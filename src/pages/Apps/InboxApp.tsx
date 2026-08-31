@@ -24,6 +24,8 @@ import { InboxRulesModal } from '../../components/Apps/Inbox/InboxRulesModal';
 import { InboxSnippetsModal } from '../../components/Apps/Inbox/InboxSnippetsModal';
 import { InboxSignaturesModal } from '../../components/Apps/Inbox/InboxSignaturesModal';
 import { InboxNewFolderModal } from '../../components/Apps/Inbox/InboxNewFolderModal';
+import { EmailNotificationToast } from '../../components/Apps/Inbox/EmailNotificationToast';
+import { playEmailNotificationSound } from '../../lib/audioNotification';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { cn } from '../../lib/utils';
@@ -91,7 +93,7 @@ const ResizeHandle: React.FC<ResizeHandleProps> = ({
 };
 
 export const InboxApp: React.FC = () => {
-  const { tenant } = usePlatform();
+  const { tenant, refreshInboxUnreadCount } = usePlatform();
   const { user } = useAuth();
 
   // Pane Widths State
@@ -233,6 +235,61 @@ export const InboxApp: React.FC = () => {
     loadData();
   }, [loadData]);
 
+  // Periodic Background Polling & Sync (Every 60s) + Tab Focus Trigger
+  useEffect(() => {
+    let isMounted = true;
+
+    const performBackgroundSync = async () => {
+      if (document.hidden || !accounts || accounts.length === 0) return;
+      try {
+        let totalNew = 0;
+        for (const acc of accounts) {
+          const res = await InboxService.syncAccount(acc.id, tenant?.id);
+          if (res && res.newThreads && res.newThreads.length > 0) {
+            totalNew += res.newThreads.length;
+            playEmailNotificationSound();
+            res.newThreads.forEach((nt: any) => {
+              toast.custom((t) => (
+                <EmailNotificationToast
+                  toastId={t}
+                  payload={nt}
+                  onOpenThread={(id) => {
+                    setSelectedThreadId(id);
+                    setSelectedFolder('inbox');
+                  }}
+                  onMarkRead={(id) => handleMarkRead(id, true)}
+                  onArchive={(id) => handleArchiveThread(id)}
+                />
+              ), { duration: 7000 });
+            });
+          } else if (res && typeof res.newMessagesCount === 'number' && res.newMessagesCount > 0) {
+            totalNew += res.newMessagesCount;
+          }
+        }
+        if (isMounted) {
+          await loadData();
+          if (refreshInboxUnreadCount) refreshInboxUnreadCount();
+        }
+      } catch (_) {}
+    };
+
+    const intervalId = setInterval(performBackgroundSync, 60000); // 60 seconds
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        performBackgroundSync();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [accounts, tenant?.id, loadData]);
+
   // Selected thread object
   const selectedThread = useMemo(() => {
     return threads.find(t => t.id === selectedThreadId) || null;
@@ -292,15 +349,38 @@ export const InboxApp: React.FC = () => {
   const handleSyncAll = async () => {
     try {
       setIsSyncing(true);
+      let totalNew = 0;
       for (const acc of accounts) {
-        await InboxService.syncAccount(acc.id, tenant?.id);
+        const res = await InboxService.syncAccount(acc.id, tenant?.id);
+        if (res && typeof res.newMessagesCount === 'number') {
+          totalNew += res.newMessagesCount;
+        }
       }
       await loadData();
-      toast.success('Mailboxes updated!');
+      if (refreshInboxUnreadCount) refreshInboxUnreadCount();
+      if (totalNew > 0) {
+        toast.success(`📬 Mailboxes updated! (${totalNew} new messages)`);
+      } else {
+        toast.success('Mailboxes are up to date');
+      }
     } catch (err: any) {
       toast.error('Sync completed with warnings');
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handleDeleteAccount = async (accountId: string) => {
+    try {
+      await InboxService.deleteAccount(accountId, tenant?.id);
+      setAccounts(prev => prev.filter(a => a.id !== accountId));
+      if (selectedAccountId === accountId) {
+        setSelectedAccountId('all');
+      }
+      await loadData();
+      toast.success('Account disconnected successfully');
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to disconnect account');
     }
   };
 
@@ -334,6 +414,12 @@ export const InboxApp: React.FC = () => {
     setIsComposeOpen(true);
   };
 
+  const getDefaultSenderAccountId = useCallback(() => {
+    if (selectedAccountId && selectedAccountId !== 'all') return selectedAccountId;
+    const personal = accounts.find(a => a.type === 'PERSONAL' || a.provider === 'GOOGLE' || a.email.includes('@gmail'));
+    return personal?.id || accounts[0]?.id;
+  }, [selectedAccountId, accounts]);
+
   // Keyboard Shortcuts Listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -356,7 +442,7 @@ export const InboxApp: React.FC = () => {
 
       if (e.key === 'c' || e.key === 'C') {
         e.preventDefault();
-        setComposerContext({});
+        setComposerContext({ accountId: getDefaultSenderAccountId() });
         setIsComposeOpen(true);
       } else if (e.key === 'e' && selectedThreadId) {
         e.preventDefault();
@@ -393,7 +479,8 @@ export const InboxApp: React.FC = () => {
     isSnippetsOpen, 
     isSignaturesOpen, 
     isNewFolderOpen, 
-    isConvertModalOpen
+    isConvertModalOpen,
+    getDefaultSenderAccountId
   ]);
 
   return (
@@ -423,7 +510,7 @@ export const InboxApp: React.FC = () => {
         }}
         onOpenNewFolder={() => setIsNewFolderOpen(true)}
         onOpenCompose={() => {
-          setComposerContext({});
+          setComposerContext({ accountId: getDefaultSenderAccountId() });
           setIsComposeOpen(true);
         }}
         onOpenAddAccount={() => setIsAddAccountOpen(true)}
@@ -433,6 +520,7 @@ export const InboxApp: React.FC = () => {
         onSync={handleSyncAll}
         isSyncing={isSyncing}
         unreadCounts={unreadCounts}
+        onDeleteAccount={handleDeleteAccount}
         width={sidebarWidth}
       />
 

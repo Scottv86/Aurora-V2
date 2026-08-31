@@ -5307,11 +5307,11 @@ export const ModuleView = () => {
                     </div>
                     <div className="flex-1">
                       <div className="text-xs font-semibold text-zinc-900 dark:text-white flex items-center justify-between">
-                        <span>Paste/Upload</span>
+                        <span>Create multiple</span>
                         <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-zinc-200/70 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">Ctrl+V</span>
                       </div>
                       <div className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug">
-                        Paste from Excel, Sheets, or CSV
+                        Upload or paste from CSV, Excel or Sheets
                       </div>
                     </div>
                   </button>
@@ -5395,7 +5395,7 @@ export const ModuleView = () => {
                   className="px-5 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white rounded-xl text-xs font-semibold transition-all shadow-xs border border-zinc-200 dark:border-zinc-700 flex items-center gap-1.5 cursor-pointer"
                 >
                   <ClipboardPaste size={13} className="text-zinc-400 dark:text-zinc-400" />
-                  <span>Paste/Upload</span>
+                  <span>Create multiple</span>
                 </button>
               </div>
             </div>

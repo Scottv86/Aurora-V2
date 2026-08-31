@@ -53,6 +53,12 @@ model Tenant {
   solutionBlueprints     SolutionBlueprint[]
   savedQueries           SavedQuery[]
   savedViews             SavedView[]
+  inboxAccounts          InboxAccount[]
+  inboxThreads           InboxThread[]
+  inboxFolders           InboxFolder[]
+  inboxSnippets          InboxSnippet[]
+  inboxSignatures        InboxSignature[]
+  inboxRules             InboxRule[]
 
   @@map("tenants")
 }
@@ -1095,4 +1101,178 @@ model SavedView {
 
   @@index([tenantId, scopeType, scopeId])
   @@map("saved_views")
+}
+
+model InboxAccount {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  name      String
+  email     String
+  provider  String   @default("IMAP") // GMAIL, OUTLOOK, YAHOO, ICLOUD, IMAP
+  isShared  Boolean  @default(false) @map("is_shared")
+  status    String   @default("CONNECTED") // CONNECTED, ERROR, SYNCING, DISCONNECTED
+  config    Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  threads   InboxThread[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("inbox_accounts")
+}
+
+model InboxFolder {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  name      String
+  color     String?  @default("#6366f1")
+  icon      String?  @default("Folder")
+  isSystem  Boolean  @default(false) @map("is_system")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("inbox_folders")
+}
+
+model InboxThread {
+  id             String    @id @default(cuid())
+  tenantId       String    @map("tenant_id")
+  accountId      String    @map("account_id")
+  subject        String
+  snippet        String?
+  folder         String    @default("inbox") // inbox, sent, archive, trash, starred, or customFolderId
+  isRead         Boolean   @default(false) @map("is_read")
+  isStarred      Boolean   @default(false) @map("is_starred")
+  isSnoozed      Boolean   @default(false) @map("is_snoozed")
+  snoozedUntil   DateTime? @map("snoozed_until")
+  status         String    @default("OPEN") // OPEN, PENDING, RESOLVED, CLOSED
+  assignedTo     String?   @map("assigned_to")
+  labels         Json      @default("[]")
+  aiInsights     Json?     @map("ai_insights")
+  linkedRecords  Json      @default("[]") @map("linked_records")
+  lastActivityAt DateTime  @default(now()) @map("last_activity_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  account        InboxAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  messages       InboxMessage[]
+  internalNotes  InboxInternalNote[]
+
+  @@index([tenantId, folder])
+  @@index([tenantId, accountId])
+  @@index([tenantId, isStarred])
+  @@map("inbox_threads")
+}
+
+model InboxMessage {
+  id             String   @id @default(cuid())
+  threadId       String   @map("thread_id")
+  messageId      String?  @map("message_id")
+  senderName     String   @map("sender_name")
+  senderEmail    String   @map("sender_email")
+  senderAvatarUrl String? @map("sender_avatar_url")
+  toRecipients   Json     @map("to_recipients") // [{ name, address }]
+  ccRecipients   Json?    @map("cc_recipients")
+  bccRecipients  Json?    @map("bcc_recipients")
+  subject        String
+  bodyText       String   @db.Text @map("body_text")
+  bodyHtml       String?  @db.Text @map("body_html")
+  snippet        String?
+  flags          Json     @default("[]")
+  sentAt         DateTime @default(now()) @map("sent_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  thread         InboxThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  attachments    InboxAttachment[]
+
+  @@index([threadId])
+  @@map("inbox_messages")
+}
+
+model InboxAttachment {
+  id            String   @id @default(cuid())
+  messageId     String   @map("message_id")
+  filename      String
+  contentType   String   @map("content_type")
+  size          Int      @default(0)
+  driveFileId   String?  @map("drive_file_id")
+  contentBase64 String?  @db.Text @map("content_base64")
+  url           String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  message       InboxMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@map("inbox_attachments")
+}
+
+model InboxInternalNote {
+  id          String   @id @default(cuid())
+  threadId    String   @map("thread_id")
+  authorId    String   @map("author_id")
+  authorName  String   @map("author_name")
+  authorEmail String   @map("author_email")
+  authorAvatar String? @map("author_avatar")
+  content     String   @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  thread      InboxThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId])
+  @@map("inbox_internal_notes")
+}
+
+model InboxSnippet {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  title       String
+  shortcut    String   // e.g. "/intro"
+  category    String   @default("General")
+  content     String   @db.Text
+  contentHtml String?  @db.Text @map("content_html")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("inbox_snippets")
+}
+
+model InboxSignature {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  accountId   String?  @map("account_id") // null = default across all accounts
+  name        String
+  contentHtml String   @db.Text @map("content_html")
+  contentText String   @db.Text @map("content_text")
+  isDefault   Boolean  @default(false) @map("is_default")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("inbox_signatures")
+}
+
+model InboxRule {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  name        String
+  enabled     Boolean  @default(true)
+  conditions  Json     @default("[]")
+  actions     Json     @default("[]")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("inbox_rules")
 }

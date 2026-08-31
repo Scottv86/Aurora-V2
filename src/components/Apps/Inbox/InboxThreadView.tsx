@@ -22,8 +22,14 @@ import {
   FileText,
   UserCheck,
   Send,
-  Loader2
+  Loader2,
+  Search,
+  Bot,
+  User,
+  Check,
+  X
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { EmailThread, EmailMessage, EmailAttachment } from '../../../types/inbox';
 import { InboxService } from '../../../services/inboxService';
 import { usePlatform } from '../../../hooks/usePlatform';
@@ -41,6 +47,109 @@ interface InboxThreadViewProps {
   onOpenComposerWithContext: (mode: 'reply' | 'replyAll' | 'forward', message: EmailMessage) => void;
 }
 
+function decodeQuotedPrintableClient(input: string): string {
+  const cleaned = input.replace(/=\r?\n/g, '');
+  const bytes: number[] = [];
+  for (let i = 0; i < cleaned.length; i++) {
+    if (cleaned[i] === '=' && i + 2 < cleaned.length) {
+      const hex = cleaned.substring(i + 1, i + 3);
+      if (/^[0-9A-Fa-f]{2}$/.test(hex)) {
+        bytes.push(parseInt(hex, 16));
+        i += 2;
+        continue;
+      }
+    }
+    bytes.push(cleaned.charCodeAt(i));
+  }
+  try {
+    const uint8 = new Uint8Array(bytes);
+    return new TextDecoder('utf-8').decode(uint8);
+  } catch (_) {
+    return cleaned.replace(/=([0-9A-Fa-f]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  }
+}
+
+function cleanEmailBody(raw: string): string {
+  if (!raw) return '';
+
+  // Check if it's a multipart raw string
+  let boundary = '';
+  const bMatch = raw.match(/boundary=["']?([^"';\r\n]+)["']?/i);
+  if (bMatch) {
+    boundary = bMatch[1].trim();
+  } else {
+    const lineMatch = raw.match(/--([A-Za-z0-9_=-]{6,})(?:\r?\n|$)/);
+    if (lineMatch) {
+      boundary = lineMatch[1].trim();
+    }
+  }
+
+  if (boundary && (raw.includes('Content-Type:') || raw.startsWith('--'))) {
+    const boundaryEscaped = boundary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const parts = raw.split(new RegExp(`--${boundaryEscaped}(?:--)?`));
+
+    let finalHtml = '';
+    let finalText = '';
+
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i].trim();
+      if (!part || part === '--') continue;
+
+      const splitIdx = part.search(/\r?\n\r?\n/);
+      const headers = splitIdx !== -1 ? part.substring(0, splitIdx) : '';
+      const body = splitIdx !== -1 ? part.substring(splitIdx).replace(/^\r?\n\r?\n/, '') : part;
+
+      const isHtml = /Content-Type:\s*text\/html/i.test(headers);
+      const isPlain = /Content-Type:\s*text\/plain/i.test(headers);
+      const isQp = /Content-Transfer-Encoding:\s*quoted-printable/i.test(headers) || body.includes('=3D');
+      const isBase64 = /Content-Transfer-Encoding:\s*base64/i.test(headers);
+
+      let decoded = body;
+      if (isQp) {
+        decoded = decodeQuotedPrintableClient(body);
+      } else if (isBase64) {
+        try {
+          decoded = atob(body.replace(/\s+/g, ''));
+        } catch (_) {}
+      }
+
+      if (isHtml || decoded.includes('<html') || decoded.includes('<table') || decoded.includes('<div') || decoded.includes('<p')) {
+        finalHtml = decoded;
+      } else if (isPlain || !finalText) {
+        finalText = decoded;
+      }
+    }
+
+    if (finalHtml) {
+      return sanitizeEmailStyles(finalHtml);
+    }
+    if (finalText) {
+      return `<div style="font-family: inherit; white-space: pre-wrap; line-height: 1.6;">${finalText}</div>`;
+    }
+  }
+
+  // Quoted printable artifacts
+  if (raw.includes('=3D') || raw.includes('=\r\n') || raw.includes('=\n')) {
+    const decoded = decodeQuotedPrintableClient(raw);
+    return sanitizeEmailStyles(decoded);
+  }
+
+  return sanitizeEmailStyles(raw);
+}
+
+function sanitizeEmailStyles(html: string): string {
+  if (!html) return '';
+  return html
+    // 1. Strip global <style>...</style> blocks that bleed into Aurora's document
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    // 2. Strip external stylesheets
+    .replace(/<link[^>]*rel=["']?stylesheet["']?[^>]*>/gi, '')
+    // 3. Prevent hardcoded min-width / oversized widths from blowing out flex columns
+    .replace(/min-width:\s*\d+px/gi, 'min-width: 0')
+    .replace(/width:\s*([5-9]\d{2}|\d{4,})px/gi, 'width: 100%')
+    .replace(/width="([5-9]\d{2}|\d{4,})"/gi, 'width="100%"');
+}
+
 export const InboxThreadView: React.FC<InboxThreadViewProps> = ({
   thread,
   onStarThread,
@@ -50,7 +159,7 @@ export const InboxThreadView: React.FC<InboxThreadViewProps> = ({
   onQuickReply,
   onOpenComposerWithContext
 }) => {
-  const { user: platformUser } = usePlatform();
+  const { user: platformUser, members = [], tenant } = usePlatform();
   const { user: authUser } = useAuth();
 
   const currentUserName = 
@@ -69,12 +178,60 @@ export const InboxThreadView: React.FC<InboxThreadViewProps> = ({
     authUser?.user_metadata?.picture || 
     '';
 
+  const humanMembers = React.useMemo(() => {
+    const fromPlatform = (members || []).filter(m => !m.isSynthetic);
+    if (fromPlatform.length > 0) return fromPlatform;
+    return [
+      { id: 'usr_kenny', name: currentUserName || 'Kenny Powers', role: 'Administrator', isSynthetic: false },
+      { id: 'usr_sarah', name: 'Sarah Jenkins', role: 'Customer Success', isSynthetic: false },
+      { id: 'usr_alex', name: 'Alex Rivera', role: 'Operations Lead', isSynthetic: false },
+      { id: 'usr_david', name: 'David Chen', role: 'Solutions Engineer', isSynthetic: false }
+    ];
+  }, [members, currentUserName]);
+
+  const botMembers = React.useMemo(() => {
+    const fromPlatform = (members || []).filter(m => m.isSynthetic);
+    if (fromPlatform.length > 0) return fromPlatform;
+    return [
+      { id: 'bot_triage', name: 'AI Triage Agent', role: 'Autonomous Agent', isSynthetic: true },
+      { id: 'bot_eng', name: 'Engineering AI Bot', role: 'Autonomous Agent', isSynthetic: true },
+      { id: 'bot_sales', name: 'Sales Qualification Bot', role: 'Autonomous Agent', isSynthetic: true }
+    ];
+  }, [members]);
+
   const [expandedMessageIds, setExpandedMessageIds] = useState<string[]>([]);
   const [smartReplies, setSmartReplies] = useState<string[]>([]);
   const [loadingReplies, setLoadingReplies] = useState(false);
   const [savingAttachmentId, setSavingAttachmentId] = useState<string | null>(null);
   const [showSnoozeMenu, setShowSnoozeMenu] = useState(false);
+  const [isAssigneeOpen, setIsAssigneeOpen] = useState(false);
+  const [assigneeSearch, setAssigneeSearch] = useState('');
   const [collaborators, setCollaborators] = useState<{ id: string; name: string; status: string }[]>([]);
+
+  const filteredHumans = React.useMemo(() => {
+    if (!assigneeSearch.trim()) return humanMembers;
+    const q = assigneeSearch.toLowerCase();
+    return humanMembers.filter(m => 
+      m.name.toLowerCase().includes(q) || 
+      (m.role && m.role.toLowerCase().includes(q)) ||
+      ((m as any).email && (m as any).email.toLowerCase().includes(q))
+    );
+  }, [humanMembers, assigneeSearch]);
+
+  const filteredBots = React.useMemo(() => {
+    if (!assigneeSearch.trim()) return botMembers;
+    const q = assigneeSearch.toLowerCase();
+    return botMembers.filter(b => 
+      b.name.toLowerCase().includes(q) || 
+      (b.role && b.role.toLowerCase().includes(q)) ||
+      ((b as any).email && (b as any).email.toLowerCase().includes(q))
+    );
+  }, [botMembers, assigneeSearch]);
+
+  const selectedMember = React.useMemo(() => {
+    if (!thread.assignedTo) return null;
+    return [...humanMembers, ...botMembers].find(m => m.name === thread.assignedTo || m.id === thread.assignedTo) || null;
+  }, [humanMembers, botMembers, thread.assignedTo]);
 
   useEffect(() => {
     // By default expand the last message, or all if only 1
@@ -170,7 +327,7 @@ export const InboxThreadView: React.FC<InboxThreadViewProps> = ({
   };
 
   return (
-    <div className="flex-1 h-full bg-white dark:bg-zinc-950 flex flex-col overflow-hidden select-text">
+    <div className="flex-1 min-w-0 h-full bg-white dark:bg-zinc-950 flex flex-col overflow-hidden select-text">
       
       {/* Top Header & Actions Bar */}
       <div className="px-6 py-3.5 border-b border-zinc-200 dark:border-zinc-800/80 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md shrink-0 space-y-3">
@@ -195,22 +352,214 @@ export const InboxThreadView: React.FC<InboxThreadViewProps> = ({
               <option value="RESOLVED">⚪ Resolved</option>
             </select>
 
-            {/* Assignee Selector */}
-            <select
-              value={thread.assignedTo || ''}
-              onChange={async (e) => {
-                const val = e.target.value;
-                await InboxService.assignThread(thread.id, val);
-                toast.success(val ? `Assigned to ${val}` : 'Unassigned');
-              }}
-              className="px-2.5 py-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 rounded-lg text-xs font-semibold border border-zinc-200 dark:border-zinc-700/80 outline-none cursor-pointer hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-            >
-              <option value="">👤 Unassigned</option>
-              <option value="Sarah Jenkins">Sarah Jenkins</option>
-              <option value="Alex Rivera">Alex Rivera</option>
-              <option value="David Chen">David Chen</option>
-              <option value="AI Triage Agent">🤖 AI Triage Agent</option>
-            </select>
+            {/* Assignee Custom Interactive Dropdown with Search & Avatar */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsAssigneeOpen(!isAssigneeOpen)}
+                className={cn(
+                  "flex items-center gap-2 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer select-none",
+                  isAssigneeOpen
+                    ? "bg-white dark:bg-zinc-800 border-indigo-500 ring-2 ring-indigo-500/20 text-zinc-900 dark:text-white"
+                    : "bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700/80 border-zinc-200 dark:border-zinc-700/80 text-zinc-800 dark:text-zinc-200"
+                )}
+              >
+                {selectedMember ? (
+                  <>
+                    {selectedMember.isSynthetic ? (
+                      <div className="w-4 h-4 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center text-[10px] shrink-0">
+                        🤖
+                      </div>
+                    ) : (
+                      <div className="w-4 h-4 rounded-full overflow-hidden bg-indigo-500 text-white flex items-center justify-center text-[9px] font-bold shrink-0">
+                        {selectedMember.avatarUrl ? (
+                          <img src={selectedMember.avatarUrl} alt={selectedMember.name} className="w-full h-full object-cover" />
+                        ) : (
+                          selectedMember.name.substring(0, 2).toUpperCase()
+                        )}
+                      </div>
+                    )}
+                    <span className="truncate max-w-[130px] font-bold">
+                      {selectedMember.name}
+                    </span>
+                  </>
+                ) : thread.assignedTo ? (
+                  <>
+                    <div className="w-4 h-4 rounded-full bg-blue-500/20 text-blue-600 flex items-center justify-center text-[9px] shrink-0">
+                      👤
+                    </div>
+                    <span className="truncate max-w-[130px] font-bold">
+                      {thread.assignedTo}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <User size={13} className="text-zinc-400 shrink-0" />
+                    <span className="text-zinc-500 dark:text-zinc-400">Unassigned</span>
+                  </>
+                )}
+                <ChevronDown size={13} className={cn("text-zinc-400 transition-transform duration-200 shrink-0", isAssigneeOpen && "rotate-180")} />
+              </button>
+
+              {/* Popover Dropdown with Search */}
+              <AnimatePresence>
+                {isAssigneeOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => { setIsAssigneeOpen(false); setAssigneeSearch(''); }} />
+                    <motion.div
+                      initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                      transition={{ duration: 0.15, ease: 'easeOut' }}
+                      className="absolute left-0 top-full mt-1.5 w-64 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl shadow-zinc-950/20 z-50 overflow-hidden flex flex-col"
+                    >
+                      {/* Search Box */}
+                      <div className="p-2 border-b border-zinc-100 dark:border-zinc-800">
+                        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-800/80 border border-zinc-200/60 dark:border-zinc-700/60">
+                          <Search size={13} className="text-zinc-400 shrink-0" />
+                          <input
+                            type="text"
+                            autoFocus
+                            value={assigneeSearch}
+                            onChange={(e) => setAssigneeSearch(e.target.value)}
+                            placeholder="Search workforce & bots..."
+                            className="w-full bg-transparent text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 outline-none"
+                          />
+                          {assigneeSearch && (
+                            <button onClick={() => setAssigneeSearch('')} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
+                              <X size={12} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* List Options */}
+                      <div className="max-h-64 overflow-y-auto custom-scrollbar p-1.5 space-y-1">
+                        {/* Unassign Option */}
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            thread.assignedTo = undefined;
+                            await InboxService.assignThread(thread.id, '', undefined, tenant?.id);
+                            setIsAssigneeOpen(false);
+                            setAssigneeSearch('');
+                            toast.success('Conversation Unassigned');
+                          }}
+                          className={cn(
+                            "w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs transition-colors cursor-pointer text-left",
+                            !thread.assignedTo
+                              ? "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-bold"
+                              : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="w-5 h-5 rounded-full border border-dashed border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-zinc-400 text-[10px]">
+                              <User size={11} />
+                            </div>
+                            <span>Unassigned</span>
+                          </div>
+                          {!thread.assignedTo && <Check size={13} />}
+                        </button>
+
+                        {/* Human Workforce */}
+                        {filteredHumans.length > 0 && (
+                          <div>
+                            <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                              👥 Workforce
+                            </div>
+                            {filteredHumans.map(m => {
+                              const isAssigned = thread.assignedTo === m.name;
+                              return (
+                                <button
+                                  key={m.id}
+                                  type="button"
+                                  onClick={async () => {
+                                    thread.assignedTo = m.name;
+                                    await InboxService.assignThread(thread.id, m.name, m, tenant?.id);
+                                    setIsAssigneeOpen(false);
+                                    setAssigneeSearch('');
+                                    toast.success(`Assigned to ${m.name}`);
+                                  }}
+                                  className={cn(
+                                    "w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs transition-colors cursor-pointer text-left",
+                                    isAssigned
+                                      ? "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-bold"
+                                      : "text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                                  )}
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <div className="w-5 h-5 rounded-full overflow-hidden bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center text-[9px] font-bold shrink-0">
+                                      {m.avatarUrl ? (
+                                        <img src={m.avatarUrl} alt={m.name} className="w-full h-full object-cover" />
+                                      ) : (
+                                        m.name.substring(0, 2).toUpperCase()
+                                      )}
+                                    </div>
+                                    <div className="min-w-0 truncate">
+                                      <div className="truncate font-semibold">{m.name}</div>
+                                      {m.role && <div className="text-[10px] text-zinc-400 truncate">{m.role}</div>}
+                                    </div>
+                                  </div>
+                                  {isAssigned && <Check size={13} className="shrink-0 text-indigo-600 dark:text-indigo-400" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* AI Agents & Bots */}
+                        {filteredBots.length > 0 && (
+                          <div className="pt-1">
+                            <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-purple-500 dark:text-purple-400">
+                              🤖 AI Agents & Bots
+                            </div>
+                            {filteredBots.map(b => {
+                              const isAssigned = thread.assignedTo === b.name;
+                              return (
+                                <button
+                                  key={b.id}
+                                  type="button"
+                                  onClick={async () => {
+                                    thread.assignedTo = b.name;
+                                    await InboxService.assignThread(thread.id, b.name, b, tenant?.id);
+                                    setIsAssigneeOpen(false);
+                                    setAssigneeSearch('');
+                                    toast.success(`Assigned to ${b.name}`);
+                                  }}
+                                  className={cn(
+                                    "w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs transition-colors cursor-pointer text-left",
+                                    isAssigned
+                                      ? "bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 font-bold"
+                                      : "text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                                  )}
+                                >
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <div className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center text-[10px] shrink-0">
+                                      🤖
+                                    </div>
+                                    <div className="min-w-0 truncate">
+                                      <div className="truncate font-semibold">{b.name}</div>
+                                      <div className="text-[10px] text-purple-500 dark:text-purple-400/80 truncate">Autonomous Agent</div>
+                                    </div>
+                                  </div>
+                                  {isAssigned && <Check size={13} className="shrink-0 text-purple-600 dark:text-purple-400" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {filteredHumans.length === 0 && filteredBots.length === 0 && (
+                          <div className="p-3 text-center text-xs text-zinc-400">
+                            No matching team members or bots found
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
           {/* Right: Actions */}
@@ -423,8 +772,8 @@ export const InboxThreadView: React.FC<InboxThreadViewProps> = ({
                   
                   {/* HTML/Text Email Body */}
                   <div 
-                    className="text-xs text-zinc-800 dark:text-zinc-200 leading-relaxed font-sans prose dark:prose-invert max-w-none break-words"
-                    dangerouslySetInnerHTML={{ __html: message.bodyHtml || message.bodyText }}
+                    className="text-xs text-zinc-800 dark:text-zinc-200 leading-relaxed font-sans prose dark:prose-invert max-w-full overflow-x-auto break-words [&_table]:max-w-full [&_table]:w-full [&_table]:table-auto [&_div]:max-w-full [&_iframe]:max-w-full"
+                    dangerouslySetInnerHTML={{ __html: cleanEmailBody(message.bodyHtml || message.bodyText) }}
                   />
 
                   {/* Attachments Section */}

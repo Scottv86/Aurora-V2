@@ -224,7 +224,7 @@ export const InboxService = {
   /**
    * Sync account
    */
-  async syncAccount(accountId: string, tenantId?: string): Promise<{ success: boolean; newMessagesCount: number }> {
+  async syncAccount(accountId: string, tenantId?: string): Promise<{ success: boolean; newMessagesCount: number; newThreads?: any[] }> {
     try {
       const res = await fetch(`${API_BASE_URL}/api/inbox/accounts/${accountId}/sync`, {
         method: 'POST',
@@ -234,7 +234,7 @@ export const InboxService = {
         return await res.json();
       }
     } catch (_) {}
-    return { success: true, newMessagesCount: 0 };
+    return { success: true, newMessagesCount: 0, newThreads: [] };
   },
 
   /**
@@ -261,7 +261,8 @@ export const InboxService = {
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.threads && data.threads.length > 0) {
+        if (Array.isArray(data.threads)) {
+          this.saveStoredThreadsList(data.threads);
           return data.threads;
         }
       }
@@ -512,6 +513,41 @@ export const InboxService = {
     const senderEmail = payload.fromEmail || currentSender.email;
     const senderAvatar = payload.fromAvatarUrl || currentSender.avatarUrl;
 
+    const fullPayload = {
+      ...payload,
+      fromName: senderName,
+      fromEmail: senderEmail,
+      fromAvatarUrl: senderAvatar
+    };
+
+    const res = await fetch(`${API_BASE_URL}/api/inbox/send`, {
+      method: 'POST',
+      headers: getAuthHeaders(tenantId),
+      body: JSON.stringify(fullPayload)
+    });
+    
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `Server error (${res.status}) while sending email`);
+    }
+
+    const data = await res.json();
+    if (data.message) {
+      const allThreads = this.getStoredThreadsList();
+      if (payload.threadId) {
+        const targetThread = allThreads.find(t => t.id === payload.threadId);
+        if (targetThread) {
+          targetThread.messages.push(data.message);
+          targetThread.timestamp = data.message.date;
+          targetThread.snippet = data.message.snippet;
+          this.saveStoredThreadsList(allThreads);
+        }
+      }
+      return data;
+    }
+    return data;
+
+    // Offline optimistic fallback
     const sentMsg: EmailMessage = {
       id: `msg_sent_${Date.now()}`,
       from: { name: senderName, address: senderEmail, avatarUrl: senderAvatar },
@@ -533,7 +569,6 @@ export const InboxService = {
       }))
     };
 
-    // Update client stored threads
     const allThreads = this.getStoredThreadsList();
     if (payload.threadId) {
       const targetThread = allThreads.find(t => t.id === payload.threadId);
@@ -561,18 +596,6 @@ export const InboxService = {
       allThreads.unshift(newThread);
       this.saveStoredThreadsList(allThreads);
     }
-
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/inbox/send`, {
-        method: 'POST',
-        headers: getAuthHeaders(tenantId),
-        body: JSON.stringify(payload)
-      });
-      if (res.ok) {
-        const data = await res.json();
-        return data;
-      }
-    } catch (_) {}
 
     return { success: true, messageId: sentMsg.id, message: sentMsg };
   },
@@ -1048,5 +1071,44 @@ Return ONLY valid JSON mapping each desired field key to its extracted value (or
         contactName: thread.from.name
       };
     }
+  },
+
+  /**
+   * Delete Signature
+   */
+  async deleteSignature(signatureId: string, tenantId?: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/inbox/signatures/${signatureId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(tenantId)
+      });
+      return res.ok;
+    } catch (_) {
+      return false;
+    }
+  },
+
+  /**
+   * Connect OAuth Account (Google / Microsoft)
+   */
+  async connectOAuthAccount(provider: 'google' | 'microsoft', payload: {
+    email: string;
+    name?: string;
+    avatarUrl?: string;
+    type: 'PERSONAL' | 'SHARED';
+    accessToken?: string;
+    refreshToken?: string;
+  }, tenantId?: string): Promise<EmailAccount> {
+    const res = await fetch(`${API_BASE_URL}/api/inbox/oauth/${provider}/connect`, {
+      method: 'POST',
+      headers: getAuthHeaders(tenantId),
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || `Failed to connect ${provider.toUpperCase()} account`);
+    }
+    const data = await res.json();
+    return data.account;
   }
 };

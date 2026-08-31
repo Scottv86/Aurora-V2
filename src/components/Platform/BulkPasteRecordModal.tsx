@@ -543,7 +543,7 @@ export const BulkPasteRecordModal: React.FC<BulkPasteRecordModalProps> = ({
                   </span>
                 </div>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  Paste rows directly from Microsoft Excel, Google Sheets, or CSV
+                  Upload or paste rows directly from CSV, Excel, or Sheets
                 </p>
               </div>
             </div>

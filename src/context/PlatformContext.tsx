@@ -7,6 +7,8 @@ import { MenuConfig } from '../types/menu';
 import { systemDefaultMenuConfig } from '../config/menuDefaults';
 import { toast } from 'sonner';
 import { slugify } from '../lib/utils';
+import { EmailNotificationToast } from '../components/Apps/Inbox/EmailNotificationToast';
+import { playEmailNotificationSound } from '../lib/audioNotification';
 
 export interface NotificationItem {
   id: string;
@@ -79,6 +81,8 @@ interface PlatformContextType {
   deleteNotification: (id: string) => void;
   clearNotifications: () => void;
   unreadCount: number;
+  inboxUnreadCount: number;
+  refreshInboxUnreadCount: () => Promise<void>;
   isBuilderFullscreen: boolean;
   setIsBuilderFullscreen: (fullscreen: boolean) => void;
   toggleBuilderFullscreen: () => void;
@@ -134,6 +138,8 @@ const fallbackContext: PlatformContextType = {
   deleteNotification: () => {},
   clearNotifications: () => {},
   unreadCount: 0,
+  inboxUnreadCount: 0,
+  refreshInboxUnreadCount: async () => {},
   isBuilderFullscreen: false,
   setIsBuilderFullscreen: () => {},
   toggleBuilderFullscreen: () => {},
@@ -929,6 +935,82 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
     return true;
   }).length;
 
+  const [inboxUnreadCount, setInboxUnreadCount] = useState<number>(0);
+
+  const refreshInboxUnreadCount = useCallback(async () => {
+    if (!tenant?.id) return;
+    try {
+      // 1. Sync personal connected accounts in background
+      const accsRes = await fetch(`${API_BASE_URL}/api/inbox/accounts`, {
+        headers: { 'x-tenant-id': tenant.id }
+      });
+      if (accsRes.ok) {
+        const accsData = await accsRes.json();
+        const accounts = accsData.accounts || [];
+        for (const acc of accounts) {
+          if (acc.status === 'CONNECTED' && acc.type === 'PERSONAL') {
+            const syncRes = await fetch(`${API_BASE_URL}/api/inbox/accounts/${acc.id}/sync`, {
+              method: 'POST',
+              headers: { 'x-tenant-id': tenant.id }
+            });
+            if (syncRes.ok) {
+              const syncData = await syncRes.json();
+              if (syncData.newThreads && syncData.newThreads.length > 0) {
+                playEmailNotificationSound();
+                syncData.newThreads.forEach((nt: any) => {
+                  toast.custom((t) => (
+                    <EmailNotificationToast
+                      toastId={t}
+                      payload={nt}
+                      onOpenThread={(id) => {
+                        window.location.href = `/workspace/apps/inbox?threadId=${id}`;
+                      }}
+                      onMarkRead={async (id) => {
+                        await fetch(`${API_BASE_URL}/api/inbox/threads/${id}/actions`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json', 'x-tenant-id': tenant.id },
+                          body: JSON.stringify({ action: 'markRead', value: true })
+                        });
+                        refreshInboxUnreadCount();
+                      }}
+                      onArchive={async (id) => {
+                        await fetch(`${API_BASE_URL}/api/inbox/threads/${id}/actions`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json', 'x-tenant-id': tenant.id },
+                          body: JSON.stringify({ action: 'archive', value: true })
+                        });
+                        refreshInboxUnreadCount();
+                      }}
+                    />
+                  ), { duration: 8000 });
+                });
+              }
+            }
+          }
+        }
+      }
+
+      // 2. Compute unread count
+      const res = await fetch(`${API_BASE_URL}/api/inbox/threads?folder=inbox`, {
+        headers: { 'x-tenant-id': tenant.id }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const threads = data.threads || [];
+        const unread = threads.filter((t: any) => !t.isRead && t.folder === 'inbox').length;
+        setInboxUnreadCount(unread);
+      }
+    } catch (_) {}
+  }, [tenant?.id]);
+
+  useEffect(() => {
+    if (tenant?.id) {
+      refreshInboxUnreadCount();
+      const interval = setInterval(refreshInboxUnreadCount, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [tenant?.id, refreshInboxUnreadCount]);
+
   return (
     <PlatformContext.Provider value={{ 
       user, 
@@ -975,6 +1057,8 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       deleteNotification,
       clearNotifications,
       unreadCount,
+      inboxUnreadCount,
+      refreshInboxUnreadCount,
       isBuilderFullscreen,
       setIsBuilderFullscreen,
       toggleBuilderFullscreen,

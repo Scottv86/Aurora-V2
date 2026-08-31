@@ -1910,10 +1910,10 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
               type="button"
               onClick={() => setShowBulkPasteModal(true)}
               className="flex items-center gap-1.5 h-8 px-3 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 rounded-xl font-semibold text-xs transition-all shadow-xs cursor-pointer select-none border border-zinc-200 dark:border-zinc-700"
-              title="Import or paste from Excel / Google Sheets"
+              title="Upload or paste from CSV, Excel or Sheets"
             >
               <LucideIcons.ClipboardPaste size={13} className="text-zinc-400 dark:text-zinc-400" />
-              <span>Paste/Upload</span>
+              <span>Create multiple</span>
             </button>
           )}
         </div>

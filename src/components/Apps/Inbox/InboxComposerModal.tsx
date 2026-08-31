@@ -38,6 +38,8 @@ import { InboxService } from '../../../services/inboxService';
 import { DocumentService } from '../../../services/documentService';
 import { DriveService } from '../../../services/driveService';
 import { InboxSnippetsModal } from './InboxSnippetsModal';
+import { EmailNotificationToast } from './EmailNotificationToast';
+import { playEmailNotificationSound } from '../../../lib/audioNotification';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { useAuth } from '../../../hooks/useAuth';
 import { cn } from '../../../lib/utils';
@@ -113,18 +115,33 @@ export const InboxComposerModal: React.FC<InboxComposerModalProps> = ({
   const composeDebounceRef = useRef<any>(null);
 
   // Sync initial body into editor
+  const [signatures, setSignatures] = useState<any[]>([]);
+
   useEffect(() => {
-    if (initialAccountId) setAccountId(initialAccountId);
-    if (initialTo) setToInput(initialTo.join(', '));
-    if (initialSubject) setSubject(initialSubject);
-    if (initialBody) {
-      setBodyText(initialBody);
-      setBodyHtml(`<p>${initialBody.replace(/\n/g, '<br/>')}</p>`);
-      if (editorRef.current) {
-        editorRef.current.innerHTML = `<p>${initialBody.replace(/\n/g, '<br/>')}</p>`;
+    if (isOpen) {
+      InboxService.getSignatures(tenant?.id).then(sigs => {
+        setSignatures(sigs);
+      }).catch(() => {});
+    }
+  }, [isOpen, tenant?.id]);
+
+  useEffect(() => {
+    if (isOpen) {
+      const activeId = initialAccountId || 
+        accounts.find(a => a.type === 'PERSONAL' || a.provider === 'GOOGLE' || a.email.includes('@gmail'))?.id || 
+        accounts[0]?.id;
+      if (activeId) setAccountId(activeId);
+      if (initialTo) setToInput(initialTo.join(', '));
+      if (initialSubject) setSubject(initialSubject);
+      if (initialBody) {
+        setBodyText(initialBody);
+        setBodyHtml(`<p>${initialBody.replace(/\n/g, '<br/>')}</p>`);
+        if (editorRef.current) {
+          editorRef.current.innerHTML = `<p>${initialBody.replace(/\n/g, '<br/>')}</p>`;
+        }
       }
     }
-  }, [initialAccountId, initialTo, initialSubject, initialBody]);
+  }, [isOpen, initialAccountId, initialTo, initialSubject, initialBody, accounts]);
 
   const handleEditorInput = () => {
     if (!editorRef.current) return;
@@ -250,8 +267,35 @@ export const InboxComposerModal: React.FC<InboxComposerModalProps> = ({
         await InboxService.scheduleEmail(accountId, req, scheduledTime, tenant?.id);
         toast.success(`Email scheduled to send at ${new Date(scheduledTime).toLocaleString()}`);
       } else {
-        await InboxService.sendEmail(req, tenant?.id);
+        const sendResult = await InboxService.sendEmail(req, tenant?.id);
         toast.success('Email transmitted successfully!');
+        
+        const isSelf = toRecipients.some(t => {
+          const addr = typeof t === 'string' ? t : (t as any)?.address || '';
+          return addr.toLowerCase() === (senderEmail || '').toLowerCase();
+        });
+        if (isSelf) {
+          playEmailNotificationSound();
+          toast.custom((t) => (
+            <EmailNotificationToast
+              toastId={t}
+              payload={{
+                threadId: (sendResult as any)?.threadId || `th_sent_${Date.now()}`,
+                subject: subject || 'No Subject',
+                senderName: senderName,
+                senderEmail: senderEmail,
+                snippet: editorRef.current?.innerText || bodyText,
+                accountName: activeAcc?.name,
+                accountEmail: activeAcc?.email
+              }}
+              onOpenThread={() => {
+                if (onSentSuccess) onSentSuccess();
+              }}
+              onMarkRead={() => {}}
+              onArchive={() => {}}
+            />
+          ), { duration: 7000 });
+        }
       }
 
       if (onSentSuccess) onSentSuccess();
@@ -412,7 +456,14 @@ export const InboxComposerModal: React.FC<InboxComposerModalProps> = ({
             <span className="text-zinc-400 font-semibold w-12 shrink-0">From:</span>
             <select
               value={accountId}
-              onChange={(e) => setAccountId(e.target.value)}
+              onChange={(e) => {
+                const newAccId = e.target.value;
+                setAccountId(newAccId);
+                const matchingSig = signatures.find(s => s.accountId === newAccId) || signatures.find(s => s.isDefault || !s.accountId);
+                if (matchingSig) {
+                  toast.info(`Switched signature to "${matchingSig.name}"`);
+                }
+              }}
               className="flex-1 bg-transparent text-zinc-800 dark:text-zinc-200 font-bold focus:outline-none cursor-pointer"
             >
               {accounts.map(acc => (
@@ -807,11 +858,11 @@ export const InboxComposerModal: React.FC<InboxComposerModalProps> = ({
             <div className="flex items-center gap-1.5 relative">
               
               {/* Send Button & Send Later Group */}
-              <div className="flex items-center rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 shadow-sm overflow-hidden">
+              <div className="flex items-center rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm shadow-indigo-500/20 overflow-hidden transition-all">
                 <button
                   onClick={handleSend}
                   disabled={isSending}
-                  className="flex items-center gap-2 px-4 py-2 hover:bg-zinc-800 dark:hover:bg-zinc-100 font-bold text-xs transition-all cursor-pointer disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 py-2 hover:bg-indigo-700/60 font-semibold text-xs transition-all cursor-pointer disabled:opacity-50"
                 >
                   {isSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                   <span>{scheduledTime ? 'Schedule Send' : 'Send'}</span>
@@ -819,7 +870,7 @@ export const InboxComposerModal: React.FC<InboxComposerModalProps> = ({
 
                 <button
                   onClick={() => setShowScheduleMenu(!showScheduleMenu)}
-                  className="p-2 border-l border-zinc-700 dark:border-zinc-300 hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-colors cursor-pointer"
+                  className="p-2 border-l border-indigo-500/40 hover:bg-indigo-700/60 transition-colors cursor-pointer"
                   title="Send Later options"
                 >
                   <ChevronDown size={14} />

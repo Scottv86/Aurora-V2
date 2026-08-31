@@ -57,7 +57,7 @@ const SidebarItemRenderer = ({
   // Subtitle styling in sidebar
   if ((item as any).isSubtitle) {
     if (collapsed) {
-      return <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-4 mx-2" />;
+      return null;
     }
     return (
       <div 
@@ -71,7 +71,10 @@ const SidebarItemRenderer = ({
     );
   }
 
+  const { inboxUnreadCount } = usePlatform();
   const hasChildren = item.children && item.children.length > 0;
+  const isInboxItem = item.to?.includes('/apps/inbox') || item.to?.includes('/inbox') || item.id === 'inbox' || item.label?.toLowerCase() === 'inbox';
+  const displayBadge = isInboxItem && inboxUnreadCount > 0 ? `${inboxUnreadCount}` : (item as any).badge;
 
   return (
     <div className="relative space-y-0.5">
@@ -81,6 +84,7 @@ const SidebarItemRenderer = ({
             icon={IconComponent} 
             label={item.label} 
             to={item.to} 
+            badge={displayBadge}
             active={active} 
             collapsed={collapsed}
             className={cn(!item.isVisible && "opacity-50 grayscale")}
@@ -136,11 +140,9 @@ const SidebarSectionRenderer = ({
   const sectionKey = section.id || section.title;
 
   return (
-    <div className="space-y-1">
-      <div className="flex items-center group/section">
-        {collapsed ? (
-          <div className="h-px bg-zinc-200 dark:bg-zinc-800 w-full my-4 mx-2" />
-        ) : (
+    <div className={cn("space-y-1", collapsed && "space-y-0")}>
+      {!collapsed && (
+        <div className="flex items-center group/section">
           <button
             type="button"
             onClick={() => onToggleSectionCollapse(sectionKey)}
@@ -157,8 +159,8 @@ const SidebarSectionRenderer = ({
               )} 
             />
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       <AnimatePresence initial={false}>
         {(!isSectionCollapsed || collapsed) && (
@@ -167,7 +169,7 @@ const SidebarSectionRenderer = ({
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.2, ease: "easeInOut" }}
-            className="space-y-0.5 overflow-hidden"
+            className={cn("space-y-0.5", !collapsed && "overflow-hidden")}
           >
             {visibleItems.map((item) => (
               <SidebarItemRenderer 
@@ -237,8 +239,12 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   const isQueueMainView = (pathnames[0] === 'workspace' && pathnames[1] === 'queues' && pathnames[2] && pathnames[3] !== 'records');
   const isPageMainView = (pathnames[0] === 'workspace' && pathnames[1] === 'pages' && pathnames[2] && pathnames[3] !== 'modules');
   const shouldHideShellBreadcrumbs = isModuleMainView || isQueueMainView || isPageMainView;
-  const [isSidebarOpen, setIsSidebarOpen] = useState(location.pathname !== '/workspace/settings/builder/new');
-  const [isSidebarHovered, setIsSidebarHovered] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    if (location.pathname === '/workspace/settings/builder/new') return false;
+    const rawStyle = tenant?.branding?.layout_style || 'sidebar';
+    if (rawStyle === 'slim') return false;
+    return true;
+  });
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(() => {
     try {
@@ -591,11 +597,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   const rawLayoutStyle = tenant?.branding?.layout_style || 'sidebar';
   const layoutStyle = (isSettingsMode || isAdminPath) ? 'sidebar' : rawLayoutStyle;
 
-  const isSidebarReallyOpen = layoutStyle === 'top' 
-    ? false 
-    : (layoutStyle === 'slim' 
-      ? isSidebarHovered 
-      : isSidebarOpen);
+  const isSidebarReallyOpen = layoutStyle === 'top' ? false : isSidebarOpen;
 
   const currentWidth = isModuleBuilder || isBuilderFullscreen || layoutStyle === 'top'
     ? 0
@@ -726,12 +728,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       <div className="flex">
         {!isModuleBuilder && !isBuilderFullscreen && layoutStyle !== 'top' && (
           <aside 
-            onMouseEnter={() => {
-              if (layoutStyle === 'slim') setIsSidebarHovered(true);
-            }}
-            onMouseLeave={() => {
-              if (layoutStyle === 'slim') setIsSidebarHovered(false);
-            }}
             style={{ width: `${currentWidth}px` }}
             className={cn(
               "fixed left-0 top-16 bottom-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 z-45 flex flex-col",
@@ -739,21 +735,19 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
               !isResizing && !isModuleBuilder && !isBuilderFullscreen && "transition-all duration-300"
             )}
           >
-            <div className={cn("flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar", isSidebarReallyOpen ? "p-4" : "p-2")}>
-              <div className="space-y-6">
+            <div className={cn("flex-1 min-h-0 overflow-y-auto custom-scrollbar", isSidebarReallyOpen ? "p-4 overflow-x-hidden" : "p-2 overflow-x-visible")}>
+              <div className={cn(collapsed ? "space-y-1" : "space-y-6")}>
                 {/* System Governance / Super Admin Mode */}
                 {isAdminPath && (
-                  <div className="flex flex-col h-full space-y-6">
-                    {isSidebarReallyOpen ? (
+                  <div className={cn("flex flex-col h-full", isSidebarReallyOpen ? "space-y-6" : "space-y-1")}>
+                    {isSidebarReallyOpen && (
                       <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-[0.2em] px-3 flex items-center gap-2">
                         <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse" />
                         Super Admin Suite
                       </div>
-                    ) : (
-                      <div className="h-px bg-zinc-200 dark:bg-zinc-800 mb-4 mx-2" />
                     )}
                     
-                    <div className="space-y-6 overflow-y-auto custom-scrollbar flex-1">
+                    <div className={cn("overflow-y-auto custom-scrollbar flex-1", isSidebarReallyOpen ? "space-y-6" : "space-y-1")}>
                       {[
                         {
                           category: 'Overview',
@@ -809,8 +803,8 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                       ].map((group) => {
                         const isGroupCollapsed = !!collapsedSections[`admin_${group.category}`];
                         return (
-                          <div key={group.category} className="space-y-1">
-                            {isSidebarReallyOpen ? (
+                          <div key={group.category} className={cn("space-y-1", !isSidebarReallyOpen && "space-y-0")}>
+                            {isSidebarReallyOpen && (
                               <button
                                 type="button"
                                 onClick={() => toggleSectionCollapse(`admin_${group.category}`)}
@@ -827,8 +821,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                                   )} 
                                 />
                               </button>
-                            ) : (
-                              <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-2 mx-2" />
                             )}
                             <AnimatePresence initial={false}>
                               {(!isGroupCollapsed || !isSidebarReallyOpen) && (
@@ -837,7 +829,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                                   animate={{ height: "auto", opacity: 1 }}
                                   exit={{ height: 0, opacity: 0 }}
                                   transition={{ duration: 0.2, ease: "easeInOut" }}
-                                  className="space-y-0.5 overflow-hidden"
+                                  className={cn("space-y-0.5", isSidebarReallyOpen && "overflow-hidden")}
                                 >
                                   {group.items.map((item, idx) => (
                                     <SidebarItem
@@ -860,7 +852,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                 )}
 
                 {!isAdminPath && !isSettingsMode && resolvedConfig && (
-                  <div className="space-y-6">
+                  <div className={cn(collapsed ? "space-y-1" : "space-y-6")}>
                     {resolvedConfig.sections.map((section) => (
                       <SidebarSectionRenderer 
                         key={section.id}
@@ -928,22 +920,20 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                 )}
 
                 {!isAdminPath && isSettingsMode && (
-                  <div className="flex flex-col h-full space-y-6">
-                    {isSidebarReallyOpen ? (
+                  <div className={cn("flex flex-col h-full", isSidebarReallyOpen ? "space-y-6" : "space-y-1")}>
+                    {isSidebarReallyOpen && (
                       <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-[0.2em] px-3 flex items-center gap-2">
                         <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse" />
                         Settings Suite
                       </div>
-                    ) : (
-                      <div className="h-px bg-zinc-200 dark:bg-zinc-800 mb-4 mx-2" />
                     )}
 
-                    <div className="space-y-6 overflow-y-auto custom-scrollbar flex-1">
+                    <div className={cn("overflow-y-auto custom-scrollbar flex-1", isSidebarReallyOpen ? "space-y-6" : "space-y-1")}>
                       {filteredSettingsGroups.map((group) => {
                         const isGroupCollapsed = !settingsSearchQuery && !!collapsedSections[`settings_${group.category}`];
                         return (
-                          <div key={group.category} className="space-y-1">
-                            {isSidebarReallyOpen ? (
+                          <div key={group.category} className={cn("space-y-1", !isSidebarReallyOpen && "space-y-0")}>
+                            {isSidebarReallyOpen && (
                               <button
                                 type="button"
                                 onClick={() => toggleSectionCollapse(`settings_${group.category}`)}
@@ -960,8 +950,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                                   )} 
                                 />
                               </button>
-                            ) : (
-                              <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-2 mx-2" />
                             )}
                             <AnimatePresence initial={false}>
                               {(!isGroupCollapsed || !isSidebarReallyOpen) && (
@@ -970,7 +958,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                                   animate={{ height: "auto", opacity: 1 }}
                                   exit={{ height: 0, opacity: 0 }}
                                   transition={{ duration: 0.2, ease: "easeInOut" }}
-                                  className="space-y-0.5 overflow-hidden"
+                                  className={cn("space-y-0.5", isSidebarReallyOpen && "overflow-hidden")}
                                 >
                                   {group.items.map((item, idx) => (
                                     <SidebarItem
@@ -994,7 +982,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
               </div>
             </div>
 
-            {layoutStyle !== 'slim' && (() => {
+            {(() => {
               let lastPlatformPath = localStorage.getItem('lastPlatformPath') || '/workspace';
               if (lastPlatformPath.includes('/settings')) {
                 lastPlatformPath = '/workspace';
@@ -1004,7 +992,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                   "shrink-0 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center w-full transition-all duration-300",
                   isSidebarReallyOpen ? "h-12" : "h-auto py-2 px-1.5 flex-col gap-1.5"
                 )}>
-                  {isTenantAdmin && !isAdminPath && (
+                  {!isAdminPath && (
                     <div className={cn("min-w-0", isSidebarReallyOpen ? "flex-1 px-2" : "w-full")}>
                       <SidebarItem
                         icon={isSettingsMode ? LayoutGrid : Settings}
@@ -1021,7 +1009,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                     </div>
                   )}
 
-                  {isTenantAdmin && !isAdminPath && !isSettingsMode && (
+                  {!isAdminPath && !isSettingsMode && (
                     isSidebarReallyOpen ? (
                       <button
                         onClick={() => navigateWithReturn('/workspace/settings/navigation/builder')}
@@ -1031,13 +1019,14 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                         <SlidersHorizontal size={15} />
                       </button>
                     ) : (
-                      <button
-                        onClick={() => navigateWithReturn('/workspace/settings/navigation/builder')}
-                        className="w-full flex items-center justify-center py-2 rounded-lg text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors shrink-0 cursor-pointer"
-                        title="Configure Navigation Menu"
-                      >
-                        <SlidersHorizontal size={16} />
-                      </button>
+                      <div className="w-full">
+                        <SidebarItem
+                          icon={SlidersHorizontal}
+                          label="Navigation Builder"
+                          onClick={() => navigateWithReturn('/workspace/settings/navigation/builder')}
+                          collapsed={collapsed}
+                        />
+                      </div>
                     )
                   )}
 
@@ -1046,25 +1035,21 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                       onClick={() => setIsSidebarOpen(!isSidebarOpen)}
                       className={cn(
                         "h-full px-2.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100/80 dark:hover:bg-zinc-800/50 transition-colors shrink-0 flex items-center justify-center cursor-pointer",
-                        isTenantAdmin && !isAdminPath ? "border-l border-zinc-200 dark:border-zinc-800" : "ml-auto"
+                        !isAdminPath ? "border-l border-zinc-200 dark:border-zinc-800" : "ml-auto"
                       )}
                       title="Collapse Sidebar"
                     >
                       <ChevronLeft size={16} />
                     </button>
                   ) : (
-                    <>
-                      {isTenantAdmin && !isAdminPath && (
-                        <div className="w-6 h-px bg-zinc-200 dark:border-zinc-800 shrink-0" />
-                      )}
-                      <button
+                    <div className="w-full">
+                      <SidebarItem
+                        icon={ChevronRight}
+                        label="Expand Sidebar"
                         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                        className="w-full flex items-center justify-center py-2 rounded-lg text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5 transition-colors shrink-0 cursor-pointer"
-                        title="Expand Sidebar"
-                      >
-                        <ChevronRight size={16} />
-                      </button>
-                    </>
+                        collapsed={collapsed}
+                      />
+                    </div>
                   )}
                 </div>
               );

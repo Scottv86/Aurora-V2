@@ -49,7 +49,7 @@ const INITIAL_APP_IDS = [
 
 export const AppLauncher = () => {
   const navigate = useNavigate();
-  const { tenant, setIsAppLauncherOpen } = usePlatform();
+  const { tenant, setIsAppLauncherOpen, inboxUnreadCount } = usePlatform();
   const [searchQuery, setSearchQuery] = useState('');
 
   // Default to all apps if not specified, ensuring newly introduced suite apps are visible by default
@@ -127,11 +127,16 @@ export const AppLauncher = () => {
                 )}
               >
                 <div className={cn(
-                  "w-12 h-12 rounded-2xl flex items-center justify-center mb-2 transition-transform duration-300 group-hover/app:scale-110 shadow-sm",
+                  "w-12 h-12 rounded-2xl flex items-center justify-center mb-2 transition-transform duration-300 group-hover/app:scale-110 shadow-sm relative",
                   "bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800",
                   app.color
                 )}>
                   <Icon size={24} />
+                  {app.id === 'inbox' && inboxUnreadCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.2 min-w-[18px] text-[10px] font-bold rounded-full bg-blue-600 text-white shadow-md flex items-center justify-center animate-in zoom-in-50 border border-white dark:border-zinc-900">
+                      {inboxUnreadCount}
+                    </span>
+                  )}
                 </div>
                 <span className="text-[11px] font-bold text-zinc-900 dark:text-white mb-0.5 text-center leading-tight">{app.label}</span>
                 {!app.to && (

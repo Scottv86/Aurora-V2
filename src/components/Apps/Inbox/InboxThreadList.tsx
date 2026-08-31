@@ -35,6 +35,89 @@ interface InboxThreadListProps {
   width?: number;
 }
 
+function decodeQp(input: string): string {
+  const cleaned = input.replace(/=\r?\n/g, '');
+  const bytes: number[] = [];
+  for (let i = 0; i < cleaned.length; i++) {
+    if (cleaned[i] === '=' && i + 2 < cleaned.length) {
+      const hex = cleaned.substring(i + 1, i + 3);
+      if (/^[0-9A-Fa-f]{2}$/.test(hex)) {
+        bytes.push(parseInt(hex, 16));
+        i += 2;
+        continue;
+      }
+    }
+    bytes.push(cleaned.charCodeAt(i));
+  }
+  try {
+    return new TextDecoder('utf-8').decode(new Uint8Array(bytes));
+  } catch (_) {
+    return cleaned.replace(/=([0-9A-Fa-f]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  }
+}
+
+function getCleanSnippet(snippet?: string, messages?: any[]): string {
+  const firstMsg = messages && messages[0];
+  const source = (firstMsg?.bodyText || firstMsg?.bodyHtml || snippet || '');
+  if (!source) return '';
+
+  let boundary = '';
+  const bMatch = source.match(/boundary=["']?([^"';\r\n]+)["']?/i);
+  if (bMatch) {
+    boundary = bMatch[1].trim();
+  } else {
+    const lineMatch = source.match(/--([A-Za-z0-9_=-]{6,})(?:\r?\n|$)/);
+    if (lineMatch) {
+      boundary = lineMatch[1].trim();
+    }
+  }
+
+  if (boundary && (source.includes('Content-Type:') || source.startsWith('--'))) {
+    const boundaryEscaped = boundary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const parts = source.split(new RegExp(`--${boundaryEscaped}(?:--)?`));
+
+    for (const p of parts) {
+      const trimmed = p.trim();
+      if (!trimmed || trimmed === '--') continue;
+
+      const splitIdx = trimmed.search(/\r?\n\r?\n/);
+      const headers = splitIdx !== -1 ? trimmed.substring(0, splitIdx) : '';
+      const body = splitIdx !== -1 ? trimmed.substring(splitIdx).replace(/^\r?\n\r?\n/, '') : trimmed;
+
+      const isPlain = /Content-Type:\s*text\/plain/i.test(headers);
+      const isHtml = /Content-Type:\s*text\/html/i.test(headers);
+
+      let decoded = decodeQp(body);
+      if (isPlain && decoded.trim()) {
+        return decoded.replace(/\s+/g, ' ').substring(0, 140).trim();
+      }
+      if (isHtml && decoded.trim()) {
+        const clean = decoded.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+                             .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+                             .replace(/<[^>]+>/g, ' ')
+                             .replace(/\s+/g, ' ')
+                             .trim();
+        if (clean) return clean.substring(0, 140).trim();
+      }
+    }
+  }
+
+  let text = decodeQp(source)
+    .replace(/--[A-Za-z0-9_-]+/g, '')
+    .replace(/Content-Type:[^\r\n]+/gi, '')
+    .replace(/Content-Transfer-Encoding:[^\r\n]+/gi, '')
+    .replace(/charset=[^\r\n]+/gi, '')
+    .replace(/boundary=[^\r\n]+/gi, '')
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/[A-Za-z0-9+/=]{40,}/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return text.substring(0, 140).trim();
+}
+
 export const InboxThreadList: React.FC<InboxThreadListProps> = ({
   threads,
   selectedThreadId,
@@ -83,29 +166,29 @@ export const InboxThreadList: React.FC<InboxThreadListProps> = ({
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matches = 
-          t.subject.toLowerCase().includes(q) ||
-          t.from.name.toLowerCase().includes(q) ||
-          t.from.address.toLowerCase().includes(q) ||
-          t.snippet.toLowerCase().includes(q);
+          (t.subject || '').toLowerCase().includes(q) ||
+          (t.from?.name || '').toLowerCase().includes(q) ||
+          (t.from?.address || '').toLowerCase().includes(q) ||
+          (t.snippet || '').toLowerCase().includes(q);
         if (!matches) return false;
       }
 
       // 2. Advanced Search Filters
       if (advFilters.from?.trim()) {
         const f = advFilters.from.toLowerCase();
-        if (!t.from.name.toLowerCase().includes(f) && !t.from.address.toLowerCase().includes(f)) {
+        if (!(t.from?.name || '').toLowerCase().includes(f) && !(t.from?.address || '').toLowerCase().includes(f)) {
           return false;
         }
       }
 
       if (advFilters.to?.trim()) {
         const toVal = advFilters.to.toLowerCase();
-        const matchesTo = t.to.some(rcpt => rcpt.name.toLowerCase().includes(toVal) || rcpt.address.toLowerCase().includes(toVal));
+        const matchesTo = (t.to || []).some(rcpt => (rcpt?.name || '').toLowerCase().includes(toVal) || (rcpt?.address || '').toLowerCase().includes(toVal));
         if (!matchesTo) return false;
       }
 
       if (advFilters.subject?.trim()) {
-        if (!t.subject.toLowerCase().includes(advFilters.subject.toLowerCase())) {
+        if (!(t.subject || '').toLowerCase().includes(advFilters.subject.toLowerCase())) {
           return false;
         }
       }
@@ -177,7 +260,7 @@ export const InboxThreadList: React.FC<InboxThreadListProps> = ({
 
   return (
     <div 
-      style={{ width: `${width}px` }}
+      style={{ width: `${width}px`, minWidth: `${width}px`, maxWidth: `${width}px` }}
       className="h-full bg-white dark:bg-zinc-950 flex flex-col shrink-0 select-none overflow-hidden"
     >
       
@@ -491,7 +574,7 @@ export const InboxThreadList: React.FC<InboxThreadListProps> = ({
 
                   {/* Snippet Preview */}
                   <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-2 leading-relaxed font-normal">
-                    {thread.snippet}
+                    {getCleanSnippet(thread.snippet, thread.messages)}
                   </p>
 
                   {/* Badges / Chips */}
@@ -516,6 +599,12 @@ export const InboxThreadList: React.FC<InboxThreadListProps> = ({
                     {thread.labels && thread.labels.length > 0 && (
                       <span className="text-[9px] font-medium px-1.5 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800/80 text-zinc-500 dark:text-zinc-400 truncate max-w-[120px]">
                         {thread.labels[0]}
+                      </span>
+                    )}
+
+                    {thread.assignedTo && (
+                      <span className="text-[9px] font-medium px-1.5 py-0.2 rounded bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200/40 dark:border-blue-800/40 flex items-center gap-1 truncate max-w-[140px]">
+                        {thread.assignedTo.startsWith('AI') || thread.assignedTo.includes('Bot') || thread.assignedTo.includes('Agent') ? '🤖' : '👤'} {thread.assignedTo}
                       </span>
                     )}
                     {thread.labels && thread.labels.length > 1 && (

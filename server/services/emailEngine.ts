@@ -625,24 +625,156 @@ export class ImapClient {
       }
     });
   }
+
+  /**
+   * Permanently delete / trash message on remote IMAP server (Two-Way Live Deletion)
+   */
+  public async deleteMessage(target: { messageId?: string; subject?: string }, folder = 'INBOX'): Promise<boolean> {
+    return new Promise((resolve) => {
+      const host = this.config.imapHost || 'imap.gmail.com';
+      const port = this.config.imapPort || 993;
+
+      let socket: tls.TLSSocket;
+      let isResolved = false;
+
+      const finish = (success: boolean) => {
+        if (!isResolved) {
+          isResolved = true;
+          try {
+            if (socket) {
+              socket.write(`A99 LOGOUT\r\n`);
+              socket.destroy();
+            }
+          } catch (_) {}
+          resolve(success);
+        }
+      };
+
+      const timeout = setTimeout(() => {
+        finish(false);
+      }, 10000);
+
+      try {
+        socket = tls.connect({
+          host,
+          port,
+          rejectUnauthorized: false,
+          servername: host
+        });
+
+        let step = 0;
+        let buffer = '';
+        let foundSeq: string[] = [];
+
+        socket.on('data', (chunk) => {
+          buffer += chunk.toString();
+
+          if (step === 0 && buffer.includes('* OK')) {
+            step = 1;
+            buffer = '';
+            const cleanPass = (this.config.password || '').replace(/\s+/g, '');
+            socket.write(`A01 LOGIN "${this.config.email}" "${cleanPass}"\r\n`);
+          } else if (step === 1 && buffer.includes('A01 OK')) {
+            step = 2;
+            buffer = '';
+            socket.write(`A02 SELECT "${folder}"\r\n`);
+          } else if (step === 1 && (buffer.includes('A01 NO') || buffer.includes('A01 BAD'))) {
+            clearTimeout(timeout);
+            finish(false);
+          } else if (step === 2 && buffer.includes('A02 OK')) {
+            step = 3;
+            buffer = '';
+            if (target.messageId) {
+              const cleanMid = target.messageId.replace(/[<>]/g, '');
+              socket.write(`A03 SEARCH HEADER Message-ID "${cleanMid}"\r\n`);
+            } else if (target.subject) {
+              const cleanSub = target.subject.replace(/"/g, '');
+              socket.write(`A03 SEARCH SUBJECT "${cleanSub}"\r\n`);
+            } else {
+              clearTimeout(timeout);
+              finish(false);
+            }
+          } else if (step === 3 && buffer.includes('A03 OK')) {
+            const searchMatch = buffer.match(/\*\s+SEARCH\s+([\d\s]+)/i);
+            if (searchMatch && searchMatch[1].trim()) {
+              foundSeq = searchMatch[1].trim().split(/\s+/).filter(Boolean);
+            }
+
+            if (foundSeq.length === 0) {
+              if (target.messageId && target.subject) {
+                step = 4;
+                buffer = '';
+                const cleanSub = target.subject.replace(/"/g, '');
+                socket.write(`A04 SEARCH SUBJECT "${cleanSub}"\r\n`);
+                return;
+              }
+              clearTimeout(timeout);
+              finish(true);
+              return;
+            }
+
+            step = 5;
+            buffer = '';
+            const seqStr = foundSeq.join(',');
+            socket.write(`A05 STORE ${seqStr} +FLAGS (\\Deleted)\r\n`);
+          } else if (step === 4 && buffer.includes('A04 OK')) {
+            const searchMatch = buffer.match(/\*\s+SEARCH\s+([\d\s]+)/i);
+            if (searchMatch && searchMatch[1].trim()) {
+              foundSeq = searchMatch[1].trim().split(/\s+/).filter(Boolean);
+            }
+
+            if (foundSeq.length === 0) {
+              clearTimeout(timeout);
+              finish(true);
+              return;
+            }
+
+            step = 5;
+            buffer = '';
+            const seqStr = foundSeq.join(',');
+            socket.write(`A05 STORE ${seqStr} +FLAGS (\\Deleted)\r\n`);
+          } else if (step === 5 && buffer.includes('A05 OK')) {
+            step = 6;
+            buffer = '';
+            socket.write(`A06 EXPUNGE\r\n`);
+          } else if (step === 6 && buffer.includes('A06 OK')) {
+            clearTimeout(timeout);
+            finish(true);
+          }
+        });
+
+        socket.on('error', () => {
+          clearTimeout(timeout);
+          finish(false);
+        });
+      } catch (_) {
+        clearTimeout(timeout);
+        finish(false);
+      }
+    });
+  }
 }
 
 /**
- * Basic MIME & Header parser for raw IMAP output
+ * Robust RFC 2822 & MIME Parser for IMAP emails
  */
 function parseRawEmailString(raw: string): ParsedEmail {
   const emailId = `msg_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
   
+  // Strip IMAP FETCH envelope header (e.g. (FLAGS (\Seen) BODY[] {12345}\r\n)
+  const cleanRaw = raw.replace(/^[^(]*\([^)]*BODY\[\]\s*\{\d+\}\r?\n/i, '')
+                      .replace(/\r?\n\)\r?\n?$/, '');
+
   // Extract Subject
   let subject = 'No Subject';
-  const subMatch = raw.match(/\r?\nSubject:\s*(.*?)(?=\r?\n[A-Z-a-z0-9]+:|\r?\n\r?\n|$)/s);
+  const subMatch = cleanRaw.match(/\r?\nSubject:\s*(.*?)(?=\r?\n[A-Za-z0-9-]+:|\r?\n\r?\n|$)/s);
   if (subMatch) {
     subject = decodeMimeHeader(subMatch[1].replace(/\r?\n\s+/g, ' ').trim());
   }
 
   // Extract From
   let from = { name: 'Unknown', address: '' };
-  const fromMatch = raw.match(/\r?\nFrom:\s*(.*?)(?=\r?\n[A-Z-a-z0-9]+:|\r?\n\r?\n|$)/s);
+  const fromMatch = cleanRaw.match(/\r?\nFrom:\s*(.*?)(?=\r?\n[A-Za-z0-9-]+:|\r?\n\r?\n|$)/s);
   if (fromMatch) {
     const rawFrom = decodeMimeHeader(fromMatch[1].replace(/\r?\n\s+/g, ' ').trim());
     const emailMatch = rawFrom.match(/<([^>]+)>/);
@@ -653,7 +785,7 @@ function parseRawEmailString(raw: string): ParsedEmail {
 
   // Extract To
   const toList: { name: string; address: string }[] = [];
-  const toMatch = raw.match(/\r?\nTo:\s*(.*?)(?=\r?\n[A-Z-a-z0-9]+:|\r?\n\r?\n|$)/s);
+  const toMatch = cleanRaw.match(/\r?\nTo:\s*(.*?)(?=\r?\n[A-Za-z0-9-]+:|\r?\n\r?\n|$)/s);
   if (toMatch) {
     const rawTo = decodeMimeHeader(toMatch[1].replace(/\r?\n\s+/g, ' ').trim());
     rawTo.split(',').forEach(part => {
@@ -666,7 +798,7 @@ function parseRawEmailString(raw: string): ParsedEmail {
 
   // Extract Date
   let date = new Date().toISOString();
-  const dateMatch = raw.match(/\r?\nDate:\s*(.*?)(?=\r?\n[A-Z-a-z0-9]+:|\r?\n\r?\n|$)/s);
+  const dateMatch = cleanRaw.match(/\r?\nDate:\s*(.*?)(?=\r?\n[A-Za-z0-9-]+:|\r?\n\r?\n|$)/s);
   if (dateMatch) {
     try {
       date = new Date(dateMatch[1].trim()).toISOString();
@@ -675,7 +807,7 @@ function parseRawEmailString(raw: string): ParsedEmail {
 
   // Extract Message-ID
   let messageId = '';
-  const msgIdMatch = raw.match(/\r?\nMessage-ID:\s*(.*?)(?=\r?\n[A-Z-a-z0-9]+:|\r?\n\r?\n|$)/is);
+  const msgIdMatch = cleanRaw.match(/\r?\nMessage-ID:\s*(.*?)(?=\r?\n[A-Za-z0-9-]+:|\r?\n\r?\n|$)/is);
   if (msgIdMatch) {
     messageId = msgIdMatch[1].trim();
   }
@@ -685,22 +817,26 @@ function parseRawEmailString(raw: string): ParsedEmail {
   if (raw.includes('\\Seen')) flags.push('\\Seen');
   if (raw.includes('\\Flagged')) flags.push('\\Flagged');
 
-  // Extract Body
-  const bodySplit = raw.split(/\r?\n\r?\n/);
-  const rawBody = bodySplit.slice(1).join('\n\n');
-  
-  let bodyText = '';
-  let bodyHtml = '';
+  // Parse MIME tree from cleaned content
+  const parsed = parseMimeSection(cleanRaw);
 
-  if (raw.includes('Content-Type: text/html')) {
-    bodyHtml = rawBody;
-    bodyText = rawBody.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-  } else {
-    bodyText = rawBody.slice(0, 5000);
-    bodyHtml = `<div style="font-family: sans-serif; white-space: pre-wrap; line-height: 1.5;">${escapeHtml(bodyText)}</div>`;
+  let bodyHtml = parsed.htmlParts.length > 0 ? parsed.htmlParts.join('<br/><hr/><br/>') : '';
+  let bodyText = parsed.textParts.length > 0 ? parsed.textParts.join('\n\n') : '';
+
+  if (!bodyHtml && bodyText) {
+    bodyHtml = `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; color: inherit; white-space: pre-wrap; line-height: 1.6;">${escapeHtml(bodyText)}</div>`;
+  } else if (!bodyText && bodyHtml) {
+    bodyText = bodyHtml.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+                       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+                       .replace(/<[^>]+>/g, ' ')
+                       .replace(/\s+/g, ' ')
+                       .trim();
   }
 
-  const snippet = (bodyText || subject).substring(0, 140).trim();
+  const snippet = (bodyText || subject)
+    .replace(/\s+/g, ' ')
+    .substring(0, 140)
+    .trim();
 
   return {
     id: emailId,
@@ -713,8 +849,129 @@ function parseRawEmailString(raw: string): ParsedEmail {
     bodyHtml,
     snippet,
     flags,
-    attachments: []
+    attachments: parsed.attachments
   };
+}
+
+function parseMimeSection(rawSection: string): { htmlParts: string[]; textParts: string[]; attachments: any[] } {
+  const htmlParts: string[] = [];
+  const textParts: string[] = [];
+  const attachments: any[] = [];
+
+  // Separate headers & body
+  const splitIdx = rawSection.search(/\r?\n\r?\n/);
+  let headerBlock = '';
+  let bodyBlock = '';
+  if (splitIdx !== -1) {
+    headerBlock = rawSection.substring(0, splitIdx);
+    bodyBlock = rawSection.substring(splitIdx).replace(/^\r?\n\r?\n/, '');
+  } else {
+    bodyBlock = rawSection;
+  }
+
+  // Parse headers
+  const contentTypeMatch = headerBlock.match(/Content-Type:\s*([^;\r\n]+)(?:;\s*([^\r\n]+(?:\r?\n\s+[^\r\n]+)*))?/i);
+  const contentType = contentTypeMatch ? contentTypeMatch[1].toLowerCase().trim() : 'text/plain';
+  const typeParams = contentTypeMatch && contentTypeMatch[2] ? contentTypeMatch[2].replace(/\r?\n\s+/g, ' ') : '';
+
+  const encodingMatch = headerBlock.match(/Content-Transfer-Encoding:\s*([^\r\n]+)/i);
+  const encoding = encodingMatch ? encodingMatch[1].trim().toLowerCase() : '';
+
+  const charsetMatch = typeParams.match(/charset=["']?([^"';\s]+)["']?/i) || headerBlock.match(/charset=["']?([^"';\s]+)["']?/i);
+  const charset = charsetMatch ? charsetMatch[1].trim() : 'utf-8';
+
+  const boundaryMatch = typeParams.match(/boundary=["']?([^"';\r\n]+)["']?/i) || headerBlock.match(/boundary=["']?([^"';\r\n]+)["']?/i);
+  const boundary = boundaryMatch ? boundaryMatch[1].trim() : null;
+
+  const dispositionMatch = headerBlock.match(/Content-Disposition:\s*([^;\r\n]+)(?:;\s*([^\r\n]+(?:\r?\n\s+[^\r\n]+)*))?/i);
+  const filenameMatch = (dispositionMatch ? dispositionMatch[2] : '')?.match(/filename=["']?([^"';\r\n]+)["']?/i) || typeParams.match(/name=["']?([^"';\r\n]+)["']?/i);
+  const filename = filenameMatch ? decodeMimeHeader(filenameMatch[1].trim()) : null;
+
+  if (boundary) {
+    // Multipart section
+    const boundaryRegex = new RegExp(`--${escapeRegExp(boundary)}(?:--)?`);
+    const parts = bodyBlock.split(boundaryRegex);
+    for (const p of parts) {
+      const trimmed = p.trim();
+      if (!trimmed || trimmed === '--') continue;
+      const sub = parseMimeSection(trimmed);
+      htmlParts.push(...sub.htmlParts);
+      textParts.push(...sub.textParts);
+      attachments.push(...sub.attachments);
+    }
+  } else if (filename || (dispositionMatch && dispositionMatch[1].toLowerCase().includes('attachment'))) {
+    // Attachment
+    const attFilename = filename || `attachment_${Date.now()}`;
+    const cleanBase64 = encoding === 'base64' ? bodyBlock.replace(/\s+/g, '') : Buffer.from(bodyBlock).toString('base64');
+    attachments.push({
+      id: `att_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
+      filename: attFilename,
+      contentType: contentType || 'application/octet-stream',
+      size: Math.round((cleanBase64.length * 3) / 4),
+      contentBase64: cleanBase64
+    });
+  } else if (contentType.includes('text/html')) {
+    const decodedHtml = decodePartContent(bodyBlock, encoding, charset);
+    htmlParts.push(decodedHtml);
+  } else if (contentType.includes('text/plain')) {
+    const decodedText = decodePartContent(bodyBlock, encoding, charset);
+    textParts.push(decodedText);
+  } else {
+    const decoded = decodePartContent(bodyBlock, encoding, charset);
+    if (decoded.includes('<html') || decoded.includes('<div') || decoded.includes('<p>')) {
+      htmlParts.push(decoded);
+    } else {
+      textParts.push(decoded);
+    }
+  }
+
+  return { htmlParts, textParts, attachments };
+}
+
+function decodeQuotedPrintable(input: string, charset = 'utf-8'): string {
+  // 1. Remove soft line breaks (=\r\n or =\n)
+  const cleaned = input.replace(/=\r?\n/g, '');
+  
+  // 2. Decode hex bytes
+  const bytes: number[] = [];
+  for (let i = 0; i < cleaned.length; i++) {
+    if (cleaned[i] === '=' && i + 2 < cleaned.length) {
+      const hex = cleaned.substring(i + 1, i + 3);
+      if (/^[0-9A-Fa-f]{2}$/.test(hex)) {
+        bytes.push(parseInt(hex, 16));
+        i += 2;
+        continue;
+      }
+    }
+    bytes.push(cleaned.charCodeAt(i));
+  }
+  
+  try {
+    const enc = (charset.toLowerCase() === 'utf-8' || charset.toLowerCase() === 'utf8') ? 'utf-8' : charset;
+    return Buffer.from(bytes).toString(enc as BufferEncoding);
+  } catch (_) {
+    return Buffer.from(bytes).toString('utf-8');
+  }
+}
+
+function decodePartContent(content: string, encoding: string, charset = 'utf-8'): string {
+  const enc = (encoding || '').toLowerCase().trim();
+  if (enc === 'base64') {
+    try {
+      const clean = content.replace(/[^A-Za-z0-9+/=]/g, '');
+      const charEnc = (charset.toLowerCase() === 'utf-8' || charset.toLowerCase() === 'utf8') ? 'utf-8' : charset;
+      return Buffer.from(clean, 'base64').toString(charEnc as BufferEncoding);
+    } catch (_) {
+      return content;
+    }
+  } else if (enc === 'quoted-printable') {
+    return decodeQuotedPrintable(content, charset);
+  }
+  return content;
+}
+
+function escapeRegExp(string: string): string {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function decodeMimeHeader(header: string): string {
@@ -723,7 +980,7 @@ function decodeMimeHeader(header: string): string {
       if (encoding.toUpperCase() === 'B') {
         return Buffer.from(text, 'base64').toString(charset.toLowerCase() === 'utf-8' ? 'utf-8' : 'utf-8');
       } else if (encoding.toUpperCase() === 'Q') {
-        return text.replace(/=([0-9A-Fa-f]{2})/g, (_: string, hex: string) => String.fromCharCode(parseInt(hex, 16))).replace(/_/g, ' ');
+        return decodeQuotedPrintable(text.replace(/_/g, ' '), charset);
       }
     } catch (_) {}
     return text;
