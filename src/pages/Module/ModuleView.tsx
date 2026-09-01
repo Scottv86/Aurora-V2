@@ -4607,7 +4607,7 @@ export const ModuleView = () => {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e4e4e720" />
                   <XAxis dataKey="name" tickLine={false} style={{ fontSize: '10px', fill: '#888' }} />
                   <YAxis tickLine={false} style={{ fontSize: '10px', fill: '#888' }} />
-                  <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '11px', fontWeight: 'bold' }} />
+                  <Tooltip cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }} contentStyle={{ background: '#18181b', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '11px', fontWeight: 'bold' }} />
                   <Bar dataKey="value" fill="#6366f1" radius={[8, 8, 0, 0]} maxBarSize={48}>
                     {analyticsData.assigneeData.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />

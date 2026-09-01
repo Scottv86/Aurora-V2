@@ -73,6 +73,22 @@ export const initSocket = (httpServer: HttpServer) => {
       socket.leave(`tenant_${tenantId}`);
     });
 
+    // Chat Channel Rooms
+    socket.on('join_channel', (channelId: string) => {
+      socket.join(`channel_${channelId}`);
+    });
+
+    socket.on('leave_channel', (channelId: string) => {
+      socket.leave(`channel_${channelId}`);
+    });
+
+    // Real-time typing indicator
+    socket.on('chat:typing', (data: { tenantId: string; channelId: string; userId: string; userName: string; isTyping: boolean }) => {
+      if (data.tenantId) {
+        socket.to(`tenant_${data.tenantId}`).emit('chat:user_typing', data);
+      }
+    });
+
     socket.on('disconnect', () => {
       console.log(`[Socket] Client disconnected: ${socket.id}`);
     });

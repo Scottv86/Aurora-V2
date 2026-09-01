@@ -59,6 +59,8 @@ model Tenant {
   inboxSnippets          InboxSnippet[]
   inboxSignatures        InboxSignature[]
   inboxRules             InboxRule[]
+  chatChannels           ChatChannel[]
+  chatPresences          ChatUserPresence[]
 
   @@map("tenants")
 }
@@ -1276,3 +1278,126 @@ model InboxRule {
   @@index([tenantId])
   @@map("inbox_rules")
 }
+
+// ----------------------------------------------------------------------
+// Enterprise Chat & Team Collaboration Models
+// ----------------------------------------------------------------------
+
+model ChatChannel {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  name        String
+  description String?  @db.Text
+  topic       String?  @db.Text
+  type        String   @default("public") // "public" | "private" | "direct" | "group"
+  isArchived  Boolean  @default(false) @map("is_archived")
+  isFavorite  Boolean  @default(false) @map("is_favorite")
+  createdBy   String?  @map("created_by")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  members     ChatChannelMember[]
+  messages    ChatMessage[]
+
+  @@index([tenantId, type])
+  @@index([tenantId, isArchived])
+  @@map("chat_channels")
+}
+
+model ChatChannelMember {
+  id         String   @id @default(cuid())
+  channelId  String   @map("channel_id")
+  userId     String   @map("user_id")
+  role       String   @default("member") // "admin" | "member"
+  lastReadAt DateTime @default(now()) @map("last_read_at")
+  isMuted    Boolean  @default(false) @map("is_muted")
+  joinedAt   DateTime @default(now()) @map("joined_at")
+
+  channel    ChatChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, userId])
+  @@index([userId])
+  @@map("chat_channel_members")
+}
+
+model ChatMessage {
+  id              String   @id @default(cuid())
+  channelId       String   @map("channel_id")
+  tenantId        String   @map("tenant_id")
+  senderId        String   @map("sender_id")
+  senderName      String   @map("sender_name")
+  senderRole      String?  @map("sender_role")
+  senderAvatar    String?  @map("sender_avatar")
+  content         String   @db.Text
+  isEdited        Boolean  @default(false) @map("is_edited")
+  isPinned        Boolean  @default(false) @map("is_pinned")
+  pinnedBy        String?  @map("pinned_by")
+  pinnedAt        DateTime? @map("pinned_at")
+  isSystem        Boolean  @default(false) @map("is_system")
+  parentMessageId String?  @map("parent_message_id")
+  threadCount     Int      @default(0) @map("thread_count")
+  lastReplyAt     DateTime? @map("last_reply_at")
+  readBy          Json     @default("[]") @map("read_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  channel         ChatChannel             @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  parentMessage   ChatMessage?            @relation("ThreadReplies", fields: [parentMessageId], references: [id], onDelete: Cascade)
+  replies         ChatMessage[]           @relation("ThreadReplies")
+  attachments     ChatMessageAttachment[]
+  reactions       ChatMessageReaction[]
+
+  @@index([channelId, createdAt])
+  @@index([tenantId, channelId])
+  @@index([parentMessageId])
+  @@map("chat_messages")
+}
+
+model ChatMessageReaction {
+  id        String   @id @default(cuid())
+  messageId String   @map("message_id")
+  userId    String   @map("user_id")
+  emoji     String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+  @@map("chat_message_reactions")
+}
+
+model ChatMessageAttachment {
+  id        String   @id @default(cuid())
+  messageId String   @map("message_id")
+  name      String
+  url       String
+  type      String   @default("file") // "image" | "file" | "audio" | "video"
+  size      Int      @default(0)
+  mimeType  String?  @map("mime_type")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@map("chat_message_attachments")
+}
+
+model ChatUserPresence {
+  id          String   @id @default(cuid())
+  userId      String   @unique @map("user_id")
+  tenantId    String   @map("tenant_id")
+  presence    String   @default("online") // "online" | "busy" | "away" | "offline"
+  statusEmoji String?  @map("status_emoji")
+  statusText  String?  @map("status_text")
+  lastActiveAt DateTime @default(now()) @map("last_active_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, presence])
+  @@map("chat_user_presences")
+}
+

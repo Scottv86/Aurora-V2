@@ -138,6 +138,7 @@ export const InlineChartComponent: React.FC<InlineChartConfig> = ({
             <XAxis dataKey={xAxisKey} stroke="#94a3b8" fontSize={12} tickLine={false} />
             <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} />
             <Tooltip 
+              cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
               contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', color: '#f8fafc' }}
             />
             <Legend wrapperStyle={{ color: '#94a3b8', fontSize: '12px' }} />

@@ -220,3 +220,30 @@ export interface EmailRule {
   };
   enabled: boolean;
 }
+
+export interface WorkspaceOAuthApp {
+  provider: 'google' | 'microsoft';
+  clientId: string;
+  clientSecretHint?: string;
+  tenantId?: string;
+  redirectUri?: string;
+  enabled: boolean;
+}
+
+export interface WorkspaceSmtpRelay {
+  host: string;
+  port: number;
+  secure: boolean;
+  username: string;
+  fromName: string;
+  fromEmail: string;
+  enabled: boolean;
+}
+
+export interface WorkspaceMailConfig {
+  googleOAuth?: WorkspaceOAuthApp;
+  microsoftOAuth?: WorkspaceOAuthApp;
+  smtpRelay?: WorkspaceSmtpRelay;
+  allowUserPersonalAccounts: boolean;
+  defaultRetentionDays?: number;
+}

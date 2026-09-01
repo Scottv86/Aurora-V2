@@ -536,7 +536,7 @@ export class ImapClient {
   /**
    * Fetches latest N messages from mailbox
    */
-  public async fetchRecentMessages(folder = 'INBOX', limit = 20): Promise<ParsedEmail[]> {
+  public async fetchRecentMessages(folder = 'INBOX', limit = 50): Promise<ParsedEmail[]> {
     return new Promise((resolve) => {
       const host = this.config.imapHost || 'imap.gmail.com';
       const port = this.config.imapPort || 993;

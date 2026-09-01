@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { 
   User, 
+  Users,
   Shield, 
   Settings, 
   Activity, 
@@ -31,13 +32,15 @@ import {
   UserCheck,
   BookOpen,
   Loader2,
-  Check
+  Check,
+  RefreshCw
 } from 'lucide-react';
 import { useMember } from '../../hooks/useMember';
 import { useTeams } from '../../hooks/useTeams';
 import { usePositions } from '../../hooks/usePositions';
 import { useUsers } from '../../hooks/useUsers';
 import { usePlatform } from '../../hooks/usePlatform';
+import { useAuth } from '../../hooks/useAuth';
 import { generateTrainingQuestions, compileAgentDirectives, generateAgentAvatar } from '../../services/aiService';
 import { Button, Input, Select, Badge, cn } from '../../components/UI/Primitives';
 import { Tabs, Modal } from '../../components/UI/TabsAndModal';
@@ -49,16 +52,62 @@ import { SignaturePad } from '../../components/Settings/Workforce/SignaturePad';
 import { CreateContractModal } from '../../components/Settings/Workforce/CreateContractModal';
 import { RequestLeaveModal } from '../../components/Settings/Workforce/RequestLeaveModal';
 import { UserPresenceBadge } from '../../components/Common/UserPresenceBadge';
+import { InboxAccountModal } from '../../components/Apps/Inbox/InboxAccountModal';
+import { InboxService } from '../../services/inboxService';
+import { EmailAccount } from '../../types/inbox';
+import { toast } from 'sonner';
+
+const GmailLogo = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24">
+    <path fill="#4285F4" d="M1.5 5.5v13a1 1 0 0 0 1 1h3v-10l6.5 4.875L18.5 9.5v10h3a1 1 0 0 0 1-1v-13a1 1 0 0 0-1.6-.8L12 12.1 2.1 4.7a1 1 0 0 0-1.6.8z"/>
+    <path fill="#34A853" d="M18.5 19.5h3a1 1 0 0 0 1-1V9.5l-4 3v7z"/>
+    <path fill="#FBBC04" d="M1.5 6.5l4 3v10h-3a1 1 0 0 1-1-1v-12z"/>
+    <path fill="#EA4335" d="M21.5 4.7a1 1 0 0 0-1.1-.1L12 10.9 3.6 4.6a1 1 0 0 0-1.1.1 1 1 0 0 0-.5.8v1l10 7.5 10-7.5v-1a1 1 0 0 0-.5-.8z"/>
+  </svg>
+);
+
+const MicrosoftLogo = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 23 23">
+    <path fill="#f25022" d="M1 1h10v10H1z"/>
+    <path fill="#00a4ef" d="M1 12h10v10H1z"/>
+    <path fill="#7fba00" d="M12 1h10v10H12z"/>
+    <path fill="#ffb900" d="M12 12h10v10H12z"/>
+  </svg>
+);
+
+const YahooLogo = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="#6001D2">
+    <path d="M12 14.5l4.5-9.5h3L14 15.5V21h-3v-5.5L5.5 5h3L12 14.5z"/>
+  </svg>
+);
+
+const AppleLogo = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.61-.75 1.04-1.8 0.92-2.87-.9.04-2 .6-2.63 1.34-.55.63-1.03 1.68-.9 2.71 1.01.08 2.01-.43 2.61-1.18z"/>
+  </svg>
+);
 
 export const MemberDetailView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { member, loading, updateMember, deleteMember } = useMember(id);
-  const { refreshBilling, setBreadcrumbOverride } = usePlatform();
+  const { refreshBilling, setBreadcrumbOverride, tenant } = usePlatform();
+  const { user: authUser } = useAuth();
   const { teams } = useTeams();
   const { positions } = usePositions();
   const { cloneMember } = useUsers();
-  const [activeTab, setActiveTab] = useState('overview');
+
+  const tabFromUrl = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(tabFromUrl || 'overview');
+
+  // Update tab if query parameter changes
+  React.useEffect(() => {
+    if (tabFromUrl && tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [tabFromUrl]);
+
   const [isSaving, setIsSaving] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -74,12 +123,19 @@ export const MemberDetailView = () => {
   const [isContractor, setIsContractor] = useState(false);
   const [workEmail, setWorkEmail] = useState('');
   const [signature, setSignature] = useState('');
+  const [homeAddress, setHomeAddress] = useState('');
+  const [workArrangements, setWorkArrangements] = useState('Office');
+  const [emergencyContact, setEmergencyContact] = useState('');
+  const [positionNumber, setPositionNumber] = useState('');
+  const [personalEmail, setPersonalEmail] = useState('');
+  const [salary, setSalary] = useState('');
+  const [positionId, setPositionId] = useState('');
+  const [teamId, setTeamId] = useState('');
+  const [status, setStatus] = useState<'Active' | 'Inactive' | 'Pending' | 'Offline'>('Active');
+  const [contracts, setContracts] = useState<any[]>([]);
 
   // Local form state
   const [role, setRole] = useState('');
-  const [teamId, setTeamId] = useState('');
-  const [positionId, setPositionId] = useState('');
-  const [status, setStatus] = useState('');
   const [modelType, setModelType] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
   const [temperature, setTemperature] = useState(0.7);
@@ -88,10 +144,6 @@ export const MemberDetailView = () => {
   const [firstName, setFirstName] = useState('');
   const [otherName, setOtherName] = useState('');
   const [familyName, setFamilyName] = useState('');
-  const [personalEmail, setPersonalEmail] = useState('');
-  const [homeAddress, setHomeAddress] = useState('');
-  const [workArrangements, setWorkArrangements] = useState('');
-  const [emergencyContact, setEmergencyContact] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [gender, setGender] = useState('');
   const [nationality, setNationality] = useState('');
@@ -104,7 +156,6 @@ export const MemberDetailView = () => {
   const [education, setEducation] = useState<{ institution: string; degree: string; fieldOfStudy: string; startDate?: string; endDate?: string }[]>([]);
   const [skills, setSkills] = useState<{ name: string; proficiencyLevel: string }[]>([]);
 
-  const { tenant } = usePlatform();
   const [kbArticles, setKbArticles] = useState<any[]>([]);
   
   // Retraining Wizard State
@@ -133,6 +184,61 @@ export const MemberDetailView = () => {
       setGeneratingAvatar(false);
     }
   };
+
+  // Mailbox & Inboxes Integration State
+  const [memberAccounts, setMemberAccounts] = useState<EmailAccount[]>([]);
+  const [loadingAccounts, setLoadingAccounts] = useState(false);
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [testingAccId, setTestingAccId] = useState<string | null>(null);
+  const [syncingAccId, setSyncingAccId] = useState<string | null>(null);
+
+  const loadMemberAccounts = async () => {
+    if (!member) return;
+    setLoadingAccounts(true);
+    try {
+      const allAccs = await InboxService.getAccounts(tenant?.id);
+      
+      const isAccountMatch = (a: EmailAccount) => {
+        // Shared inboxes: accessible if delegated or global
+        if (a.type === 'SHARED') {
+          if (!a.sharedMembers || a.sharedMembers.length === 0) return true;
+          return a.sharedMembers.includes(member.id) || (member.userId && a.sharedMembers.includes(member.userId));
+        }
+
+        // 1. Direct Member ID matching
+        if (a.userId && (a.userId === member.id || a.userId === member.userId)) return true;
+        if ((a.config as any)?.userId && ((a.config as any).userId === member.id || (a.config as any).userId === member.userId)) return true;
+
+        // 2. Email matching (work email, personal email, or user email)
+        const memberEmails = [member.email, member.personalEmail, workEmail, personalEmail].filter(Boolean).map(e => e.toLowerCase());
+        if (a.email && memberEmails.includes(a.email.toLowerCase())) return true;
+        if (a.userEmail && memberEmails.includes(a.userEmail.toLowerCase())) return true;
+        if ((a.config as any)?.userEmail && memberEmails.includes((a.config as any).userEmail.toLowerCase())) return true;
+
+        // 3. User name match
+        if (a.userName && (a.userName.toLowerCase() === member.name?.toLowerCase() || a.userName.toLowerCase() === `${member.firstName || ''} ${member.familyName || ''}`.trim().toLowerCase())) return true;
+
+        // 4. Current user viewing own profile fallback
+        if (authUser && (authUser.id === member.id || authUser.id === member.userId || authUser.email?.toLowerCase() === member.email?.toLowerCase())) {
+          return true;
+        }
+
+        return false;
+      };
+
+      const filtered = allAccs.filter(isAccountMatch);
+      setMemberAccounts(filtered);
+    } catch (_) {}
+    finally {
+      setLoadingAccounts(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (member) {
+      loadMemberAccounts();
+    }
+  }, [member?.id, member?.email, tenant?.id]);
 
   // Fetch articles from localStorage
   React.useEffect(() => {
@@ -477,6 +583,7 @@ export const MemberDetailView = () => {
           tabs={member.isSynthetic ? [
             { id: 'overview', label: 'Overview', icon: User },
             { id: 'configuration', label: 'AI Settings', icon: Sparkles },
+            { id: 'mailboxes', label: 'Mailboxes', icon: Mail },
             { id: 'permissions', label: 'Permissions', icon: Shield },
             { id: 'activity', label: 'Activity', icon: Activity } 
           ] : [
@@ -486,6 +593,7 @@ export const MemberDetailView = () => {
             { id: 'professional', label: 'Skills', icon: Sparkles },
             { id: 'contracts', label: 'Contracts', icon: Receipt },
             { id: 'leave', label: 'Time Off', icon: Clock },
+            { id: 'mailboxes', label: 'Mailboxes', icon: Mail },
             { id: 'permissions', label: 'Permissions', icon: Shield },
             { id: 'activity', label: 'Activity', icon: Activity } 
           ]}
@@ -1284,6 +1392,195 @@ export const MemberDetailView = () => {
             </div>
           )}
 
+          {activeTab === 'mailboxes' && (
+            <div className="space-y-6">
+              {/* Header & Quick Action */}
+              <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 space-y-6 shadow-sm">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-zinc-100 dark:border-zinc-800 pb-5">
+                  <div className="space-y-1">
+                    <h3 className="text-lg font-bold flex items-center gap-2">
+                      <Mail size={18} className="text-indigo-500" /> Connected Mailboxes & Inboxes
+                    </h3>
+                    <p className="text-xs text-zinc-500">
+                      Personal mailboxes connected by this user, along with shared department mailboxes they have permission to access.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate('/workspace/settings/email-connections')}
+                      className="text-xs gap-1.5"
+                    >
+                      <Globe size={14} /> Open All Connections Hub
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => setIsAccountModalOpen(true)}
+                      className="text-xs gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white"
+                    >
+                      <Plus size={14} /> Connect Mailbox
+                    </Button>
+                  </div>
+                </div>
+
+                {loadingAccounts ? (
+                  <div className="py-12 text-center text-xs text-zinc-400">
+                    <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-indigo-500" />
+                    Loading connected mailboxes...
+                  </div>
+                ) : memberAccounts.length === 0 ? (
+                  <div className="py-10 text-center space-y-3 bg-zinc-50 dark:bg-zinc-800/30 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-700">
+                    <div className="w-12 h-12 rounded-full bg-indigo-500/10 text-indigo-600 flex items-center justify-center mx-auto">
+                      <Mail size={20} />
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="font-semibold text-sm text-zinc-800 dark:text-zinc-200">No Mailboxes Connected</h4>
+                      <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+                        This member does not have any active personal or delegated shared mailboxes connected yet.
+                      </p>
+                    </div>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => setIsAccountModalOpen(true)}
+                      className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
+                    >
+                      <Plus size={14} className="mr-1" /> Connect Mailbox for {fullName}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {memberAccounts.map((acc) => {
+                      const isTesting = testingAccId === acc.id;
+                      const isSyncing = syncingAccId === acc.id;
+                      return (
+                        <div
+                          key={acc.id}
+                          className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/20 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            {acc.provider.toLowerCase() === 'gmail' || acc.email.includes('gmail.com') ? (
+                              <div className="w-10 h-10 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center shadow-sm shrink-0 p-2">
+                                <GmailLogo className="w-5 h-5" />
+                              </div>
+                            ) : acc.provider.toLowerCase() === 'outlook' || acc.email.includes('outlook.com') || acc.email.includes('office365.com') ? (
+                              <div className="w-10 h-10 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center shadow-sm shrink-0 p-2">
+                                <MicrosoftLogo className="w-4 h-4" />
+                              </div>
+                            ) : acc.provider.toLowerCase() === 'yahoo' || acc.email.includes('yahoo.com') ? (
+                              <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/50 flex items-center justify-center shadow-sm shrink-0 p-2">
+                                <YahooLogo className="w-5 h-5" />
+                              </div>
+                            ) : acc.provider.toLowerCase() === 'icloud' || acc.email.includes('icloud.com') ? (
+                              <div className="w-10 h-10 rounded-xl bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 flex items-center justify-center shadow-sm shrink-0 p-2 text-zinc-900 dark:text-white">
+                                <AppleLogo className="w-4 h-4" />
+                              </div>
+                            ) : acc.type === 'SHARED' ? (
+                              <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 flex items-center justify-center shadow-sm shrink-0 text-emerald-600 dark:text-emerald-400">
+                                <Users size={18} />
+                              </div>
+                            ) : (
+                              <div
+                                className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white shadow-sm shrink-0"
+                                style={{ backgroundColor: acc.color || '#4F46E5' }}
+                              >
+                                <Mail size={18} />
+                              </div>
+                            )}
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-bold text-sm text-zinc-900 dark:text-white">
+                                  {acc.name}
+                                </span>
+                                <Badge variant={acc.type === 'SHARED' ? 'purple' : 'zinc'} className="text-[10px] uppercase">
+                                  {acc.type === 'SHARED' ? 'Shared Delegated' : 'Personal User'}
+                                </Badge>
+                                <Badge variant={acc.status === 'CONNECTED' ? 'green' : 'amber'} className="text-[10px]">
+                                  {acc.status}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-3 text-xs text-zinc-500 flex-wrap font-mono">
+                                <span>{acc.email}</span>
+                                <span>•</span>
+                                <span>Provider: {acc.provider.toUpperCase()}</span>
+                                <span>•</span>
+                                <span>
+                                  Last Sync: {acc.lastSyncedAt ? new Date(acc.lastSyncedAt).toLocaleTimeString() : 'Never'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 self-end sm:self-center">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={async () => {
+                                setTestingAccId(acc.id);
+                                try {
+                                  const res = await InboxService.testConnection(acc.config, tenant?.id);
+                                  if (res.success) toast.success(`Connection to ${acc.email} verified!`);
+                                  else toast.error(res.message);
+                                } catch (e: any) {
+                                  toast.error(e.message || 'Connection test failed');
+                                } finally {
+                                  setTestingAccId(null);
+                                }
+                              }}
+                              disabled={isTesting}
+                              className="text-xs"
+                            >
+                              {isTesting ? 'Testing...' : 'Test'}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={async () => {
+                                setSyncingAccId(acc.id);
+                                try {
+                                  await InboxService.syncAccount(acc.id, tenant?.id);
+                                  toast.success(`Synced ${acc.email}`);
+                                  await loadMemberAccounts();
+                                } catch (_) {
+                                  toast.error('Sync failed');
+                                } finally {
+                                  setSyncingAccId(null);
+                                }
+                              }}
+                              disabled={isSyncing}
+                              className="text-xs"
+                            >
+                              <RefreshCw size={12} className={cn('mr-1', isSyncing && 'animate-spin')} />
+                              {isSyncing ? 'Syncing...' : 'Sync'}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={async () => {
+                                if (confirm(`Disconnect ${acc.email} from ${fullName}?`)) {
+                                  await InboxService.deleteAccount(acc.id, tenant?.id);
+                                  toast.success('Mailbox disconnected.');
+                                  await loadMemberAccounts();
+                                }
+                              }}
+                              className="text-xs text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                              title="Disconnect / Revoke access"
+                            >
+                              <Trash2 size={14} />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {activeTab === 'permissions' && (
             <PermissionsTab 
               memberId={member.id}
@@ -1487,6 +1784,16 @@ export const MemberDetailView = () => {
           </div>
         </div>
       </Modal>
+
+      <InboxAccountModal
+        isOpen={isAccountModalOpen}
+        onClose={() => setIsAccountModalOpen(false)}
+        onAccountAdded={async (newAcc) => {
+          setIsAccountModalOpen(false);
+          toast.success(`Mailbox ${newAcc.email} connected.`);
+          await loadMemberAccounts();
+        }}
+      />
     </div>
   );
 };

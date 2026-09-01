@@ -19,6 +19,7 @@ import {
 import { EmailAccount, EmailProvider, AccountType } from '../../../types/inbox';
 import { InboxService, autoDetectEmailSettings } from '../../../services/inboxService';
 import { usePlatform } from '../../../hooks/usePlatform';
+import { useAuth } from '../../../hooks/useAuth';
 import { cn } from '../../../lib/utils';
 import { toast } from 'sonner';
 
@@ -34,6 +35,7 @@ export const InboxAccountModal: React.FC<InboxAccountModalProps> = ({
   onAccountAdded
 }) => {
   const { tenant } = usePlatform();
+  const { user } = useAuth();
 
   const [accountType, setAccountType] = useState<AccountType>('PERSONAL');
   const [provider, setProvider] = useState<EmailProvider>('gmail');
@@ -148,6 +150,9 @@ export const InboxAccountModal: React.FC<InboxAccountModalProps> = ({
         provider,
         type: accountType,
         color,
+        userId: user?.id,
+        userEmail: user?.email,
+        userName: user?.user_metadata?.name || user?.user_metadata?.full_name || (user?.email ? user.email.split('@')[0] : undefined),
         config: {
           email: email.trim(),
           password: password.trim(),
@@ -155,7 +160,10 @@ export const InboxAccountModal: React.FC<InboxAccountModalProps> = ({
           imapHost,
           imapPort: Number(imapPort),
           smtpHost,
-          smtpPort: Number(smtpPort)
+          smtpPort: Number(smtpPort),
+          userId: user?.id,
+          userEmail: user?.email,
+          userName: user?.user_metadata?.name || user?.user_metadata?.full_name || (user?.email ? user.email.split('@')[0] : undefined)
         }
       }, tenant?.id);
 

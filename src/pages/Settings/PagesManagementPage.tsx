@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { cn, slugify } from '../../lib/utils';
 import { EmptyState } from '../../components/UI/EmptyState';
 import { TrashService } from '../../services/trashService';
+import { DATA_API_URL } from '../../config';
 
 const COMMON_ICONS = [
   'LayoutDashboard', 'ClipboardList', 'Layers', 'Database', 'Globe', 'Cpu', 'ShieldCheck', 'Inbox', 'BookOpen', 'BarChart'
@@ -78,7 +79,7 @@ export const PagesManagementPage = () => {
         payload: targetPage
       });
 
-      const response = await fetch(`http://localhost:3001/api/data/modules/${targetPage.id}`, {
+      const response = await fetch(`${DATA_API_URL}/modules/${targetPage.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -132,7 +133,7 @@ export const PagesManagementPage = () => {
         ];
       }
 
-      const response = await fetch(`http://localhost:3001/api/data/modules`, {
+      const response = await fetch(`${DATA_API_URL}/modules`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

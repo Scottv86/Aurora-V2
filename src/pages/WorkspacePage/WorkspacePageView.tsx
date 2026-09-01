@@ -401,7 +401,12 @@ const WidgetRenderer = React.memo(({ widget, tenant, session }: { widget: any, t
               className="w-full h-full flex-1"
             />
           ) : (
-            <WorkQueue />
+            <WorkQueue
+              isWidget={true}
+              widgetTitle={widget.title}
+              widgetProperties={widget.properties}
+              className="w-full h-full"
+            />
           )}
         </div>
       );
@@ -854,7 +859,10 @@ const ChartWidget: React.FC<{ widget: any, tenant: any, session: any }> = ({ wid
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                 <XAxis dataKey="date" stroke="#71717a" fontSize={10} tickLine={false} />
                 <YAxis stroke="#71717a" fontSize={10} tickLine={false} />
-                <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px', color: '#fff', fontSize: '11px' }} />
+                <Tooltip 
+                  cursor={{ stroke: '#3f3f46', strokeWidth: 1 }}
+                  contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px', color: '#fff', fontSize: '11px' }} 
+                />
                 <Line type="monotone" dataKey="volume" stroke="#6366f1" strokeWidth={2.5} activeDot={{ r: 6 }} animationDuration={300} />
               </LineChart>
             ) : (
@@ -862,7 +870,10 @@ const ChartWidget: React.FC<{ widget: any, tenant: any, session: any }> = ({ wid
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                 <XAxis dataKey="date" stroke="#71717a" fontSize={10} tickLine={false} />
                 <YAxis stroke="#71717a" fontSize={10} tickLine={false} />
-                <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px', color: '#fff', fontSize: '11px' }} />
+                <Tooltip 
+                  cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
+                  contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px', color: '#fff', fontSize: '11px' }} 
+                />
                 <Bar dataKey="volume" fill="#6366f1" radius={[4, 4, 0, 0]} animationDuration={300} />
               </BarChart>
             )}
@@ -1332,7 +1343,10 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
                             <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                             <XAxis dataKey="name" stroke="#71717a" fontSize={9} tickLine={false} />
                             <YAxis stroke="#71717a" fontSize={9} tickLine={false} />
-                            <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />
+                            <Tooltip 
+                              cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
+                              contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px', color: '#fff', fontSize: '10px' }} 
+                            />
                             {(w.properties?.showLegend ?? false) && <Legend wrapperStyle={{ fontSize: '9px' }} />}
                             <Bar dataKey="value" fill={w.properties.color || '#6366f1'} radius={[4, 4, 0, 0]} animationDuration={300} />
                           </BarChart>
@@ -1349,7 +1363,10 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
                             <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                             <XAxis dataKey="name" stroke="#71717a" fontSize={9} tickLine={false} />
                             <YAxis stroke="#71717a" fontSize={9} tickLine={false} />
-                            <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />
+                            <Tooltip 
+                              cursor={{ stroke: '#3f3f46', strokeWidth: 1 }}
+                              contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px', color: '#fff', fontSize: '10px' }} 
+                            />
                             {(w.properties?.showLegend ?? false) && <Legend wrapperStyle={{ fontSize: '9px' }} />}
                             <Line type="monotone" dataKey="value" stroke={w.properties.color || '#6366f1'} strokeWidth={2} animationDuration={300} />
                           </LineChart>
@@ -1366,7 +1383,10 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
                             <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                             <XAxis dataKey="name" stroke="#71717a" fontSize={9} tickLine={false} />
                             <YAxis stroke="#71717a" fontSize={9} tickLine={false} />
-                            <Tooltip contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />
+                            <Tooltip 
+                              cursor={{ stroke: '#3f3f46', strokeWidth: 1 }}
+                              contentStyle={{ background: '#18181b', border: '1px solid #27272a', borderRadius: '8px', color: '#fff', fontSize: '10px' }} 
+                            />
                             {(w.properties?.showLegend ?? false) && <Legend wrapperStyle={{ fontSize: '9px' }} />}
                             <Area type="monotone" dataKey="value" fill={w.properties.color || '#6366f1'} stroke={w.properties.color || '#6366f1'} fillOpacity={0.15} animationDuration={300} />
                           </AreaChart>

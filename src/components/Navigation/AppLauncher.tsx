@@ -21,7 +21,7 @@ const APPS: AppItem[] = [
   { id: 'drive', label: 'Drive', iconName: 'Folder', description: 'Personal & tenant shared storage', color: 'text-amber-500', to: '/workspace/apps/drive' },
   { id: 'query', label: 'Query Explorer', iconName: 'Terminal', description: 'Database schema, SQL runner & data explorer', color: 'text-indigo-500', to: '/workspace/apps/query' },
   { id: 'query-builder', label: 'Query Builder', iconName: 'Database', description: 'Author & save reusable dataset views', color: 'text-purple-500', to: '/workspace/settings/platform-modules/queries-library' },
-  { id: 'chat', label: 'Chat', iconName: 'MessageSquare', description: 'Real-time team messaging', color: 'text-emerald-500' },
+  { id: 'chat', label: 'Chat', iconName: 'MessageSquare', description: 'Real-time team messaging & channels', color: 'text-emerald-500', to: '/workspace/apps/chat' },
   { id: 'meet', label: 'Meet', iconName: 'Video', description: 'Video conferencing', color: 'text-rose-500' },
   { id: 'calendar', label: 'Calendar', iconName: 'Calendar', description: 'Schedule and events', color: 'text-blue-600' },
   { id: 'notes', label: 'Notes', iconName: 'StickyNote', description: 'Quick thoughts and ideas', color: 'text-yellow-500' },

@@ -522,6 +522,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         { label: 'Workforce & Access', icon: LucideIcons.Users, to: '/workspace/settings/platform-modules/workforce-management' },
         { label: 'Subscription', icon: CreditCard, to: '/workspace/settings/subscription' },
         { label: 'AI Services', icon: Sparkles, to: '/workspace/settings/ai-services' },
+        { label: 'Email & Inboxes', icon: LucideIcons.Mail, to: '/workspace/settings/email-connections' },
         { label: 'Branding', icon: Palette, to: '/workspace/settings/branding' },
       ]
     },

@@ -5,23 +5,689 @@ import * as Icons from 'lucide-react';
 import { 
   ArrowLeft, Save, Trash2, Settings, 
   Sparkles, Layout, Eye, Loader2, Cpu, GripVertical,
-  Maximize2, Minimize2
+  Maximize2, Minimize2, SlidersHorizontal
 } from 'lucide-react';
 import ReactGridLayout from 'react-grid-layout';
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, LineChart, Line 
+} from 'recharts';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../../components/UI/Primitives';
 import { toast } from 'sonner';
-import { fetchModule } from '../../services/dataService';
+import { fetchModule, fetchRecords } from '../../services/dataService';
 import { PageAIBuilderModal } from './PageAIBuilderModal';
 import { PLATFORM_MODULES } from '../../config/platformModules';
 import { API_BASE_URL, DATA_API_URL } from '../../config';
 import { cn, slugify } from '../../lib/utils';
 import { ReportWidgetEmbed, getWidgetDefaultDimensions } from './WorkspacePageView';
 import { QueueRenderer } from '../../components/Builders/QueueBuilder/QueueRenderer';
+import { FormRenderer } from '../../components/Builders/FormBuilder/FormRenderer';
+import { builderCache } from '../../utils/builderCache';
 import { UnsavedChangesModal } from '../../components/Common/UnsavedChangesModal';
 export { PageBuilderEngine } from '../../components/PageEngine';
 export { getWidgetDefaultDimensions };
+
+// --- BUILDER LIVE WIDGET PREVIEW COMPONENTS ---
+
+const BuilderStatsGridPreview: React.FC<{ widget: any; tenant: any; session: any }> = ({ tenant, session }) => {
+  const statsCacheKey = `stats_${tenant?.id || 'default'}`;
+  const defaultStats = { activeRecords: 12, totalRecords: 48, aiAutomations: 128, health: '99.9%' };
+  const [stats, setStats] = useState<any>(() => builderCache.get(statsCacheKey) || defaultStats);
+
+  useEffect(() => {
+    if (!tenant?.id) return;
+    let isMounted = true;
+    const fetchStats = async () => {
+      try {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const res = await fetch(`${API_BASE_URL}/api/data/stats`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant.id
+          }
+        });
+        if (res.ok && isMounted) {
+          const json = await res.json();
+          setStats(json);
+          builderCache.set(statsCacheKey, json);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch widget stats for builder preview', err);
+      }
+    };
+    fetchStats();
+    return () => { isMounted = false; };
+  }, [tenant?.id, session?.access_token, statsCacheKey]);
+
+  const currentStats = stats || defaultStats;
+  const items = [
+    { label: 'Active Cases', value: currentStats.activeRecords?.toString() || '12', icon: Icons.Database, color: 'text-indigo-500 bg-indigo-500/10' },
+    { label: 'Submissions', value: currentStats.totalRecords?.toString() || '48', icon: Icons.Globe, color: 'text-emerald-500 bg-emerald-500/10' },
+    { label: 'AI Automations', value: currentStats.aiAutomations?.toString() || '128', icon: Icons.Cpu, color: 'text-purple-500 bg-purple-500/10' },
+    { label: 'System Health', value: currentStats.health || '99.9%', icon: Icons.ShieldCheck, color: 'text-amber-500 bg-amber-500/10' },
+  ];
+
+  return (
+    <div className="h-full w-full flex flex-col justify-center pointer-events-none p-0.5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 h-full">
+        {items.map((stat, i) => {
+          const IconComp = stat.icon;
+          return (
+            <div 
+              key={i} 
+              className="p-2.5 bg-zinc-50/80 dark:bg-zinc-950/60 border border-zinc-200/80 dark:border-zinc-800 rounded-xl flex flex-col justify-between"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider truncate">{stat.label}</span>
+                <div className={cn("p-1 rounded-md shrink-0", stat.color)}>
+                  <IconComp size={12} />
+                </div>
+              </div>
+              <p className="text-sm font-black text-zinc-900 dark:text-white mt-1">{stat.value}</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const BuilderWorkflowsPreview: React.FC<{ widget: any }> = ({ widget }) => {
+  const workflows = [
+    { name: 'Customer Onboarding', status: 'Running', health: 'Healthy', items: 42 },
+    { name: 'Invoice & Expense Approval', status: 'Running', health: 'Healthy', items: 128 },
+    { name: 'Support SLA Triage', status: 'Paused', health: 'Warning', items: 15 },
+    { name: 'Vendor Security Screening', status: 'Running', health: 'Healthy', items: 9 },
+  ];
+
+  return (
+    <div className="h-full flex flex-col bg-zinc-50/70 dark:bg-zinc-950/50 rounded-xl p-3 border border-zinc-200 dark:border-zinc-800 overflow-hidden pointer-events-none">
+      <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-2 shrink-0">
+        <div className="flex items-center gap-1.5">
+          <div className="w-5 h-5 rounded-md bg-indigo-500/10 flex items-center justify-center text-indigo-600">
+            <Icons.Workflow size={11} />
+          </div>
+          <span className="text-[11px] font-bold text-zinc-900 dark:text-white truncate">{widget.title || 'Running Workflows'}</span>
+        </div>
+        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 uppercase">
+          4 Active
+        </span>
+      </div>
+
+      <div className="space-y-1.5 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+        {workflows.map((wf, i) => (
+          <div key={i} className="flex items-center justify-between p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs shadow-2xs">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-6 h-6 rounded-md bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center shrink-0">
+                <Icons.Workflow size={11} className="text-zinc-500" />
+              </div>
+              <div className="truncate">
+                <p className="text-[11px] font-bold text-zinc-850 dark:text-white truncate">{wf.name}</p>
+                <p className="text-[9px] text-zinc-400">{wf.items} cases in queue</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded", wf.status === 'Running' ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-amber-500/10 text-amber-600 dark:text-amber-400")}>
+                {wf.status}
+              </span>
+              <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded", wf.health === 'Healthy' ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" : "bg-rose-500/10 text-rose-600 dark:text-rose-400")}>
+                {wf.health}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const BuilderQueuePreview: React.FC<{ widget: any }> = ({ widget }) => {
+  return (
+    <div className="h-full flex flex-col bg-zinc-50/70 dark:bg-zinc-950/50 rounded-xl p-3 border border-zinc-200 dark:border-zinc-800 overflow-hidden text-left pointer-events-none">
+      <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-2 shrink-0">
+        <div className="flex items-center gap-1.5 truncate">
+          <div className="w-5 h-5 rounded-md bg-indigo-500/10 flex items-center justify-center text-indigo-600 shrink-0">
+            <Icons.Layers size={11} />
+          </div>
+          <span className="text-[11px] font-bold text-zinc-900 dark:text-white truncate">{widget.title || 'My Work Inbox'}</span>
+        </div>
+        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 uppercase shrink-0">
+          {widget.properties?.viewMode || 'Split'} View
+        </span>
+      </div>
+
+      {/* Mini KPI summary */}
+      {widget.properties?.showKpiRibbon !== false && (
+        <div className="flex gap-1.5 overflow-hidden mb-2 shrink-0">
+          <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-indigo-600">Mine: 4</span>
+          <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-rose-600">Urgent: 2</span>
+          <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-500">All: 12</span>
+        </div>
+      )}
+
+      {/* Mini case preview cards */}
+      <div className="space-y-1.5 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+        <div className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-2xs">
+          <div className="flex items-center justify-between text-[9px] text-zinc-400 mb-0.5">
+            <span className="font-mono font-bold">#49201</span>
+            <span className="font-bold text-rose-600 bg-rose-500/10 px-1 rounded">High</span>
+          </div>
+          <p className="text-[10px] font-bold text-zinc-800 dark:text-zinc-200 truncate">Customer SLA Escalation Response</p>
+        </div>
+        <div className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-2xs">
+          <div className="flex items-center justify-between text-[9px] text-zinc-400 mb-0.5">
+            <span className="font-mono font-bold">#49202</span>
+            <span className="font-bold text-blue-600 bg-blue-500/10 px-1 rounded">Normal</span>
+          </div>
+          <p className="text-[10px] font-bold text-zinc-800 dark:text-zinc-200 truncate">Verify Billing Address & Tax ID</p>
+        </div>
+        <div className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-2xs">
+          <div className="flex items-center justify-between text-[9px] text-zinc-400 mb-0.5">
+            <span className="font-mono font-bold">#49203</span>
+            <span className="font-bold text-emerald-600 bg-emerald-500/10 px-1 rounded">Low</span>
+          </div>
+          <p className="text-[10px] font-bold text-zinc-800 dark:text-zinc-200 truncate">Quarterly Client Review Follow-up</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const BuilderModuleTablePreview: React.FC<{ widget: any; tenant: any; session: any; modules: any[] }> = ({ widget, tenant, session, modules }) => {
+  const moduleId = widget.properties?.moduleId;
+  const targetModule = useMemo(() => modules.find((m: any) => m.id === moduleId), [modules, moduleId]);
+  const recordsCacheKey = `records_${tenant?.id || 'default'}_${moduleId || 'none'}`;
+  const [records, setRecords] = useState<any[]>(() => builderCache.get(recordsCacheKey) || []);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!tenant?.id || !moduleId) return;
+    let isSubscribed = true;
+    const loadRecords = async () => {
+      if (!builderCache.has(recordsCacheKey)) setLoading(true);
+      try {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const res = await fetchRecords(moduleId, tenant.id, token, 1, 10);
+        if (isSubscribed) {
+          const data = res.records || [];
+          setRecords(data);
+          builderCache.set(recordsCacheKey, data);
+        }
+      } catch (err) {
+        console.warn('Failed to load records for builder table preview', err);
+      } finally {
+        if (isSubscribed) setLoading(false);
+      }
+    };
+    loadRecords();
+    return () => { isSubscribed = false; };
+  }, [moduleId, tenant?.id, session?.access_token, recordsCacheKey]);
+
+  const sampleRecords = [
+    { id: 'REC-10492', title: 'Global Enterprise Service Level Agreement', createdAt: '2026-08-30' },
+    { id: 'REC-10493', title: 'Quarterly Corporate Tax Compliance Audit', createdAt: '2026-08-29' },
+    { id: 'REC-10494', title: 'Customer Support Escalation Tier-2', createdAt: '2026-08-28' },
+    { id: 'REC-10495', title: 'Vendor Security & Privacy Assessment', createdAt: '2026-08-27' }
+  ];
+
+  const displayRecords = moduleId && records.length > 0 ? records : sampleRecords;
+
+  return (
+    <div className="h-full flex flex-col bg-zinc-50/70 dark:bg-zinc-950/50 rounded-xl p-3 border border-zinc-200 dark:border-zinc-800 overflow-hidden pointer-events-none">
+      <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-2 shrink-0">
+        <div className="flex items-center gap-1.5 truncate">
+          <div className="w-5 h-5 rounded-md bg-indigo-500/10 flex items-center justify-center text-indigo-600 shrink-0">
+            <Icons.Database size={11} />
+          </div>
+          <span className="text-[11px] font-bold text-zinc-900 dark:text-white truncate">
+            {widget.title || (targetModule ? targetModule.name : 'Module Records Table')}
+          </span>
+        </div>
+        <span className={cn(
+          "text-[9px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0",
+          moduleId ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+        )}>
+          {moduleId && targetModule ? targetModule.name : 'Sample Preview'}
+        </span>
+      </div>
+
+      {loading ? (
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="border-b border-zinc-200 dark:border-zinc-800 text-[9px] font-bold text-zinc-400 uppercase tracking-wider">
+                <th className="pb-1.5 pl-1">Record ID</th>
+                <th className="pb-1.5">Summary</th>
+                <th className="pb-1.5 text-right pr-1">Date</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-200/60 dark:divide-zinc-800/60">
+              {displayRecords.slice(0, 5).map((rec: any, idx: number) => {
+                const recId = rec.id ? String(rec.id).slice(-6) : `00${idx + 1}`;
+                let summary = rec.title || rec.name;
+                if (!summary && rec.data) {
+                  const firstKey = Object.keys(rec.data).find(k => !k.startsWith('_') && rec.data[k]);
+                  if (firstKey) summary = rec.data[firstKey];
+                }
+                if (!summary) summary = `Record ${recId}`;
+
+                const dateStr = rec.createdAt ? new Date(rec.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Today';
+
+                return (
+                  <tr key={rec.id || idx} className="hover:bg-zinc-100/50 dark:hover:bg-zinc-900/50">
+                    <td className="py-1.5 pl-1 font-mono text-[10px] font-bold text-zinc-500">#{recId}</td>
+                    <td className="py-1.5 font-medium text-[11px] text-zinc-800 dark:text-zinc-200 truncate max-w-[150px]">{summary}</td>
+                    <td className="py-1.5 pr-1 text-right text-[10px] text-zinc-400 whitespace-nowrap">{dateStr}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const BuilderModuleCreatorPreview: React.FC<{ widget: any; tenant: any; session: any; modules: any[] }> = ({ widget, tenant, session, modules }) => {
+  const moduleId = widget.properties?.moduleId;
+  const targetModule = useMemo(() => modules.find((m: any) => m.id === moduleId), [modules, moduleId]);
+  const [fields, setFields] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!tenant?.id || !moduleId) {
+      setFields([]);
+      return;
+    }
+    let isSubscribed = true;
+    const loadModule = async () => {
+      setLoading(true);
+      try {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const mod = await fetchModule(moduleId, tenant.id, token, modules);
+        if (isSubscribed) {
+          const layout = mod?.config?.layout || [];
+          const inputs = layout.filter((item: any) => item && item.id && !['heading', 'divider', 'spacer'].includes(item.type));
+          setFields(inputs.length > 0 ? inputs : (mod.fields || []));
+        }
+      } catch (err) {
+        console.warn('Failed to fetch module layout for builder creator preview', err);
+      } finally {
+        if (isSubscribed) setLoading(false);
+      }
+    };
+    loadModule();
+    return () => { isSubscribed = false; };
+  }, [moduleId, tenant?.id, session?.access_token, modules]);
+
+  const sampleFields = [
+    { id: 'f1', label: 'Item Title / Summary', type: 'text', required: true, placeholder: 'e.g. New Project Request' },
+    { id: 'f2', label: 'Department / Category', type: 'select', required: true, options: ['Operations', 'Engineering', 'Finance'] },
+    { id: 'f3', label: 'Description & Notes', type: 'longText', required: false, placeholder: 'Enter details...' }
+  ];
+
+  const displayFields = fields.length > 0 ? fields : sampleFields;
+
+  return (
+    <div className="h-full flex flex-col bg-zinc-50/70 dark:bg-zinc-950/50 rounded-xl p-3 border border-zinc-200 dark:border-zinc-800 overflow-hidden pointer-events-none">
+      <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-2 shrink-0">
+        <div className="flex items-center gap-1.5 truncate">
+          <div className="w-5 h-5 rounded-md bg-indigo-500/10 flex items-center justify-center text-indigo-600 shrink-0">
+            <Icons.FileText size={11} />
+          </div>
+          <span className="text-[11px] font-bold text-zinc-900 dark:text-white truncate">
+            {widget.title || (targetModule ? `Submit ${targetModule.name}` : 'Submission Form')}
+          </span>
+        </div>
+        <span className={cn(
+          "text-[9px] font-bold px-1.5 py-0.5 rounded uppercase shrink-0",
+          moduleId ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+        )}>
+          {moduleId && targetModule ? targetModule.name : 'Sample Form'}
+        </span>
+      </div>
+
+      {loading ? (
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-0.5 custom-scrollbar text-xs">
+          {displayFields.slice(0, 4).map((f: any, i: number) => (
+            <div key={f.id || i} className="space-y-1">
+              <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block">
+                {f.label || f.name} {f.required && <span className="text-red-500">*</span>}
+              </label>
+              {f.type === 'longText' || f.type === 'textarea' ? (
+                <div className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-2 text-[10px] text-zinc-400 h-12">
+                  {f.placeholder || 'Enter notes or comments...'}
+                </div>
+              ) : f.type === 'select' ? (
+                <div className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-[10px] text-zinc-500 flex items-center justify-between">
+                  <span>Select option...</span>
+                  <Icons.ChevronDown size={11} className="text-zinc-400" />
+                </div>
+              ) : (
+                <div className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-[10px] text-zinc-400">
+                  {f.placeholder || `Enter ${f.label || 'value'}...`}
+                </div>
+              )}
+            </div>
+          ))}
+          <div className="pt-1 flex justify-end">
+            <div className="px-3 py-1 bg-indigo-600 text-white rounded-lg font-bold text-[10px]">
+              Submit Entry
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const BuilderChartPreview: React.FC<{ widget: any; tenant: any; session: any }> = ({ widget, tenant, session }) => {
+  const moduleId = widget.properties?.moduleId;
+  const chartType = widget.properties?.chartType || 'bar';
+  const chartCacheKey = `chart_data_${tenant?.id || 'default'}_${moduleId || 'none'}`;
+  const [chartData, setChartData] = useState<any[]>(() => builderCache.get(chartCacheKey) || []);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!tenant?.id || !moduleId) return;
+    let isSubscribed = true;
+    const loadChartData = async () => {
+      if (!builderCache.has(chartCacheKey)) setLoading(true);
+      try {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const res = await fetchRecords(moduleId, tenant.id, token, 1, 50);
+        if (isSubscribed) {
+          const recs = res.records || [];
+          const grouped: Record<string, number> = {};
+          recs.forEach((r: any) => {
+            const dateStr = new Date(r.createdAt || Date.now()).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            grouped[dateStr] = (grouped[dateStr] || 0) + 1;
+          });
+          const formatted = Object.entries(grouped).map(([date, count]) => ({ date, volume: count })).reverse();
+          setChartData(formatted);
+          builderCache.set(chartCacheKey, formatted);
+        }
+      } catch (err) {
+        console.warn('Failed to load chart records for builder', err);
+      } finally {
+        if (isSubscribed) setLoading(false);
+      }
+    };
+    loadChartData();
+    return () => { isSubscribed = false; };
+  }, [moduleId, tenant?.id, session?.access_token, chartCacheKey]);
+
+  const sampleChartData = [
+    { date: 'Mon', volume: 14 },
+    { date: 'Tue', volume: 28 },
+    { date: 'Wed', volume: 19 },
+    { date: 'Thu', volume: 34 },
+    { date: 'Fri', volume: 42 },
+    { date: 'Sat', volume: 22 },
+    { date: 'Sun', volume: 11 },
+  ];
+
+  const dataToRender = moduleId && chartData.length > 0 ? chartData : sampleChartData;
+
+  return (
+    <div className="h-full flex flex-col bg-zinc-50/70 dark:bg-zinc-950/50 rounded-xl p-3 border border-zinc-200 dark:border-zinc-800 overflow-hidden pointer-events-none">
+      <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-2 shrink-0">
+        <div className="flex items-center gap-1.5 truncate">
+          <div className="w-5 h-5 rounded-md bg-indigo-500/10 flex items-center justify-center text-indigo-600 shrink-0">
+            <Icons.BarChart size={11} />
+          </div>
+          <span className="text-[11px] font-bold text-zinc-900 dark:text-white truncate">
+            {widget.title || 'Volume Chart'}
+          </span>
+        </div>
+        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 uppercase shrink-0">
+          {chartType} {moduleId ? 'Live' : 'Sample'}
+        </span>
+      </div>
+
+      {loading ? (
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
+        </div>
+      ) : (
+        <div className="flex-1 min-h-[120px] w-full">
+          <ResponsiveContainer width="100%" height="100%" minHeight={100}>
+            {chartType === 'line' ? (
+              <LineChart data={dataToRender} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(120, 120, 120, 0.15)" />
+                <XAxis dataKey="date" stroke="#71717a" fontSize={9} tickLine={false} />
+                <YAxis stroke="#71717a" fontSize={9} tickLine={false} />
+                <Line type="monotone" dataKey="volume" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
+            ) : (
+              <BarChart data={dataToRender} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(120, 120, 120, 0.15)" />
+                <XAxis dataKey="date" stroke="#71717a" fontSize={9} tickLine={false} />
+                <YAxis stroke="#71717a" fontSize={9} tickLine={false} />
+                <Bar dataKey="volume" fill="#6366f1" radius={[3, 3, 0, 0]} />
+              </BarChart>
+            )}
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const BuilderRichTextPreview: React.FC<{ widget: any }> = ({ widget }) => {
+  const content = widget.properties?.content || '<p>Welcome to your noticeboard! You can customize this message in the widget properties panel.</p>';
+
+  return (
+    <div className="h-full flex flex-col bg-zinc-50/70 dark:bg-zinc-950/50 rounded-xl p-3 border border-zinc-200 dark:border-zinc-800 overflow-hidden pointer-events-none">
+      <div className="flex items-center gap-1.5 border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-2 shrink-0">
+        <div className="w-5 h-5 rounded-md bg-indigo-500/10 flex items-center justify-center text-indigo-600 shrink-0">
+          <Icons.Layout size={11} />
+        </div>
+        <span className="text-[11px] font-bold text-zinc-900 dark:text-white truncate">
+          {widget.title || 'Noticeboard'}
+        </span>
+      </div>
+      <div 
+        className="flex-1 min-h-0 overflow-y-auto custom-scrollbar prose dark:prose-invert max-w-none text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed"
+        dangerouslySetInnerHTML={{ __html: content }}
+      />
+    </div>
+  );
+};
+
+const BuilderStandaloneFormPreview: React.FC<{ widget: any }> = ({ widget }) => {
+  const fields = widget.properties?.fields || [
+    { id: 'name', label: 'Full Name', type: 'text', required: true, colSpan: 6 },
+    { id: 'email', label: 'Email Address', type: 'email', required: true, colSpan: 6 },
+    { id: 'comments', label: 'Comments / Inquiry', type: 'textarea', required: false, colSpan: 12 }
+  ];
+
+  return (
+    <div className="h-full flex flex-col bg-zinc-50/70 dark:bg-zinc-950/50 rounded-xl p-3 border border-zinc-200 dark:border-zinc-800 overflow-hidden pointer-events-none">
+      <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-2 shrink-0">
+        <div className="flex items-center gap-1.5 truncate">
+          <div className="w-5 h-5 rounded-md bg-indigo-500/10 flex items-center justify-center text-indigo-600 shrink-0">
+            <Icons.FileText size={11} />
+          </div>
+          <span className="text-[11px] font-bold text-zinc-900 dark:text-white truncate">
+            {widget.title || 'Standalone Form Embed'}
+          </span>
+        </div>
+        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 uppercase shrink-0">
+          Form Library
+        </span>
+      </div>
+
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-0.5 custom-scrollbar">
+        {widget.properties?.subtitle && (
+          <p className="text-[10px] text-zinc-500">{widget.properties.subtitle}</p>
+        )}
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          {fields.map((f: any, idx: number) => (
+            <div key={f.id || idx} className={f.colSpan === 12 ? "col-span-2 space-y-1" : "col-span-1 space-y-1"}>
+              <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider block">
+                {f.label} {f.required && <span className="text-red-500">*</span>}
+              </label>
+              {f.type === 'textarea' ? (
+                <div className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg p-2 text-[10px] text-zinc-400 h-12">
+                  Enter message...
+                </div>
+              ) : (
+                <div className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-[10px] text-zinc-400">
+                  Enter {f.label}...
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="pt-1 flex justify-end">
+          <div className="px-3 py-1 bg-indigo-600 text-white rounded-lg font-bold text-[10px]">
+            {widget.properties?.buttonLabel || 'Submit Request'}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const BuilderReportPreview: React.FC<{ widget: any; tenant: any; session: any }> = ({ widget, tenant, session }) => {
+  if (widget.properties?.reportId) {
+    return (
+      <div className="w-full h-full pointer-events-none scale-[0.96] origin-top bg-zinc-50/70 dark:bg-zinc-950/50 rounded-xl p-3 border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+        <ReportWidgetEmbed widget={widget} tenant={tenant} session={session} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col bg-zinc-50/70 dark:bg-zinc-950/50 rounded-xl p-3 border border-zinc-200 dark:border-zinc-800 overflow-hidden pointer-events-none">
+      <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-2 shrink-0">
+        <div className="flex items-center gap-1.5 truncate">
+          <div className="w-5 h-5 rounded-md bg-indigo-500/10 flex items-center justify-center text-indigo-600 shrink-0">
+            <Icons.BarChart3 size={11} />
+          </div>
+          <span className="text-[11px] font-bold text-zinc-900 dark:text-white truncate">
+            {widget.title || 'BI Report Dashboard'}
+          </span>
+        </div>
+        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 uppercase shrink-0">
+          BI Studio
+        </span>
+      </div>
+
+      <div className="flex-1 flex flex-col justify-between space-y-2">
+        <div className="grid grid-cols-3 gap-1.5">
+          <div className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg">
+            <span className="text-[8px] font-bold text-zinc-400 uppercase">Revenue</span>
+            <p className="text-xs font-black text-indigo-600">$48.5k</p>
+          </div>
+          <div className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg">
+            <span className="text-[8px] font-bold text-zinc-400 uppercase">Growth</span>
+            <p className="text-xs font-black text-emerald-600">+24.8%</p>
+          </div>
+          <div className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg">
+            <span className="text-[8px] font-bold text-zinc-400 uppercase">Avg SLA</span>
+            <p className="text-xs font-black text-amber-600">1.4 hrs</p>
+          </div>
+        </div>
+
+        <div className="p-3 bg-white/70 dark:bg-zinc-900/70 border border-dashed border-zinc-300 dark:border-zinc-800 rounded-lg text-center flex flex-col items-center justify-center">
+          <Icons.BarChart3 size={18} className="text-zinc-400 mb-1" />
+          <p className="text-[10px] font-bold text-zinc-700 dark:text-zinc-300">Select BI Report</p>
+          <p className="text-[9px] text-zinc-400">Choose a published report in widget properties to embed its live visual charts.</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const BuilderHeroPreview: React.FC<{ widget: any }> = ({ widget }) => {
+  return (
+    <div className="h-full flex flex-col justify-center bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl p-4 shadow-sm text-center space-y-2 pointer-events-none overflow-hidden">
+      <h3 className="text-sm font-black truncate">{widget.title || 'Welcome to Aurora Platform'}</h3>
+      <p className="text-[11px] text-indigo-100 line-clamp-2 max-w-sm mx-auto">
+        {widget.properties?.subtitle || 'Empowering operational excellence with modular low-code engines.'}
+      </p>
+      <div>
+        <span className="inline-block px-3 py-1 bg-white text-indigo-600 font-bold text-[10px] rounded-lg shadow-sm">
+          {widget.properties?.buttonLabel || 'Explore Portal'}
+        </span>
+      </div>
+    </div>
+  );
+};
+
+const BuilderFaqPreview: React.FC<{ widget: any }> = ({ widget }) => {
+  return (
+    <div className="h-full flex flex-col bg-zinc-50/70 dark:bg-zinc-950/50 rounded-xl p-3 border border-zinc-200 dark:border-zinc-800 overflow-hidden pointer-events-none">
+      <div className="flex items-center gap-1.5 border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-2 shrink-0">
+        <Icons.HelpCircle size={12} className="text-indigo-500" />
+        <span className="text-[11px] font-bold text-zinc-900 dark:text-white truncate">{widget.title || 'Frequently Asked Questions'}</span>
+      </div>
+      <div className="space-y-1.5 flex-1 min-h-0 overflow-y-auto custom-scrollbar text-xs">
+        <div className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg">
+          <p className="font-semibold text-[10px] text-zinc-850 dark:text-white">Q: How do I customize this page?</p>
+          <p className="text-[9px] text-zinc-500">Drag and drop widgets from the toolbox and configure properties on the right.</p>
+        </div>
+        <div className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg">
+          <p className="font-semibold text-[10px] text-zinc-850 dark:text-white">Q: Can I embed custom forms and tables?</p>
+          <p className="text-[9px] text-zinc-500">Yes, select any custom module or form from your workspace library.</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const BuilderWidgetPreviewRenderer: React.FC<{ widget: any; tenant: any; session: any; modules: any[] }> = ({ widget, tenant, session, modules }) => {
+  switch (widget.type) {
+    case 'stats-grid':
+      return <BuilderStatsGridPreview widget={widget} tenant={tenant} session={session} />;
+    case 'active-workflows':
+      return <BuilderWorkflowsPreview widget={widget} />;
+    case 'queue':
+    case 'work-queue':
+      if (widget.properties?.queueId) {
+        return (
+          <div className="w-full h-full pointer-events-none scale-[0.92] origin-top bg-zinc-50/70 dark:bg-zinc-950/50 rounded-xl p-2 border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+            <QueueRenderer queueId={widget.properties.queueId} queueConfig={widget.properties.queueConfig} showHeader={false} readOnly={true} />
+          </div>
+        );
+      }
+      return <BuilderQueuePreview widget={widget} />;
+    case 'module-table':
+      return <BuilderModuleTablePreview widget={widget} tenant={tenant} session={session} modules={modules} />;
+    case 'module-creator':
+      return <BuilderModuleCreatorPreview widget={widget} tenant={tenant} session={session} modules={modules} />;
+    case 'rich-text':
+      return <BuilderRichTextPreview widget={widget} />;
+    case 'chart':
+      return <BuilderChartPreview widget={widget} tenant={tenant} session={session} />;
+    case 'report':
+      return <BuilderReportPreview widget={widget} tenant={tenant} session={session} />;
+    case 'standalone-form':
+      return <BuilderStandaloneFormPreview widget={widget} />;
+    case 'hero':
+      return <BuilderHeroPreview widget={widget} />;
+    case 'faq':
+      return <BuilderFaqPreview widget={widget} />;
+    default:
+      return (
+        <div className="h-full flex items-center justify-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50/50 dark:bg-zinc-950/40 text-[10px] text-zinc-400 font-medium">
+          Widget: {widget.title || widget.type}
+        </div>
+      );
+  }
+};
 
 const useMyContainerWidth = (loading: boolean) => {
   const [width, setWidth] = useState(1280);
@@ -223,7 +889,16 @@ export const PageBuilder = () => {
         title = 'Running Workflows';
         break;
       case 'work-queue':
-        title = 'My Work Inbox';
+      case 'queue':
+        title = type === 'queue' ? 'Work Queue Embed' : 'My Work Inbox';
+        properties = {
+          viewMode: 'split',
+          defaultFilter: 'mine',
+          showKpiRibbon: true,
+          density: 'comfortable',
+          pageSize: 25,
+          moduleId: 'all'
+        };
         break;
       case 'module-table':
         title = 'Recent Records';
@@ -244,6 +919,18 @@ export const PageBuilder = () => {
       case 'report':
         title = 'BI Report Dashboard';
         properties = { reportId: '' };
+        break;
+      case 'standalone-form':
+        title = 'Standalone Form Embed';
+        properties = { subtitle: 'Please complete the details below.' };
+        break;
+      case 'hero':
+        title = 'Welcome to Aurora Platform';
+        properties = { subtitle: 'Empowering operational excellence with modular low-code engines.' };
+        break;
+      case 'faq':
+        title = 'Frequently Asked Questions';
+        properties = {};
         break;
     }
 
@@ -558,31 +1245,12 @@ export const PageBuilder = () => {
 
                       {/* Preview Layout Placeholder / Live Preview */}
                       <div className="w-full flex-1 min-h-0 relative">
-                        {widget.type === 'report' ? (
-                          widget.properties?.reportId ? (
-                            <div className="w-full h-full pointer-events-none scale-[0.95] origin-top bg-zinc-50 dark:bg-zinc-950/40 rounded-2xl p-4 border border-zinc-200 dark:border-zinc-800 overflow-hidden">
-                              <ReportWidgetEmbed widget={widget} tenant={tenant} session={session} />
-                            </div>
-                          ) : (
-                            <div className="h-full flex items-center justify-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50/50 dark:bg-zinc-950/40 text-[10px] text-zinc-400 font-medium">
-                              Configure Embedded BI Report...
-                            </div>
-                          )
-                        ) : (widget.type === 'queue' || widget.type === 'work-queue') && widget.properties?.queueId ? (
-                          <div className="w-full h-full pointer-events-none scale-[0.90] origin-top bg-zinc-50 dark:bg-zinc-950/40 rounded-2xl p-2 border border-zinc-200 dark:border-zinc-800 overflow-hidden">
-                            <QueueRenderer queueId={widget.properties.queueId} queueConfig={widget.properties.queueConfig} showHeader={false} readOnly={true} />
-                          </div>
-                        ) : (widget.type === 'queue' || widget.type === 'work-queue') ? (
-                          <div className="h-full flex flex-col items-center justify-center border border-dashed border-indigo-500/30 rounded-xl bg-indigo-500/10 p-4 text-center">
-                            <Icons.ListOrdered size={22} className="text-indigo-500 mb-1" />
-                            <p className="text-xs font-bold text-zinc-700 dark:text-zinc-200">{widget.title || 'Work Queue'}</p>
-                            <p className="text-[10px] text-zinc-400 mt-0.5">Select a queue in the right panel to bind live records.</p>
-                          </div>
-                        ) : (
-                          <div className="h-full flex items-center justify-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50/50 dark:bg-zinc-950/40 text-[10px] text-zinc-400 font-medium">
-                            Widget Preview ({widget.w}x{widget.h})
-                          </div>
-                        )}
+                        <BuilderWidgetPreviewRenderer 
+                          widget={widget} 
+                          tenant={tenant} 
+                          session={session} 
+                          modules={modules} 
+                        />
                       </div>
                     </div>
                   );
@@ -598,15 +1266,9 @@ export const PageBuilder = () => {
             <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
               <div className="flex items-center justify-between border-b border-zinc-100 dark:border-white/5 pb-2">
                 <h3 className="text-xs font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-widest flex items-center gap-1.5">
-                  <Settings size={14} className="text-indigo-500" />
-                  Widget Settings
+                  <SlidersHorizontal size={13} className="text-indigo-500" />
+                  Widget Properties
                 </h3>
-                <button 
-                  onClick={() => setSelectedWidgetId(null)}
-                  className="text-[10px] font-bold text-zinc-400 hover:text-zinc-900 dark:hover:text-white uppercase"
-                >
-                  Deselect
-                </button>
               </div>
 
               <div className="space-y-4 text-xs">
@@ -667,30 +1329,135 @@ export const PageBuilder = () => {
                   </div>
                 )}
 
-                {/* Work Queue selection properties */}
+                {/* Work Queue selection & rich configuration properties */}
                 {(selectedWidget.type === 'work-queue' || selectedWidget.type === 'queue') && (
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <label className="font-bold text-zinc-500 uppercase tracking-wider block">Bound Work Queue</label>
-                      <button
-                        type="button"
-                        onClick={() => navigate('/workspace/settings/platform-modules/queues-management')}
-                        className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-bold"
-                      >
-                        Manage Queues
-                      </button>
+                  <div className="space-y-3.5 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="font-bold text-zinc-500 uppercase tracking-wider block">Bound Work Queue</label>
+                        <button
+                          type="button"
+                          onClick={() => navigate('/workspace/settings/platform-modules/queues-management')}
+                          className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline font-bold"
+                        >
+                          Manage Queues
+                        </button>
+                      </div>
+                      <QueueDropdown 
+                        selectedWidget={selectedWidget} 
+                        setWidgets={setWidgets}
+                        tenant={tenant}
+                        modules={modules}
+                        menuConfig={menuConfig}
+                        session={session}
+                      />
+                      <p className="text-[10px] text-zinc-400">
+                        Bind to a configured queue or use Personal Unified Inbox.
+                      </p>
                     </div>
-                    <QueueDropdown 
-                      selectedWidget={selectedWidget} 
-                      setWidgets={setWidgets}
-                      tenant={tenant}
-                      modules={modules}
-                      menuConfig={menuConfig}
-                      session={session}
-                    />
-                    <p className="text-[10px] text-zinc-400">
-                      Bind this widget to a configured queue from the Queues Library.
-                    </p>
+
+                    {/* View Mode */}
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-zinc-500 uppercase tracking-wider block">Default View Layout</label>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {[
+                          { id: 'split', label: 'Split Pane' },
+                          { id: 'list', label: 'Feed List' },
+                          { id: 'kanban', label: 'Kanban' }
+                        ].map((mode) => (
+                          <button
+                            key={mode.id}
+                            type="button"
+                            onClick={() => {
+                              setWidgets(prev => prev.map(w => {
+                                if (w.id === selectedWidget.id) {
+                                  return { ...w, properties: { ...w.properties, viewMode: mode.id } };
+                                }
+                                return w;
+                              }));
+                            }}
+                            className={cn(
+                              "py-1.5 px-2 rounded-lg border text-center font-bold text-[10px] transition-all",
+                              (selectedWidget.properties?.viewMode || 'split') === mode.id
+                                ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400"
+                                : "border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                            )}
+                          >
+                            {mode.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Default Filter Tab */}
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-zinc-500 uppercase tracking-wider block">Default Filter Tab</label>
+                      <select
+                        value={selectedWidget.properties?.defaultFilter || 'mine'}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setWidgets(prev => prev.map(w => {
+                            if (w.id === selectedWidget.id) {
+                              return { ...w, properties: { ...w.properties, defaultFilter: val } };
+                            }
+                            return w;
+                          }));
+                        }}
+                        className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      >
+                        <option value="mine">Assigned to Me</option>
+                        <option value="urgent">Urgent & High SLA</option>
+                        <option value="due_today">Due Soon / Backlog</option>
+                        <option value="unassigned">Unassigned Pool</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="all">All Cases</option>
+                      </select>
+                    </div>
+
+                    {/* Module Scope */}
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-zinc-500 uppercase tracking-wider block">Module Scope</label>
+                      <select
+                        value={selectedWidget.properties?.moduleId || 'all'}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setWidgets(prev => prev.map(w => {
+                            if (w.id === selectedWidget.id) {
+                              return { ...w, properties: { ...w.properties, moduleId: val === 'all' ? undefined : val } };
+                            }
+                            return w;
+                          }));
+                        }}
+                        className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      >
+                        <option value="all">All Active Modules</option>
+                        {modules.map((m: any) => (
+                          <option key={m.id} value={m.id}>{m.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* KPI Ribbon Toggle */}
+                    <div className="flex items-center justify-between pt-1">
+                      <div>
+                        <label className="font-bold text-zinc-700 dark:text-zinc-300 text-xs block">Show KPI Ribbon</label>
+                        <p className="text-[10px] text-zinc-400">Display summary counters at top</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={selectedWidget.properties?.showKpiRibbon !== false}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setWidgets(prev => prev.map(w => {
+                            if (w.id === selectedWidget.id) {
+                              return { ...w, properties: { ...w.properties, showKpiRibbon: checked } };
+                            }
+                            return w;
+                          }));
+                        }}
+                        className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500/20 cursor-pointer"
+                      />
+                    </div>
                   </div>
                 )}
 
@@ -743,6 +1510,70 @@ export const PageBuilder = () => {
                       }}
                       className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-2.5 outline-none font-mono resize-none h-40 text-zinc-850 dark:text-white focus:border-indigo-500/50"
                     />
+                  </div>
+                )}
+
+                {/* Standalone Form properties */}
+                {selectedWidget.type === 'standalone-form' && (
+                  <div className="space-y-1.5">
+                    <label className="font-bold text-zinc-500 uppercase tracking-wider block">Subtitle / Description</label>
+                    <input
+                      type="text"
+                      placeholder="Please fill out the information below..."
+                      value={selectedWidget.properties?.subtitle || ''}
+                      onChange={(e) => {
+                        const txt = e.target.value;
+                        setWidgets((prev: any[]) => prev.map(w => {
+                          if (w.id === selectedWidget.id) {
+                            return { ...w, properties: { ...w.properties, subtitle: txt } };
+                          }
+                          return w;
+                        }));
+                      }}
+                      className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2.5 py-1.5 outline-none text-zinc-850 dark:text-white focus:border-indigo-500/50"
+                    />
+                  </div>
+                )}
+
+                {/* Hero section properties */}
+                {selectedWidget.type === 'hero' && (
+                  <div className="space-y-3">
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-zinc-500 uppercase tracking-wider block">Hero Subtitle</label>
+                      <input
+                        type="text"
+                        placeholder="Hero subtitle text..."
+                        value={selectedWidget.properties?.subtitle || ''}
+                        onChange={(e) => {
+                          const txt = e.target.value;
+                          setWidgets((prev: any[]) => prev.map(w => {
+                            if (w.id === selectedWidget.id) {
+                              return { ...w, properties: { ...w.properties, subtitle: txt } };
+                            }
+                            return w;
+                          }));
+                        }}
+                        className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2.5 py-1.5 outline-none text-zinc-850 dark:text-white focus:border-indigo-500/50"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-zinc-500 uppercase tracking-wider block">Button Label</label>
+                      <input
+                        type="text"
+                        placeholder="Explore Portal"
+                        value={selectedWidget.properties?.buttonLabel || ''}
+                        onChange={(e) => {
+                          const txt = e.target.value;
+                          setWidgets((prev: any[]) => prev.map(w => {
+                            if (w.id === selectedWidget.id) {
+                              return { ...w, properties: { ...w.properties, buttonLabel: txt } };
+                            }
+                            return w;
+                          }));
+                        }}
+                        className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2.5 py-1.5 outline-none text-zinc-850 dark:text-white focus:border-indigo-500/50"
+                      />
+                    </div>
                   </div>
                 )}
 
@@ -814,11 +1645,11 @@ const ReportDropdown = ({ selectedWidget, setWidgets, tenant, session }: any) =>
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchPublishedReports = async () => {
+    const fetchReportsList = async () => {
       if (!tenant?.id) return;
       try {
         const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-        const res = await fetch(`http://localhost:3001/api/reports`, {
+        const res = await fetch(`${API_BASE_URL}/api/reports`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'x-tenant-id': tenant.id
@@ -826,7 +1657,7 @@ const ReportDropdown = ({ selectedWidget, setWidgets, tenant, session }: any) =>
         });
         if (res.ok) {
           const data = await res.json();
-          setReports(data.filter((r: any) => r.status === 'Published'));
+          setReports(Array.isArray(data) ? data : []);
         }
       } catch (err) {
         console.error('Failed to fetch reports list', err);
@@ -834,17 +1665,42 @@ const ReportDropdown = ({ selectedWidget, setWidgets, tenant, session }: any) =>
         setLoading(false);
       }
     };
-    fetchPublishedReports();
+    fetchReportsList();
   }, [tenant?.id, session?.access_token]);
 
   return (
     <select
       value={selectedWidget.properties?.reportId || ''}
-      onChange={(e) => {
+      onChange={async (e) => {
         const rId = e.target.value;
+        const targetReport = reports.find((r: any) => r.id === rId);
+
+        // If report is in Draft, publish it so it renders properly in workspace view
+        if (targetReport && targetReport.status === 'Draft' && tenant?.id) {
+          try {
+            const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+            await fetch(`${API_BASE_URL}/api/reports/${rId}`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'x-tenant-id': tenant.id
+              },
+              body: JSON.stringify({ status: 'Published' })
+            });
+            targetReport.status = 'Published';
+          } catch (err) {
+            console.error('Failed to auto-publish selected draft report:', err);
+          }
+        }
+
         setWidgets((prev: any[]) => prev.map(w => {
           if (w.id === selectedWidget.id) {
-            return { ...w, properties: { ...w.properties, reportId: rId } };
+            return { 
+              ...w, 
+              title: w.title === 'BI Report Dashboard' || !w.title ? (targetReport?.name || 'BI Report Dashboard') : w.title,
+              properties: { ...w.properties, reportId: rId } 
+            };
           }
           return w;
         }));
@@ -855,13 +1711,13 @@ const ReportDropdown = ({ selectedWidget, setWidgets, tenant, session }: any) =>
       {loading ? (
         <option className="bg-white dark:bg-zinc-950 text-zinc-800 dark:text-zinc-200">Loading reports...</option>
       ) : reports.length === 0 ? (
-        <option value="" className="bg-white dark:bg-zinc-950 text-zinc-800 dark:text-zinc-200">No published reports found</option>
+        <option value="" className="bg-white dark:bg-zinc-950 text-zinc-800 dark:text-zinc-200">No reports found</option>
       ) : (
         <>
           <option value="" className="bg-white dark:bg-zinc-950 text-zinc-800 dark:text-zinc-200">Select report...</option>
           {reports.map((r: any) => (
             <option key={r.id} value={r.id} className="bg-white dark:bg-zinc-950 text-zinc-800 dark:text-zinc-200">
-              {r.name}
+              {r.name} {r.status === 'Draft' ? '(Draft)' : ''}
             </option>
           ))}
         </>

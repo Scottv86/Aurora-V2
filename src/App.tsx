@@ -72,6 +72,7 @@ const AgentBuilderStudio = lazy(() => import('./components/Builders/AgentBuilder
 
 const OrganizationPage = lazy(() => import('./pages/Settings/OrganizationPage').then(m => ({ default: m.OrganizationPage })));
 const AISettingsPage = lazy(() => import('./pages/Settings/AISettingsPage').then(m => ({ default: m.AISettingsPage })));
+const MailboxSettingsPage = lazy(() => import('./pages/Settings/MailboxSettingsPage').then(m => ({ default: m.MailboxSettingsPage })));
 
 // Super Admin Suite Pages
 const SuperAdminOverview = lazy(() => import('./pages/SuperAdmin/SuperAdminOverview').then(m => ({ default: m.SuperAdminOverview })));
@@ -123,6 +124,7 @@ const DriveApp = lazy(() => import('./pages/Apps/DriveApp').then(m => ({ default
 const DocsApp = lazy(() => import('./pages/Apps/DocsApp').then(m => ({ default: m.DocsApp })));
 const DocEditor = lazy(() => import('./pages/Apps/DocEditor').then(m => ({ default: m.DocEditor })));
 const InboxApp = lazy(() => import('./pages/Apps/InboxApp').then(m => ({ default: m.InboxApp })));
+const ChatApp = lazy(() => import('./pages/Apps/ChatApp').then(m => ({ default: m.ChatApp })));
 import { slugify } from './lib/utils';
 
 
@@ -238,6 +240,11 @@ const App = () => {
                 <Route path="/workspace/aurora-vibe" element={<ProtectedRoute><AntigravityChat /></ProtectedRoute>} />
                 <Route path="/workspace/aurora-vibe/:sessionId" element={<ProtectedRoute><AntigravityChat /></ProtectedRoute>} />
 
+                {/* Aurora Dedicated Full-Screen Chat (Without App Shell) */}
+                <Route path="/workspace/apps/chat" element={<ProtectedRoute><ChatApp /></ProtectedRoute>} />
+                <Route path="/workspace/apps/chat/:conversationId" element={<ProtectedRoute><ChatApp /></ProtectedRoute>} />
+                <Route path="/workspace/chat" element={<Navigate to="/workspace/apps/chat" replace />} />
+
                {/* Platform Operations & Administration (SuperAdmin Suite) */}
               <Route path="/admin" element={<ProtectedRoute requireAdmin><PlatformShell><SuperAdminOverview /></PlatformShell></ProtectedRoute>} />
               <Route path="/admin/tenants" element={<ProtectedRoute requireAdmin><PlatformShell><TenantManagementPage /></PlatformShell></ProtectedRoute>} />
@@ -340,6 +347,10 @@ const App = () => {
                 <Route path="organization" element={<OrganizationPage />} />
                 <Route path="subscription" element={<SubscriptionPage />} />
                 <Route path="ai-services" element={<AISettingsPage />} />
+                <Route path="email-connections" element={<MailboxSettingsPage />} />
+                <Route path="mailboxes" element={<Navigate to="/workspace/settings/email-connections" replace />} />
+                <Route path="inbox-connections" element={<Navigate to="/workspace/settings/email-connections" replace />} />
+                <Route path="email" element={<Navigate to="/workspace/settings/email-connections" replace />} />
                 <Route path="billing" element={<Navigate to="/workspace/settings/subscription" replace />} />
                 <Route path="usage" element={<Navigate to="/workspace/settings/subscription" replace />} />
                 
@@ -393,6 +404,7 @@ const App = () => {
                    <Route path="records-management" element={<RecordsManagementSettings />} />
                    <Route path="agents" element={<AgentsLibraryPage />} />
                    <Route path="agents-library" element={<AgentsLibraryPage />} />
+                   <Route path="email-connections" element={<MailboxSettingsPage />} />
                    <Route path="testing" element={<TestingPage />} />
                 </Route>
                  <Route path="solutions" element={<Navigate to="/workspace/settings/platform-modules/solutions" replace />} />

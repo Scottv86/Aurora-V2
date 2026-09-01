@@ -60,6 +60,15 @@ const SETTINGS_ITEMS: SettingItem[] = [
     tags: ['ai', 'byok', 'openai', 'anthropic', 'gemini', 'grok', 'deepseek', 'privacy', 'keys', 'tokens']
   },
   {
+    id: 'email-connections',
+    label: 'Email & Inboxes',
+    description: 'Manage connected user mailboxes, shared department inboxes, enterprise OAuth apps, and SMTP relays.',
+    icon: 'Mail',
+    to: '/workspace/settings/email-connections',
+    category: 'General & Security',
+    tags: ['email', 'inbox', 'imap', 'smtp', 'gmail', 'outlook', 'mailboxes', 'connections', 'shared inbox', 'oauth']
+  },
+  {
     id: 'branding',
     label: 'Branding',
     description: 'Logo, brand colors, and customization themes.',

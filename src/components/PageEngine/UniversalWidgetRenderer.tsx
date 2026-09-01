@@ -106,7 +106,7 @@ export const UniversalWidgetRenderer: React.FC<UniversalWidgetProps> = ({
     case 'work-queue':
     case 'queue':
       return (
-        <div className="relative group bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-5 shadow-sm overflow-hidden">
+        <div className="relative group bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-3 shadow-sm overflow-hidden h-full">
           {widget.properties?.queueId && (
             <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity z-20 flex items-center gap-1 bg-zinc-900/90 backdrop-blur-md text-white p-1 rounded-xl shadow-lg border border-zinc-700 text-[10px] font-bold">
               <span className="px-2 py-0.5 text-indigo-400 bg-indigo-950/60 rounded-md">Global Library Queue</span>
@@ -124,7 +124,12 @@ export const UniversalWidgetRenderer: React.FC<UniversalWidgetProps> = ({
               pageSize={widget.properties?.pageSize || 8}
             />
           ) : (
-            <WorkQueue />
+            <WorkQueue
+              isWidget={true}
+              widgetTitle={widget.title}
+              widgetProperties={widget.properties}
+              className="w-full h-full"
+            />
           )}
         </div>
       );

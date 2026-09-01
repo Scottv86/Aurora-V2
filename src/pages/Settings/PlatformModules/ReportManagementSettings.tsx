@@ -3,7 +3,7 @@ import {
   BarChart2, Plus, ArrowLeft, ArrowRight, Trash2, Edit2, Eye, 
   Save, Check, BarChart, LineChart, 
   PieChart, Layers, Table, Activity, TrendingUp, Info, Printer,
-  GripVertical, Maximize2, Minimize2, Search
+  GripVertical, Maximize2, Minimize2, Search, Layout
 } from 'lucide-react';
 
 
@@ -36,6 +36,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { createFormulaContext } from '../../../lib/formulaEngine';
 import { VisualSkeleton } from '../../WorkspacePage/WorkspacePageView';
 import { NewReportModal } from '../../../components/Modals/NewReportModal';
+import { EmbedReportInPageModal } from '../../../components/Modals/EmbedReportInPageModal';
 
 // Types
 export interface ReportWidget {
@@ -397,7 +398,7 @@ const ReportBuilderCanvas = ({
                             {(widget.properties.showGridlines ?? true) && <CartesianGrid strokeDasharray="3 3" stroke="#88888820" />}
                             <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} />
                             <YAxis stroke="#888888" fontSize={9} tickLine={false} />
-                            {(widget.properties.showTooltip ?? true) && <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />}
+                            {(widget.properties.showTooltip ?? true) && <Tooltip cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }} contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />}
                             {(widget.properties.showLegend ?? false) && <Legend wrapperStyle={{ fontSize: '9px' }} />}
                             <Bar dataKey="value" fill={widget.properties.color || '#6366f1'} radius={[4, 4, 0, 0]} animationDuration={300} />
                           </ReBarChart>
@@ -414,7 +415,7 @@ const ReportBuilderCanvas = ({
                             {(widget.properties.showGridlines ?? true) && <CartesianGrid strokeDasharray="3 3" stroke="#88888820" />}
                             <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} />
                             <YAxis stroke="#888888" fontSize={9} tickLine={false} />
-                            {(widget.properties.showTooltip ?? true) && <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />}
+                            {(widget.properties.showTooltip ?? true) && <Tooltip cursor={{ stroke: '#3f3f46', strokeWidth: 1 }} contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />}
                             {(widget.properties.showLegend ?? false) && <Legend wrapperStyle={{ fontSize: '9px' }} />}
                             <Line type="monotone" dataKey="value" stroke={widget.properties.color || '#6366f1'} strokeWidth={2} animationDuration={300} />
                           </ReLineChart>
@@ -431,7 +432,7 @@ const ReportBuilderCanvas = ({
                             {(widget.properties.showGridlines ?? true) && <CartesianGrid strokeDasharray="3 3" stroke="#88888820" />}
                             <XAxis dataKey="name" stroke="#888888" fontSize={9} tickLine={false} />
                             <YAxis stroke="#888888" fontSize={9} tickLine={false} />
-                            {(widget.properties.showTooltip ?? true) && <Tooltip contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />}
+                            {(widget.properties.showTooltip ?? true) && <Tooltip cursor={{ stroke: '#3f3f46', strokeWidth: 1 }} contentStyle={{ background: '#18181b', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }} />}
                             {(widget.properties.showLegend ?? false) && <Legend wrapperStyle={{ fontSize: '9px' }} />}
                             <Area type="monotone" dataKey="value" fill={widget.properties.color || '#6366f1'} stroke={widget.properties.color || '#6366f1'} fillOpacity={0.15} animationDuration={300} />
                           </ReAreaChart>
@@ -522,6 +523,7 @@ setView('LIST');
   const [isPreview, setIsPreview] = useState(false);
   const [savingReport, setSavingReport] = useState(false);
   const [deletingReport, setDeletingReport] = useState<Report | null>(null);
+  const [embeddingReport, setEmbeddingReport] = useState<Report | null>(null);
   const [isReportDirty, setIsReportDirty] = useState(false);
   const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
   const isReportInitializedRef = React.useRef(false);
@@ -1569,16 +1571,28 @@ setView('LIST');
                 >
                   <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeletingReport(report);
-                    }}
-                    className="absolute top-4 right-4 p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-colors duration-150 opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
-                    title="Delete Report"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  <div className="absolute top-4 right-4 flex items-center gap-1 opacity-0 group-hover:opacity-100 z-20 transition-opacity duration-150">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEmbeddingReport(report);
+                      }}
+                      className="p-2 rounded-xl bg-zinc-100/80 hover:bg-indigo-500/10 text-zinc-500 hover:text-indigo-600 dark:bg-zinc-800/80 dark:hover:bg-indigo-500/20 transition-colors duration-150 cursor-pointer"
+                      title="Embed in Workspace Page"
+                    >
+                      <Layout size={14} />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeletingReport(report);
+                      }}
+                      className="p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-colors duration-150 cursor-pointer"
+                      title="Delete Report"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
 
                   <div className="relative z-10 flex flex-col h-full justify-between">
                     <div>
@@ -1766,6 +1780,16 @@ setView('LIST');
                 >
                   {isPreview ? <Edit2 size={14} /> : <Eye size={14} />}
                   {isPreview ? 'Design Mode' : 'Preview Mode'}
+                </Button>
+
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setEmbeddingReport(currentReport)}
+                  className="gap-1.5 font-bold print-hide text-xs"
+                  title="Embed in Workspace Page"
+                >
+                  <Layout size={14} /> Embed in Page
                 </Button>
 
                 <Button
@@ -2501,6 +2525,18 @@ setView('LIST');
           </div>
         )
       )}
+
+      <EmbedReportInPageModal
+        isOpen={Boolean(embeddingReport)}
+        onClose={() => setEmbeddingReport(null)}
+        report={embeddingReport}
+        onReportUpdated={(updatedReport) => {
+          setReports(prev => prev.map(r => r.id === updatedReport.id ? updatedReport : r));
+          if (currentReport?.id === updatedReport.id) {
+            setCurrentReport(updatedReport);
+          }
+        }}
+      />
 
       {showUnsavedConfirm && (
         <UnsavedChangesModal

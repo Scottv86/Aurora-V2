@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Inbox, 
   Star, 
@@ -142,6 +143,7 @@ export const InboxSidebar: React.FC<InboxSidebarProps> = ({
   onDeleteAccount,
   width = 256
 }) => {
+  const navigate = useNavigate();
   const folders: { id: InboxFolder; label: string; icon: any }[] = [
     { id: 'inbox', label: 'Inbox', icon: Inbox },
     { id: 'starred', label: 'Starred', icon: Star },
@@ -215,12 +217,23 @@ export const InboxSidebar: React.FC<InboxSidebarProps> = ({
             <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
               Mailboxes
             </span>
-            <button
-              onClick={onOpenAddAccount}
-              className="text-[10px] font-bold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:underline flex items-center gap-1 cursor-pointer"
-            >
-              <Plus size={11} /> Add
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => navigate('/workspace/settings/email-connections')}
+                title="Manage Mailbox Settings & Gateways"
+                className="text-[10px] font-bold text-zinc-500 hover:text-zinc-900 dark:hover:text-white flex items-center gap-0.5 cursor-pointer"
+              >
+                <Settings size={11} />
+              </button>
+              <button
+                type="button"
+                onClick={onOpenAddAccount}
+                className="text-[10px] font-bold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <Plus size={11} /> Add
+              </button>
+            </div>
           </div>
 
           {/* All Inboxes Aggregator */}
