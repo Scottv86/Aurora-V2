@@ -48,6 +48,9 @@ export class AutomationScheduler {
     // Check SLA warning and breach deadlines
     await this.checkSLAs();
 
+    // Check KPI metric threshold alerts & workflow triggers
+    await this.checkKpiThresholds();
+
     // Fetch and execute active Antigravity scheduled tasks
     try {
       const chatScheduledTasks = await (globalPrisma as any).antigravityScheduledTask.findMany({
@@ -597,4 +600,53 @@ export class AutomationScheduler {
 
     return session.id;
   }
+
+  /**
+   * Evaluates active KPI metric threshold alerts and triggers automated workflows on breach.
+   */
+  private static async checkKpiThresholds() {
+    try {
+      const activeKpis = await globalPrisma.kpiDefinition.findMany({
+        where: { status: 'ACTIVE' }
+      });
+
+      for (const kpi of activeKpis) {
+        if (!kpi.thresholds || !Array.isArray(kpi.thresholds) || kpi.thresholds.length === 0) {
+          continue;
+        }
+
+        // Check if there are any automations subscribed to KPI_THRESHOLD_BREACH for this KPI
+        const automations = await globalPrisma.automation.findMany({
+          where: {
+            tenantId: kpi.tenantId,
+            isActive: true,
+            triggerType: 'KPI_THRESHOLD_BREACH'
+          }
+        }).catch(() => []);
+
+        if (automations.length === 0) continue;
+
+        // Perform threshold checks and trigger automations
+        for (const auto of automations) {
+          const config = typeof auto.triggerConfig === 'string' 
+            ? JSON.parse(auto.triggerConfig || '{}') 
+            : (auto.triggerConfig || {});
+
+          if (config.kpiId && config.kpiId !== kpi.id && config.kpiId !== kpi.slug) {
+            continue;
+          }
+
+          // Execute pipeline
+          console.log(`[Scheduler] KPI threshold trigger fired for automation "${auto.name}" on KPI "${kpi.name}"`);
+          await AutomationEngine.runPipeline(auto, null, { kpiId: kpi.id, kpiName: kpi.name }, 'KPI_THRESHOLD_BREACH', globalPrisma).catch(err => {
+            console.error(`[Scheduler] Error running KPI automation ${auto.id}:`, err);
+          });
+        }
+      }
+    } catch (err) {
+      // Safe catch to prevent scheduler interruption
+      console.warn('[Scheduler] KPI threshold check notice:', err);
+    }
+  }
 }
+

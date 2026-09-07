@@ -79,7 +79,7 @@ const INITIAL_TEST_SUITES: TestSuite[] = [
   {
     id: 'TS-005',
     name: 'Document Generation & PDF Merge Engine',
-    category: 'Templates & Generation',
+    category: 'Content & Generation',
     testsCount: 12,
     passingCount: 12,
     duration: '1.8s',

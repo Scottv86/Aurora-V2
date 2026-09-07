@@ -331,6 +331,67 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
           });
         }
 
+        // 7. Process Semantic Metric & KPI Artifacts
+        if (result.metricArtifact) {
+          const metricIdx = updatedArtifacts.findIndex(a => a.type === 'METRIC' || (a.type as any) === 'KPI');
+          const newMetricArt: SolutionArtifact = {
+            id: result.metricArtifact.id || `art_metric_${Date.now()}`,
+            name: result.metricArtifact.name || 'Operational SLA & Metric KPI',
+            type: 'METRIC',
+            description: result.metricArtifact.description || 'Semantic calculated business metric, formula & thresholds',
+            content: result.metricArtifact
+          };
+          if (metricIdx >= 0) updatedArtifacts[metricIdx] = newMetricArt;
+          else updatedArtifacts.push(newMetricArt);
+        }
+
+        if (Array.isArray(result.metricArtifacts) && result.metricArtifacts.length > 0) {
+          result.metricArtifacts.forEach((met: any, idx: number) => {
+            const metId = met.id || `art_metric_${Date.now()}_${idx}`;
+            const metIdx = updatedArtifacts.findIndex(a => a.id === metId || (a.type === 'METRIC' && a.name === met.name));
+            const artObj: SolutionArtifact = {
+              id: metId,
+              name: met.name || `Business Metric ${idx + 1}`,
+              type: 'METRIC',
+              description: met.description || 'Calculated KPI definition',
+              content: met
+            };
+            if (metIdx >= 0) updatedArtifacts[metIdx] = artObj;
+            else updatedArtifacts.push(artObj);
+          });
+        }
+
+        // 8. Process Content & Document Template Artifacts
+        const contentData = result.contentArtifact || result.templateArtifact;
+        if (contentData) {
+          const contentIdx = updatedArtifacts.findIndex(a => a.type === 'CONTENT' || a.type === 'TEMPLATE');
+          const newContentArt: SolutionArtifact = {
+            id: contentData.id || `art_content_${Date.now()}`,
+            name: contentData.name || 'Customer Notice & Document Template',
+            type: 'CONTENT',
+            description: contentData.description || 'Block-based transactional document/email template with dynamic merge tokens',
+            content: contentData
+          };
+          if (contentIdx >= 0) updatedArtifacts[contentIdx] = newContentArt;
+          else updatedArtifacts.push(newContentArt);
+        }
+
+        if (Array.isArray(result.contentArtifacts) && result.contentArtifacts.length > 0) {
+          result.contentArtifacts.forEach((cnt: any, idx: number) => {
+            const cntId = cnt.id || `art_content_${Date.now()}_${idx}`;
+            const cntIdx = updatedArtifacts.findIndex(a => a.id === cntId || ((a.type === 'CONTENT' || a.type === 'TEMPLATE') && a.name === cnt.name));
+            const artObj: SolutionArtifact = {
+              id: cntId,
+              name: cnt.name || `Document Template ${idx + 1}`,
+              type: 'CONTENT',
+              description: cnt.description || 'Block template definition',
+              content: cnt
+            };
+            if (cntIdx >= 0) updatedArtifacts[cntIdx] = artObj;
+            else updatedArtifacts.push(artObj);
+          });
+        }
+
         setArtifacts(updatedArtifacts);
       }
 
@@ -372,6 +433,12 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
       const specArt = artifacts.find(a => a.type === 'PAGE' || a.id.startsWith('art_spec_'));
       const dynamicDescription = specArt?.description || (specArt?.content as any)?.title || (chatMessages.find(m => m.role === 'self')?.text ? `Enterprise solution blueprint for "${chatMessages.find(m => m.role === 'self')?.text}"` : `Comprehensive solution blueprint combining ${artifacts.length} builder artifacts.`);
 
+      const metricsCount = artifacts.filter(a => a.type === 'METRIC' || (a.type as any) === 'KPI').length;
+      const contentCount = artifacts.filter(a => a.type === 'CONTENT' || a.type === 'TEMPLATE').length;
+      const formsCount = artifacts.filter(a => a.type === 'FORM').length;
+      const workflowsCount = artifacts.filter(a => a.type === 'WORKFLOW').length;
+      const agentsCount = artifacts.filter(a => a.type === 'AGENT').length;
+
       const payload = {
         id: solutionId,
         name: solutionName,
@@ -380,6 +447,13 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
         version: solutionVersion,
         status: solutionStatus,
         author: 'Platform Architecture',
+        modulesCount: connectedModules.length,
+        formsCount,
+        workflowsCount,
+        metricsCount,
+        contentCount,
+        agentsCount,
+        artifactsCount: artifacts.length,
         activeArtifactId,
         contextSources,
         connectedModules,
@@ -465,6 +539,9 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
   };
 
   const handleExportSpecMarkdown = () => {
+    const metricsArts = artifacts.filter(a => a.type === 'METRIC' || (a.type as any) === 'KPI');
+    const contentArts = artifacts.filter(a => a.type === 'CONTENT' || a.type === 'TEMPLATE');
+
     const specMarkdown = `# Solution Architecture Specification: ${solutionName}
 **Version**: ${solutionVersion}  
 **Status**: ${solutionStatus}  
@@ -479,22 +556,32 @@ This document provides a comprehensive technical architecture specification for 
 ---
 
 ## 1. Connected Context Sources & Reference Grounding
-${contextSources.map(s => `- **${s.name}** (${s.sourceOrigin || 'LOCAL_FILE'}) - ${s.size}`).join('\n')}
+${contextSources.map(s => `- **${s.name}** (${s.sourceOrigin || 'LOCAL_FILE'}) - ${s.size}`).join('\n') || '- None attached'}
 
 ---
 
 ## 2. Data Modules & Schema Hierarchy
-${connectedModules.map(m => `### Module: ${m.name} (${m.type})\n- **Fields Count**: ${m.fieldsCount}\n- **Status**: ${m.linked ? 'Linked' : 'Unlinked'}`).join('\n\n')}
+${connectedModules.map(m => `### Module: ${m.name} (${m.type})\n- **Fields Count**: ${m.fieldsCount}\n- **Status**: ${m.linked ? 'Linked' : 'Unlinked'}`).join('\n\n') || '- No custom modules defined'}
 
 ---
 
-## 3. Solution Artifacts & Layout Specs
+## 3. Semantic Business Metrics & KPIs
+${metricsArts.map(m => `### Metric: ${m.name}\n- **Source**: ${m.content?.sourceType || 'module_record'} (${m.content?.sourceConfig?.aggregateType || 'count'} aggregation)\n- **Target**: ${m.content?.targetValue ?? 'N/A'}\n- **Time Horizon**: ${m.content?.timeHorizon || 'trailing_30d'}\n- **Description**: ${m.description || ''}`).join('\n\n') || '- No specific metrics configured'}
+
+---
+
+## 4. Content Templates & Transactional Documents
+${contentArts.map(c => `### Content: ${c.name} (${c.content?.type || 'letter'})\n- **Subject / Notice**: ${c.content?.metadata?.subject || c.name}\n- **Blocks Count**: ${c.content?.blocks?.length || 0}\n- **Description**: ${c.description || ''}`).join('\n\n') || '- No content templates configured'}
+
+---
+
+## 5. Solution Artifacts & Layout Specs
 ${artifacts.map(a => `### Artifact: ${a.name} (${a.type})\n\`\`\`json\n${JSON.stringify(a.content, null, 2)}\n\`\`\``).join('\n\n')}
 
 ---
 
-## 4. Process Automation & Execution Matrix
-- Trigger ON_FORM_SUBMIT -> Assign Service -> Generate Welcome Pack
+## 6. Process Automation & Execution Matrix
+- Trigger ON_FORM_SUBMIT -> Assign Service -> Generate Welcome Pack & Output Notice
 - SLA Escalation Rule: 4 Hours threshold
 `;
 

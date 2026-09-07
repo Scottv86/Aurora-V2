@@ -53,6 +53,7 @@ model Tenant {
   solutionBlueprints     SolutionBlueprint[]
   savedQueries           SavedQuery[]
   savedViews             SavedView[]
+  kpis                   KpiDefinition[]
   inboxAccounts          InboxAccount[]
   inboxThreads           InboxThread[]
   inboxFolders           InboxFolder[]
@@ -1106,6 +1107,42 @@ model SavedView {
 
   @@index([tenantId, scopeType, scopeId])
   @@map("saved_views")
+}
+
+model KpiDefinition {
+  id                    String   @id @default(cuid())
+  tenantId              String   @map("tenant_id")
+  workspaceId           String?  @map("workspace_id")
+  name                  String
+  slug                  String
+  description           String?
+  category              String   @default("General")
+  tags                  Json     @default("[]")
+  iconName              String?  @default("Target") @map("icon_name")
+  sourceType            String   @default("module_record") @map("source_type") // module_record, saved_query, formula, system
+  sourceConfig          Json     @default("{}") @map("source_config")
+  formula               String?
+  format                String   @default("number") // number, currency, percentage, duration, bytes
+  formatOptions         Json?    @map("format_options") // { currencyCode, decimalPrecision, prefix, suffix }
+  trendDirection        String   @default("higher_is_better") @map("trend_direction") // higher_is_better, lower_is_better, neutral
+  targetValue           Float?   @map("target_value")
+  targetConfig          Json?    @map("target_config")
+  thresholds            Json     @default("[]")
+  timeHorizon           String   @default("all_time") @map("time_horizon") // today, this_week, mtd, qtd, ytd, trailing_30d, all_time, custom
+  isGlobal              Boolean  @default(false) @map("is_global")
+  status                String   @default("ACTIVE") // ACTIVE, DRAFT, ARCHIVED
+  cacheTtlSeconds       Int      @default(60) @map("cache_ttl_seconds")
+  downstreamUsagesCount Int      @default(0) @map("downstream_usages_count")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@index([tenantId, workspaceId])
+  @@index([tenantId, status])
+  @@map("kpi_definitions")
 }
 
 model InboxAccount {

@@ -40,7 +40,7 @@ The workspace contains the following data modules (use their exact IDs if you re
 ${JSON.stringify(moduleCatalog, null, 2)}
 
 Recommend a grid layout consisting of widgets.
-Widget types allowed:
+- "accessible-modules": Renders a launchpad directory of all modules accessible to the current user. Properties can include "displayStyle" ("cards", "tiles", "list", "grouped"), "columns" (2, 3, 4). Width (w) should be 12.
 - "stats-grid": Displays overview statistics of cases and workloads. Width (w) should be 12.
 - "active-workflows": Renders progress summaries of active workflows. Width (w) should be 12.
 - "work-queue": Renders the user's personal actionable inbox list. Width (w) should be 12.

@@ -144,17 +144,46 @@ class SolutionArtifactRegistryManager {
       label: 'Analytics & Reports',
       description: 'KPI summary metrics cards and chart queries',
       iconName: 'BarChart3',
-      targetBuilderRoute: '/workspace/settings/platform-modules/reports-library',
+      targetBuilderRoute: '/workspace/settings/platform-modules/report-management',
       renderPreview: (_artifact) => null
     });
 
-    // 11. TEMPLATE
+    // 11. METRIC (KPI Builder)
+    this.registerPlugin({
+      type: 'METRIC',
+      label: 'Semantic Business Metric / KPI',
+      description: 'Calculated metrics, aggregation formulas, target thresholds and trend indicators',
+      iconName: 'Target',
+      targetBuilderRoute: '/workspace/settings/platform-modules/kpi-management',
+      renderPreview: (_artifact) => null
+    });
+
+    // 12. CONTENT & TEMPLATE (Content / Document Template Builder)
+    this.registerPlugin({
+      type: 'CONTENT',
+      label: 'Content & Document Template',
+      description: 'Block-based document, email, letter, and notification templates with dynamic merge tokens',
+      iconName: 'FileText',
+      targetBuilderRoute: '/workspace/settings/platform-modules/document-generation',
+      renderPreview: (_artifact) => null
+    });
+
     this.registerPlugin({
       type: 'TEMPLATE',
-      label: 'Email & Document Template',
+      label: 'Content & Document Template',
       description: 'Dynamic body templates with mustache variable pills',
       iconName: 'Mail',
-      targetBuilderRoute: '/workspace/settings/platform-modules/templates-library',
+      targetBuilderRoute: '/workspace/settings/platform-modules/document-generation',
+      renderPreview: (_artifact) => null
+    });
+
+    // 13. AGENT
+    this.registerPlugin({
+      type: 'AGENT',
+      label: 'Autonomous AI Copilot',
+      description: 'Autonomous digital coworker configured for automated triage, execution & safety guardrails',
+      iconName: 'Bot',
+      targetBuilderRoute: '/workspace/settings/platform-modules/agents-library',
       renderPreview: (_artifact) => null
     });
   }

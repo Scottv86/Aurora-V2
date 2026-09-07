@@ -45,10 +45,12 @@ export const DocumentGeneratorModal: React.FC<DocumentGeneratorModalProps> = ({
     setLoading(true);
     try {
       const tmpls = await DocumentService.getTemplates(tenant.id, moduleId);
-      setTemplates(tmpls.filter(t => t.status === 'Published'));
+      const published = tmpls.filter(t => t.status === 'Published');
+      const docTemplates = published.filter(t => (t.type || 'letter') === 'letter' || (t.type || 'letter') === 'page');
+      setTemplates(docTemplates.length ? docTemplates : published);
     } catch (error) {
-      console.error('Error loading templates:', error);
-      toast.error('Failed to load templates');
+      console.error('Error loading content templates:', error);
+      toast.error('Failed to load content templates');
     } finally {
       setLoading(false);
     }

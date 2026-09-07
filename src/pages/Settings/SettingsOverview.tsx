@@ -125,6 +125,15 @@ const SETTINGS_ITEMS: SettingItem[] = [
     tags: ['queries', 'sql', 'datasets', 'views', 'builder', 'analytics', 'data']
   },
   {
+    id: 'kpi-management',
+    label: 'Metrics',
+    description: 'Define semantic calculation formulas, targets, and alert thresholds.',
+    icon: 'Target',
+    to: '/workspace/settings/platform-modules/kpi-management',
+    category: 'Build & Customize',
+    tags: ['metrics', 'kpi', 'targets', 'goals', 'thresholds', 'analytics', 'ribbons', 'formulas']
+  },
+  {
     id: 'validations-library',
     label: 'Rules',
     description: 'Create and maintain reusable field and cross-entity validation rulesets.',
@@ -216,12 +225,12 @@ const SETTINGS_ITEMS: SettingItem[] = [
   },
   {
     id: 'document-generation',
-    label: 'Templates',
-    description: 'Configure automated document templates, PDF creation, and email merging.',
+    label: 'Content',
+    description: 'Configure reusable document templates, email merging, and automated output content.',
     icon: 'FileText',
     to: '/workspace/settings/platform-modules/document-generation',
     category: 'Build & Customize',
-    tags: ['documents', 'templates', 'pdf', 'email merge', 'generation']
+    tags: ['content', 'documents', 'emails', 'templates', 'pdf', 'email merge', 'generation']
   },
   {
     id: 'report-management',

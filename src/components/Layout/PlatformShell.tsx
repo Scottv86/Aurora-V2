@@ -473,8 +473,8 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       if (feature === 'automations') {
         return renderConfigureButton('Configure Automations', () => navigateWithReturn('/workspace/settings/platform-modules/automation-management'), 'Zap');
       }
-      if (feature === 'templates') {
-        return renderConfigureButton('Configure Templates', () => navigateWithReturn('/workspace/settings/platform-modules/document-generation'), 'FileText');
+      if (feature === 'templates' || feature === 'content') {
+        return renderConfigureButton('Configure Content', () => navigateWithReturn('/workspace/settings/platform-modules/document-generation'), 'FileText');
       }
       if (feature === 'reports') {
         return renderConfigureButton('Configure Reports', () => navigateWithReturn('/workspace/settings/platform-modules/report-management'), 'BarChart2');
@@ -534,6 +534,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         { label: 'Modules', icon: Layers, to: '/workspace/settings/platform-modules' },
         { label: 'Lists', icon: LucideIcons.ListTodo, to: '/workspace/settings/platform-modules/global-lists' },
         { label: 'Queries', icon: LucideIcons.Database, to: '/workspace/settings/platform-modules/queries-library' },
+        { label: 'Metrics', icon: LucideIcons.Target, to: '/workspace/settings/platform-modules/kpi-management' },
         { label: 'Rules', icon: LucideIcons.ShieldCheck, to: '/workspace/settings/platform-modules/validations-library' },
         { label: 'Integrations', icon: LucideIcons.Plug, to: '/workspace/settings/platform-modules/integration-management' },
         { label: 'Workflows', icon: LucideIcons.GitBranch, to: '/workspace/settings/platform-modules/workflows-library' },
@@ -544,7 +545,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         { label: 'Pages', icon: Layout, to: '/workspace/settings/pages' },
         { label: 'Menus', icon: Compass, to: '/workspace/settings/navigation' },
         { label: 'Sites', icon: LucideIcons.Globe, to: '/workspace/settings/platform-modules/sites' },
-        { label: 'Templates', icon: LucideIcons.FileText, to: '/workspace/settings/platform-modules/document-generation' },
+        { label: 'Content', icon: LucideIcons.FileText, to: '/workspace/settings/platform-modules/document-generation' },
         { label: 'Reports', icon: LucideIcons.BarChart2, to: '/workspace/settings/platform-modules/report-management' },
       ]
     },

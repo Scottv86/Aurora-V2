@@ -559,6 +559,61 @@ export interface SolutionOrchestrationResult {
     };
   };
   agentArtifacts?: any[];
+  metricArtifact?: {
+    id: string;
+    name: string;
+    slug?: string;
+    description?: string;
+    category?: string;
+    iconName?: string;
+    sourceType?: 'module_record' | 'saved_query' | 'formula' | 'system';
+    sourceConfig?: {
+      moduleId?: string;
+      aggregateType?: 'count' | 'sum' | 'avg' | 'min' | 'max' | 'median' | 'percentage' | 'formula';
+      aggregateField?: string;
+      formulaExpression?: string;
+      filters?: Array<{ id: string; fieldId: string; operator: string; value: any }>;
+    };
+    format?: 'number' | 'currency' | 'percentage' | 'duration' | 'bytes';
+    formatOptions?: {
+      currencyCode?: string;
+      decimalPrecision?: number;
+      prefix?: string;
+      suffix?: string;
+      compactNotation?: boolean;
+    };
+    trendDirection?: 'higher_is_better' | 'lower_is_better' | 'neutral';
+    targetValue?: number;
+    thresholds?: Array<{ id?: string; condition: 'gt' | 'gte' | 'lt' | 'lte' | 'eq'; value: number; color: 'emerald' | 'rose' | 'amber' | 'blue' | 'zinc'; label: string }>;
+    timeHorizon?: 'today' | 'this_week' | 'mtd' | 'qtd' | 'ytd' | 'trailing_30d' | 'all_time';
+  };
+  metricArtifacts?: any[];
+  contentArtifact?: {
+    id: string;
+    name: string;
+    type?: 'email' | 'letter' | 'page' | 'message';
+    description?: string;
+    moduleId?: string;
+    metadata?: {
+      subject?: string;
+      preheader?: string;
+      senderName?: string;
+      replyTo?: string;
+      paperSize?: 'A4' | 'Letter';
+      orientation?: 'portrait' | 'landscape';
+      showLetterhead?: boolean;
+      channel?: 'sms' | 'push' | 'banner';
+    };
+    blocks?: Array<{
+      id: string;
+      type: string;
+      data: Record<string, any>;
+      styles?: Record<string, any>;
+    }>;
+    content?: string;
+  };
+  contentArtifacts?: any[];
+  templateArtifact?: any;
 }
 
 
@@ -745,6 +800,71 @@ Operational Directives:
         licenceType: 'AI Agent Seat',
         teamName: 'Operations Squad'
       }
+    },
+    metricArtifact: {
+      id: `art_metric_${Date.now()}`,
+      name: `${topic} SLA Resolution Rate`,
+      slug: `${topic.toLowerCase().replace(/[^a-z0-9]/g, '-')}-sla-rate`,
+      description: `Monitors the percentage of ${topic} intake records successfully resolved within the 4-hour SLA threshold.`,
+      category: 'Performance',
+      iconName: 'Target',
+      sourceType: 'module_record',
+      sourceConfig: {
+        moduleId: customModules[0]?.id,
+        aggregateType: 'percentage',
+        aggregateField: 'f_status',
+        filters: [{ id: 'f1', fieldId: 'f_status', operator: 'equals', value: 'Submitted' }]
+      },
+      format: 'percentage',
+      formatOptions: { decimalPrecision: 1, suffix: '%' },
+      trendDirection: 'higher_is_better',
+      targetValue: 95,
+      thresholds: [
+        { id: 't1', condition: 'gte', value: 90, color: 'emerald', label: 'Optimal' },
+        { id: 't2', condition: 'lt', value: 75, color: 'rose', label: 'Critical' }
+      ],
+      timeHorizon: 'trailing_30d'
+    },
+    contentArtifact: {
+      id: `art_content_${Date.now()}`,
+      name: `${topic} Acknowledgment & Summary Notice`,
+      type: 'letter',
+      description: `Automated official document generated upon ${topic} intake registration with case reference numbers and recipient details.`,
+      moduleId: customModules[0]?.id,
+      metadata: {
+        paperSize: 'A4',
+        orientation: 'portrait',
+        showLetterhead: true,
+        subject: `Official ${topic} Confirmation`
+      },
+      blocks: [
+        {
+          id: 'b1',
+          type: 'letterhead',
+          data: { organizationName: 'Aurora Enterprise Platform', department: `${topic} Administration Hub` }
+        },
+        {
+          id: 'b2',
+          type: 'heading',
+          data: { text: `Official Notice: ${topic} Registration`, level: 'h2' }
+        },
+        {
+          id: 'b3',
+          type: 'text',
+          data: { content: `Thank you for submitting your {{title}} registration. Your submission reference number is **{{f_ref}}**. It has been recorded under status **{{f_status}}** and assigned to our triage team.` }
+        },
+        {
+          id: 'b4',
+          type: 'callout',
+          data: { title: 'SLA Escalation Window', content: 'Our automated digital coworker will process your verification within 4 business hours.', variant: 'info' }
+        },
+        {
+          id: 'b5',
+          type: 'signature_block',
+          data: { signerName: 'Aurora Lead Registrar', signerTitle: 'Chief Platform Officer' }
+        }
+      ],
+      content: `<h2>Official Notice: ${topic} Registration</h2><p>Submission Reference: <strong>{{f_ref}}</strong></p><p>Status: <strong>{{f_status}}</strong></p>`
     }
   };
 };
@@ -871,12 +991,16 @@ You are fully aware of all specialized Builders in the Aurora platform:
 7. Automations & SLA Rules Builder (Trigger rules, event listeners & auto-assignments)
 8. Validation Rules Builder (Field-level constraints & logic verification)
 9. Integration & Connectors Builder (REST APIs, webhooks & external data connectors)
-10. Reports & Analytics Builder (Dashboards, KPI metrics & charts)
-11. Document Templates Builder (PDF/Word generation templates)
-12. Roles & Security Matrix Builder (RBAC permissions, scopes & access policies)
-13. Autonomous Agent Builder (AI digital coworkers, domain specialists, workflow copilots, tool bindings & safety guardrails)
+10. Metrics & KPI Builder (Semantic business metrics, formulas, aggregation engines [count, sum, avg, min, max, percentage, formula] over data modules, targets, threshold alert rules [emerald, rose, amber] & time horizons)
+11. Content & Document Template Builder (Multi-channel block-based document/email/letter/message templates with layout blocks [heading, text, letterhead, callout, table_repeater, button, signature_block], dynamic mustache merge tokens {{variable}}, and metadata)
+12. Reports & Analytics Builder (Dashboards, KPI ribbons, query visualizers & chart queries)
+13. Roles & Security Matrix Builder (RBAC permissions, scopes & access policies)
+14. Autonomous Agent Builder (AI digital coworkers, domain specialists, workflow copilots, tool bindings & safety guardrails)
 
-CRITICAL MANDATE: You MUST ALWAYS generate a "specArtifact" ("Solution Design") FIRST for every request. The specArtifact is the primary technical architecture proposal document that outlines the solution vision, business goals, data schema hierarchy, process workflows, RBAC matrix, and API endpoints. Always include specArtifact as the primary artifact in your JSON response. Whenever a solution involves task automation, document processing, triage, or conversational assistance, ALSO synthesize an "agentArtifact" for an autonomous digital coworker tailored to this solution.
+CRITICAL MANDATE: You MUST ALWAYS generate a "specArtifact" ("Solution Design") FIRST for every request. The specArtifact is the primary technical architecture proposal document that outlines the solution vision, business goals, data schema hierarchy, process workflows, RBAC matrix, and API endpoints. Always include specArtifact as the primary artifact in your JSON response. 
+Whenever a solution involves operational performance tracking or KPIs, ALSO synthesize a "metricArtifact" for key business metric tracking.
+Whenever a solution involves transactional communications, official receipts, certificates, letters, or notifications, ALSO synthesize a "contentArtifact" for automated document generation.
+Whenever a solution involves task automation, document processing, triage, or conversational assistance, ALSO synthesize an "agentArtifact" for an autonomous digital coworker tailored to this solution.
 
 OUTPUT FORMAT: Return ONLY valid JSON matching this schema:
 {
@@ -931,6 +1055,41 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this schema:
       "licenceType": "AI Agent Seat",
       "teamName": "Operations Squad"
     }
+  },
+  "metricArtifact": {
+    "id": "art_metric_1",
+    "name": "SLA Compliance Rate",
+    "slug": "sla-compliance-rate",
+    "description": "Percentage of intake submissions resolved within 4h SLA window.",
+    "category": "Operations",
+    "iconName": "Target",
+    "sourceType": "module_record",
+    "sourceConfig": {
+      "aggregateType": "percentage",
+      "aggregateField": "status"
+    },
+    "format": "percentage",
+    "formatOptions": { "decimalPrecision": 1, "suffix": "%" },
+    "trendDirection": "higher_is_better",
+    "targetValue": 95,
+    "thresholds": [
+      { "id": "t1", "condition": "gte", "value": 90, "color": "emerald", "label": "Optimal" },
+      { "id": "t2", "condition": "lt", "value": 75, "color": "rose", "label": "Critical" }
+    ],
+    "timeHorizon": "trailing_30d"
+  },
+  "contentArtifact": {
+    "id": "art_content_1",
+    "name": "Intake Confirmation & Summary Letter",
+    "type": "letter",
+    "description": "Official confirmation document sent to applicants with submission details.",
+    "metadata": { "paperSize": "A4", "orientation": "portrait", "showLetterhead": true, "subject": "Registration Notice" },
+    "blocks": [
+      { "id": "b1", "type": "letterhead", "data": { "organizationName": "Aurora Platform" } },
+      { "id": "b2", "type": "heading", "data": { "text": "Registration Confirmation", "level": "h2" } },
+      { "id": "b3", "type": "text", "data": { "content": "Thank you for your registration with reference **{{f_ref}}**." } },
+      { "id": "b4", "type": "callout", "data": { "title": "Next Steps", "content": "Our operations team will review your file within 2 business days.", "variant": "info" } }
+    ]
   },
   "formArtifact": {
     "id": "art_form_1",

@@ -197,9 +197,12 @@ export const InboxComposerModal: React.FC<InboxComposerModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      // Load templates
+      // Load email content templates
       DocumentService.getTemplates(tenant?.id || 'default')
-        .then(t => setTemplates(t))
+        .then(all => {
+          const emailTemplates = all.filter(t => (t.type || 'letter') === 'email' || !t.type);
+          setTemplates(emailTemplates.length ? emailTemplates : all);
+        })
         .catch(() => setTemplates([]));
 
       // Load Drive files
@@ -323,9 +326,12 @@ export const InboxComposerModal: React.FC<InboxComposerModalProps> = ({
   const handleInsertTemplate = (tpl: any) => {
     const context = {
       'party.firstName': toInput.split('@')[0] || 'Customer',
+      'first_name': toInput.split('@')[0] || 'Customer',
       'tenant.name': tenant?.name || 'Aurora',
+      'tenant_name': tenant?.name || 'Aurora',
       'user.name': (user as any)?.name || (user as any)?.firstName || 'Representative',
-      'system.currentDate': new Date().toLocaleDateString()
+      'system.currentDate': new Date().toLocaleDateString(),
+      'today_date': new Date().toLocaleDateString()
     };
     const rawContent = tpl.content || '';
     const interpolated = InboxService.interpolateTemplate(rawContent, context);
@@ -334,8 +340,11 @@ export const InboxComposerModal: React.FC<InboxComposerModalProps> = ({
     if (editorRef.current) {
       editorRef.current.innerHTML = interpolated;
     }
+    if (tpl.metadata?.subject) {
+      setSubject(InboxService.interpolateTemplate(tpl.metadata.subject, context));
+    }
     setShowTemplateMenu(false);
-    toast.success(`Inserted template "${tpl.name}"`);
+    toast.success(`Inserted email template "${tpl.name}"`);
   };
 
   const handleAttachDriveFile = (file: any) => {

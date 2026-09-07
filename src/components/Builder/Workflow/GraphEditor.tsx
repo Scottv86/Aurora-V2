@@ -17,7 +17,7 @@ import '@xyflow/react/dist/style.css';
 import { 
   GitFork, Zap, Activity, Clock, Play, Settings2, Trash2, Bug, Info, ChevronRight, 
   Search, Layout as LayoutIcon, Wand2, Mail, MessageSquare, RefreshCw, FileText, Globe, Sparkles as SparklesIcon, X as CloseIcon,
-  Bot
+  Bot, Target
 } from 'lucide-react';
 import { Workflow, WorkflowNodeType } from '../../../types/platform';
 import { WorkflowDebugger } from './WorkflowDebugger';
@@ -39,6 +39,7 @@ const ACTION_LIBRARY = [
   { id: 'WEBHOOK', label: 'Outbound Webhook', desc: 'Push data to external systems and APIs.', icon: Globe, color: 'zinc' },
   { id: 'AI_SUMMARIZE', label: 'AI Summarize', desc: 'Generate intelligent summaries using LLMs.', icon: SparklesIcon, color: 'amber' },
   { id: 'AI_AGENT', label: 'Trigger AI Agent', desc: 'Hand off the record to an autonomous agent for complex reasoning.', icon: Bot, color: 'violet' },
+  { id: 'KPI_CHECK', label: 'Evaluate KPI Metric', desc: 'Evaluate a live KPI metric and branch or log telemetry.', icon: Target, color: 'rose' },
   { id: 'RUN_AUTOMATION', label: 'Run Automation', desc: 'Execute a reusable saved automation pipeline.', icon: Play, color: 'indigo' },
 ];
 

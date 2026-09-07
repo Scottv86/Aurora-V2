@@ -3,7 +3,7 @@ import { FormRenderer, QueueRenderer } from '../Builders';
 import { WorkQueue } from '../WorkQueue';
 import { 
   Database, Globe, Cpu, ShieldCheck, Workflow, 
-  HelpCircle 
+  HelpCircle, Boxes
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
@@ -171,6 +171,39 @@ export const UniversalWidgetRenderer: React.FC<UniversalWidgetProps> = ({
               <p className="text-zinc-500 dark:text-zinc-400">{item.a}</p>
             </div>
           ))}
+        </div>
+      );
+
+    case 'accessible-modules':
+    case 'module-directory':
+      return (
+        <div className="p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+            <div className="flex items-center gap-2">
+              <Boxes size={18} className="text-indigo-500" />
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider">
+                {widget.title || 'Accessible Modules'}
+              </h3>
+            </div>
+            <span className="text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full uppercase">
+              {widget.properties?.displayStyle || 'Cards'}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {[
+              { name: 'Customer Inquiries', category: 'Support', desc: 'Manage incoming customer requests and support tickets' },
+              { name: 'Financial Invoices', category: 'Finance', desc: 'Process vendor bills and accounts payable' },
+              { name: 'Employee Directory', category: 'Human Resources', desc: 'Company workforce registry and team structures' }
+            ].map((mod, i) => (
+              <div key={i} className="p-3.5 bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-800 rounded-2xl">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-bold text-zinc-900 dark:text-white">{mod.name}</span>
+                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-white dark:bg-zinc-900 text-zinc-500 font-semibold border border-zinc-200 dark:border-zinc-800">{mod.category}</span>
+                </div>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-2">{mod.desc}</p>
+              </div>
+            ))}
+          </div>
         </div>
       );
 

@@ -238,12 +238,27 @@ const renderVariablePreviews = (
                     className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-400 border border-purple-200/60 dark:border-purple-900/60 font-semibold select-none cursor-help text-[8px]" 
                     title={part.content}
                   >
-                    <span>⚙️</span>
+                    <span>🔄</span>
                     <span>{stepModName} → {fieldLabel}</span>
                   </span>
                 );
               }
             }
+          }
+
+          // Case 4: kpi token preview
+          if (varKey.startsWith('kpi.')) {
+            const kpiSub = varKey.replace('kpi.', '');
+            return (
+              <span 
+                key={idx} 
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border border-rose-200/60 dark:border-rose-900/60 font-semibold select-none cursor-help text-[8px]" 
+                title={part.content}
+              >
+                <span>🎯</span>
+                <span>KPI → {kpiSub}</span>
+              </span>
+            );
           }
 
           // Fallback

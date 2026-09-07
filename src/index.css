@@ -125,6 +125,33 @@
   fill: var(--color-indigo-400) !important;
 }
 
+/* Content Builder Quill Typography Inheritance */
+.content-block-quill .ql-container.ql-snow {
+  font-family: inherit !important;
+  font-size: inherit !important;
+  font-weight: inherit !important;
+  color: inherit !important;
+}
+
+.content-block-quill .ql-editor {
+  font-family: inherit !important;
+  font-size: inherit !important;
+  font-weight: inherit !important;
+  color: inherit !important;
+  text-align: inherit !important;
+}
+
+.content-block-quill .ql-editor p,
+.content-block-quill .ql-editor span,
+.content-block-quill .ql-editor div,
+.content-block-quill .ql-editor strong,
+.content-block-quill .ql-editor em {
+  font-family: inherit !important;
+  font-size: inherit !important;
+  font-weight: inherit;
+  color: inherit !important;
+}
+
 .scrollbar-hide::-webkit-scrollbar,
 .no-scrollbar::-webkit-scrollbar {
   display: none;

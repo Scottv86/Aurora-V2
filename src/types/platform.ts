@@ -355,19 +355,114 @@ export interface User {
   cuid?: string;
 }
 
+export type ContentType = 'email' | 'letter' | 'page' | 'message';
+
+export type ContentBlockType = 
+  | 'heading'
+  | 'text'
+  | 'letterhead'
+  | 'signature_block'
+  | 'table_repeater'
+  | 'callout'
+  | 'hero_banner'
+  | 'grid_2col'
+  | 'button'
+  | 'divider'
+  | 'spacer'
+  | 'quote'
+  | 'code';
+
+export interface ContentBlockStyles {
+  fontFamily?: string;
+  fontSize?: string;
+  fontWeight?: string;
+  lineHeight?: string;
+  textColor?: string;
+  bgColor?: string;
+  align?: 'left' | 'center' | 'right' | 'justify';
+  padding?: string;
+  borderRadius?: string;
+  borderWidth?: string;
+  borderColor?: string;
+  borderStyle?: 'solid' | 'dashed' | 'dotted';
+}
+
+export type ConditionOperator = 
+  | 'equals' 
+  | 'not_equals' 
+  | 'contains' 
+  | 'not_contains' 
+  | 'greater_than' 
+  | 'less_than' 
+  | 'is_empty' 
+  | 'is_not_empty';
+
+export interface ContentBlockRule {
+  id: string;
+  field: string;
+  operator: ConditionOperator;
+  value: string;
+}
+
+export interface ContentBlockCondition {
+  enabled?: boolean;
+  conjunction?: 'AND' | 'OR';
+  rules?: ContentBlockRule[];
+  // Legacy single condition fallback support
+  field?: string;
+  operator?: ConditionOperator;
+  value?: string;
+}
+
+export interface ContentBlock {
+  id: string;
+  type: ContentBlockType;
+  data: Record<string, any>;
+  styles?: ContentBlockStyles;
+  conditions?: ContentBlockCondition;
+}
+
+export interface ContentMetadata {
+  // Email specific
+  subject?: string;
+  preheader?: string;
+  senderName?: string;
+  replyTo?: string;
+
+  // Letter specific
+  paperSize?: 'A4' | 'Letter';
+  orientation?: 'portrait' | 'landscape';
+  showLetterhead?: boolean;
+
+  // Site Page specific
+  slug?: string;
+  containerWidth?: 'contained' | 'full';
+  seoTitle?: string;
+
+  // Message / SMS specific
+  channel?: 'sms' | 'push' | 'banner';
+  maxChars?: number;
+}
+
 export interface DocumentTemplate {
   id: string;
   tenantId: string;
   name: string;
+  type?: ContentType;
   description?: string;
   moduleId?: string;
   content: string;
-  status: 'Draft' | 'Published' | 'Archived';
-  version: number;
+  blocks?: ContentBlock[];
+  fontFamily?: string;
+  metadata?: ContentMetadata;
+  status?: 'Draft' | 'Published' | 'Archived';
+  version?: number;
   createdAt: string;
   updatedAt: string;
-  createdBy?: string;
+  createdBy: string;
 }
+
+export type ContentItem = DocumentTemplate;
 
 export interface GeneratedDocument {
   id: string;

@@ -647,6 +647,136 @@ const BuilderFaqPreview: React.FC<{ widget: any }> = ({ widget }) => {
   );
 };
 
+const BuilderAccessibleModulesPreview: React.FC<{ widget: any; modules: any[] }> = ({ widget, modules }) => {
+  const displayStyle = widget.properties?.displayStyle || 'cards';
+  const columns = Number(widget.properties?.columns) || 3;
+  const showDescription = widget.properties?.showDescription !== false;
+  const showCategory = widget.properties?.showCategory !== false;
+  const showSearch = widget.properties?.showSearch !== false;
+  const scope = widget.properties?.scope || 'all';
+  const selectedModuleIds: string[] = widget.properties?.selectedModuleIds || [];
+
+  const rawDisplayMods = useMemo(() => {
+    let list = (modules || []).filter((m: any) => {
+      if (m.type === 'PAGE' || m.isGlobal || m.isIntakeTriage || m.config?.isIntakeTriage) return false;
+      return true;
+    });
+    if (scope === 'curated' && selectedModuleIds.length > 0) {
+      list = list.filter((m: any) => selectedModuleIds.includes(m.id));
+    }
+    if (list.length === 0) {
+      list = [
+        { id: 'm1', name: 'Customer Inquiries', category: 'Support', description: 'Customer tickets and resolution tracking', icon: 'LifeBuoy' },
+        { id: 'm2', name: 'Vendor Invoices', category: 'Finance', description: 'Accounts payable and vendor invoice validation', icon: 'Receipt' },
+        { id: 'm3', name: 'Employee Directory', category: 'HR', description: 'Staff roster and department alignment', icon: 'Users' },
+        { id: 'm4', name: 'Asset Registry', category: 'Operations', description: 'Hardware assets and equipment tracking', icon: 'Server' }
+      ];
+    }
+    return list;
+  }, [modules, scope, selectedModuleIds]);
+
+  const resolveIcon = (iconName: any) => {
+    if (!iconName) return Icons.Box;
+    const LucideIcon = (Icons as any)[iconName];
+    return LucideIcon || Icons.Box;
+  };
+
+  const gridColClass = columns === 2 ? 'grid-cols-2' : columns === 4 ? 'grid-cols-4' : 'grid-cols-3';
+
+  return (
+    <div className="h-full flex flex-col bg-zinc-50/70 dark:bg-zinc-950/50 rounded-xl p-3 border border-zinc-200 dark:border-zinc-800 overflow-hidden pointer-events-none text-left">
+      <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2 mb-2 shrink-0">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <div className="w-5 h-5 rounded-md bg-indigo-500/10 flex items-center justify-center text-indigo-600 shrink-0">
+            <Icons.Boxes size={11} />
+          </div>
+          <span className="text-[11px] font-bold text-zinc-900 dark:text-white truncate">
+            {widget.title || 'Accessible Modules'}
+          </span>
+        </div>
+        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 uppercase shrink-0">
+          {displayStyle}
+        </span>
+      </div>
+
+      {showSearch && (
+        <div className="mb-2 shrink-0">
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-[10px] text-zinc-400">
+            <Icons.Search size={10} />
+            <span>Search accessible modules...</span>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-1.5 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+        {displayStyle === 'tiles' ? (
+          <div className="grid grid-cols-4 gap-2">
+            {rawDisplayMods.slice(0, 8).map((m: any, i: number) => {
+              const IconComp = resolveIcon(m.icon || m.iconName);
+              return (
+                <div key={m.id || i} className="flex flex-col items-center justify-center p-2 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-center">
+                  <div className="p-1.5 rounded-md bg-indigo-500/10 text-indigo-600 mb-1">
+                    <IconComp size={14} />
+                  </div>
+                  <span className="text-[9px] font-bold text-zinc-800 dark:text-zinc-200 truncate w-full">{m.name}</span>
+                </div>
+              );
+            })}
+          </div>
+        ) : displayStyle === 'list' || displayStyle === 'compact-list' ? (
+          <div className="space-y-1">
+            {rawDisplayMods.slice(0, 5).map((m: any, i: number) => {
+              const IconComp = resolveIcon(m.icon || m.iconName);
+              return (
+                <div key={m.id || i} className="flex items-center justify-between p-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="p-1 rounded-md bg-indigo-500/10 text-indigo-600 shrink-0">
+                      <IconComp size={11} />
+                    </div>
+                    <div className="truncate">
+                      <p className="text-[10px] font-bold text-zinc-850 dark:text-white truncate">{m.name}</p>
+                      {showDescription && displayStyle === 'list' && m.description && (
+                        <p className="text-[8px] text-zinc-400 truncate">{m.description}</p>
+                      )}
+                    </div>
+                  </div>
+                  {showCategory && m.category && (
+                    <span className="text-[8px] px-1 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 shrink-0">{m.category}</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className={cn("grid gap-2", gridColClass)}>
+            {rawDisplayMods.slice(0, 6).map((m: any, i: number) => {
+              const IconComp = resolveIcon(m.icon || m.iconName);
+              return (
+                <div key={m.id || i} className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="p-1 rounded-md bg-indigo-500/10 text-indigo-600">
+                        <IconComp size={12} />
+                      </div>
+                      {showCategory && m.category && (
+                        <span className="text-[8px] font-bold px-1 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500">{m.category}</span>
+                      )}
+                    </div>
+                    <p className="text-[10px] font-bold text-zinc-850 dark:text-white truncate">{m.name}</p>
+                    {showDescription && m.description && (
+                      <p className="text-[8px] text-zinc-400 line-clamp-1 mt-0.5">{m.description}</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const BuilderWidgetPreviewRenderer: React.FC<{ widget: any; tenant: any; session: any; modules: any[] }> = ({ widget, tenant, session, modules }) => {
   switch (widget.type) {
     case 'stats-grid':
@@ -667,6 +797,9 @@ const BuilderWidgetPreviewRenderer: React.FC<{ widget: any; tenant: any; session
       return <BuilderModuleTablePreview widget={widget} tenant={tenant} session={session} modules={modules} />;
     case 'module-creator':
       return <BuilderModuleCreatorPreview widget={widget} tenant={tenant} session={session} modules={modules} />;
+    case 'accessible-modules':
+    case 'module-directory':
+      return <BuilderAccessibleModulesPreview widget={widget} modules={modules} />;
     case 'rich-text':
       return <BuilderRichTextPreview widget={widget} />;
     case 'chart':
@@ -907,6 +1040,21 @@ export const PageBuilder = () => {
         title = 'Submit Record Form';
         properties = { moduleId: '' };
         break;
+      case 'accessible-modules':
+      case 'module-directory':
+        title = 'Accessible Modules';
+        properties = {
+          displayStyle: 'cards',
+          columns: 3,
+          showDescription: true,
+          showCategory: true,
+          showSearch: true,
+          scope: 'all',
+          selectedModuleIds: [],
+          subtitle: 'Launch and manage your accessible modules',
+          emptyMessage: 'No accessible modules found.'
+        };
+        break;
       case 'rich-text':
         title = 'Noticeboard';
         properties = { content: '<p>Welcome to your noticeboard!</p>' };
@@ -1131,6 +1279,7 @@ export const PageBuilder = () => {
 
           <div className="grid grid-cols-1 gap-2 text-xs">
             {[
+              { type: 'accessible-modules', label: 'Module Directory', icon: Icons.Boxes, desc: 'List modules accessible to the current user with custom card/list layouts.' },
               { type: 'stats-grid', label: 'Stats Metrics Grid', icon: Cpu, desc: 'Display summaries of key tenant parameters.' },
               { type: 'active-workflows', label: 'Active Workflows', icon: Icons.Workflow, desc: 'Show currently executing workflows.' },
               { type: 'queue', label: 'Work Queue Embed', icon: Icons.ListOrdered, desc: 'Embed any standalone or unified queue from your library.' },
@@ -1455,6 +1604,214 @@ export const PageBuilder = () => {
                           }));
                         }}
                         className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500/20 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Accessible Modules / Module Directory properties */}
+                {(selectedWidget.type === 'accessible-modules' || selectedWidget.type === 'module-directory') && (
+                  <div className="space-y-4 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                    {/* Subtitle */}
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-zinc-500 uppercase tracking-wider block">Subtitle / Description</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Launch and manage your accessible modules"
+                        value={selectedWidget.properties?.subtitle || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setWidgets((prev: any[]) => prev.map(w => w.id === selectedWidget.id ? { ...w, properties: { ...w.properties, subtitle: val } } : w));
+                        }}
+                        className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2.5 py-1.5 outline-none text-zinc-850 dark:text-white focus:border-indigo-500/50 text-xs"
+                      />
+                    </div>
+
+                    {/* Display Style Selector */}
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-zinc-500 uppercase tracking-wider block">Display Style</label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {[
+                          { id: 'cards', label: 'Bento Cards', icon: Icons.LayoutGrid },
+                          { id: 'tiles', label: 'Compact Tiles', icon: Icons.Grid },
+                          { id: 'list', label: 'Detailed List', icon: Icons.List },
+                          { id: 'compact-list', label: 'Compact Rows', icon: Icons.Menu },
+                          { id: 'grouped', label: 'By Category', icon: Icons.Layers }
+                        ].map((mode) => {
+                          const isSelected = (selectedWidget.properties?.displayStyle || 'cards') === mode.id;
+                          const ModeIcon = mode.icon;
+                          return (
+                            <button
+                              key={mode.id}
+                              type="button"
+                              onClick={() => {
+                                setWidgets((prev: any[]) => prev.map(w => w.id === selectedWidget.id ? { ...w, properties: { ...w.properties, displayStyle: mode.id } } : w));
+                              }}
+                              className={cn(
+                                "flex items-center gap-1.5 p-2 rounded-xl border text-xs font-semibold transition-all text-left cursor-pointer",
+                                isSelected
+                                  ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 shadow-2xs"
+                                  : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 text-zinc-700 dark:text-zinc-300"
+                              )}
+                            >
+                              <ModeIcon size={13} className={isSelected ? "text-indigo-500" : "text-zinc-400"} />
+                              <span>{mode.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Grid Columns Selector (for cards & grouped) */}
+                    {['cards', 'grouped'].includes(selectedWidget.properties?.displayStyle || 'cards') && (
+                      <div className="space-y-1.5">
+                        <label className="font-bold text-zinc-500 uppercase tracking-wider block">Grid Columns</label>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {[2, 3, 4].map((cols) => {
+                            const isSelected = (Number(selectedWidget.properties?.columns) || 3) === cols;
+                            return (
+                              <button
+                                key={cols}
+                                type="button"
+                                onClick={() => {
+                                  setWidgets((prev: any[]) => prev.map(w => w.id === selectedWidget.id ? { ...w, properties: { ...w.properties, columns: cols } } : w));
+                                }}
+                                className={cn(
+                                  "py-1.5 px-2 rounded-xl border text-center text-xs font-bold transition-all cursor-pointer",
+                                  isSelected
+                                    ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 shadow-2xs"
+                                    : "border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300"
+                                )}
+                              >
+                                {cols} Columns
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Module Scope Selection */}
+                    <div className="space-y-2">
+                      <label className="font-bold text-zinc-500 uppercase tracking-wider block">Module Scope</label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {[
+                          { id: 'all', label: 'All Accessible' },
+                          { id: 'curated', label: 'Curated Selection' }
+                        ].map((sc) => {
+                          const isSelected = (selectedWidget.properties?.scope || 'all') === sc.id;
+                          return (
+                            <button
+                              key={sc.id}
+                              type="button"
+                              onClick={() => {
+                                setWidgets((prev: any[]) => prev.map(w => w.id === selectedWidget.id ? { ...w, properties: { ...w.properties, scope: sc.id } } : w));
+                              }}
+                              className={cn(
+                                "p-2 rounded-xl border text-xs font-semibold text-center transition-all cursor-pointer",
+                                isSelected
+                                  ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 shadow-2xs"
+                                  : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 text-zinc-600 dark:text-zinc-400"
+                              )}
+                            >
+                              {sc.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Curated Module Multi-Select Checkboxes */}
+                      {selectedWidget.properties?.scope === 'curated' && (
+                        <div className="mt-2 p-2.5 bg-zinc-50/70 dark:bg-zinc-950/60 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
+                          <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider mb-1">Select modules to include:</p>
+                          {modules
+                            .filter((m: any) => m.type !== 'PAGE' && !m.isGlobal && !m.isIntakeTriage)
+                            .map((m: any) => {
+                              const selectedIds: string[] = selectedWidget.properties?.selectedModuleIds || [];
+                              const isChecked = selectedIds.includes(m.id);
+                              return (
+                                <label
+                                  key={m.id}
+                                  className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer text-xs"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(e) => {
+                                      const nextIds = e.target.checked
+                                        ? [...selectedIds, m.id]
+                                        : selectedIds.filter(id => id !== m.id);
+                                      setWidgets((prev: any[]) => prev.map(w => w.id === selectedWidget.id ? { ...w, properties: { ...w.properties, selectedModuleIds: nextIds } } : w));
+                                    }}
+                                    className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                                  />
+                                  <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate">{m.name}</span>
+                                  {m.category && (
+                                    <span className="ml-auto text-[9px] text-zinc-400 px-1 rounded bg-zinc-100 dark:bg-zinc-800">{m.category}</span>
+                                  )}
+                                </label>
+                              );
+                            })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Feature Toggles */}
+                    <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                      <label className="font-bold text-zinc-500 uppercase tracking-wider block">Visual Elements</label>
+                      
+                      <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-700 dark:text-zinc-300">
+                        <input
+                          type="checkbox"
+                          checked={selectedWidget.properties?.showDescription !== false}
+                          onChange={(e) => {
+                            const val = e.target.checked;
+                            setWidgets((prev: any[]) => prev.map(w => w.id === selectedWidget.id ? { ...w, properties: { ...w.properties, showDescription: val } } : w));
+                          }}
+                          className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>Show Module Descriptions</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-700 dark:text-zinc-300">
+                        <input
+                          type="checkbox"
+                          checked={selectedWidget.properties?.showCategory !== false}
+                          onChange={(e) => {
+                            const val = e.target.checked;
+                            setWidgets((prev: any[]) => prev.map(w => w.id === selectedWidget.id ? { ...w, properties: { ...w.properties, showCategory: val } } : w));
+                          }}
+                          className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>Show Category Badges</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-700 dark:text-zinc-300">
+                        <input
+                          type="checkbox"
+                          checked={selectedWidget.properties?.showSearch !== false}
+                          onChange={(e) => {
+                            const val = e.target.checked;
+                            setWidgets((prev: any[]) => prev.map(w => w.id === selectedWidget.id ? { ...w, properties: { ...w.properties, showSearch: val } } : w));
+                          }}
+                          className="rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>Show In-Widget Search & Filter Bar</span>
+                      </label>
+                    </div>
+
+                    {/* Empty Message */}
+                    <div className="space-y-1.5 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                      <label className="font-bold text-zinc-500 uppercase tracking-wider block">Empty State Message</label>
+                      <input
+                        type="text"
+                        placeholder="No accessible modules found."
+                        value={selectedWidget.properties?.emptyMessage || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setWidgets((prev: any[]) => prev.map(w => w.id === selectedWidget.id ? { ...w, properties: { ...w.properties, emptyMessage: val } } : w));
+                        }}
+                        className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2.5 py-1.5 outline-none text-zinc-850 dark:text-white focus:border-indigo-500/50 text-xs"
                       />
                     </div>
                   </div>

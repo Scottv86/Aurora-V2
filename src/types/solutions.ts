@@ -11,6 +11,8 @@ export type SolutionArtifactType =
   | 'VALIDATION' 
   | 'INTEGRATION' 
   | 'REPORT' 
+  | 'METRIC'
+  | 'CONTENT'
   | 'TEMPLATE' 
   | 'GLOBAL_LIST' 
   | 'PERMISSION'
@@ -77,6 +79,8 @@ export interface SolutionBlueprint {
   modulesCount: number;
   workflowsCount: number;
   formsCount: number;
+  metricsCount?: number;
+  contentCount?: number;
   agentsCount?: number;
   artifactsCount?: number;
   author: string;

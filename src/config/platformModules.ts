@@ -101,12 +101,12 @@ export const PLATFORM_MODULES: PlatformModule[] = [
   },
   {
     id: 'document-generation',
-    name: 'Document generation',
+    name: 'Content',
     slug: 'document-generation',
     iconName: 'FileText',
     isCore: true,
-    description: 'Configure automated document templates, PDF creation, and email merging.',
-    path: '/workspace/platform/templates'
+    description: 'Configure reusable document templates, email merging, and automated output content.',
+    path: '/workspace/platform/content'
   },
   {
     id: 'report-management',
@@ -152,5 +152,14 @@ export const PLATFORM_MODULES: PlatformModule[] = [
     isCore: true,
     description: 'Author, parameterize, and save reusable multi-table queries and virtual datasets.',
     path: '/workspace/settings/platform-modules/queries-library'
+  },
+  {
+    id: 'kpi-management',
+    name: 'Metrics',
+    slug: 'kpi-management',
+    iconName: 'Target',
+    isCore: true,
+    description: 'Define semantic metrics, calculation formulas, targets, and alert thresholds.',
+    path: '/workspace/settings/platform-modules/kpi-management'
   }
 ];

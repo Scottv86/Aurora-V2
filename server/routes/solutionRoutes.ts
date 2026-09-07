@@ -264,13 +264,96 @@ router.post('/:id/deploy', async (req: TenantRequest, res) => {
             }
           });
         }
-        provisionedResources.push(`Autonomous Agent: ${agentName} (${role})`);
+        provisionedResources.push(`AI Digital Coworker: ${agentName}`);
       } catch (e) {
         console.warn(`[SolutionDeployer] Agent error for ${aArt.name}:`, e);
       }
     }
+    // 5. Provision Semantic Metrics & KPIs (KpiDefinition Table)
+    const metricArtifacts = artifacts.filter((a: any) => a.type === 'METRIC' || a.type === 'KPI');
+    for (const mArt of metricArtifacts) {
+      try {
+        const mConfig = mArt.content || {};
+        if (db.kpiDefinition) {
+          await db.kpiDefinition.upsert({
+            where: { id: `kpi_${mArt.id}` },
+            update: {
+              name: mArt.name,
+              category: mConfig.category || 'Operations',
+              sourceType: mConfig.sourceType || 'module_record',
+              sourceConfig: mConfig.sourceConfig || {},
+              format: mConfig.format || 'percentage',
+              targetValue: typeof mConfig.targetValue === 'number' ? mConfig.targetValue : null,
+              thresholds: mConfig.thresholds || [],
+              status: 'ACTIVE'
+            },
+            create: {
+              id: `kpi_${mArt.id}`,
+              tenantId,
+              name: mArt.name,
+              slug: mConfig.slug || mArt.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+              description: mArt.description || mConfig.description || '',
+              category: mConfig.category || 'Operations',
+              tags: mConfig.tags || ['solution', 'kpi'],
+              iconName: mConfig.iconName || 'Target',
+              sourceType: mConfig.sourceType || 'module_record',
+              sourceConfig: mConfig.sourceConfig || {},
+              format: mConfig.format || 'percentage',
+              formatOptions: mConfig.formatOptions || {},
+              trendDirection: mConfig.trendDirection || 'higher_is_better',
+              targetValue: typeof mConfig.targetValue === 'number' ? mConfig.targetValue : null,
+              thresholds: mConfig.thresholds || [],
+              timeHorizon: mConfig.timeHorizon || 'trailing_30d',
+              isGlobal: false,
+              status: 'ACTIVE',
+              cacheTtlSeconds: 300
+            }
+          });
+        }
+        provisionedResources.push(`Semantic Metric: ${mArt.name}`);
+      } catch (e) {
+        console.warn(`[SolutionDeployer] Metric error for ${mArt.name}:`, e);
+      }
+    }
 
-    // 5. Update Blueprint Status to PUBLISHED
+    // 6. Provision Content & Document Templates (DocumentTemplate Table)
+    const contentArtifacts = artifacts.filter((a: any) => a.type === 'CONTENT' || a.type === 'TEMPLATE');
+    for (const cArt of contentArtifacts) {
+      try {
+        const cContent = cArt.content || {};
+        if (db.documentTemplate) {
+          await db.documentTemplate.upsert({
+            where: { id: `tmpl_${cArt.id}` },
+            update: {
+              name: cArt.name,
+              type: cContent.type || 'letter',
+              description: cArt.description || '',
+              content: typeof cContent === 'string' ? cContent : (cContent.content || ''),
+              blocks: cContent.blocks || [],
+              metadata: cContent.metadata || {},
+              status: 'Published'
+            },
+            create: {
+              id: `tmpl_${cArt.id}`,
+              tenantId,
+              name: cArt.name,
+              type: cContent.type || 'letter',
+              description: cArt.description || '',
+              content: typeof cContent === 'string' ? cContent : (cContent.content || ''),
+              blocks: cContent.blocks || [],
+              metadata: cContent.metadata || {},
+              status: 'Published',
+              createdBy: 'SolutionDeployer'
+            }
+          });
+        }
+        provisionedResources.push(`Content Template: ${cArt.name}`);
+      } catch (e) {
+        console.warn(`[SolutionDeployer] Content error for ${cArt.name}:`, e);
+      }
+    }
+
+    // 7. Update Blueprint Status to PUBLISHED
     await model.update({
       where: { id },
       data: { status: 'PUBLISHED' }

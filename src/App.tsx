@@ -67,6 +67,7 @@ const WorkflowsLibraryPage = lazy(() => import('./pages/Settings/WorkflowsLibrar
 const ValidationsLibraryPage = lazy(() => import('./pages/Settings/ValidationsLibraryPage').then(m => ({ default: m.ValidationsLibraryPage })));
 const QueuesLibraryPage = lazy(() => import('./pages/Settings/QueuesLibraryPage').then(m => ({ default: m.QueuesLibraryPage })));
 const QueriesLibraryPage = lazy(() => import('./pages/Settings/QueriesLibraryPage').then(m => ({ default: m.QueriesLibraryPage })));
+const KpiLibraryPage = lazy(() => import('./pages/Settings/KpiLibraryPage').then(m => ({ default: m.KpiLibraryPage })));
 const AgentsLibraryPage = lazy(() => import('./pages/Settings/AgentsLibraryPage').then(m => ({ default: m.AgentsLibraryPage })));
 const AgentBuilderStudio = lazy(() => import('./components/Builders/AgentBuilder/AgentBuilderStudio').then(m => ({ default: m.AgentBuilderStudio })));
 
@@ -296,7 +297,8 @@ const App = () => {
                 <Route path="ai-builder" element={<Navigate to="/workspace/settings/ai-builder" replace />} />
                 <Route path="builder/:id" element={<Navigate to="/workspace/settings/builder/:id" replace />} />
                 <Route path="catalog" element={<Navigate to="/workspace/settings/modules" replace />} />
-                <Route path="documents" element={<Navigate to="/workspace/settings/templates" replace />} />
+                <Route path="documents" element={<Navigate to="/workspace/settings/content" replace />} />
+                <Route path="content" element={<Navigate to="/workspace/platform/content" replace />} />
                 <Route path="workflows" element={<Navigate to="/workspace/settings/automations" replace />} />
                 <Route path="automations" element={<Navigate to="/workspace/settings/automations" replace />} />
                 <Route path="reports" element={<Navigate to="/workspace/settings/reports" replace />} />
@@ -306,6 +308,29 @@ const App = () => {
                 <Route path="pages" element={<NavigateWithSearch to="/workspace/settings/pages" replace />} />
                 <Route path="queues" element={<NavigateWithSearch to="/workspace/settings/queues" replace />} />
                 <Route path="testing" element={<Navigate to="/workspace/settings/testing" replace />} />
+                
+                {/* Platform Core Modules */}
+                <Route path="platform/people-organisations" element={<PeopleOrgSettings />} />
+                <Route path="platform/work-distribution" element={<IntakeSettingsPage />} />
+                <Route path="platform/knowledge-base" element={<KnowledgeBaseSettings />} />
+                <Route path="platform/pricing-catalog" element={<PricingCatalogSettings />} />
+                <Route path="platform/inventory-manager" element={<InventoryManagerSettings />} />
+                <Route path="platform/global-lists" element={<GlobalListsSettings />} />
+                <Route path="platform/workforce" element={<WorkforcePage />} />
+                <Route path="platform/workforce/member/:id" element={<MemberDetailView />} />
+                <Route path="platform/workforce/teams/:id" element={<TeamDetailView />} />
+                <Route path="platform/integrations" element={<ConnectorsPage />} />
+                <Route path="platform/sites" element={<SitesPage />} />
+                <Route path="platform/sites/:siteId/portal" element={<NavigateWithParams to="/public/portal/:siteId" replace />} />
+
+
+                <Route path="platform/automations" element={<AutomationsPage />} />
+                <Route path="platform/content" element={<DocumentAutomation />} />
+                <Route path="platform/templates" element={<Navigate to="/workspace/platform/content" replace />} />
+                <Route path="platform/reports" element={<ReportManagementSettings />} />
+                <Route path="platform/api" element={<APISettings />} />
+                <Route path="platform/finance" element={<ComingSoon title="Financial Management" description="Financial settings, tax configurations, and payment processing rules." />} />
+                <Route path="platform/records-management" element={<RecordsManagement />} />
                 
                 {/* Dynamic Module Routes */}
                 <Route path="modules/:moduleId" element={<ModuleView />} />
@@ -320,29 +345,8 @@ const App = () => {
                 {/* Platform Operations */}
                 <Route path="my-work" element={<MyWorkRouteWrapper />} />
                 <Route path="queue" element={<Navigate to="/workspace/my-work" replace />} />
-                <Route path="platform/people-organisations" element={<PeopleOrgDirectory />} />
-                <Route path="platform/people-organisations/:id" element={<PeopleOrgDetail />} />
-                <Route path="analytics" element={<Analytics />} />
                 <Route path="platform/work-distribution" element={<TriageInboxPage />} />
                 <Route path="platform/intake" element={<Navigate to="/workspace/platform/work-distribution" replace />} />
-                <Route path="platform/knowledge-base" element={<KnowledgeBaseSettings />} />
-                <Route path="platform/pricing-catalog" element={<PricingCatalogSettings />} />
-                <Route path="platform/inventory-manager" element={<InventoryManagerSettings />} />
-                <Route path="platform/global-lists" element={<GlobalListsSettings />} />
-                <Route path="platform/workforce" element={<WorkforcePage />} />
-                <Route path="platform/workforce/member/:id" element={<MemberDetailView />} />
-                <Route path="platform/workforce/teams/:id" element={<TeamDetailView />} />
-                <Route path="platform/integrations" element={<ConnectorsPage />} />
-                <Route path="platform/sites" element={<SitesPage />} />
-                <Route path="platform/sites/:siteId/portal" element={<NavigateWithParams to="/public/portal/:siteId" replace />} />
-
-
-                <Route path="platform/automations" element={<AutomationsPage />} />
-                <Route path="platform/templates" element={<DocumentAutomation />} />
-                <Route path="platform/reports" element={<ReportManagementSettings />} />
-                <Route path="platform/api" element={<APISettings />} />
-                <Route path="platform/finance" element={<ComingSoon title="Financial Management" description="Financial settings, tax configurations, and payment processing rules." />} />
-                <Route path="platform/records-management" element={<RecordsManagement />} />
                 
                 {/* Aurora Utility Apps */}
                 <Route path="apps/inbox" element={<InboxApp />} />
@@ -422,6 +426,8 @@ const App = () => {
                    <Route path="financial-management" element={<ComingSoon title="Financial Management" description="Financial settings, tax configurations, and payment processing rules." />} />
                    <Route path="queues-management" element={<QueuesLibraryPage />} />
                    <Route path="queries-library" element={<QueriesLibraryPage />} />
+                   <Route path="kpi-management" element={<KpiLibraryPage />} />
+                   <Route path="kpi-library" element={<KpiLibraryPage />} />
                    <Route path="records-management" element={<RecordsManagementSettings />} />
                    <Route path="agents" element={<AgentsLibraryPage />} />
                    <Route path="agents-library" element={<AgentsLibraryPage />} />
@@ -431,6 +437,9 @@ const App = () => {
                  <Route path="solutions" element={<Navigate to="/workspace/settings/platform-modules/solutions" replace />} />
                  <Route path="solution" element={<Navigate to="/workspace/settings/platform-modules/solutions" replace />} />
                  <Route path="queries" element={<Navigate to="/workspace/settings/platform-modules/queries-library" replace />} />
+                 <Route path="kpis" element={<Navigate to="/workspace/settings/platform-modules/kpi-management" replace />} />
+                 <Route path="metrics" element={<Navigate to="/workspace/settings/platform-modules/kpi-management" replace />} />
+                 <Route path="content" element={<Navigate to="/workspace/settings/platform-modules/document-generation" replace />} />
                  <Route path="templates" element={<Navigate to="/workspace/settings/platform-modules/document-generation" replace />} />
                  <Route path="automations" element={<Navigate to="/workspace/settings/platform-modules/automation-management" replace />} />
                  <Route path="reports" element={<Navigate to="/workspace/settings/platform-modules/report-management" replace />} />

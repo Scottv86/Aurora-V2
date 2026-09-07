@@ -8,6 +8,7 @@ import {
 import ReactGridLayout from 'react-grid-layout';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
+import { useCapabilities } from '../../hooks/useCapabilities';
 import { Button } from '../../components/UI/Primitives';
 import { PageWrapper } from '../../components/Common/PageWrapper';
 import { Breadcrumbs } from '../../components/Navigation/Breadcrumbs';
@@ -32,6 +33,8 @@ export const getWidgetDefaultDimensions = (type: string) => {
     case 'queue': return { w: 12, h: 6, minW: 6, minH: 4 };
     case 'module-table': return { w: 6, h: 6, minW: 4, minH: 3 };
     case 'module-creator': return { w: 6, h: 6, minW: 4, minH: 3 };
+    case 'accessible-modules':
+    case 'module-directory': return { w: 12, h: 6, minW: 6, minH: 3 };
     case 'rich-text': return { w: 12, h: 4, minW: 4, minH: 2 };
     case 'chart': return { w: 6, h: 5, minW: 4, minH: 3 };
     case 'report': return { w: 12, h: 8, minW: 6, minH: 4 };
@@ -453,6 +456,10 @@ const WidgetRenderer = React.memo(({ widget, tenant, session }: { widget: any, t
 
 
 
+    case 'accessible-modules':
+    case 'module-directory':
+      return <AccessibleModulesWidget widget={widget} tenant={tenant} session={session} />;
+
     default:
       return (
         <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-500 rounded-3xl text-xs font-bold">
@@ -461,6 +468,408 @@ const WidgetRenderer = React.memo(({ widget, tenant, session }: { widget: any, t
       );
   }
 });
+
+// --- WIDGET: ACCESSIBLE MODULES DIRECTORY ---
+const AccessibleModulesWidget: React.FC<{ widget: any; tenant: any; session: any }> = ({ widget }) => {
+  const navigate = useNavigate();
+  const { modules, user, isDeveloper } = usePlatform();
+  const { isSuperAdmin } = useAuth();
+  const { hasCapability } = useCapabilities();
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+
+  const displayStyle = widget.properties?.displayStyle || 'cards';
+  const columns = Number(widget.properties?.columns) || 3;
+  const showDescription = widget.properties?.showDescription !== false;
+  const showCategory = widget.properties?.showCategory !== false;
+  const showSearch = widget.properties?.showSearch !== false;
+  const scope = widget.properties?.scope || 'all';
+  const selectedModuleIds: string[] = widget.properties?.selectedModuleIds || [];
+  const emptyMessage = widget.properties?.emptyMessage || "No accessible modules found.";
+
+  // Filter accessible modules for this user
+  const accessibleModules = useMemo(() => {
+    return (modules || []).filter((m: any) => {
+      // 1. Exclude pages and internal triage modules
+      if (m.type === 'PAGE' || m.isGlobal || m.isIntakeTriage || m.config?.isIntakeTriage) return false;
+      // 2. Must be enabled
+      if (m.enabled === false) return false;
+      // 3. Scope filter (if curated)
+      if (scope === 'curated' && selectedModuleIds.length > 0) {
+        if (!selectedModuleIds.includes(m.id)) return false;
+      }
+      // 4. Permission check
+      const isAdminOrDev = isDeveloper || isSuperAdmin || 
+        user?.role === 'SUPER_ADMIN' || user?.role === 'TENANT_ADMIN' || 
+        user?.role?.toLowerCase() === 'admin' || user?.isSuperAdmin === true;
+      if (!isAdminOrDev) {
+        if (m.config?.requiredCapability && !hasCapability(m.config.requiredCapability)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [modules, scope, selectedModuleIds, isDeveloper, isSuperAdmin, user, hasCapability]);
+
+  // Extract distinct categories
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    accessibleModules.forEach((m: any) => {
+      if (m.category) set.add(m.category);
+    });
+    return Array.from(set).sort();
+  }, [accessibleModules]);
+
+  // Filter by search and selected category
+  const filteredModules = useMemo(() => {
+    return accessibleModules.filter((m: any) => {
+      if (selectedCategory !== 'all' && (m.category || 'Uncategorized') !== selectedCategory) {
+        return false;
+      }
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        const nameMatch = m.name?.toLowerCase().includes(query);
+        const descMatch = m.description?.toLowerCase().includes(query);
+        const catMatch = m.category?.toLowerCase().includes(query);
+        if (!nameMatch && !descMatch && !catMatch) return false;
+      }
+      return true;
+    });
+  }, [accessibleModules, selectedCategory, searchQuery]);
+
+  // Group modules by category if displayStyle === 'grouped'
+  const groupedModules = useMemo(() => {
+    const groups: Record<string, any[]> = {};
+    filteredModules.forEach((m: any) => {
+      const cat = m.category || 'General';
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(m);
+    });
+    return groups;
+  }, [filteredModules]);
+
+  const gridColClass = useMemo(() => {
+    if (columns === 2) return 'grid-cols-1 md:grid-cols-2';
+    if (columns === 4) return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4';
+    return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3';
+  }, [columns]);
+
+  const resolveIcon = (iconName: any) => {
+    if (!iconName) return Icons.Box;
+    if (typeof iconName === 'object' && iconName.render) return iconName;
+    const LucideIcon = (Icons as any)[iconName];
+    return LucideIcon || Icons.Box;
+  };
+
+  const getModuleColor = (cat: string = '') => {
+    const c = cat.toLowerCase();
+    if (c.includes('finan') || c.includes('bill') || c.includes('pay')) return { bg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20', hover: 'hover:border-emerald-500/40 dark:hover:border-emerald-500/40' };
+    if (c.includes('hr') || c.includes('people') || c.includes('staff')) return { bg: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20', hover: 'hover:border-purple-500/40 dark:hover:border-purple-500/40' };
+    if (c.includes('case') || c.includes('ticket') || c.includes('support')) return { bg: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20', hover: 'hover:border-amber-500/40 dark:hover:border-amber-500/40' };
+    if (c.includes('tech') || c.includes('dev') || c.includes('system')) return { bg: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20', hover: 'hover:border-cyan-500/40 dark:hover:border-cyan-500/40' };
+    return { bg: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20', hover: 'hover:border-indigo-500/40 dark:hover:border-indigo-500/40' };
+  };
+
+  return (
+    <div className="h-full flex flex-col p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xs overflow-hidden">
+      {/* Header & Optional Title / Search */}
+      <div className="shrink-0 space-y-3 pb-3 border-b border-zinc-100 dark:border-zinc-800/80 mb-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+              <Icons.Boxes size={16} />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-zinc-950 dark:text-white uppercase tracking-wider">
+                {widget.title || 'Accessible Modules'}
+              </h3>
+              {widget.properties?.subtitle && (
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">{widget.properties.subtitle}</p>
+              )}
+            </div>
+          </div>
+
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400">
+            {filteredModules.length} {filteredModules.length === 1 ? 'Module' : 'Modules'}
+          </span>
+        </div>
+
+        {/* Search & Category Filter Pills */}
+        {showSearch && (
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <div className="relative flex-1 min-w-[160px]">
+              <Icons.Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search modules..."
+                className="w-full pl-8 pr-3 py-1 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60 rounded-xl text-xs text-zinc-800 dark:text-zinc-200 placeholder-zinc-400 outline-none focus:ring-1 focus:ring-indigo-500/40"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-pointer"
+                >
+                  <Icons.X size={12} />
+                </button>
+              )}
+            </div>
+
+            {categories.length > 0 && (
+              <div className="flex items-center gap-1 overflow-x-auto custom-scrollbar py-0.5 max-w-full">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategory('all')}
+                  className={cn(
+                    "px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap cursor-pointer",
+                    selectedCategory === 'all'
+                      ? "bg-indigo-600 text-white shadow-2xs"
+                      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                  )}
+                >
+                  All
+                </button>
+                {categories.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setSelectedCategory(cat)}
+                    className={cn(
+                      "px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap cursor-pointer",
+                      selectedCategory === cat
+                        ? "bg-indigo-600 text-white shadow-2xs"
+                        : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                    )}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+        {filteredModules.length === 0 ? (
+          <div className="h-full min-h-[140px] flex flex-col items-center justify-center p-6 text-center text-zinc-400 bg-zinc-50/50 dark:bg-zinc-950/40 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800">
+            <Icons.Boxes size={28} className="text-zinc-300 dark:text-zinc-700 mb-2" />
+            <p className="text-xs font-semibold">{emptyMessage}</p>
+            {searchQuery && (
+              <button
+                onClick={() => { setSearchQuery(''); setSelectedCategory('all'); }}
+                className="mt-2 text-[11px] font-bold text-indigo-500 hover:underline cursor-pointer"
+              >
+                Clear search filters
+              </button>
+            )}
+          </div>
+        ) : displayStyle === 'tiles' ? (
+          /* COMPACT APP TILES */
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+            {filteredModules.map((mod: any) => {
+              const IconComp = resolveIcon(mod.icon || mod.iconName);
+              const colors = getModuleColor(mod.category);
+              return (
+                <button
+                  key={mod.id}
+                  onClick={() => navigate(`/workspace/modules/${mod.id}`)}
+                  className="flex flex-col items-center justify-center p-3 rounded-xl border border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-950/40 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-xs transition-all text-center group cursor-pointer"
+                >
+                  <div className={cn("p-2.5 rounded-xl mb-2 transition-transform group-hover:scale-110", colors.bg)}>
+                    <IconComp size={20} />
+                  </div>
+                  <span className="text-xs font-bold text-zinc-850 dark:text-white line-clamp-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                    {mod.name}
+                  </span>
+                  {showCategory && mod.category && (
+                    <span className="text-[9px] text-zinc-400 truncate mt-0.5">
+                      {mod.category}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ) : displayStyle === 'list' ? (
+          /* DETAILED LIST */
+          <div className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
+            {filteredModules.map((mod: any) => {
+              const IconComp = resolveIcon(mod.icon || mod.iconName);
+              const colors = getModuleColor(mod.category);
+              return (
+                <div
+                  key={mod.id}
+                  onClick={() => navigate(`/workspace/modules/${mod.id}`)}
+                  className="flex items-center justify-between p-3 hover:bg-zinc-100/60 dark:hover:bg-zinc-800/50 rounded-xl transition-all cursor-pointer group"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={cn("p-2 rounded-xl shrink-0 transition-transform group-hover:scale-105", colors.bg)}>
+                      <IconComp size={16} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-zinc-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">
+                          {mod.name}
+                        </span>
+                        {showCategory && mod.category && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 shrink-0">
+                            {mod.category}
+                          </span>
+                        )}
+                      </div>
+                      {showDescription && mod.description && (
+                        <p className="text-[11px] text-zinc-400 dark:text-zinc-500 line-clamp-1 mt-0.5">
+                          {mod.description}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-zinc-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors shrink-0 ml-2">
+                    <span className="text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity hidden sm:inline">Open</span>
+                    <Icons.ChevronRight size={14} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : displayStyle === 'compact-list' ? (
+          /* COMPACT LIST */
+          <div className="space-y-1">
+            {filteredModules.map((mod: any) => {
+              const IconComp = resolveIcon(mod.icon || mod.iconName);
+              const colors = getModuleColor(mod.category);
+              return (
+                <div
+                  key={mod.id}
+                  onClick={() => navigate(`/workspace/modules/${mod.id}`)}
+                  className="flex items-center justify-between px-2.5 py-1.5 hover:bg-zinc-100/60 dark:hover:bg-zinc-800/50 rounded-lg transition-all cursor-pointer group"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className={cn("p-1 rounded-md shrink-0", colors.bg)}>
+                      <IconComp size={12} />
+                    </div>
+                    <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">
+                      {mod.name}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 text-zinc-400 group-hover:text-indigo-500 shrink-0">
+                    {showCategory && mod.category && (
+                      <span className="text-[9px] text-zinc-400 mr-1 hidden sm:inline">{mod.category}</span>
+                    )}
+                    <Icons.ChevronRight size={12} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : displayStyle === 'grouped' ? (
+          /* GROUPED BY CATEGORY */
+          <div className="space-y-5">
+            {Object.entries(groupedModules).map(([cat, mods]) => (
+              <div key={cat} className="space-y-2">
+                <div className="flex items-center gap-2 pb-1 border-b border-zinc-100 dark:border-zinc-800">
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{cat}</span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 rounded">
+                    {mods.length}
+                  </span>
+                </div>
+                <div className={cn("grid gap-3", gridColClass)}>
+                  {mods.map((mod: any) => {
+                    const IconComp = resolveIcon(mod.icon || mod.iconName);
+                    const colors = getModuleColor(mod.category);
+                    return (
+                      <div
+                        key={mod.id}
+                        onClick={() => navigate(`/workspace/modules/${mod.id}`)}
+                        className={cn(
+                          "p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-950/40 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-xs transition-all cursor-pointer group flex flex-col justify-between",
+                          colors.hover
+                        )}
+                      >
+                        <div className="flex items-start gap-2.5 mb-2">
+                          <div className={cn("p-2 rounded-xl shrink-0 transition-transform group-hover:scale-105", colors.bg)}>
+                            <IconComp size={15} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-xs font-bold text-zinc-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">
+                              {mod.name}
+                            </h4>
+                            {showDescription && mod.description && (
+                              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-2 mt-0.5 leading-snug">
+                                {mod.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          /* DEFAULT: BENTO CARDS */
+          <div className={cn("grid gap-3", gridColClass)}>
+            {filteredModules.map((mod: any) => {
+              const IconComp = resolveIcon(mod.icon || mod.iconName);
+              const colors = getModuleColor(mod.category);
+              return (
+                <div
+                  key={mod.id}
+                  onClick={() => navigate(`/workspace/modules/${mod.id}`)}
+                  className={cn(
+                    "p-4 rounded-xl border border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-950/40 hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-xs transition-all cursor-pointer group flex flex-col justify-between",
+                    colors.hover
+                  )}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className={cn("p-2.5 rounded-xl transition-transform group-hover:scale-105", colors.bg)}>
+                        <IconComp size={16} />
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {showCategory && mod.category && (
+                          <span className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-700/60 text-zinc-600 dark:text-zinc-400">
+                            {mod.category}
+                          </span>
+                        )}
+                        <div className="w-6 h-6 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 group-hover:bg-indigo-50 dark:group-hover:bg-indigo-950/60 transition-all">
+                          <Icons.ArrowUpRight size={13} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <h4 className="text-xs font-bold text-zinc-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-1">
+                      {mod.name}
+                    </h4>
+
+                    {showDescription && mod.description && (
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-2 mt-1 leading-snug">
+                        {mod.description}
+                      </p>
+                    )}
+                  </div>
+
+                  {mod.type && (
+                    <div className="pt-3 mt-2 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between text-[10px] text-zinc-400">
+                      <span className="font-mono uppercase tracking-wider text-[9px]">{mod.type}</span>
+                      <span className="font-semibold text-indigo-500 group-hover:underline">Launch &rarr;</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 // --- WIDGET: MODULE TABLE ---
 const ModuleTableWidget: React.FC<{ widget: any, tenant: any, session: any }> = ({ widget, tenant, session }) => {

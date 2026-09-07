@@ -26,7 +26,10 @@ import {
   Cpu,
   Wrench,
   Shield,
-  Key
+  Key,
+  Target,
+  TrendingUp,
+  Mail
 } from 'lucide-react';
 import { SolutionArtifact, SavedNote } from '../../../types/solutions';
 import { DrivePickerModal } from '../../Drive/DrivePickerModal';
@@ -146,12 +149,17 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
       case 'REPORT':
         navigate('/workspace/settings/platform-modules/report-management');
         break;
+      case 'METRIC':
+      case 'KPI' as any:
+        navigate('/workspace/settings/platform-modules/kpi-management');
+        break;
       case 'SITE':
         navigate('/workspace/settings/platform-modules/sites');
         break;
       case 'PAGE':
         navigate('/workspace/settings/pages');
         break;
+      case 'CONTENT':
       case 'TEMPLATE':
         navigate('/workspace/settings/platform-modules/document-generation');
         break;
@@ -179,6 +187,28 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
           icon: Bot,
           badgeLabel: 'AI AGENT',
           categoryLabel: 'Digital Coworker & Copilot'
+        };
+      case 'METRIC':
+      case 'KPI' as any:
+        return {
+          bg: 'bg-emerald-500/10 dark:bg-emerald-500/15',
+          border: 'border-emerald-500/30 hover:border-emerald-500/60',
+          text: 'text-emerald-600 dark:text-emerald-400',
+          badge: 'bg-emerald-500/20 text-emerald-500',
+          icon: Target,
+          badgeLabel: 'METRIC / KPI',
+          categoryLabel: 'Semantic Metrics Studio'
+        };
+      case 'CONTENT':
+      case 'TEMPLATE':
+        return {
+          bg: 'bg-purple-500/10 dark:bg-purple-500/15',
+          border: 'border-purple-500/30 hover:border-purple-500/60',
+          text: 'text-purple-600 dark:text-purple-400',
+          badge: 'bg-purple-500/20 text-purple-500',
+          icon: FileText,
+          badgeLabel: 'CONTENT / DOC',
+          categoryLabel: 'Content & Document Builder'
         };
       case 'PERMISSION':
         return {
@@ -897,30 +927,309 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
           </div>
         );
 
-      case 'TEMPLATE':
-        /* DOCUMENT & EMAIL TEMPLATES PREVIEW */
+      case 'METRIC':
+      case 'KPI' as any:
+        /* SEMANTIC METRIC & KPI STUDIO PREVIEW */
+        const metricData = art.content || {};
+        const targetVal = metricData.targetValue ?? 95;
+        const formatType = metricData.format || 'percentage';
+        const suffixStr = metricData.formatOptions?.suffix || (formatType === 'percentage' ? '%' : '');
+        const prefixStr = metricData.formatOptions?.prefix || (formatType === 'currency' ? '$' : '');
+        const thresholdsList = Array.isArray(metricData.thresholds) && metricData.thresholds.length > 0
+          ? metricData.thresholds
+          : [
+              { id: '1', condition: 'gte', value: 90, color: 'emerald', label: 'Optimal' },
+              { id: '2', condition: 'lt', value: 75, color: 'rose', label: 'Critical' }
+            ];
+
         return (
-          <div className={`bg-white/90 dark:bg-zinc-900/90 border border-purple-500/30 rounded-3xl p-6 shadow-2xl space-y-5 ${isFullscreen ? 'max-w-5xl mx-auto' : ''}`}>
-            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-2xl bg-purple-500/10 text-purple-500 border border-purple-500/20">
-                  <FileText size={20} />
+          <div className={`bg-white/90 dark:bg-zinc-900/90 border border-emerald-500/30 rounded-3xl p-6 shadow-2xl space-y-5 ${isFullscreen ? 'max-w-5xl mx-auto' : ''}`}>
+            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4">
+              <div className="flex items-center gap-3.5">
+                <div className="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 text-emerald-500 border border-emerald-500/30 shadow-inner">
+                  <Target size={24} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-zinc-900 dark:text-white">{art.name}</h3>
-                  <p className="text-xs text-zinc-500">WYSIWYG Email & Document Generation Template Canvas</p>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-black text-zinc-900 dark:text-white flex items-center gap-2">
+                      <span>{art.name}</span>
+                    </h3>
+                    <span className="px-2.5 py-0.5 text-[10px] font-black uppercase rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                      {metricData.category || 'Operations Metric'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-500 font-medium mt-0.5">
+                    {art.description || 'Calculated business metric definition with threshold alerts and time horizon slices'}
+                  </p>
                 </div>
               </div>
-              <span className="px-2.5 py-1 text-[10px] font-bold rounded-full bg-purple-500/10 text-purple-500 uppercase">DOCUMENT TEMPLATE</span>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleOpenDedicatedBuilder}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-500/20 transition-all flex items-center gap-1.5 cursor-pointer"
+                  title="Open in Metrics Studio"
+                >
+                  <Target size={14} />
+                  <span>Open in Metrics Studio</span>
+                  <ArrowRight size={13} />
+                </button>
+
+                <button
+                  onClick={() => {
+                    const jsonStr = JSON.stringify(art.content, null, 2);
+                    navigator.clipboard.writeText(jsonStr);
+                    toast.success('Metric KPI definition JSON copied to clipboard!');
+                  }}
+                  className="p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
+                  title="Copy Metric JSON"
+                >
+                  <Copy size={14} />
+                </button>
+              </div>
             </div>
 
-            <div className="p-6 bg-zinc-50 dark:bg-zinc-950 rounded-2xl border border-zinc-200 dark:border-zinc-800 text-xs leading-relaxed space-y-3 font-sans">
-              <p className="font-bold text-zinc-900 dark:text-white text-sm">Subject: Welcome to Aurora - &#123;&#123;stakeholder_name&#125;&#125;</p>
-              <hr className="border-zinc-200 dark:border-zinc-800" />
-              <p className="text-zinc-700 dark:text-zinc-300">
-                Hello <span className="px-1.5 py-0.5 bg-indigo-500/10 text-indigo-500 font-mono font-bold rounded">&#123;&#123;stakeholder_name&#125;&#125;</span>,<br /><br />
-                Your solution request <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-500 font-mono font-bold rounded">&#123;&#123;solution_title&#125;&#125;</span> has been successfully logged under tier <span className="px-1.5 py-0.5 bg-purple-500/10 text-purple-500 font-mono font-bold rounded">&#123;&#123;classification_tier&#125;&#125;</span>.
-              </p>
+            {/* KPI Performance Card Banner */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="p-5 bg-zinc-50 dark:bg-zinc-950 rounded-2xl border border-zinc-200 dark:border-zinc-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400">Target Benchmark</span>
+                  <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 text-[10px] font-bold">
+                    {metricData.trendDirection === 'lower_is_better' ? 'Lower is Better' : 'Higher is Better'}
+                  </span>
+                </div>
+                <div className="text-2xl font-black text-zinc-900 dark:text-white flex items-baseline gap-1">
+                  <span>{prefixStr}{targetVal}{suffixStr}</span>
+                  <span className="text-xs text-zinc-400 font-medium">Goal</span>
+                </div>
+                <p className="text-[11px] text-zinc-500 font-medium">
+                  Horizon: <span className="font-bold text-zinc-700 dark:text-zinc-300">{metricData.timeHorizon || 'trailing_30d'}</span>
+                </p>
+              </div>
+
+              <div className="p-5 bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-cyan-500/10 rounded-2xl border border-emerald-500/20 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Simulated Health</span>
+                  <span className="px-2 py-0.5 rounded bg-emerald-500 text-white text-[10px] font-black">
+                    Optimal
+                  </span>
+                </div>
+                <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                  <TrendingUp size={22} className="text-emerald-500" />
+                  <span>{prefixStr}{typeof targetVal === 'number' ? Math.round(targetVal * 1.02 * 10) / 10 : 96.4}{suffixStr}</span>
+                </div>
+                <p className="text-[11px] text-emerald-700/80 dark:text-emerald-300/80 font-medium">
+                  +3.2% vs previous reporting period
+                </p>
+              </div>
+
+              <div className="p-5 bg-zinc-50 dark:bg-zinc-950 rounded-2xl border border-zinc-200 dark:border-zinc-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400">Calculation Engine</span>
+                  <span className="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-500 font-mono text-[10px] font-bold">
+                    {metricData.sourceConfig?.aggregateType?.toUpperCase() || 'PERCENTAGE'}
+                  </span>
+                </div>
+                <div className="text-xs font-mono font-bold text-indigo-500 truncate mt-1">
+                  {metricData.sourceConfig?.aggregateField ? `FIELD: ${metricData.sourceConfig.aggregateField}` : 'AGGREGATE: All Records'}
+                </div>
+                <p className="text-[11px] text-zinc-500 font-medium">
+                  Source: <span className="font-bold text-zinc-700 dark:text-zinc-300">{metricData.sourceType || 'module_record'}</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Threshold Rules Matrix */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-black uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                <Zap size={13} className="text-amber-500" />
+                <span>Threshold Evaluation &amp; Automation Triggers</span>
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {thresholdsList.map((rule: any, rIdx: number) => (
+                  <div key={rIdx} className="p-3.5 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-3 h-3 rounded-full ${
+                        rule.color === 'rose' ? 'bg-rose-500' :
+                        rule.color === 'amber' ? 'bg-amber-500' :
+                        rule.color === 'blue' ? 'bg-blue-500' : 'bg-emerald-500'
+                      }`} />
+                      <div>
+                        <span className="text-xs font-bold text-zinc-900 dark:text-white">{rule.label}</span>
+                        <span className="text-[10px] text-zinc-400 font-mono block">Condition: {rule.condition.toUpperCase()} {rule.value}{suffixStr}</span>
+                      </div>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                      rule.color === 'rose' ? 'bg-rose-500/10 text-rose-500' :
+                      rule.color === 'amber' ? 'bg-amber-500/10 text-amber-500' :
+                      'bg-emerald-500/10 text-emerald-500'
+                    }`}>
+                      {rule.color === 'rose' ? 'Trigger SLA Alert' : 'Healthy Status'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'CONTENT':
+      case 'TEMPLATE':
+        /* CONTENT & DOCUMENT BUILDER PREVIEW */
+        const contentInfo = art.content || {};
+        const contentBlocks = Array.isArray(contentInfo.blocks) ? contentInfo.blocks : [];
+        const metadata = contentInfo.metadata || {};
+
+        return (
+          <div className={`bg-white/90 dark:bg-zinc-900/90 border border-purple-500/30 rounded-3xl p-6 shadow-2xl space-y-5 ${isFullscreen ? 'max-w-5xl mx-auto' : ''}`}>
+            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4">
+              <div className="flex items-center gap-3.5">
+                <div className="p-3.5 rounded-2xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 text-purple-500 border border-purple-500/30 shadow-inner">
+                  <FileText size={24} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-black text-zinc-900 dark:text-white flex items-center gap-2">
+                      <span>{art.name}</span>
+                    </h3>
+                    <span className="px-2.5 py-0.5 text-[10px] font-black uppercase rounded-full bg-purple-500/10 text-purple-500 border border-purple-500/20">
+                      {contentInfo.type || 'Letter Template'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-500 font-medium mt-0.5">
+                    {art.description || 'Dynamic block-based transactional document/email template with schema merge tokens'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleOpenDedicatedBuilder}
+                  className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-md shadow-purple-500/20 transition-all flex items-center gap-1.5 cursor-pointer"
+                  title="Open in Content Builder"
+                >
+                  <FileText size={14} />
+                  <span>Open in Content Builder</span>
+                  <ArrowRight size={13} />
+                </button>
+
+                <button
+                  onClick={() => {
+                    const templateContent = contentInfo.content || JSON.stringify(contentBlocks, null, 2);
+                    navigator.clipboard.writeText(templateContent);
+                    toast.success('Document template content copied to clipboard!');
+                  }}
+                  className="p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
+                  title="Copy Document Template HTML/JSON"
+                >
+                  <Copy size={14} />
+                </button>
+              </div>
+            </div>
+
+            {/* Template Format & Channel Pill */}
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="px-3 py-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-xl font-bold border border-zinc-200 dark:border-zinc-700 flex items-center gap-1.5">
+                <Mail size={13} className="text-purple-500" />
+                <span>Modal: {contentInfo.type?.toUpperCase() || 'LETTER'}</span>
+              </span>
+              {metadata.subject && (
+                <span className="px-3 py-1 bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded-xl font-bold border border-purple-500/20">
+                  Subject: {metadata.subject}
+                </span>
+              )}
+              {metadata.paperSize && (
+                <span className="px-3 py-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-xl font-medium border border-zinc-200 dark:border-zinc-700">
+                  Paper: {metadata.paperSize} ({metadata.orientation || 'portrait'})
+                </span>
+              )}
+              <span className="px-3 py-1 bg-emerald-500/10 text-emerald-500 rounded-xl font-bold">
+                {contentBlocks.length > 0 ? `${contentBlocks.length} Canvas Blocks` : 'HTML Template'}
+              </span>
+            </div>
+
+            {/* Block Canvas Render Viewport */}
+            <div className="p-6 bg-zinc-50 dark:bg-zinc-950 rounded-2xl border border-zinc-200 dark:border-zinc-800 space-y-4 shadow-inner">
+              {contentBlocks.length > 0 ? (
+                contentBlocks.map((blk: any, bIdx: number) => {
+                  if (blk.type === 'letterhead') {
+                    return (
+                      <div key={bIdx} className="p-4 bg-gradient-to-r from-purple-600 to-indigo-700 rounded-xl text-white flex items-center justify-between shadow-md">
+                        <div>
+                          <h4 className="text-sm font-black tracking-wide">{blk.data?.organizationName || 'Aurora Enterprise Platform'}</h4>
+                          <p className="text-[11px] opacity-80">{blk.data?.department || 'Official Administration Hub'}</p>
+                        </div>
+                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-white/20">OFFICIAL NOTICE</span>
+                      </div>
+                    );
+                  }
+
+                  if (blk.type === 'heading') {
+                    return (
+                      <h3 key={bIdx} className="text-base font-black text-zinc-900 dark:text-white border-b border-zinc-200 dark:border-zinc-800 pb-2 pt-1">
+                        {blk.data?.text || 'Notice Title'}
+                      </h3>
+                    );
+                  }
+
+                  if (blk.type === 'text') {
+                    const textRaw = blk.data?.content || blk.data?.text || '';
+                    return (
+                      <p key={bIdx} className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed font-medium">
+                        {textRaw.split(/(\{\{[^}]+\}\})/).map((part: string, pIdx: number) => {
+                          if (part.startsWith('{{') && part.endsWith('}}')) {
+                            return (
+                              <span key={pIdx} className="px-1.5 py-0.5 mx-0.5 bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 font-mono font-bold rounded text-[11px] border border-indigo-500/20">
+                                {part}
+                              </span>
+                            );
+                          }
+                          return <span key={pIdx}>{part}</span>;
+                        })}
+                      </p>
+                    );
+                  }
+
+                  if (blk.type === 'callout') {
+                    return (
+                      <div key={bIdx} className="p-4 bg-purple-500/10 border-l-4 border-purple-500 rounded-r-xl space-y-1">
+                        <span className="text-xs font-bold text-purple-600 dark:text-purple-400">{blk.data?.title || 'Important Notice'}</span>
+                        <p className="text-xs text-zinc-600 dark:text-zinc-300">{blk.data?.content || ''}</p>
+                      </div>
+                    );
+                  }
+
+                  if (blk.type === 'signature_block') {
+                    return (
+                      <div key={bIdx} className="pt-4 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs">
+                        <div>
+                          <p className="font-mono text-zinc-400">_____________________________</p>
+                          <p className="font-bold text-zinc-900 dark:text-white mt-1">{blk.data?.signerName || 'Authorized Signatory'}</p>
+                          <p className="text-[11px] text-zinc-500">{blk.data?.signerTitle || 'Lead Officer'}</p>
+                        </div>
+                        <span className="px-2 py-1 rounded bg-emerald-500/10 text-emerald-500 font-bold text-[10px]">
+                          DIGITALLY VERIFIED
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={bIdx} className="p-3 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 text-xs font-mono text-zinc-500">
+                      Block: {blk.type}
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="text-xs leading-relaxed space-y-3 font-sans">
+                  <p className="font-bold text-zinc-900 dark:text-white text-sm">Subject: {metadata.subject || `Notice - {{f_title}}`}</p>
+                  <hr className="border-zinc-200 dark:border-zinc-800" />
+                  <p className="text-zinc-700 dark:text-zinc-300">
+                    Hello <span className="px-1.5 py-0.5 bg-indigo-500/10 text-indigo-500 font-mono font-bold rounded">&#123;&#123;f_name&#125;&#125;</span>,<br /><br />
+                    Your record submission <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-500 font-mono font-bold rounded">&#123;&#123;f_ref&#125;&#125;</span> has been successfully processed under status <span className="px-1.5 py-0.5 bg-purple-500/10 text-purple-500 font-mono font-bold rounded">&#123;&#123;f_status&#125;&#125;</span>.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         );

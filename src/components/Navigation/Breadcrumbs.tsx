@@ -43,7 +43,8 @@ const PATH_MAP: Record<string, string> = {
   messaging: 'Messaging',
   database: 'Database',
   lists: 'Lists',
-  templates: 'Templates',
+  content: 'Content',
+  templates: 'Content',
   automations: 'Automations',
   logic: 'Logic',
   security: 'Security',
@@ -64,7 +65,7 @@ const PATH_MAP: Record<string, string> = {
   'workforce-management': 'Workforce Management',
   'integration-management': 'Integrations',
   'automation-management': 'Automations',
-  'document-generation': 'Templates',
+  'document-generation': 'Content',
   'report-management': 'Reports',
   'api-management': 'API Management',
   'financial-management': 'Financial Management',
@@ -76,6 +77,8 @@ const PATH_MAP: Record<string, string> = {
   queues: 'Queues',
   'queues-management': 'Queues',
   'queries-library': 'Queries',
+  'kpi-management': 'Metrics',
+  'kpi-library': 'Metrics',
   agents: 'Agents',
 };
 
