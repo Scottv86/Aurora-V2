@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -6,13 +6,8 @@ import {
   Wrench, 
   Plus, 
   Trash2, 
-  Code, 
   Play, 
-  CheckCircle2, 
-  Globe, 
-  Lock, 
-  Sliders, 
-  ArrowRight 
+  CheckCircle2 
 } from 'lucide-react';
 import { AgentToolBinding, AgentCustomToolParameter } from '../../types/agent';
 import { toast } from 'sonner';

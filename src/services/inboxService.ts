@@ -5,7 +5,6 @@ import {
   EmailMessage, 
   SendEmailRequest, 
   EmailServerConfig, 
-  EmailRule, 
   LinkedModuleRecord,
   EmailSnippet,
   EmailSignature,
@@ -16,8 +15,6 @@ import { executeServerCompletion } from './aiService';
 import { DriveService } from './driveService';
 
 const STORAGE_ACCOUNTS_KEY = 'aurora_inbox_accounts_v1';
-const STORAGE_THREADS_KEY = 'aurora_inbox_threads_v1';
-const STORAGE_RULES_KEY = 'aurora_inbox_rules_v1';
 const STORAGE_WORKSPACE_MAIL_KEY = 'aurora_workspace_mail_config_v1';
 const STORAGE_SYNC_LOGS_KEY = 'aurora_inbox_sync_logs_v1';
 
@@ -343,16 +340,16 @@ export const InboxService = {
     if (!params) return list;
     let res = list;
     if (params.folder && params.folder !== 'starred') {
-      res = res.filter(t => t.folder === params.folder);
+      res = res.filter((t: EmailThread) => t.folder === params.folder);
     }
     if (params.folder === 'starred' || params.isStarred) {
-      res = res.filter(t => t.isStarred);
+      res = res.filter((t: EmailThread) => t.isStarred);
     }
     if (params.label) {
-      res = res.filter(t => t.labels?.includes(params.label!));
+      res = res.filter((t: EmailThread) => t.labels?.includes(params.label!));
     }
     if (params.accountId && params.accountId !== 'all') {
-      res = res.filter(t => t.accountId === params.accountId || t.accountId.startsWith(params.accountId));
+      res = res.filter((t: EmailThread) => t.accountId === params.accountId || t.accountId.startsWith(params.accountId));
     }
     return res;
   },
@@ -371,7 +368,7 @@ export const InboxService = {
       }
     } catch (_) {}
     const list = this.getStoredThreadsList();
-    return list.find(t => t.id === threadId) || null;
+    return list.find((t: EmailThread) => t.id === threadId) || null;
   },
 
   /**
@@ -405,7 +402,7 @@ export const InboxService = {
     if (data.message) {
       const allThreads = this.getStoredThreadsList();
       if (payload.threadId) {
-        const targetThread = allThreads.find(t => t.id === payload.threadId);
+        const targetThread = allThreads.find((t: EmailThread) => t.id === payload.threadId);
         if (targetThread) {
           targetThread.messages.push(data.message);
           targetThread.timestamp = data.message.date;
@@ -441,7 +438,7 @@ export const InboxService = {
 
     const allThreads = this.getStoredThreadsList();
     if (payload.threadId) {
-      const targetThread = allThreads.find(t => t.id === payload.threadId);
+      const targetThread = allThreads.find((t: EmailThread) => t.id === payload.threadId);
       if (targetThread) {
         targetThread.messages.push(sentMsg);
         targetThread.timestamp = sentMsg.date;
@@ -451,6 +448,7 @@ export const InboxService = {
     } else {
       const newThread: EmailThread = {
         id: `th_sent_${Date.now()}`,
+        tenantId: tenantId || '',
         accountId: payload.accountId || 'acc_default',
         subject: payload.subject,
         snippet: sentMsg.snippet,
@@ -460,7 +458,7 @@ export const InboxService = {
         folder: 'inbox',
         isRead: true,
         isStarred: false,
-        status: 'OPEN',
+        labels: [],
         messages: [sentMsg]
       };
       allThreads.unshift(newThread);
@@ -555,12 +553,11 @@ export const InboxService = {
    */
   async saveAttachmentToDrive(attachment: { filename: string; contentType: string; contentBase64?: string; size: number }, driveType: 'PERSONAL' | 'TENANT_SHARED' = 'TENANT_SHARED'): Promise<string> {
     try {
+      const mockFile = new File([''], attachment.filename, { type: attachment.contentType || 'application/octet-stream' });
       const item = DriveService.uploadFile(
-        null,
-        attachment.filename,
-        attachment.size || 1024,
-        attachment.contentType || 'application/octet-stream',
-        driveType
+        mockFile,
+        driveType,
+        null
       );
       return item.id;
     } catch (err: any) {

@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useLocation } from 'react-router-dom';
 import { Button } from '../../../components/UI/Primitives';
 import { 
   Search, 
@@ -33,23 +32,16 @@ import {
   ArrowUp,
   ArrowDown,
   Columns,
-  Maximize2,
-  Minimize2,
-  Sparkles,
   FileSpreadsheet,
   Save,
   Calculator,
-  FunctionSquare,
   KeyRound,
-  Fingerprint,
   ListOrdered,
-  Binary,
   DollarSign,
   Percent,
   Mail,
   Phone,
   Globe,
-  Link2,
   User,
   Tag,
   CircleDot,
@@ -213,7 +205,7 @@ export const evaluateListFormula = (
       if (String(val).toLowerCase() === 'false') return 'false';
 
       if (!isNaN(Number(val)) && String(val).trim() !== '') {
-        return Number(val);
+        return String(Number(val));
       }
 
       return `"${String(val).replace(/"/g, '\\"')}"`;
@@ -242,11 +234,9 @@ export const evaluateListFormula = (
 };
 
 export const GlobalListsSettings = () => {
-  const location = useLocation();
-  const { tenant, members = [], isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
-  const isSettingsMode = location.pathname.startsWith('/workspace/settings');
+  const { tenant, members = [], setIsBuilderFullscreen } = usePlatform();
 
-  const { lists, loading: listsLoading, createListWithItems, saveFullList, deleteList, refetch: refetchLists } = useGlobalLists();
+  const { lists, loading: listsLoading, createListWithItems, saveFullList, deleteList } = useGlobalLists();
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showHistory, setShowHistory] = useState(false);
@@ -291,13 +281,12 @@ export const GlobalListsSettings = () => {
       }));
   }, [localColumns, calculatorModalCol]);
 
-  const activeListSummary = useMemo(() => lists.find(l => l.id === selectedListId), [lists, selectedListId]);
   const { 
     list: activeList,
     items: dbItems
   } = useGlobalList(selectedListId && selectedListId !== 'draft' ? selectedListId : null, { showAllHistory: showHistory });
 
-  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [, setActiveDragId] = useState<string | null>(null);
 
   // Sync loaded DB data into local state when opening an existing list
   useEffect(() => {
@@ -409,7 +398,7 @@ export const GlobalListsSettings = () => {
         sort_order: idx,
         is_active: true,
         valid_from: new Date().toISOString(),
-        valid_to: null
+        valid_to: null as string | null
       })));
       setSelectedListId('draft');
       setIsDirty(true);
@@ -424,7 +413,7 @@ export const GlobalListsSettings = () => {
         sort_order: startingIdx + idx,
         is_active: true,
         valid_from: new Date().toISOString(),
-        valid_to: null
+        valid_to: null as string | null
       }));
       setLocalItems(prev => [...prev, ...newItems]);
       setIsDirty(true);

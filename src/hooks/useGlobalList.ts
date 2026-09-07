@@ -67,6 +67,9 @@ export interface GlobalList {
   description: string | null;
   columns: ListColumn[];
   created_at: string;
+  is_system?: boolean;
+  item_count?: number;
+  items?: GlobalListItem[];
 }
 
 interface UseGlobalListOptions {

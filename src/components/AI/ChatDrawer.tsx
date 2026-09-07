@@ -1,25 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   X, 
-  Send, 
-  Smile, 
-  Paperclip, 
   MessageSquare, 
   Maximize2, 
   Hash, 
-  Lock, 
-  ChevronDown, 
-  Clock, 
-  Phone,
-  Sparkles
+  ChevronDown 
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { usePlatform } from '../../hooks/usePlatform';
-import { useAuth } from '../../hooks/useAuth';
-import { ChatService } from '../../services/chatService';
-import { ChatChannel, ChatMessage } from '../../types/chat';
 import { ChatMessageItem } from '../Apps/Chat/ChatMessageItem';
 import { ChatComposer } from '../Apps/Chat/ChatComposer';
 import { ChatProvider, useChat } from '../../context/ChatContext';
@@ -31,9 +21,7 @@ const ChatDrawerInner: React.FC = () => {
     channels, 
     activeChannel, 
     setActiveChannel, 
-    messages, 
-    sendMessage,
-    setIsCallingOpen 
+    messages 
   } = useChat();
   
   const [showChannelDropdown, setShowChannelDropdown] = useState(false);

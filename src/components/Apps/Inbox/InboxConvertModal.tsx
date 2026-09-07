@@ -5,16 +5,12 @@ import {
   Layers, 
   Check, 
   Sparkles, 
-  ArrowRight, 
   Loader2, 
-  FileText, 
-  User, 
-  Tag 
+  User 
 } from 'lucide-react';
 import { EmailThread } from '../../../types/inbox';
 import { InboxService } from '../../../services/inboxService';
 import { usePlatform } from '../../../hooks/usePlatform';
-import { cn } from '../../../lib/utils';
 import { toast } from 'sonner';
 
 interface InboxConvertModalProps {

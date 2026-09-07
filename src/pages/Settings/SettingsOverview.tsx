@@ -77,6 +77,15 @@ const SETTINGS_ITEMS: SettingItem[] = [
     category: 'General & Security',
     tags: ['theme', 'colors', 'dark mode', 'branding', 'logo']
   },
+  {
+    id: 'notifications',
+    label: 'Notifications',
+    description: 'Toast positioning, sound chimes, alert durations, and notification preferences.',
+    icon: 'Bell',
+    to: '/workspace/settings/notifications',
+    category: 'General & Security',
+    tags: ['notifications', 'toasts', 'alerts', 'sounds', 'popups', 'positioning', 'chimes']
+  },
 
   // Build & Customize (All Platform Builders)
   {

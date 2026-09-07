@@ -8,8 +8,6 @@ import {
   Code, 
   Link2, 
   Mic, 
-  MicOff,
-  Image as ImageIcon,
   X,
   FileText
 } from 'lucide-react';

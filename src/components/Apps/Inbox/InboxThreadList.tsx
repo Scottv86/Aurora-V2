@@ -10,13 +10,7 @@ import {
   Paperclip, 
   CheckSquare, 
   Square, 
-  Clock, 
-  Tag, 
-  Sparkles, 
-  Layers, 
-  CheckCircle, 
-  AlertCircle,
-  Users
+  Layers
 } from 'lucide-react';
 import { EmailThread, InboxFolder, AdvancedSearchFilters } from '../../../types/inbox';
 import { cn } from '../../../lib/utils';
@@ -122,13 +116,13 @@ export const InboxThreadList: React.FC<InboxThreadListProps> = ({
   threads,
   selectedThreadId,
   onSelectThread,
-  selectedFolder,
-  selectedLabel,
+  selectedFolder: _selectedFolder,
+  selectedLabel: _selectedLabel,
   onStarThread,
   onArchiveThread,
   onTrashThread,
   onMarkRead,
-  onBatchAction,
+  onBatchAction: _onBatchAction,
   width = 360
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -146,6 +140,18 @@ export const InboxThreadList: React.FC<InboxThreadListProps> = ({
     status: 'ALL',
     hasLinkedRecord: false
   });
+
+  const handleResetFilters = () => {
+    setAdvFilters({
+      from: '',
+      to: '',
+      subject: '',
+      hasAttachments: false,
+      dateRange: 'all',
+      status: 'ALL',
+      hasLinkedRecord: false
+    });
+  };
 
   const activeAdvFilterCount = useMemo(() => {
     let count = 0;

@@ -184,7 +184,7 @@ export const SubscriptionPage = () => {
     }
   ];
 
-  const invoiceColumns = [
+  const invoiceColumns: Column<Invoice>[] = [
     {
       header: 'Invoice ID',
       sortable: true,

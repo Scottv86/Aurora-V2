@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Database, 
   Play, 
-  Save, 
   ArrowLeft, 
   Plus, 
   Trash2, 
@@ -21,22 +20,12 @@ import {
   Sparkles, 
   Maximize2, 
   Minimize2, 
-  Clock, 
   Tag, 
-  HelpCircle, 
-  Check, 
   Code, 
-  Eye, 
-  RefreshCw, 
-  Share2, 
-  Zap,
-  Info,
-  Edit3
+  Info
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { Button } from '../../UI/Primitives';
-import { DynamicIcon } from '../../UI/DynamicIcon';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { useAuth } from '../../../hooks/useAuth';
 import { API_BASE_URL } from '../../../config';
@@ -97,23 +86,6 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({
   const [status, setStatus] = useState<QueryStatus>(initialQuery?.status || 'DRAFT');
   const [cacheTtl, setCacheTtl] = useState<number>(initialQuery?.cacheTtlSeconds || 0);
   const [isDirty, setIsDirty] = useState(false);
-  const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
-  const isInitializedRef = React.useRef(false);
-
-  // Track query builder modifications
-  useEffect(() => {
-    if (isInitializedRef.current) {
-      setIsDirty(true);
-    }
-  }, [name, description, category, tags, sqlQuery, parameters, columnsConfig, cacheTtl]);
-
-  useEffect(() => {
-    setTimeout(() => {
-      isInitializedRef.current = true;
-      setIsDirty(false);
-    }, 150);
-  }, [initialQuery]);
-
   // SQL & Mode State
   const [sqlQuery, setSqlQuery] = useState<string>(
     initialQuery?.sql || 
@@ -162,6 +134,23 @@ LIMIT 50;`
     initialQuery?.columnsConfig || []
   );
 
+  const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
+  const isInitializedRef = React.useRef(false);
+
+  // Track query builder modifications
+  useEffect(() => {
+    if (isInitializedRef.current) {
+      setIsDirty(true);
+    }
+  }, [name, description, category, tags, sqlQuery, parameters, columnsConfig, cacheTtl]);
+
+  useEffect(() => {
+    setTimeout(() => {
+      isInitializedRef.current = true;
+      setIsDirty(false);
+    }, 150);
+  }, [initialQuery]);
+
   // Schema state
   const [schema, setSchema] = useState<SchemaData>({ physicalTables: [], customModules: [] });
   const [schemaLoading, setSchemaLoading] = useState(true);
@@ -174,7 +163,32 @@ LIMIT 50;`
   // Active Left / Bottom Tabs
   const [leftTab, setLeftTab] = useState<'schema' | 'params' | 'settings'>('schema');
   const [bottomTab, setBottomTab] = useState<'results' | 'columns' | 'explain'>('results');
-  const [isFullscreen, setIsFullscreen] = useState(true);
+  const [bottomPaneHeight, setBottomPaneHeight] = useState<number>(300);
+
+  // Draggable Resizer for Bottom Results Pane
+  const handleStartBottomResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startHeight = bottomPaneHeight;
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaY = moveEvent.clientY - startY;
+      const newHeight = Math.max(120, Math.min(window.innerHeight - 200, startHeight - deltaY));
+      setBottomPaneHeight(newHeight);
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
 
   // Execution State
   const [executing, setExecuting] = useState(false);
@@ -186,7 +200,6 @@ LIMIT 50;`
 
   // DOM Refs
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const lineNumbersRef = useRef<HTMLDivElement>(null);
 
   // Load Database Schema
   useEffect(() => {
@@ -217,18 +230,6 @@ LIMIT 50;`
 
     fetchSchema();
   }, [token, tenant?.id]);
-
-  // Sync scroll for editor
-  const handleScroll = () => {
-    if (textareaRef.current && lineNumbersRef.current) {
-      lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop;
-    }
-  };
-
-  const lineNumbers = useMemo(() => {
-    const lines = sqlQuery.split('\n').length;
-    return Array.from({ length: Math.max(lines, 1) }, (_, i) => i + 1);
-  }, [sqlQuery]);
 
   // Insert column/table name at cursor
   const insertTextAtCursor = (text: string) => {
@@ -753,7 +754,7 @@ LIMIT 50;`
                   </div>
                 ) : (
                   <div className="space-y-2.5">
-                    {parameters.map((param, idx) => (
+                    {parameters.map((param, _idx) => (
                       <div key={param.id} className="p-3 rounded-xl border border-zinc-800 bg-zinc-950/60 space-y-2 relative group">
                         <button
                           onClick={() => {
@@ -932,7 +933,7 @@ LIMIT 50;`
           )}
 
           {/* SQL Editor Area with Colourised Syntax & IntelliSense */}
-          <div className="flex-1 flex flex-col min-h-[220px] relative border-b border-zinc-800/80">
+          <div className="flex-1 flex flex-col min-h-[140px] relative">
             {/* Editor Top Bar */}
             <div className="flex items-center justify-between px-4 py-1.5 bg-zinc-900/60 border-b border-zinc-800/60 text-xs text-zinc-400">
               <div className="flex items-center gap-2">
@@ -968,10 +969,23 @@ LIMIT 50;`
             </div>
           </div>
 
+          {/* Draggable Divider Resizer */}
+          <div
+            onMouseDown={handleStartBottomResize}
+            onDoubleClick={() => setBottomPaneHeight(300)}
+            className="h-2 bg-zinc-950 border-y border-zinc-800/80 hover:bg-indigo-600/30 active:bg-indigo-600/50 transition-colors cursor-row-resize select-none shrink-0 relative group flex items-center justify-center z-10"
+            title="Drag to resize results pane (Double-click to reset height)"
+          >
+            <div className="w-10 h-1 rounded-full bg-zinc-700 group-hover:bg-indigo-400 transition-colors" />
+          </div>
+
           {/* Bottom Results & Output Configuration Dock */}
-          <div className="h-64 flex flex-col bg-zinc-900/70 backdrop-blur-md shrink-0">
+          <div 
+            style={{ height: bottomPaneHeight }}
+            className="flex flex-col bg-zinc-900/70 backdrop-blur-md shrink-0 overflow-hidden"
+          >
             {/* Bottom Tabs Bar */}
-            <div className="flex items-center justify-between px-4 py-2 bg-zinc-950/60 border-b border-zinc-800/80 text-xs">
+            <div className="flex items-center justify-between px-4 py-2 bg-zinc-950/60 border-b border-zinc-800/80 text-xs shrink-0">
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setBottomTab('results')}
@@ -1021,16 +1035,29 @@ LIMIT 50;`
                 </button>
               </div>
 
-              {/* Bottom Actions */}
-              {results.length > 0 && bottomTab === 'results' && (
-                <button
-                  onClick={exportToCSV}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs border border-zinc-700 transition-all"
-                >
-                  <Download size={13} />
-                  <span>Export CSV</span>
-                </button>
-              )}
+              {/* Bottom Actions & Size Toggle */}
+              <div className="flex items-center gap-2">
+                {results.length > 0 && bottomTab === 'results' && (
+                  <button
+                    onClick={exportToCSV}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs border border-zinc-700 transition-all"
+                  >
+                    <Download size={13} />
+                    <span>Export CSV</span>
+                  </button>
+                )}
+
+                <div className="flex items-center gap-1 pl-2 border-l border-zinc-800 text-zinc-400">
+                  <button
+                    type="button"
+                    onClick={() => setBottomPaneHeight(prev => (prev < 420 ? 550 : 250))}
+                    title={bottomPaneHeight < 420 ? "Maximize Results Pane" : "Restore Results Pane"}
+                    className="p-1.5 hover:text-zinc-200 hover:bg-zinc-800 rounded-lg transition-colors"
+                  >
+                    {bottomPaneHeight < 420 ? <Maximize2 size={13} /> : <Minimize2 size={13} />}
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Bottom Content Views */}

@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { TenantRequest } from '../middleware/tenantMiddleware';
 import { GoogleGenAI, Type } from '@google/genai';
 import { resolveTenantAIClient, executeAICompletion } from '../services/aiProviderService';
+import { checkAIFeatureOrThrow } from '../lib/aiPermissions';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -147,6 +148,10 @@ router.post('/ai-builder', async (req: TenantRequest, res: Response) => {
     }
 
     const tenantId = req.tenantId || 'default-tenant';
+    const userId = req.user?.uid;
+
+    await checkAIFeatureOrThrow(tenantId, userId, 'ai:report_generator', req.db);
+
     const client = await resolveTenantAIClient(tenantId);
 
     const promptText = `You are Aurora BI AI, an expert business intelligence designer.

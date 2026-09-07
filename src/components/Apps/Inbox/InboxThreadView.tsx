@@ -6,28 +6,20 @@ import {
   Reply, 
   ReplyAll, 
   Forward, 
-  MoreVertical, 
   Paperclip, 
-  Download, 
   FolderPlus, 
   Sparkles, 
   ShieldCheck, 
   Clock, 
   Layers, 
-  Plus, 
   ChevronDown, 
   ChevronUp, 
-  ExternalLink,
-  Printer,
-  FileText,
-  UserCheck,
-  Send,
-  Loader2,
-  Search,
-  Bot,
-  User,
-  Check,
-  X
+  FileText, 
+  Loader2, 
+  Search, 
+  User, 
+  Check, 
+  X 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { EmailThread, EmailMessage, EmailAttachment } from '../../../types/inbox';
@@ -296,7 +288,7 @@ export const InboxThreadView: React.FC<InboxThreadViewProps> = ({
   const handleSaveToDrive = async (attachment: EmailAttachment) => {
     try {
       setSavingAttachmentId(attachment.id);
-      const driveItemId = await InboxService.saveAttachmentToDrive({
+      await InboxService.saveAttachmentToDrive({
         filename: attachment.filename,
         contentType: attachment.contentType,
         contentBase64: attachment.contentBase64,
@@ -372,8 +364,8 @@ export const InboxThreadView: React.FC<InboxThreadViewProps> = ({
                       </div>
                     ) : (
                       <div className="w-4 h-4 rounded-full overflow-hidden bg-indigo-500 text-white flex items-center justify-center text-[9px] font-bold shrink-0">
-                        {selectedMember.avatarUrl ? (
-                          <img src={selectedMember.avatarUrl} alt={selectedMember.name} className="w-full h-full object-cover" />
+                        {(selectedMember as any).avatarUrl ? (
+                          <img src={(selectedMember as any).avatarUrl} alt={selectedMember.name} className="w-full h-full object-cover" />
                         ) : (
                           selectedMember.name.substring(0, 2).toUpperCase()
                         )}
@@ -489,8 +481,8 @@ export const InboxThreadView: React.FC<InboxThreadViewProps> = ({
                                 >
                                   <div className="flex items-center gap-2 min-w-0">
                                     <div className="w-5 h-5 rounded-full overflow-hidden bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center text-[9px] font-bold shrink-0">
-                                      {m.avatarUrl ? (
-                                        <img src={m.avatarUrl} alt={m.name} className="w-full h-full object-cover" />
+                                      {(m as any).avatarUrl ? (
+                                        <img src={(m as any).avatarUrl} alt={m.name} className="w-full h-full object-cover" />
                                       ) : (
                                         m.name.substring(0, 2).toUpperCase()
                                       )}
@@ -687,9 +679,8 @@ export const InboxThreadView: React.FC<InboxThreadViewProps> = ({
       {/* Messages Scroll Area */}
       <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
         
-        {thread.messages.map((message, idx) => {
+        {thread.messages.map((message) => {
           const isExpanded = expandedMessageIds.includes(message.id);
-          const isLast = idx === thread.messages.length - 1;
 
           const isCurrentUser = 
             message.from.name === currentUserName ||

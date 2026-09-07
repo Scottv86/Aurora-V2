@@ -45,7 +45,7 @@ export const QueueView: React.FC = () => {
   }, [menuConfig, queueId]);
 
   // 2. Fetch queue metadata if not in navigation
-  const { data: fetchedQueue } = useQuery<QueueEntity | null>({
+  const { data: _fetchedQueue } = useQuery<QueueEntity | null>({
     queryKey: ['queue-view-header-entity', tenant?.id, queueId],
     queryFn: async () => {
       if (!queueId || !tenant?.id || navQueue) return null;

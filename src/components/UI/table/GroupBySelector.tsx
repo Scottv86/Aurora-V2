@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Layers, Check, ChevronDown, X, Hash } from 'lucide-react';
+import { Layers, Check, ChevronDown } from 'lucide-react';
 import { cn } from '../Primitives';
 import { Column } from '../Table';
 import { GroupConfig, getColKey } from './TableGrouping';

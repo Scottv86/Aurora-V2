@@ -205,8 +205,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     connectionErrorMessage,
     isOffline,
     refetchContext,
-    isBuilderFullscreen,
-    setIsBuilderFullscreen
+    isBuilderFullscreen
   } = usePlatform();
 
   const isTenantAdmin = isDeveloper || 
@@ -524,6 +523,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         { label: 'AI Services', icon: Sparkles, to: '/workspace/settings/ai-services' },
         { label: 'Email & Inboxes', icon: LucideIcons.Mail, to: '/workspace/settings/email-connections' },
         { label: 'Branding', icon: Palette, to: '/workspace/settings/branding' },
+        { label: 'Notifications', icon: LucideIcons.Bell, to: '/workspace/settings/notifications' },
       ]
     },
     {

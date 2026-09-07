@@ -67,7 +67,6 @@ import {
   Sidebar,
   Grid3X3,
   Maximize2,
-  Minimize2,
   Folder,
   ListPlus,
   Calculator,
@@ -90,7 +89,6 @@ import {
   ArrowUp,
   ArrowDown,
   X,
-  Bug,
   Database,
   FileText,
   Upload,
@@ -1819,7 +1817,7 @@ export const ModuleEditor = () => {
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const returnUrl = (location.state as any)?.returnUrl || searchParams.get('returnUrl');
-  const { tenant, modules, refreshModules, setBreadcrumbOverride, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
+  const { tenant, modules, refreshModules, setBreadcrumbOverride, isBuilderFullscreen, setIsBuilderFullscreen } = usePlatform();
   const { session, user } = useAuth();
 
   useEffect(() => {
@@ -1956,7 +1954,7 @@ export const ModuleEditor = () => {
   const [architectInput, setArchitectInput] = useState('');
   const [isArchitectThinking, setIsArchitectThinking] = useState(false);
   const [activeDragItem, setActiveDragItem] = useState<{ type: string, fieldType?: string, fieldId?: string } | null>(null);
-  const [draggedFieldInfo, setDraggedFieldInfo] = useState<{ type: string, fieldType?: string, fieldId?: string, label?: string, icon?: any } | null>(null);
+  const [_draggedFieldInfo, setDraggedFieldInfo] = useState<{ type: string, fieldType?: string, fieldId?: string, label?: string, icon?: any } | null>(null);
   const lastDragOverTimeRef = useRef<number>(0);
   const [dragOverInfo, setDragOverInfo] = useState<{ col: number, span: number, index: number, active: boolean, parentId?: string, height?: number, rowSpan?: number } | null>(null);
   const [previewLayout, setPreviewLayout] = useState<Field[] | null>(null);
@@ -2858,8 +2856,8 @@ export const ModuleEditor = () => {
   
   // Tab Scrolling Refs & State
   const tabContainerRef = useRef<HTMLDivElement>(null);
-  const [showLeftScroll, setShowLeftScroll] = useState(false);
-  const [showRightScroll, setShowRightScroll] = useState(false);
+  const [_showLeftScroll, setShowLeftScroll] = useState(false);
+  const [_showRightScroll, setShowRightScroll] = useState(false);
 
   const checkScroll = useCallback(() => {
     requestAnimationFrame(() => {

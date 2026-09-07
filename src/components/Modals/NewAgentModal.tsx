@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -7,16 +7,10 @@ import {
   Sparkles, 
   ArrowRight, 
   ArrowLeft, 
-  Search, 
-  CreditCard, 
-  ShieldCheck, 
-  Headphones, 
-  GitFork, 
-  Wrench, 
-  BookOpen 
+  Search 
 } from 'lucide-react';
 import { AgentBlueprint } from '../../types/agent';
-import { createDefaultAgentBlueprint, DEFAULT_AGENT_TOOLS } from '../../services/agentBuilderService';
+import { DEFAULT_AGENT_TOOLS } from '../../services/agentBuilderService';
 
 export interface NewAgentModalProps {
   isOpen: boolean;

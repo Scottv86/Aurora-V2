@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, CornerDownRight, MessageSquare } from 'lucide-react';
+import { X, CornerDownRight } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useChat } from '../../../context/ChatContext';
 import { ChatMessageItem } from './ChatMessageItem';

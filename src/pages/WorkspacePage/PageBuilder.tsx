@@ -5,7 +5,7 @@ import * as Icons from 'lucide-react';
 import { 
   ArrowLeft, Save, Trash2, Settings, 
   Sparkles, Layout, Eye, Loader2, Cpu, GripVertical,
-  Maximize2, Minimize2, SlidersHorizontal
+  SlidersHorizontal
 } from 'lucide-react';
 import ReactGridLayout from 'react-grid-layout';
 import { 
@@ -22,7 +22,6 @@ import { API_BASE_URL, DATA_API_URL } from '../../config';
 import { cn, slugify } from '../../lib/utils';
 import { ReportWidgetEmbed, getWidgetDefaultDimensions } from './WorkspacePageView';
 import { QueueRenderer } from '../../components/Builders/QueueBuilder/QueueRenderer';
-import { FormRenderer } from '../../components/Builders/FormBuilder/FormRenderer';
 import { builderCache } from '../../utils/builderCache';
 import { UnsavedChangesModal } from '../../components/Common/UnsavedChangesModal';
 export { PageBuilderEngine } from '../../components/PageEngine';
@@ -738,7 +737,7 @@ export const PageBuilder = () => {
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const returnUrl = (location.state as any)?.returnUrl || searchParams.get('returnUrl');
-  const { tenant, refreshModules, modules, menuConfig, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen, setBreadcrumbOverride } = usePlatform();
+  const { tenant, refreshModules, modules, menuConfig, isBuilderFullscreen, setIsBuilderFullscreen, setBreadcrumbOverride } = usePlatform();
   const { session } = useAuth();
 
   useEffect(() => {

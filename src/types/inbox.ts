@@ -34,12 +34,17 @@ export interface EmailServerConfig {
   smtpPort?: number;
   smtpSecure?: boolean;
   provider?: EmailProvider;
+  userId?: string;
+  userEmail?: string;
+  userName?: string;
 }
 
 export interface EmailAccount {
   id: string;
   tenantId?: string;
   userId?: string;
+  userEmail?: string;
+  userName?: string;
   email: string;
   name: string;
   provider: EmailProvider;
@@ -51,6 +56,8 @@ export interface EmailAccount {
   lastSyncedAt?: string;
   unreadCount?: number;
   sharedMembers?: string[];
+  isShared?: boolean;
+  password?: string;
   createdAt: string;
 }
 
@@ -120,6 +127,7 @@ export interface EmailThread {
   linkedRecords?: LinkedModuleRecord[];
   internalNotes?: EmailInternalNote[];
   sharedStatus?: SharedStatus;
+  status?: SharedStatus;
   assignedTo?: string;
   assignedToUser?: {
     id: string;

@@ -1,5 +1,4 @@
 import React, { useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { GripVertical, Trash2, Folder, ListPlus, Move, BrainCircuit, Settings2, Copy, ChevronDown, Box, LayoutGrid, FolderTree, ListOrdered, GitCommit, Layers, Plus } from 'lucide-react';
 import { cn, calculateHeight } from '../../lib/utils';
 import { GRID_CONFIG } from '../ModuleEditor';
@@ -87,7 +86,6 @@ export const FieldGroup = React.forwardRef<HTMLDivElement, FieldGroupProps & Omi
   const iconSize = density === 'compact' ? 12 : density === 'spacious' ? 16 : 14;
   const titleTextSize = density === 'compact' ? 'text-xs' : density === 'spacious' ? 'text-sm font-bold' : 'text-xs font-bold';
   const subtitleTextSize = density === 'compact' ? 'text-[8px]' : density === 'spacious' ? 'text-[10px]' : 'text-[9px]';
-  const nestedPadding = density === 'compact' ? 'p-1.5 mt-2 rounded-md' : density === 'spacious' ? 'p-3 mt-4 rounded-xl' : 'p-2.5 mt-3 rounded-lg';
 
   const getIcon = (size: number = 16) => {
     if (block.iconName) {
@@ -110,7 +108,7 @@ export const FieldGroup = React.forwardRef<HTMLDivElement, FieldGroupProps & Omi
   const showIcon = block.showIcon !== false;
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const [isResizing, setIsResizing] = useState<'left' | 'right' | null>(null);
+  const [isResizing] = useState<'left' | 'right' | null>(null);
   const [isContentHovered, setIsContentHovered] = useState(false);
 
   const gc = gridConfig || GRID_CONFIG;
@@ -121,56 +119,6 @@ export const FieldGroup = React.forwardRef<HTMLDivElement, FieldGroupProps & Omi
     index: dragOverInfo!.index,
     rowSpan: (dragOverInfo as any).rowSpan 
   } : null);
-
-
-  const handleResizeStart = (e: React.PointerEvent, direction: 'left' | 'right') => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsResizing(direction);
-    
-    const startX = e.clientX;
-    const startSpan = block.colSpan || 12;
-    const startCol = block.startCol || 1;
-
-    const handlePointerMove = (moveEvent: PointerEvent) => {
-      if (!containerRef.current) return;
-      
-      const canvas = containerRef.current.closest('.grid-canvas-container');
-      if (!canvas) return;
-      
-      const rect = canvas.getBoundingClientRect();
-      const padding = isNested ? gc.nestedPadding : gc.padding;
-      const canvasWidth = rect.width - padding;
-      const colWidth = canvasWidth / 12;
-      
-      const deltaX = moveEvent.clientX - startX;
-      const deltaCols = Math.round(deltaX / colWidth);
-
-      if (direction === 'right') {
-        const newSpan = Math.max(1, Math.min(12, startSpan + deltaCols));
-        const finalSpan = Math.min(newSpan, 13 - startCol);
-        if (block.colSpan !== finalSpan) {
-          onUpdate(block.id, { colSpan: finalSpan });
-        }
-      } else {
-        const maxStartCol = startCol + startSpan - 1;
-        const newStartCol = Math.max(1, Math.min(maxStartCol, startCol + deltaCols));
-        const newSpan = startSpan - (newStartCol - startCol);
-        if (block.startCol !== newStartCol || block.colSpan !== newSpan) {
-          onUpdate(block.id, { startCol: newStartCol, colSpan: newSpan });
-        }
-      }
-    };
-
-    const handlePointerUp = () => {
-      setIsResizing(null);
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-    };
-
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
-  };
 
   return (
     <div

@@ -9,7 +9,6 @@ import {
   Check, 
   AlertCircle, 
   Loader2, 
-  HelpCircle, 
   ExternalLink, 
   Users, 
   Sparkles,

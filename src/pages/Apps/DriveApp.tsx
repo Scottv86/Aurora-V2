@@ -19,9 +19,7 @@ import {
   Upload, 
   FolderPlus, 
   FilePlus, 
-  X,
-  Maximize2,
-  Minimize2
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DriveItem, DriveType, DocumentClassification } from '../../types/drive';
@@ -40,7 +38,7 @@ type NavTab = 'PERSONAL' | 'TENANT_SHARED' | 'STARRED' | 'RECENT' | 'GOVERNANCE'
 export const DriveApp = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { tenant, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
+  const { tenant, isBuilderFullscreen, setIsBuilderFullscreen } = usePlatform();
   const { user, session } = useAuth();
 
   useEffect(() => {

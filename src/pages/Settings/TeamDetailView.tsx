@@ -4,8 +4,12 @@ import { motion } from 'framer-motion';
 import { 
   Activity, 
   Trash2, 
-  Save
+  Save,
+  Sliders,
+  Users
 } from 'lucide-react';
+import { AIFeatureOverridesPanel } from '../../components/Settings/AIFeatureOverridesPanel';
+import { AIPolicyState } from '../../types/aiGovernance';
 import { useTeam } from '../../hooks/useTeams';
 import { usePlatform } from '../../hooks/usePlatform';
 import { Button, Input, Badge } from '../../components/UI/Primitives';
@@ -29,12 +33,14 @@ export const TeamDetailView = () => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
+  const [aiOverrides, setAiOverrides] = useState<Record<string, AIPolicyState>>({});
 
   useEffect(() => {
     if (team) {
       setName(team.name);
       setDescription(team.description || '');
       setAvatarUrl(team.avatar || '');
+      setAiOverrides(((team as any).aiOverrides as Record<string, AIPolicyState>) || {});
     }
   }, [team]);
 
@@ -47,7 +53,7 @@ export const TeamDetailView = () => {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await updateTeam({ name, description, avatarUrl });
+      await updateTeam({ name, description, avatarUrl, aiOverrides } as any);
     } finally {
       setIsSaving(false);
     }
@@ -131,9 +137,10 @@ export const TeamDetailView = () => {
       <div className="space-y-6">
         <Tabs 
           tabs={[
-            { id: 'overview', label: 'Overview' },
-            { id: 'members', label: 'Team Roster' },
-            { id: 'activity', label: 'Team Activity' }
+            { id: 'overview', label: 'Overview', icon: Activity },
+            { id: 'members', label: 'Team Roster', icon: Users },
+            { id: 'ai-access', label: 'AI Access', icon: Sliders },
+            { id: 'activity', label: 'Team Activity', icon: Activity }
           ]}
           activeTab={activeTab}
           onChange={setActiveTab}
@@ -235,6 +242,19 @@ export const TeamDetailView = () => {
                  ]}
                />
             </motion.div>
+          )}
+
+          {activeTab === 'ai-access' && (
+            <AIFeatureOverridesPanel
+              title="Team AI Access Overrides"
+              description={`Configure AI feature access overrides for all members in ${team.name}. Members will inherit these unless they have individual overrides.`}
+              targetName={team.name}
+              targetType="Team"
+              overrides={aiOverrides}
+              onChange={setAiOverrides}
+              onSave={handleSave}
+              isSaving={isSaving}
+            />
           )}
 
           {activeTab === 'activity' && (

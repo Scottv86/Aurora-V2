@@ -9,18 +9,13 @@ import {
   Plus, 
   Sparkles, 
   CheckCircle2, 
-  Clock, 
-  AlertCircle, 
   MessageSquare, 
   Send, 
   Zap, 
-  ShieldAlert, 
-  FileText, 
   Phone, 
   Mail, 
   ChevronRight,
-  Loader2,
-  Share2
+  Loader2
 } from 'lucide-react';
 import { EmailThread } from '../../../types/inbox';
 import { InboxService } from '../../../services/inboxService';
@@ -85,7 +80,7 @@ export const InboxContextSidebar: React.FC<InboxContextSidebarProps> = ({
       setAddingNote(true);
       await InboxService.addInternalNote(thread.id, newNoteContent.trim(), {
         id: user?.id,
-        name: user?.name || user?.firstName || 'Staff Member',
+        name: (user as any)?.name || (user as any)?.firstName || 'Staff Member',
         email: user?.email
       }, tenant?.id);
 

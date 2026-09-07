@@ -33,8 +33,11 @@ import {
   BookOpen,
   Loader2,
   Check,
-  RefreshCw
+  RefreshCw,
+  Sliders
 } from 'lucide-react';
+import { AIFeatureOverridesPanel } from '../../components/Settings/AIFeatureOverridesPanel';
+import { AIPolicyState } from '../../types/aiGovernance';
 import { useMember } from '../../hooks/useMember';
 import { useTeams } from '../../hooks/useTeams';
 import { usePositions } from '../../hooks/usePositions';
@@ -126,13 +129,11 @@ export const MemberDetailView = () => {
   const [homeAddress, setHomeAddress] = useState('');
   const [workArrangements, setWorkArrangements] = useState('Office');
   const [emergencyContact, setEmergencyContact] = useState('');
-  const [positionNumber, setPositionNumber] = useState('');
   const [personalEmail, setPersonalEmail] = useState('');
-  const [salary, setSalary] = useState('');
   const [positionId, setPositionId] = useState('');
   const [teamId, setTeamId] = useState('');
   const [status, setStatus] = useState<'Active' | 'Inactive' | 'Pending' | 'Offline'>('Active');
-  const [contracts, setContracts] = useState<any[]>([]);
+  const [aiOverrides, setAiOverrides] = useState<Record<string, AIPolicyState>>({});
 
   // Local form state
   const [role, setRole] = useState('');
@@ -212,11 +213,12 @@ export const MemberDetailView = () => {
         // 2. Email matching (work email, personal email, or user email)
         const memberEmails = [member.email, member.personalEmail, workEmail, personalEmail].filter(Boolean).map(e => e.toLowerCase());
         if (a.email && memberEmails.includes(a.email.toLowerCase())) return true;
-        if (a.userEmail && memberEmails.includes(a.userEmail.toLowerCase())) return true;
+        if ((a as any).userEmail && memberEmails.includes(String((a as any).userEmail).toLowerCase())) return true;
         if ((a.config as any)?.userEmail && memberEmails.includes((a.config as any).userEmail.toLowerCase())) return true;
 
         // 3. User name match
-        if (a.userName && (a.userName.toLowerCase() === member.name?.toLowerCase() || a.userName.toLowerCase() === `${member.firstName || ''} ${member.familyName || ''}`.trim().toLowerCase())) return true;
+        const accUserName = (a as any).userName || a.name;
+        if (accUserName && (accUserName.toLowerCase() === member.name?.toLowerCase() || accUserName.toLowerCase() === `${member.firstName || ''} ${member.familyName || ''}`.trim().toLowerCase())) return true;
 
         // 4. Current user viewing own profile fallback
         if (authUser && (authUser.id === member.id || authUser.id === member.userId || authUser.email?.toLowerCase() === member.email?.toLowerCase())) {
@@ -391,6 +393,7 @@ export const MemberDetailView = () => {
       setCertifications(member.certifications || []);
       setEducation(member.education || []);
       setSkills(member.skills || []);
+      setAiOverrides((member.aiOverrides as Record<string, AIPolicyState>) || {});
     }
   }, [member]);
 
@@ -429,7 +432,8 @@ export const MemberDetailView = () => {
         licenceType,
         isContractor,
         workEmail,
-        signature
+        signature,
+        aiOverrides
       });
       await refreshBilling();
     } finally {
@@ -585,6 +589,7 @@ export const MemberDetailView = () => {
             { id: 'configuration', label: 'AI Settings', icon: Sparkles },
             { id: 'mailboxes', label: 'Mailboxes', icon: Mail },
             { id: 'permissions', label: 'Permissions', icon: Shield },
+            { id: 'ai-access', label: 'AI Access', icon: Sliders },
             { id: 'activity', label: 'Activity', icon: Activity } 
           ] : [
             { id: 'overview', label: 'Overview', icon: User },
@@ -595,6 +600,7 @@ export const MemberDetailView = () => {
             { id: 'leave', label: 'Time Off', icon: Clock },
             { id: 'mailboxes', label: 'Mailboxes', icon: Mail },
             { id: 'permissions', label: 'Permissions', icon: Shield },
+            { id: 'ai-access', label: 'AI Access', icon: Sliders },
             { id: 'activity', label: 'Activity', icon: Activity } 
           ]}
           activeTab={activeTab}
@@ -838,7 +844,7 @@ export const MemberDetailView = () => {
                       <Select 
                            label="Assignment Status" 
                            value={status}
-                           onChange={(e) => setStatus(e.target.value)}
+                           onChange={(e) => setStatus(e.target.value as any)}
                            options={[
                              { label: 'Active', value: 'Active' },
                              { label: 'Inactive / Suspended', value: 'Inactive' },
@@ -1236,7 +1242,7 @@ export const MemberDetailView = () => {
                         <Select 
                            label="Status" 
                            value={status}
-                           onChange={(e) => setStatus(e.target.value)}
+                           onChange={(e) => setStatus(e.target.value as any)}
                            options={[
                              { label: 'Active', value: 'Active' },
                              { label: 'Inactive / Suspended', value: 'Inactive' },
@@ -1408,7 +1414,7 @@ export const MemberDetailView = () => {
 
                   <div className="flex items-center gap-2">
                     <Button
-                      variant="outline"
+                      variant="secondary"
                       size="sm"
                       onClick={() => navigate('/workspace/settings/email-connections')}
                       className="text-xs gap-1.5"
@@ -1516,7 +1522,7 @@ export const MemberDetailView = () => {
 
                           <div className="flex items-center gap-2 self-end sm:self-center">
                             <Button
-                              variant="outline"
+                              variant="secondary"
                               size="sm"
                               onClick={async () => {
                                 setTestingAccId(acc.id);
@@ -1536,7 +1542,7 @@ export const MemberDetailView = () => {
                               {isTesting ? 'Testing...' : 'Test'}
                             </Button>
                             <Button
-                              variant="outline"
+                              variant="secondary"
                               size="sm"
                               onClick={async () => {
                                 setSyncingAccId(acc.id);
@@ -1586,6 +1592,17 @@ export const MemberDetailView = () => {
               memberId={member.id}
               assignedGroups={member.permissionGroups || []}
               onUpdate={(groupIds) => updateMember({ permissionGroups: groupIds })}
+            />
+          )}
+
+          {activeTab === 'ai-access' && (
+            <AIFeatureOverridesPanel 
+              targetName={fullName}
+              targetType={member.isSynthetic ? 'User' : 'User'}
+              overrides={aiOverrides}
+              onChange={setAiOverrides}
+              onSave={handleSave}
+              isSaving={isSaving}
             />
           )}
 

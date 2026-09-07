@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Search, 
   Settings2, 
@@ -22,7 +22,6 @@ import {
   Globe,
   Trash2
 } from 'lucide-react';
-
 import { NexusSelectionModal } from '../../components/Builder/NexusSelectionModal';
 import { EmptyState } from '../../components/UI/EmptyState';
 import { PageHeader } from '../../components/UI/PageHeader';
@@ -52,6 +51,10 @@ export interface Connector {
     config?: { name: string; type: string; label: string; description?: string }[];
   };
   description: string;
+  version?: string;
+  status?: string;
+  isOfficial?: boolean;
+  capabilities?: string[];
 }
 
 export interface TenantConnector {
@@ -735,7 +738,7 @@ export const ConnectorsPage: React.FC<{ isSettingsMode?: boolean }> = ({ isSetti
         onClose={() => setIsModalOpen(false)}
         activeConnectors={activeConnectors}
         registry={registry}
-        onSelect={(conn) => {
+        onSelect={(conn: any) => {
           const targetId = conn?.connectorId || conn?.id || conn?.slug;
           if (targetId) {
             navigate(`${basePath}/${targetId}`);

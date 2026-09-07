@@ -22,9 +22,7 @@ import {
   ShieldCheck, 
   Heading1, 
   Heading2,
-  Trash2,
-  Maximize2,
-  Minimize2
+  Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DriveItem, DriveType, MergeFieldToken, DocumentClassification } from '../../types/drive';
@@ -41,7 +39,7 @@ import { toast } from 'sonner';
 export const DocEditor = () => {
   const { documentId } = useParams();
   const navigate = useNavigate();
-  const { modules, tenant, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
+  const { modules, tenant, isBuilderFullscreen, setIsBuilderFullscreen } = usePlatform();
   const { user, session } = useAuth();
 
   useEffect(() => {

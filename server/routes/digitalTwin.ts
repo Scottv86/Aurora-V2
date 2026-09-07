@@ -10,12 +10,14 @@ import {
   processDraftAction,
   getHandoverDigest
 } from '../services/digitalTwinService';
+import { checkAIFeatureOrThrow } from '../lib/aiPermissions';
+import { TenantRequest } from '../middleware/tenantMiddleware';
 
 const router = Router();
 
 // Middleware to extract user ID (fallback to default user if unauthenticated in dev)
 const getUserId = (req: any) => {
-  return req.user?.id || req.headers['x-user-id'] || 'default-user';
+  return req.user?.uid || req.user?.id || req.headers['x-user-id'] || 'default-user';
 };
 
 // GET /api/digital-twin/config
@@ -30,13 +32,16 @@ router.get('/config', (req, res) => {
 });
 
 // POST /api/digital-twin/config
-router.post('/config', (req, res) => {
+router.post('/config', async (req, res) => {
   try {
+    const tenantId = (req as TenantRequest).tenantId || 'default-tenant';
     const userId = getUserId(req);
+    await checkAIFeatureOrThrow(tenantId, userId, 'ai:digital_twin', (req as any).db);
+
     const updated = updateTwinConfig(userId, req.body);
     res.json({ success: true, config: updated });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
 
@@ -58,38 +63,47 @@ router.post('/status', (req, res) => {
 // POST /api/digital-twin/analyze-style
 router.post('/analyze-style', async (req, res) => {
   try {
+    const tenantId = (req as TenantRequest).tenantId || 'default-tenant';
     const userId = getUserId(req);
+    await checkAIFeatureOrThrow(tenantId, userId, 'ai:digital_twin', (req as any).db);
+
     const { samples } = req.body;
     const styleProfile = await analyzeWritingStyle(userId, Array.isArray(samples) ? samples : []);
     res.json({ success: true, styleProfile });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
 
 // POST /api/digital-twin/test-prompt (Playground)
 router.post('/test-prompt', async (req, res) => {
   try {
+    const tenantId = (req as TenantRequest).tenantId || 'default-tenant';
     const userId = getUserId(req);
+    await checkAIFeatureOrThrow(tenantId, userId, 'ai:digital_twin', (req as any).db);
+
     const { prompt } = req.body;
     if (!prompt) return res.status(400).json({ success: false, error: 'Prompt is required' });
 
     const result = await generateTwinResponse(userId, prompt);
     res.json({ success: true, ...result });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
 
 // POST /api/digital-twin/simulate-ping
 router.post('/simulate-ping', async (req, res) => {
   try {
+    const tenantId = (req as TenantRequest).tenantId || 'default-tenant';
     const userId = getUserId(req);
+    await checkAIFeatureOrThrow(tenantId, userId, 'ai:digital_twin', (req as any).db);
+
     const { message, senderName, channel } = req.body;
     const result = await triageIncomingPing(userId, message || 'Status update query', senderName || 'Team Member', channel || 'Slack');
     res.json({ success: true, result });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
 

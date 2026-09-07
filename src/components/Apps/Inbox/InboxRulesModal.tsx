@@ -5,12 +5,7 @@ import {
   Zap, 
   Plus, 
   Trash2, 
-  Check, 
-  Sliders, 
-  Tag, 
-  User, 
-  ArrowRight,
-  ShieldCheck
+  ArrowRight
 } from 'lucide-react';
 import { EmailRule } from '../../../types/inbox';
 import { cn } from '../../../lib/utils';

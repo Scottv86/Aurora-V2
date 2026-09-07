@@ -2,8 +2,8 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Plus, X, Check, Search, Calendar, User, 
-  Hash, Type, CheckSquare, Layers, SlidersHorizontal, Star
+  X, Check, Search, Calendar, User, 
+  Hash, Type, Layers, SlidersHorizontal, Star
 } from 'lucide-react';
 import { cn } from './Primitives';
 import { getFieldValue } from '../../lib/utils';
@@ -22,6 +22,8 @@ export type FilterFieldType =
 export type FilterOperator = 
   | 'equals' 
   | 'not_equals' 
+  | 'is'
+  | 'is_not'
   | 'contains' 
   | 'not_contains' 
   | 'starts_with' 
@@ -43,6 +45,9 @@ export type FilterOperator =
   | 'date_before' 
   | 'date_after' 
   | 'date_between'
+  | 'date_is'
+  | 'date_on'
+  | 'date_equals'
   | 'is_me'
   | 'is_unassigned';
 

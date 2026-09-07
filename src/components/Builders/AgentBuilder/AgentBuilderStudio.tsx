@@ -3,8 +3,6 @@ import {
   ArrowLeft, 
   Bot, 
   Save, 
-  Maximize2, 
-  Minimize2, 
   PanelLeftOpen, 
   PanelLeftClose, 
   PanelRightOpen, 
@@ -12,8 +10,7 @@ import {
   Rocket,
   Download,
   Upload,
-  Tag,
-  Share2
+  Tag
 } from 'lucide-react';
 import { AgentBlueprint } from '../../../types/agent';
 import { createDefaultAgentBlueprint } from '../../../services/agentBuilderService';
@@ -42,7 +39,7 @@ export const AgentBuilderStudio: React.FC<AgentBuilderStudioProps> = ({
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const returnUrl = (location.state as any)?.returnUrl || searchParams.get('returnUrl');
-  const { isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
+  const { setIsBuilderFullscreen } = usePlatform();
   const { provisionAgent } = useUsers();
 
   const [blueprint, setBlueprint] = useState<AgentBlueprint>(

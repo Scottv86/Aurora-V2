@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles, Cpu, X, ArrowRight } from 'lucide-react';
 import { Button } from '../../components/UI/Primitives';
-import { GoogleGenAI, Type } from "@google/genai";
+import { executeServerCompletion } from '../../services/aiService';
 import { PLATFORM_MODULES } from '../../config/platformModules';
 import { toast } from 'sonner';
 
@@ -20,16 +20,8 @@ export const PageAIBuilderModal = ({ isOpen, onClose, onLayoutGenerated, modules
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
 
-    const apiKey = (import.meta as any).env.VITE_GEMINI_API_KEY;
-    if (!apiKey) {
-      toast.error("Gemini API Key is missing. Please add VITE_GEMINI_API_KEY to your .env file.");
-      return;
-    }
-
     setIsGenerating(true);
     try {
-      const ai = new GoogleGenAI({ apiKey });
-      
       // Catalog of modules present in the system
       const moduleCatalog = modules
         .filter((m: any) => {
@@ -41,82 +33,51 @@ export const PageAIBuilderModal = ({ isOpen, onClose, onLayoutGenerated, modules
         })
         .map((m: any) => ({ id: m.id, name: m.name, category: m.category }));
 
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-lite",
-        contents: `You are Aurora AI, the visual builder assistant for a business workspace platform.
-        A user wants to design a workspace dashboard/page layouts for: "${prompt}".
-        
-        The workspace contains the following data modules (use their exact IDs if you reference them in widgets):
-        ${JSON.stringify(moduleCatalog, null, 2)}
-        
-        Recommend a grid layout consisting of widgets.
-        Widget types allowed:
-        - "stats-grid": Displays overview statistics of cases and workloads. Width (w) should be 12.
-        - "active-workflows": Renders progress summaries of active workflows. Width (w) should be 12.
-        - "work-queue": Renders the user's personal actionable inbox list. Width (w) should be 12.
-        - "module-table": Renders a data list for a chosen custom module. Must include "moduleId" in properties. Width (w) can be 6, 8, or 12.
-        - "module-creator": Renders a form to submit entries to a chosen custom module. Must include "moduleId" in properties. Width (w) can be 6 or 12.
-        - "rich-text": Displays styled noticeboard text. Must include "content" (HTML string) in properties. Width (w) can be 6 or 12.
-        - "chart": Renders line/bar volume chart of record creation rates. Must include "moduleId" and "chartType" ("bar" or "line") in properties. Width (w) can be 6 or 12.
-        
-        Arrange the layout cleanly, putting widgets next to each other by setting their widths (w) logically (e.g. two half-width widgets "w: 6" side-by-side).
-        
-        Provide your response in structured JSON format.`,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              widgets: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    id: { type: Type.STRING },
-                    type: { type: Type.STRING, enum: ['stats-grid', 'active-workflows', 'work-queue', 'module-table', 'module-creator', 'rich-text', 'chart'] },
-                    title: { type: Type.STRING },
-                    w: { type: Type.INTEGER, enum: [4, 6, 8, 12] },
-                    properties: {
-                      type: Type.OBJECT,
-                      properties: {
-                        moduleId: { type: Type.STRING },
-                        chartType: { type: Type.STRING, enum: ['bar', 'line'] },
-                        content: { type: Type.STRING }
-                      }
-                    }
-                  },
-                  required: ["id", "type", "title", "w"]
-                }
-              }
-            },
-            required: ["widgets"]
-          } as any
-        }
-      });
+      const systemInstruction = `You are Aurora AI, the visual builder assistant for a business workspace platform.
+A user wants to design a workspace dashboard/page layouts for: "${prompt}".
 
-      try {
-        const result = JSON.parse(response.text);
-        if (result && Array.isArray(result.widgets)) {
-          // Add unique timestamps to IDs to prevent conflicts
-          const cleanWidgets = result.widgets.map((w: any) => ({
-            ...w,
-            id: `${w.type}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`
-          }));
-          onLayoutGenerated(cleanWidgets);
-          onClose();
-          setPrompt('');
-          toast.success("AI generated page layout successfully!");
-        } else {
-          throw new Error("Invalid response format");
-        }
-      } catch (err) {
-        console.error("AI Generation Parse Error:", err, response.text);
-        throw new Error("Failed to parse layout from AI response");
+The workspace contains the following data modules (use their exact IDs if you reference them in widgets):
+${JSON.stringify(moduleCatalog, null, 2)}
+
+Recommend a grid layout consisting of widgets.
+Widget types allowed:
+- "stats-grid": Displays overview statistics of cases and workloads. Width (w) should be 12.
+- "active-workflows": Renders progress summaries of active workflows. Width (w) should be 12.
+- "work-queue": Renders the user's personal actionable inbox list. Width (w) should be 12.
+- "module-table": Renders a data list for a chosen custom module. Must include "moduleId" in properties. Width (w) can be 6, 8, or 12.
+- "module-creator": Renders a form to submit entries to a chosen custom module. Must include "moduleId" in properties. Width (w) can be 6 or 12.
+- "rich-text": Displays styled noticeboard text. Must include "content" (HTML string) in properties. Width (w) can be 6 or 12.
+- "chart": Renders line/bar volume chart of record creation rates. Must include "moduleId" and "chartType" ("bar" or "line") in properties. Width (w) can be 6 or 12.
+
+Arrange the layout cleanly, putting widgets next to each other by setting their widths (w) logically (e.g. two half-width widgets "w: 6" side-by-side).
+
+Provide your response strictly in structured JSON format with a root "widgets" array.`;
+
+      const responseText = await executeServerCompletion(
+        `Generate page layout for: "${prompt}"`,
+        systemInstruction,
+        'application/json',
+        'gemini-2.5-flash',
+        'ai:page_builder'
+      );
+
+      const jsonStr = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(jsonStr);
+      if (parsed && Array.isArray(parsed.widgets) && parsed.widgets.length > 0) {
+        const cleanWidgets = parsed.widgets.map((w: any) => ({
+          ...w,
+          id: `${w.type}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`
+        }));
+        onLayoutGenerated(cleanWidgets);
+        setPrompt('');
+        toast.success("AI generated page layout successfully!");
+        onClose();
+      } else {
+        toast.error("Could not parse layout from AI response. Please try again.");
       }
-
-    } catch (error: any) {
-      console.error("AI Page Generator Error:", error);
-      toast.error(error.message || "Failed to generate layout via AI");
+    } catch (err: any) {
+      console.error("AI Page generation error:", err);
+      toast.error(err.message || "Failed to generate page layout.");
     } finally {
       setIsGenerating(false);
     }
@@ -169,7 +130,7 @@ export const PageAIBuilderModal = ({ isOpen, onClose, onLayoutGenerated, modules
                   className="gap-2 shadow-lg shadow-indigo-500/10 font-bold"
                 >
                   <Cpu size={14} />
-                  Architect Layout
+                  <span>Generate Layout</span>
                   <ArrowRight size={14} />
                 </Button>
               </div>

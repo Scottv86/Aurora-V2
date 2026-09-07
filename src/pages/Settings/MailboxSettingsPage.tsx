@@ -16,8 +16,7 @@ import {
   Copy, 
   Send,
   Lock,
-  ExternalLink,
-  UserCheck
+  ExternalLink
 } from 'lucide-react';
 import { SettingsSubNavLayout, SettingsSubNavItem } from '../../components/Settings/SettingsSubNavLayout';
 import { Button, Badge, cn } from '../../components/UI/Primitives';
@@ -111,7 +110,6 @@ export const MailboxSettingsPage: React.FC = () => {
   const { user: authUser } = useAuth();
 
   const [activeTab, setActiveTab] = useState<string>('overview');
-  const [loading, setLoading] = useState<boolean>(false);
   const [accounts, setAccounts] = useState<EmailAccount[]>([]);
   const [syncLogs, setSyncLogs] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -164,8 +162,7 @@ export const MailboxSettingsPage: React.FC = () => {
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
 
   // Load Data
-  const loadData = async (silent = false) => {
-    if (!silent) setLoading(true);
+  const loadData = async (_silent = false) => {
     try {
       const [accs, cfg, logs] = await Promise.all([
         InboxService.getAccounts(tenant?.id),
@@ -177,13 +174,11 @@ export const MailboxSettingsPage: React.FC = () => {
       setSyncLogs(logs || []);
     } catch (e) {
       console.error('[MailboxSettings] Failed to load:', e);
-    } finally {
-      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData(true);
+    loadData();
   }, [tenant?.id]);
 
   // Filtered Accounts
@@ -211,8 +206,8 @@ export const MailboxSettingsPage: React.FC = () => {
     if (acc.type === 'SHARED') return null;
 
     const accUserId = acc.userId || (acc.config as any)?.userId;
-    const accUserEmail = acc.userEmail || (acc.config as any)?.userEmail;
-    const accUserName = acc.userName || (acc.config as any)?.userName;
+    const accUserEmail = (acc as any).userEmail || (acc.config as any)?.userEmail;
+    const accUserName = (acc as any).userName || (acc.config as any)?.userName;
 
     // Helper to format real human name
     const formatMemberName = (m?: any) => {
@@ -511,7 +506,7 @@ export const MailboxSettingsPage: React.FC = () => {
       actions={
         <div className="flex items-center gap-2">
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
             onClick={handleSyncAll}
             disabled={isSyncingAll}
@@ -582,47 +577,72 @@ export const MailboxSettingsPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Filter and Search Bar */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800">
+            {/* Action Bar & Filters */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
               <div className="relative w-full sm:w-80">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
                 <input
                   type="text"
-                  placeholder="Search by email, name or server..."
+                  placeholder="Search mailboxes or domains..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-1.5 text-sm bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  className="w-full pl-9 pr-4 py-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 />
               </div>
 
-              <div className="flex items-center gap-3 w-full sm:w-auto">
-                <select
-                  value={typeFilter}
-                  onChange={(e: any) => setTypeFilter(e.target.value)}
-                  className="px-3 py-1.5 text-xs font-medium bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg focus:outline-none"
-                >
-                  <option value="ALL">All Types</option>
-                  <option value="PERSONAL">Personal Mailboxes</option>
-                  <option value="SHARED">Shared Inboxes</option>
-                </select>
+              <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto">
+                <div className="flex items-center bg-zinc-100 dark:bg-zinc-800 p-1 rounded-lg text-xs">
+                  <button
+                    onClick={() => setTypeFilter('ALL')}
+                    className={cn(
+                      'px-3 py-1 rounded-md transition-colors',
+                      typeFilter === 'ALL'
+                        ? 'bg-white dark:bg-zinc-700 font-medium text-zinc-900 dark:text-white shadow-xs'
+                        : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                    )}
+                  >
+                    All ({accounts.length})
+                  </button>
+                  <button
+                    onClick={() => setTypeFilter('PERSONAL')}
+                    className={cn(
+                      'px-3 py-1 rounded-md transition-colors',
+                      typeFilter === 'PERSONAL'
+                        ? 'bg-white dark:bg-zinc-700 font-medium text-zinc-900 dark:text-white shadow-xs'
+                        : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                    )}
+                  >
+                    Personal ({accounts.filter((a) => a.type === 'PERSONAL').length})
+                  </button>
+                  <button
+                    onClick={() => setTypeFilter('SHARED')}
+                    className={cn(
+                      'px-3 py-1 rounded-md transition-colors',
+                      typeFilter === 'SHARED'
+                        ? 'bg-white dark:bg-zinc-700 font-medium text-zinc-900 dark:text-white shadow-xs'
+                        : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                    )}
+                  >
+                    Shared ({accounts.filter((a) => a.type === 'SHARED').length})
+                  </button>
+                </div>
 
                 <select
                   value={providerFilter}
                   onChange={(e) => setProviderFilter(e.target.value)}
-                  className="px-3 py-1.5 text-xs font-medium bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg focus:outline-none"
+                  className="px-3 py-1.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs focus:outline-none"
                 >
                   <option value="ALL">All Providers</option>
                   <option value="gmail">Gmail</option>
                   <option value="outlook">Microsoft 365</option>
-                  <option value="yahoo">Yahoo</option>
-                  <option value="icloud">iCloud</option>
+                  <option value="yahoo">Yahoo Mail</option>
+                  <option value="icloud">Apple iCloud</option>
                   <option value="custom">Custom IMAP</option>
-                  <option value="shared">Shared</option>
                 </select>
               </div>
             </div>
 
-            {/* Accounts List */}
+            {/* Account List Grid */}
             {filteredAccounts.length === 0 ? (
               <EmptyState
                 icon={Mail}
@@ -632,8 +652,7 @@ export const MailboxSettingsPage: React.FC = () => {
                     ? 'No email accounts match your search filters.'
                     : 'Get started by connecting your first personal or shared mailbox.'
                 }
-                actionLabel="Connect Mailbox"
-                onAction={() => setIsAddAccountOpen(true)}
+                action={{ label: 'Connect Mailbox', onClick: () => setIsAddAccountOpen(true) }}
               />
             ) : (
               <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-sm">
@@ -774,7 +793,7 @@ export const MailboxSettingsPage: React.FC = () => {
                           </Button>
 
                           <Button
-                            variant="outline"
+                            variant="secondary"
                             size="sm"
                             onClick={() => handleSyncAccount(acc)}
                             disabled={isSyncing}
@@ -831,8 +850,7 @@ export const MailboxSettingsPage: React.FC = () => {
                 icon={Users}
                 title="No Shared Inboxes Created"
                 description="Set up shared mailboxes like support@company.com or sales@company.com for collaborative team workflows."
-                actionLabel="Create Shared Inbox"
-                onAction={() => setIsAddAccountOpen(true)}
+                action={{ label: 'Create Shared Inbox', onClick: () => setIsAddAccountOpen(true) }}
               />
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -879,7 +897,7 @@ export const MailboxSettingsPage: React.FC = () => {
 
                     <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
                       <Button
-                        variant="outline"
+                        variant="secondary"
                         size="sm"
                         onClick={() => {
                           setEditingSharedAccount(acc);
@@ -1205,7 +1223,7 @@ export const MailboxSettingsPage: React.FC = () => {
 
                 <div className="flex items-end">
                   <Button
-                    variant="outline"
+                    variant="secondary"
                     onClick={handleTestRelay}
                     disabled={testRelayStatus.testing}
                     className="w-full gap-2 text-xs"
@@ -1264,7 +1282,7 @@ export const MailboxSettingsPage: React.FC = () => {
 
               <div className="flex items-center gap-2">
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   onClick={async () => {
                     localStorage.removeItem('aurora_inbox_sync_logs_v1');
@@ -1276,7 +1294,7 @@ export const MailboxSettingsPage: React.FC = () => {
                   Clear Logs
                 </Button>
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   onClick={async () => {
                     const logs = await InboxService.getSyncLogs(tenant?.id);
@@ -1360,7 +1378,6 @@ export const MailboxSettingsPage: React.FC = () => {
           isOpen={true}
           title="Disconnect Mailbox"
           description={`Are you sure you want to disconnect ${accountToDelete.email}? Synced emails will no longer be polled from this server.`}
-          confirmLabel="Disconnect Mailbox"
           onClose={() => setAccountToDelete(null)}
           onConfirm={handleDeleteAccount}
         />
@@ -1437,7 +1454,7 @@ export const MailboxSettingsPage: React.FC = () => {
 
               <div className="flex items-center gap-2">
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   onClick={() => setEditingSharedAccount(null)}
                 >

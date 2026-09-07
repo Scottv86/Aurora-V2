@@ -3,16 +3,13 @@ import {
   Smile, 
   MessageSquare, 
   Pin, 
-  MoreHorizontal, 
   Edit3, 
   Trash2, 
   Copy, 
   Check, 
   FileText, 
   Download, 
-  CornerDownRight,
-  ExternalLink,
-  Code
+  CornerDownRight
 } from 'lucide-react';
 import { ChatMessage } from '../../../types/chat';
 import { useChat } from '../../../context/ChatContext';
@@ -39,9 +36,10 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({ message, isThr
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   const currentUserId = user?.id || platformUser?.id || platformUser?.memberId || 'current-user';
-  const platformName = platformUser?.firstName && (platformUser?.lastName || platformUser?.familyName)
-    ? `${platformUser.firstName} ${platformUser.lastName || platformUser.familyName}`
-    : (platformUser?.name || platformUser?.firstName || platformUser?.lastName || platformUser?.familyName);
+  const platformFamilyName = (platformUser as any)?.familyName;
+  const platformName = platformUser?.firstName && (platformUser?.lastName || platformFamilyName)
+    ? `${platformUser.firstName} ${platformUser.lastName || platformFamilyName}`
+    : (platformUser?.name || platformUser?.firstName || platformUser?.lastName || platformFamilyName);
   const currentUserName = platformName || (user?.user_metadata as any)?.full_name || (user?.user_metadata as any)?.name || user?.email?.split('@')[0] || 'User';
 
   const isMe = message.senderId === currentUserId || 
@@ -49,7 +47,7 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({ message, isThr
                (platformName && message.senderName === platformName) ||
                message.senderName === user?.email?.split('@')[0];
 
-  const isOwner = isMe || user?.isSuperAdmin;
+  const isOwner = isMe || (user as any)?.isSuperAdmin;
 
   const handleSaveEdit = async () => {
     if (editContent.trim()) {

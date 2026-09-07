@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import * as Icons from 'lucide-react';
 import { 
   Layout, Database, Cpu, ShieldCheck, Globe, Workflow, 
-  ChevronRight, Loader2, SlidersHorizontal
+  Loader2, SlidersHorizontal
 } from 'lucide-react';
 import ReactGridLayout from 'react-grid-layout';
 import { usePlatform } from '../../hooks/usePlatform';
@@ -17,11 +17,12 @@ import { API_BASE_URL, DATA_API_URL } from '../../config';
 import { cn, slugify, getFieldValue } from '../../lib/utils';
 import { toast } from 'sonner';
 import { builderCache } from '../../utils/builderCache';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, Legend } from 'recharts';
 import { FormRenderer } from '../../components/Builders/FormBuilder/FormRenderer';
 import { QueueRenderer } from '../../components/Builders/QueueBuilder/QueueRenderer';
 import { Table, Column } from '../../components/UI/Table';
+import { createFormulaContext } from '../../lib/formulaEngine';
 
 export const getWidgetDefaultDimensions = (type: string) => {
   switch (type) {
@@ -285,13 +286,11 @@ const WidgetRenderer = React.memo(({ widget, tenant, session }: { widget: any, t
   const statsCacheKey = `stats_${tenant?.id || 'default'}`;
   const defaultStats = { activeRecords: 12, totalRecords: 48, aiAutomations: 128, health: '99.9%' };
   const [stats, setStats] = useState<any>(() => builderCache.get(statsCacheKey) || defaultStats);
-  const [statsLoading, setStatsLoading] = useState(false);
 
   // Stats Grid Widget Fetcher
   useEffect(() => {
     if (widget.type !== 'stats-grid' || !tenant?.id) return;
     const fetchStats = async () => {
-      setStatsLoading(true);
       try {
         const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
         const res = await fetch(`${API_BASE_URL}/api/data/stats`, {
@@ -307,8 +306,6 @@ const WidgetRenderer = React.memo(({ widget, tenant, session }: { widget: any, t
         }
       } catch (err) {
         console.error('Failed to fetch widget stats', err);
-      } finally {
-        setStatsLoading(false);
       }
     };
     fetchStats();

@@ -1,7 +1,7 @@
 import express from 'express';
-import { GoogleGenAI } from '@google/genai';
 import { resolveTenantAIClient, executeAICompletion } from '../services/aiProviderService';
 import { TenantRequest } from '../middleware/tenantMiddleware';
+import { checkAIFeatureOrThrow } from '../lib/aiPermissions';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -60,13 +60,13 @@ Example Output:
 }
 `;
 
-router.post('/command', async (req, res) => {
+router.post('/command', async (req: any, res) => {
   try {
+    const tenantId = (req as TenantRequest).tenantId || 'default-tenant';
+    const userId = (req as TenantRequest).user?.uid;
     const { command, currentLayout } = req.body;
 
-    if (!process.env.GEMINI_API_KEY) {
-      return res.status(500).json({ error: "Gemini API key is not configured on the server." });
-    }
+    await checkAIFeatureOrThrow(tenantId, userId, 'ai:form_builder', req.db);
 
     const prompt = `
 ${SYSTEM_PROMPT}
@@ -78,7 +78,6 @@ Generate the updated layout based on the request. Preserve existing fields if th
 Ensure all fields follow the 12-column grid rules and do not overlap.
 `;
 
-    const tenantId = (req as TenantRequest).tenantId || 'default-tenant';
     const client = await resolveTenantAIClient(tenantId);
 
     const result = await executeAICompletion(client, {
@@ -100,7 +99,7 @@ Ensure all fields follow the 12-column grid rules and do not overlap.
 
   } catch (error: any) {
     console.error("Architect Error:", error);
-    res.status(500).json({ error: error.message || "Failed to process architect command." });
+    res.status(error.status || 500).json({ error: error.message || "Failed to process architect command." });
   }
 });
 
@@ -129,13 +128,13 @@ Return ONLY a valid JSON object:
 }
 `;
 
-router.post('/forge', async (req, res) => {
+router.post('/forge', async (req: any, res) => {
   try {
+    const tenantId = (req as TenantRequest).tenantId || 'default-tenant';
+    const userId = (req as TenantRequest).user?.uid;
     const { prompt: userPrompt } = req.body;
 
-    if (!process.env.GEMINI_API_KEY) {
-      return res.status(500).json({ error: "Gemini API key is not configured." });
-    }
+    await checkAIFeatureOrThrow(tenantId, userId, 'ai:connector_architect', req.db);
 
     const prompt = `
 ${FORGE_PROMPT}
@@ -145,8 +144,8 @@ User Request: ${userPrompt}
 Generate the connector configuration.
 `;
 
-    const result = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+    const client = await resolveTenantAIClient(tenantId);
+    const result = await executeAICompletion(client, {
       contents: [{ role: 'user', parts: [{ text: prompt }] }]
     });
     
@@ -158,7 +157,7 @@ Generate the connector configuration.
 
   } catch (error: any) {
     console.error("Forge Error:", error);
-    res.status(500).json({ error: "Failed to forge connector." });
+    res.status(error.status || 500).json({ error: error.message || "Failed to forge connector." });
   }
 });
 

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Shield, Trash2, Edit2, CheckCircle2, Search, Plus } from 'lucide-react';
 import { usePermissionGroups, PermissionGroup } from '../../../hooks/usePermissionGroups';
-import { Table } from '../../UI/Table';
+import { Table, Column } from '../../UI/Table';
 import { Badge, Button } from '../../UI/Primitives';
 import { CreateEditGroupModal } from './CreateEditGroupModal';
 import { DeleteConfirmationModal } from '../../Common/DeleteConfirmationModal';
@@ -48,7 +48,7 @@ export const SecurityGroups = ({
     }
   };
 
-  const columns = [
+  const columns: Column<PermissionGroup>[] = [
     {
       header: 'Name',
       accessor: (g: PermissionGroup) => (

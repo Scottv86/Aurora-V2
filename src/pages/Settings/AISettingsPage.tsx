@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useSearchParams } from 'react-router-dom';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../config';
@@ -11,13 +12,19 @@ import {
   Plus, 
   Trash2, 
   RefreshCw, 
-  Sliders,
-  Sparkles,
-  ShieldCheck
+  Sliders, 
+  Sparkles, 
+  ShieldCheck,
+  Users,
+  Shield,
+  CheckCircle2,
+  XCircle,
+  Lock
 } from 'lucide-react';
 import { Button, Badge, cn } from '../../components/UI/Primitives';
 import { SettingsSubNavLayout, SettingsSubNavItem } from '../../components/Settings/SettingsSubNavLayout';
 import { PageLoader } from '../../components/UI/PageLoader';
+import { AI_FEATURES_CATALOG, AI_CATEGORY_LABELS, AIFeatureCategory } from '../../types/aiGovernance';
 import { toast } from 'sonner';
 
 interface TenantAIKey {
@@ -126,8 +133,16 @@ const PROVIDERS = [
 export const AISettingsPage = () => {
   const { tenant } = usePlatform();
   const { session } = useAuth();
+  const [searchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get('tab');
   
-  const [activeTab, setActiveTab] = useState('keys');
+  const [activeTab, setActiveTab] = useState(tabFromUrl || 'governance');
+
+  useEffect(() => {
+    if (tabFromUrl && tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [tabFromUrl]);
   const [loading, setLoading] = useState(true);
   const [keys, setKeys] = useState<TenantAIKey[]>([]);
   const [mapping, setMapping] = useState<TenantAIMapping>({
@@ -156,6 +171,13 @@ export const AISettingsPage = () => {
     pricingCatalog: {}
   });
 
+  // Governance State
+  const [featureDefaults, setFeatureDefaults] = useState<Record<string, boolean>>({});
+  const [savingGovernance, setSavingGovernance] = useState(false);
+  const [teamsList, setTeamsList] = useState<any[]>([]);
+  const [memberOverridesCount, setMemberOverridesCount] = useState(0);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+
   // Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState('openai');
@@ -180,20 +202,86 @@ export const AISettingsPage = () => {
     setLoading(true);
     try {
       const headers = getAuthHeader();
-      const [keysRes, configRes, usageRes] = await Promise.all([
+      const [keysRes, configRes, usageRes, govRes] = await Promise.all([
         fetch(`${API_BASE_URL}/api/ai/keys`, { headers }),
         fetch(`${API_BASE_URL}/api/ai/config`, { headers }),
-        fetch(`${API_BASE_URL}/api/ai/usage`, { headers })
+        fetch(`${API_BASE_URL}/api/ai/usage`, { headers }),
+        fetch(`${API_BASE_URL}/api/ai/governance`, { headers })
       ]);
 
       if (keysRes.ok) setKeys(await keysRes.json());
       if (configRes.ok) setMapping(await configRes.json());
       if (usageRes.ok) setUsage(await usageRes.json());
+      if (govRes.ok) {
+        const govData = await govRes.json();
+        setFeatureDefaults(govData.featureDefaults || {});
+        setTeamsList(govData.teams || []);
+        setMemberOverridesCount(govData.memberOverridesCount || 0);
+      }
     } catch (err: any) {
       console.error('Failed to load AI settings data:', err);
       toast.error('Failed to load AI settings');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleFeature = (key: string) => {
+    setFeatureDefaults(prev => ({
+      ...prev,
+      [key]: prev[key] === false ? true : false
+    }));
+  };
+
+  const handleApplyPreset = (preset: 'all' | 'productivity' | 'zero') => {
+    const updated: Record<string, boolean> = {};
+    if (preset === 'all') {
+      AI_FEATURES_CATALOG.forEach(f => {
+        updated[f.key] = true;
+      });
+      toast.info('Enabled all AI features preset');
+    } else if (preset === 'zero') {
+      AI_FEATURES_CATALOG.forEach(f => {
+        updated[f.key] = false;
+      });
+      toast.warning('Air-gapped Zero-AI preset applied');
+    } else if (preset === 'productivity') {
+      AI_FEATURES_CATALOG.forEach(f => {
+        if (
+          f.key === 'ai:formula_assistant' ||
+          f.key === 'ai:ask_aurora_filter' ||
+          f.key === 'ai:record_summary' ||
+          f.key === 'ai:report_generator' ||
+          f.key === 'ai:document_template'
+        ) {
+          updated[f.key] = true;
+        } else {
+          updated[f.key] = false;
+        }
+      });
+      toast.info('Strict Productivity AI preset applied');
+    }
+    setFeatureDefaults(updated);
+  };
+
+  const handleSaveGovernanceDefaults = async () => {
+    setSavingGovernance(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/ai/governance/defaults`, {
+        method: 'PUT',
+        headers: getAuthHeader(),
+        body: JSON.stringify({ featureDefaults })
+      });
+      if (res.ok) {
+        toast.success('AI Feature Governance policies saved successfully');
+      } else {
+        const data = await res.json();
+        toast.error(data.error || 'Failed to save governance defaults');
+      }
+    } catch (err: any) {
+      toast.error('Failed to save governance defaults');
+    } finally {
+      setSavingGovernance(false);
     }
   };
 
@@ -296,34 +384,255 @@ export const AISettingsPage = () => {
   };
 
   const subNavItems: SettingsSubNavItem[] = [
+    { id: 'governance', label: 'Feature Governance', icon: ShieldCheck, description: '19-Feature Policy Matrix' },
     { id: 'keys', label: 'API Keys & Providers', icon: Key, description: 'BYOK Provider Keys' },
     { id: 'routing', label: 'Model Tiers & Routing', icon: Sliders, description: 'Cost & performance' },
     { id: 'telemetry', label: 'Usage & Quotas', icon: BarChart3, description: 'Token consumption' },
-    { id: 'privacy', label: 'Data Privacy & Governance', icon: ShieldCheck, description: 'Zero-retention rules' }
+    { id: 'privacy', label: 'Data Privacy & Rules', icon: Lock, description: 'Zero-retention rules' }
   ];
+
+  const filteredFeatures = AI_FEATURES_CATALOG.filter(f => {
+    if (selectedCategory === 'all') return true;
+    return f.category === selectedCategory;
+  });
+
+  const enabledFeaturesCount = AI_FEATURES_CATALOG.filter(f => featureDefaults[f.key] !== false).length;
+  const restrictedFeaturesCount = AI_FEATURES_CATALOG.length - enabledFeaturesCount;
 
   return (
     <SettingsSubNavLayout
-      title="AI Services"
-      description="Bring your own API keys, set capability tiers, monitor model usage, and enforce zero-data-retention privacy policy."
+      title="AI Services & Governance"
+      description="Manage enterprise AI features, configure hierarchical user/team policies, connect BYOK providers, and monitor telemetry."
       icon={Sparkles}
       items={subNavItems}
       activeId={activeTab}
       onTabChange={setActiveTab}
       actions={
-        <Button 
-          onClick={() => setIsAddModalOpen(true)}
-          className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium flex items-center gap-2 shadow-md shadow-indigo-500/20"
-        >
-          <Plus size={16} /> Add API Key
-        </Button>
+        activeTab === 'governance' ? (
+          <Button 
+            onClick={handleSaveGovernanceDefaults}
+            disabled={savingGovernance}
+            className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium flex items-center gap-2 shadow-md shadow-indigo-500/20"
+          >
+            <ShieldCheck size={16} /> {savingGovernance ? 'Saving...' : 'Save AI Policies'}
+          </Button>
+        ) : (
+          <Button 
+            onClick={() => setIsAddModalOpen(true)}
+            className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium flex items-center gap-2 shadow-md shadow-indigo-500/20"
+          >
+            <Plus size={16} /> Add API Key
+          </Button>
+        )
       }
     >
       {loading ? (
         <PageLoader label="Loading AI Services..." fullscreen={false} className="min-h-[400px]" />
       ) : (
         <>
-          {/* TAB 1: API KEYS & PROVIDERS */}
+          {/* TAB 0: AI FEATURE GOVERNANCE & POLICY GATING */}
+          {activeTab === 'governance' && (
+            <div className="w-full space-y-6">
+              {/* Governance Stats Banner */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-4 rounded-2xl bg-white dark:bg-white/5 border border-zinc-200 dark:border-zinc-800 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold">
+                    <CheckCircle2 size={20} />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Active Features</p>
+                    <p className="text-xl font-extrabold text-zinc-900 dark:text-white">
+                      {enabledFeaturesCount} <span className="text-xs text-zinc-400 font-normal">/ {AI_FEATURES_CATALOG.length}</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-white dark:bg-white/5 border border-zinc-200 dark:border-zinc-800 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center font-bold">
+                    <XCircle size={20} />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Restricted Features</p>
+                    <p className="text-xl font-extrabold text-zinc-900 dark:text-white">
+                      {restrictedFeaturesCount}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-white dark:bg-white/5 border border-zinc-200 dark:border-zinc-800 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center font-bold">
+                    <Users size={20} />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Teams Configured</p>
+                    <p className="text-xl font-extrabold text-zinc-900 dark:text-white">
+                      {teamsList.length}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-white dark:bg-white/5 border border-zinc-200 dark:border-zinc-800 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center font-bold">
+                    <Shield size={20} />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">User Overrides</p>
+                    <p className="text-xl font-extrabold text-zinc-900 dark:text-white">
+                      {memberOverridesCount}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Presets & Controls Card */}
+              <div className="p-6 rounded-2xl bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-pink-500/10 border border-indigo-500/20 backdrop-blur-xl space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-base font-extrabold text-zinc-900 dark:text-white flex items-center gap-2">
+                      <Sparkles className="text-indigo-500" size={18} />
+                      Governance Quick Presets
+                    </h3>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                      Apply pre-configured compliance templates across all 19 platform AI tools with one click.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button 
+                      type="button"
+                      onClick={() => handleApplyPreset('all')}
+                      className="text-xs font-bold gap-1.5 px-3 py-1.5 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-800 dark:text-zinc-200 flex items-center transition-all shadow-sm"
+                    >
+                      <CheckCircle2 size={13} className="text-emerald-500" />
+                      Full Enterprise AI
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => handleApplyPreset('productivity')}
+                      className="text-xs font-bold gap-1.5 px-3 py-1.5 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-800 dark:text-zinc-200 flex items-center transition-all shadow-sm"
+                    >
+                      <Sliders size={13} className="text-indigo-500" />
+                      Strict Productivity
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => handleApplyPreset('zero')}
+                      className="text-xs font-bold gap-1.5 px-3 py-1.5 rounded-xl border border-rose-200/60 dark:border-rose-900/30 bg-rose-50/50 dark:bg-rose-950/20 hover:bg-rose-100/60 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center transition-all shadow-sm"
+                    >
+                      <XCircle size={13} className="text-rose-500" />
+                      Air-Gapped (Zero AI)
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Category Filter Pills */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategory('all')}
+                  className={cn(
+                    "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap border",
+                    selectedCategory === 'all'
+                      ? "bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-500/25"
+                      : "bg-zinc-100/80 dark:bg-zinc-900/60 text-zinc-600 dark:text-zinc-400 border-zinc-200/60 dark:border-zinc-800/80 hover:bg-zinc-200/70 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                  )}
+                >
+                  All Features ({AI_FEATURES_CATALOG.length})
+                </button>
+                {(Object.keys(AI_CATEGORY_LABELS) as AIFeatureCategory[]).map(catKey => {
+                  const count = AI_FEATURES_CATALOG.filter(f => f.category === catKey).length;
+                  const isCatSelected = selectedCategory === catKey;
+                  return (
+                    <button
+                      type="button"
+                      key={catKey}
+                      onClick={() => setSelectedCategory(catKey)}
+                      className={cn(
+                        "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap border",
+                        isCatSelected
+                          ? "bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-500/25"
+                          : "bg-zinc-100/80 dark:bg-zinc-900/60 text-zinc-600 dark:text-zinc-400 border-zinc-200/60 dark:border-zinc-800/80 hover:bg-zinc-200/70 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                      )}
+                    >
+                      {AI_CATEGORY_LABELS[catKey].title} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Features List Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredFeatures.map(feat => {
+                  const isEnabled = featureDefaults[feat.key] !== false;
+                  return (
+                    <div 
+                      key={feat.key}
+                      className={cn(
+                        "p-5 rounded-2xl border transition-all flex flex-col justify-between gap-4",
+                        isEnabled 
+                          ? "bg-white dark:bg-white/5 border-zinc-200 dark:border-zinc-800 shadow-sm"
+                          : "bg-zinc-50/70 dark:bg-white/[0.02] border-zinc-200/60 dark:border-zinc-800/60 opacity-80"
+                      )}
+                    >
+                      <div className="space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className={cn(
+                              "w-9 h-9 rounded-xl flex items-center justify-center font-bold transition-colors",
+                              isEnabled
+                                ? "bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20"
+                                : "bg-zinc-200 dark:bg-zinc-800 text-zinc-400"
+                            )}>
+                              <Cpu size={18} />
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-sm text-zinc-900 dark:text-zinc-100">{feat.name}</h4>
+                              <span className="text-[10px] font-mono text-zinc-400">{feat.key}</span>
+                            </div>
+                          </div>
+                          
+                          {/* Toggle Switch */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleFeature(feat.key)}
+                            className={cn(
+                              "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                              isEnabled ? "bg-indigo-600" : "bg-zinc-300 dark:bg-zinc-700"
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                                isEnabled ? "translate-x-5" : "translate-x-0"
+                              )}
+                            />
+                          </button>
+                        </div>
+
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                          {feat.description}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-3 border-t border-zinc-100 dark:border-zinc-800/50 text-[11px]">
+                        <span className="text-zinc-400 font-medium">
+                          {AI_CATEGORY_LABELS[feat.category].title}
+                        </span>
+                        <Badge variant={isEnabled ? 'green' : 'zinc'} className="text-[10px] font-bold">
+                          {isEnabled ? 'Enabled Org-Wide' : 'Restricted Org-Wide'}
+                        </Badge>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Bottom Info Note */}
+              <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-white/[0.02] border border-zinc-200 dark:border-zinc-800 text-xs text-zinc-500 text-center">
+                Changes apply immediately as baseline defaults for all users unless overridden at the team or member level.
+              </div>
+            </div>
+          )}
           {activeTab === 'keys' && (
             <div className="w-full space-y-6">
               <div className="p-5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 backdrop-blur-xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg shadow-indigo-500/5">

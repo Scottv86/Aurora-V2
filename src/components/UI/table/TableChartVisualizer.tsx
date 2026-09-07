@@ -1,8 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { 
-  BarChart3, PieChart, TrendingUp, Layers, Hash, 
-  ArrowUpRight, Sparkles, Filter, ChevronRight, Activity,
-  SlidersHorizontal, Award, Compass
+  BarChart3, PieChart, Layers, Activity
 } from 'lucide-react';
 import { cn } from '../Primitives';
 import { Column } from '../Table';
@@ -22,10 +20,10 @@ export function TableChartVisualizer<T>({
   data,
   columns,
   groupByField: initialGroup,
-  measureField: initialMeasure,
+  measureField: _initialMeasure,
   assigneeOptions,
   filterFields,
-  onClose
+  onClose: _onClose
 }: TableChartVisualizerProps<T>) {
   // Extract all valid columns for grouping (filtering out non-data columns like Actions or Checkbox)
   const eligibleGroupColumns = useMemo(() => {

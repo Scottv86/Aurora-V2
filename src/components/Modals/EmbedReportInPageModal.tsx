@@ -41,7 +41,7 @@ export const EmbedReportInPageModal: React.FC<EmbedReportInPageModalProps> = ({
   const [mode, setMode] = useState<'existing' | 'new'>('existing');
   const [selectedPageId, setSelectedPageId] = useState<string>('');
   const [newPageName, setNewPageName] = useState<string>('');
-  const [newPageIcon, setNewPageIcon] = useState<string>('LayoutDashboard');
+  const [newPageIcon] = useState<string>('LayoutDashboard');
   const [widgetTitle, setWidgetTitle] = useState<string>('');
   const [widgetWidth, setWidgetWidth] = useState<number>(12);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -167,7 +167,7 @@ export const EmbedReportInPageModal: React.FC<EmbedReportInPageModalProps> = ({
         }
 
         targetPageName = existingPage.name;
-        const currentWidgets = existingPage.config?.widgets || existingPage.widgets || [];
+        const currentWidgets = existingPage.config?.widgets || (existingPage as any).widgets || [];
         
         // Calculate next y offset
         const maxY = currentWidgets.reduce((max: number, w: any) => {
@@ -189,7 +189,7 @@ export const EmbedReportInPageModal: React.FC<EmbedReportInPageModalProps> = ({
           body: JSON.stringify({
             name: existingPage.name,
             category: 'Workspace Pages',
-            iconName: existingPage.iconName || existingPage.icon || 'Layers',
+            iconName: (existingPage as any).iconName || existingPage.icon || 'Layers',
             type: 'PAGE',
             enabled: true,
             status: 'ACTIVE',

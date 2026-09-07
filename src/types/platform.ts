@@ -4,6 +4,39 @@
 
 export type Environment = 'DEV' | 'QA' | 'UAT' | 'PROD';
 
+export type ToastPosition = 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
+
+export interface ToastNotificationConfig {
+  position?: ToastPosition;
+  duration?: number;
+  closeButton?: boolean;
+  expand?: boolean;
+}
+
+export type ChimeSoundId = 
+  | 'aurora' 
+  | 'crystal' 
+  | 'breeze' 
+  | 'pop' 
+  | 'ping' 
+  | 'zen' 
+  | 'celestial' 
+  | 'ripple' 
+  | 'marimba' 
+  | 'apex';
+
+export interface SoundNotificationConfig {
+  enabled?: boolean;
+  volume?: number;
+  defaultChime?: ChimeSoundId;
+  toastChime?: ChimeSoundId;
+}
+
+export interface NotificationSettings {
+  toasts?: ToastNotificationConfig;
+  sounds?: SoundNotificationConfig;
+}
+
 export interface Tenant {
   id: string;
   name: string;
@@ -25,6 +58,7 @@ export interface Tenant {
     forceDarkMode?: boolean;
     layout_style?: string;
     show_breadcrumbs?: boolean;
+    toastPosition?: ToastPosition;
   };
   localization?: {
     timezone?: string;
@@ -45,6 +79,7 @@ export interface Tenant {
     autoCategorization?: boolean;
     archivingPolicyDays?: number;
     homePageId?: string | null;
+    notifications?: NotificationSettings;
   };
   menuConfig?: any;
 }
@@ -258,6 +293,8 @@ export interface Module {
   config?: ModuleConfig;
   connectorMappings?: Record<string, Record<string, string>>;
   forms?: any[];
+  interfaceSettings?: any;
+  formattingRules?: any;
 }
 
 
@@ -416,6 +453,7 @@ export interface TenantMember {
   education?: { institution: string; degree: string; fieldOfStudy: string; startDate?: string; endDate?: string }[];
   skills?: { name: string; proficiencyLevel: string }[];
   permissionGroups?: { id: string; name: string; description?: string }[];
+  aiOverrides?: Record<string, 'ALLOW' | 'DENY' | 'INHERIT'>;
 }
 
 export interface Team {

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { TenantRequest } from '../middleware/tenantMiddleware';
 import { runAgentLoop, executeAgentTool, resumeAgentLoop } from '../services/antigravityAgent';
 import { resolveTenantAIClient, executeAICompletion } from '../services/aiProviderService';
+import { checkAIFeatureOrThrow } from '../lib/aiPermissions';
 import { AutomationScheduler } from '../services/scheduler';
 import { emitTenantUpdate } from '../socket';
 
@@ -382,6 +383,9 @@ router.post('/sessions/:id/chat', async (req: TenantRequest, res) => {
     if (!message) {
       return res.status(400).json({ error: 'Message is required' });
     }
+
+    // Check AI feature permission for conversational agent
+    await checkAIFeatureOrThrow(tenantId, userId, 'ai:antigravity_agent', req.db);
 
     // Ensure session exists in database to satisfy foreign key constraints
     const db = req.db!;

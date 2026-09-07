@@ -6,9 +6,7 @@ import {
   MessageSquare, 
   Users, 
   Search, 
-  Check, 
-  UserCheck,
-  UserPlus
+  Check 
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useChat } from '../../../context/ChatContext';

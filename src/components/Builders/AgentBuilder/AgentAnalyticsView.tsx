@@ -1,16 +1,12 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { 
   Activity, 
   CheckCircle2, 
   AlertTriangle, 
   Clock, 
   Zap, 
-  Wrench, 
   Search, 
-  Eye, 
-  ChevronRight, 
-  ShieldAlert,
-  Bot
+  ChevronRight 
 } from 'lucide-react';
 import { AgentBlueprint, AgentRunLog } from '../../../types/agent';
 

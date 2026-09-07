@@ -45,16 +45,14 @@ export const ListBulkImportModal: React.FC<ListBulkImportModalProps> = ({
   onClose,
   onSuccess,
   existingList,
-  createListWithItems,
-  bulkAddItems
+  createListWithItems: _createListWithItems,
+  bulkAddItems: _bulkAddItems
 }) => {
   const [activeTab, setActiveTab] = useState<'file' | 'paste'>('file');
   const [step, setStep] = useState<'upload' | 'preview'>('upload');
   
   // Raw input states
   const [pastedText, setPastedText] = useState('');
-  const [fileName, setFileName] = useState('');
-  const [fileSize, setFileSize] = useState('');
   
   // Parsed dataset states
   const [listName, setListName] = useState('');
@@ -216,8 +214,6 @@ export const ListBulkImportModal: React.FC<ListBulkImportModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setFileName(file.name);
-    setFileSize(`${(file.size / 1024).toFixed(1)} KB`);
     const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
     const formattedName = cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
 

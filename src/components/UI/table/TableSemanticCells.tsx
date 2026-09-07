@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { 
-  User, Mail, ExternalLink, Calendar, Clock, AlertTriangle, 
-  HelpCircle, ChevronDown, Check, ArrowUpRight, ShieldCheck, Sparkles 
+  Mail, Calendar, ChevronDown, Check, ArrowUpRight, Sparkles 
 } from 'lucide-react';
 import { cn } from '../Primitives';
 
@@ -296,7 +295,7 @@ export const CurrencyCell: React.FC<{
   locale?: string;
   showTrend?: boolean;
   className?: string;
-}> = ({ amount, currency = 'USD', locale = 'en-US', showTrend = false, className }) => {
+}> = ({ amount, currency = 'USD', locale = 'en-US', showTrend: _showTrend = false, className }) => {
   if (amount === undefined || amount === null || amount === '') {
     return <span className="text-zinc-400 text-xs">—</span>;
   }

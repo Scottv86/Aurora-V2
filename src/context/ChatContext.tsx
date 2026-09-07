@@ -45,7 +45,8 @@ interface ChatContextType {
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, token } = useAuth();
+  const { user, session } = useAuth();
+  const token = session?.access_token || (import.meta as any).env.VITE_DEV_TOKEN;
   const { tenant, user: platformUser } = usePlatform();
   const { presenceStatus } = useDigitalTwin();
   const [channels, setChannels] = useState<ChatChannel[]>([]);
@@ -73,13 +74,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const currentUserId = user?.id || platformUser?.id || platformUser?.memberId || 'current-user';
 
-  const platformName = platformUser?.firstName && (platformUser?.lastName || platformUser?.familyName)
-    ? `${platformUser.firstName} ${platformUser.lastName || platformUser.familyName}`
-    : (platformUser?.name || platformUser?.firstName || platformUser?.lastName || platformUser?.familyName);
+  const platformName = platformUser?.firstName && ((platformUser as any)?.lastName || (platformUser as any)?.familyName)
+    ? `${platformUser.firstName} ${(platformUser as any).lastName || (platformUser as any).familyName}`
+    : (platformUser?.name || platformUser?.firstName || (platformUser as any)?.lastName || (platformUser as any)?.familyName);
 
   const currentUserName = platformName || (user?.user_metadata as any)?.full_name || (user?.user_metadata as any)?.name || user?.email?.split('@')[0] || 'User';
-  const currentUserAvatar = platformUser?.avatarUrl || platformUser?.avatar_url || (user?.user_metadata as any)?.avatar_url || (user?.user_metadata as any)?.picture;
-  const currentUserRole = platformUser?.position?.title || platformUser?.position || platformUser?.role || (user as any)?.role || (user?.email === 'superadmin@aurora.com' ? 'Workspace Admin' : 'Team Member');
+  const currentUserAvatar = platformUser?.avatarUrl || (platformUser as any)?.avatar_url || (user?.user_metadata as any)?.avatar_url || (user?.user_metadata as any)?.picture;
+  const currentUserRole = (platformUser as any)?.position?.title || platformUser?.position || platformUser?.role || (user as any)?.role || (user?.email === 'superadmin@aurora.com' ? 'Workspace Admin' : 'Team Member');
 
   // 1. Initial load for channels and user directory
   const loadChannelsAndUsers = useCallback(async () => {

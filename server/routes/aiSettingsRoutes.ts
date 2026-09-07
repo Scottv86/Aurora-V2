@@ -3,6 +3,7 @@ import { TenantRequest } from '../middleware/tenantMiddleware';
 import { globalPrisma } from '../lib/prisma';
 import { encryptSecret, decryptSecret, generateKeyHint } from '../lib/crypto';
 import { PROVIDER_PRICING, calculateEstimatedCost, resolveTenantAIClient, executeAICompletion, logAIUsageMetric } from '../services/aiProviderService';
+import { resolveAIFeatureAccess, getAllUserEffectiveAIPolicies } from '../lib/aiPermissions';
 import { GoogleGenAI } from '@google/genai';
 
 const router = Router();
@@ -410,11 +411,125 @@ router.get('/usage', async (req: TenantRequest, res) => {
   }
 });
 
+// GET AI Feature Governance overview & tenant defaults
+router.get('/governance', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db || globalPrisma;
+    const tenantId = req.tenantId || 'default-tenant';
+    const userId = req.user?.uid;
+
+    const mappingModel = getMappingModel(db) || getMappingModel(globalPrisma);
+    let mapping = null;
+    if (mappingModel) {
+      mapping = await mappingModel.findUnique({ where: { tenantId } });
+    }
+
+    const featureDefaults = (mapping?.featureDefaults as Record<string, boolean>) || {};
+
+    // Get Teams with AI Overrides
+    const teams = await db.team.findMany({
+      where: { tenantId },
+      select: { id: true, name: true, aiOverrides: true }
+    });
+
+    // Get Member overrides count
+    const memberOverridesCount = await db.tenantMember.count({
+      where: {
+        tenantId,
+        aiOverrides: { not: null }
+      }
+    });
+
+    const userPolicies = await getAllUserEffectiveAIPolicies(tenantId, userId, db);
+
+    res.json({
+      tenantId,
+      featureDefaults,
+      teams,
+      memberOverridesCount,
+      userPolicies
+    });
+  } catch (err: any) {
+    console.error('[AISettingsRoutes] GET /governance Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch AI governance status' });
+  }
+});
+
+// PUT update Tenant AI feature defaults
+router.put('/governance/defaults', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db || globalPrisma;
+    const tenantId = req.tenantId!;
+    const { featureDefaults } = req.body;
+
+    if (!featureDefaults || typeof featureDefaults !== 'object') {
+      return res.status(400).json({ error: 'featureDefaults object is required' });
+    }
+
+    const mappingModel = getMappingModel(db) || getMappingModel(globalPrisma);
+    if (!mappingModel) {
+      return res.status(500).json({ error: 'TenantAIMapping model is not initialized.' });
+    }
+
+    const mapping = await mappingModel.upsert({
+      where: { tenantId },
+      update: { featureDefaults },
+      create: {
+        tenantId,
+        featureDefaults
+      }
+    });
+
+    res.json({ success: true, featureDefaults: mapping.featureDefaults });
+  } catch (err: any) {
+    console.error('[AISettingsRoutes] PUT /governance/defaults Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to update feature defaults' });
+  }
+});
+
+// GET current user's effective AI policies
+router.get('/governance/user-policies', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db || globalPrisma;
+    const tenantId = req.tenantId || 'default-tenant';
+    const userId = req.user?.uid;
+
+    const policies = await getAllUserEffectiveAIPolicies(tenantId, userId, db);
+    res.json(policies);
+  } catch (err: any) {
+    console.error('[AISettingsRoutes] GET /governance/user-policies Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch user AI policies' });
+  }
+});
+
 // POST execute generic AI completion (used by frontend aiService tools: formula generator, solution builder, summaries, etc.)
 router.post('/completion', async (req: TenantRequest, res) => {
   try {
     const tenantId = req.tenantId || 'default-tenant';
+    const userId = req.user?.uid;
     const { model, prompt, contents, systemInstruction, responseMimeType, feature } = req.body;
+
+    // Feature Gating Check
+    const targetFeature = feature || 'ai:formula_assistant';
+    const policyResult = await resolveAIFeatureAccess({
+      tenantId,
+      userId,
+      featureKey: targetFeature,
+      db: req.db || globalPrisma
+    });
+
+    if (!policyResult.allowed) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'AI_FEATURE_DISABLED',
+          title: 'AI Feature Restricted',
+          message: `The AI tool '${targetFeature}' is disabled for your account (${policyResult.reason}).`,
+          feature: targetFeature,
+          level: policyResult.level
+        }
+      });
+    }
 
     const client = await resolveTenantAIClient(tenantId, model);
 

@@ -33,7 +33,6 @@ export const AgentsLibraryPage: React.FC = () => {
     return cached.filter(a => a && !a.id.startsWith('agent_tpl_'));
   });
 
-  const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'ACTIVE' | 'DRAFT'>('ALL');
 
@@ -234,7 +233,7 @@ export const AgentsLibraryPage: React.FC = () => {
         </div>
 
         {/* Agent Cards Grid or Empty State */}
-        {loading ? null : filteredAgents.length === 0 ? (
+        {filteredAgents.length === 0 ? (
           <EmptyState
             icon={Bot}
             title={search ? "No agents match your search" : "No agents created yet"}

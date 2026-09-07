@@ -48,7 +48,7 @@ import { WorkflowPreview } from '../../components/Builder/Workflow/WorkflowPrevi
 import { RepeatableGroupBlock } from '../../components/Platform/RepeatableGroupBlock';
 import { RecursiveCollectionBlock } from '../../components/Platform/RecursiveCollectionBlock';
 import { AccordionContainer } from '../../components/UI/AccordionContainer';
-import { builderCache, workspaceMotion } from '../../utils/builderCache';
+import { builderCache } from '../../utils/builderCache';
 import { DynamicIcon } from '../../components/UI/DynamicIcon';
 import { PageWrapper } from '../../components/Common/PageWrapper';
 
@@ -1733,9 +1733,6 @@ export const RecordDetailView = ({
         ? editForm.steps.find((s: any) => s.id === tabId)
         : null;
       const formFields = currentStep ? currentStep.fields : editForm.fields;
-      
-      const density = (interfaceSettings.detail as any)?.density || 'standard';
-      const ds = getDensityStyles(density);
       
       return (
         <div className="grid grid-cols-12 w-full gap-y-6 gap-x-6">

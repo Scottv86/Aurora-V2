@@ -156,6 +156,7 @@ model TenantMember {
   licenceType      String                  @default("Standard") @map("licence_type")
   signature        String?                 @map("signature")
   workEmail        String?                 @map("work_email")
+  aiOverrides      Json?                   @map("ai_overrides")
   contracts        EmploymentContract[]
   leaveBalances    LeaveBalance[]
   leaveRequests    LeaveRequest[]
@@ -240,6 +241,7 @@ model Team {
   description String?
   createdAt   DateTime       @default(now()) @map("created_at")
   avatarUrl   String?        @map("avatar_url")
+  aiOverrides Json?          @map("ai_overrides")
   tenant      Tenant         @relation(fields: [tenantId], references: [id])
   members     TenantMember[]
 
@@ -961,6 +963,7 @@ model TenantAIMapping {
   zeroDataRetention Boolean  @default(true) @map("zero_data_retention")
   piiRedaction      Boolean  @default(false) @map("pii_redaction")
   allowLocalOnly    Boolean  @default(false) @map("allow_local_only")
+  featureDefaults   Json?    @map("feature_defaults")
 
   tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 

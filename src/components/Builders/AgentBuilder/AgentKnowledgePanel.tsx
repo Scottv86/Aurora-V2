@@ -13,21 +13,17 @@ import {
   MessageSquare, 
   Users, 
   Lock, 
-  ShieldCheck, 
   Globe, 
   HardDrive, 
   BarChart2, 
   Plus, 
-  Link2,
-  FileCheck,
-  Image as ImageIcon,
-  FileCode,
-  CheckCircle2,
-  Bot,
-  Zap,
-  ListOrdered,
-  Brain,
-  Bookmark
+  FileCheck, 
+  Image as ImageIcon, 
+  Bot, 
+  Zap, 
+  ListOrdered, 
+  Brain, 
+  Bookmark 
 } from 'lucide-react';
 import { AgentBlueprint, AgentGuardrails, AgentToolBinding, AgentMemoryEntry, AgentMemoryConfig } from '../../../types/agent';
 import { ContextSource } from '../../../types/solutions';
@@ -45,18 +41,17 @@ export interface AgentKnowledgePanelProps {
 export const AgentKnowledgePanel: React.FC<AgentKnowledgePanelProps> = ({
   blueprint,
   onChange,
-  onToggleCollapse
+  onToggleCollapse: _onToggleCollapse
 }) => {
   const [activeTab, setActiveTab] = useState<'knowledge' | 'tools' | 'memory' | 'guardrails' | 'autopilot'>('knowledge');
   const [toolSearch, setToolSearch] = useState('');
-  const [memorySearch, setMemorySearch] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isCustomToolModalOpen, setIsCustomToolModalOpen] = useState(false);
   const [isNewMemoryOpen, setIsNewMemoryOpen] = useState(false);
   const [newMemKey, setNewMemKey] = useState('');
   const [newMemVal, setNewMemVal] = useState('');
   const [newMemCategory, setNewMemCategory] = useState<'PREFERENCE' | 'FACT' | 'ACCOUNT_STATE'>('PREFERENCE');
-  const [newMemUser, setNewMemUser] = useState('Alex Mercer');
+  const [newMemUser] = useState('Alex Mercer');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { members } = useUsers();

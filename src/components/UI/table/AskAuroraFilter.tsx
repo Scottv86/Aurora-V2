@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
-  Sparkles, ArrowRight, CornerDownLeft, Loader2, X, Filter, 
-  Bot, Check, ExternalLink, BarChart3, HelpCircle, Lightbulb, MessageSquare
+  Sparkles, CornerDownLeft, Loader2, X, Filter, 
+  Bot
 } from 'lucide-react';
 import { cn, Button } from '../Primitives';
-import { TableFilterState, FilterFieldOption, FilterClause } from '../TableFilterBar';
+import { TableFilterState, FilterFieldOption, TableFilterClause } from '../TableFilterBar';
 import { getRecordValue, resolveRecordDisplayValue } from './TableGrouping';
 import { executeServerCompletion } from '../../../services/aiService';
 import { toast } from 'sonner';
@@ -224,7 +224,7 @@ If the user asks an analytical or data query, inspect the records and answer acc
     activeRole: string = 'Systems Analyst'
   ): AIResponse => {
     const q = qStr.toLowerCase().trim();
-    const clauses: FilterClause[] = [];
+    const clauses: TableFilterClause[] = [];
 
     // 0a. Logged-in user / Identity queries
     if (
@@ -257,6 +257,7 @@ If the user asks an analytical or data query, inspect the records and answer acc
             matchType: 'and',
             clauses: [
               {
+                id: 'clause_me',
                 fieldId,
                 operator: 'equals',
                 value: activeId
@@ -314,6 +315,7 @@ If the user asks an analytical or data query, inspect the records and answer acc
       const fieldId = personField ? personField.id : 'assigneeId';
       
       clauses.push({
+        id: 'clause_user_target',
         fieldId,
         operator: 'is',
         value: targetId
@@ -400,6 +402,7 @@ If the user asks an analytical or data query, inspect the records and answer acc
         });
 
         clauses.push({
+          id: 'clause_numeric_target',
           fieldId: fieldKey,
           operator: 'is',
           value: targetNum
@@ -425,6 +428,7 @@ If the user asks an analytical or data query, inspect the records and answer acc
           const optLabel = typeof opt === 'object' ? opt.label : opt;
           if (q.includes(String(optVal).toLowerCase()) || q.includes(String(optLabel).toLowerCase())) {
             clauses.push({
+              id: 'clause_option_target',
               fieldId: f.id,
               operator: 'is',
               value: String(optVal)
@@ -460,6 +464,7 @@ If the user asks an analytical or data query, inspect the records and answer acc
         matchType: 'and',
         clauses: [
           {
+            id: 'clause_search',
             fieldId: fList[0]?.id || 'id',
             operator: 'contains',
             value: qStr.trim()

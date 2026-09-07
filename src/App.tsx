@@ -104,6 +104,7 @@ const SiteBuilderPage = lazy(() => import('./pages/Settings/SiteBuilderPage').th
 const PortalViewPage = lazy(() => import('./pages/Platform/PortalViewPage').then(m => ({ default: m.PortalViewPage })));
 
 const BrandingSettingsPage = lazy(() => import('./pages/Settings/BrandingSettingsPage').then(m => ({ default: m.BrandingSettingsPage })));
+const NotificationSettingsPage = lazy(() => import('./pages/Settings/NotificationSettingsPage').then(m => ({ default: m.NotificationSettingsPage })));
 const NavigationSettingsPage = lazy(() => import('./pages/Settings/NavigationSettingsPage').then(m => ({ default: m.NavigationSettingsPage })));
 const NavigationManagementPage = lazy(() => import('./pages/Settings/NavigationManagementPage').then(m => ({ default: m.NavigationManagementPage })));
 const SettingsOverview = lazy(() => import('./pages/Settings/SettingsOverview').then(m => ({ default: m.SettingsOverview })));
@@ -215,6 +216,25 @@ const MyWorkRouteWrapper = () => {
   return <WorkQueue />;
 };
 
+const PlatformToaster = () => {
+  const { tenant } = usePlatform();
+  const toastConfig = tenant?.workspaceSettings?.notifications?.toasts || {};
+  const position = toastConfig.position || tenant?.branding?.toastPosition || 'bottom-left';
+  const duration = toastConfig.duration ?? 4000;
+  const closeButton = toastConfig.closeButton ?? true;
+  const expand = toastConfig.expand ?? false;
+
+  return (
+    <Toaster 
+      key={`toaster-${position}-${expand}-${closeButton}`}
+      position={position} 
+      expand={expand} 
+      closeButton={closeButton} 
+      duration={duration} 
+    />
+  );
+};
+
 const App = () => {
   return (
     <ThemeProvider>
@@ -226,7 +246,7 @@ const App = () => {
                 <ModalStackProvider>
                   <NewModuleModalProvider>
                     <Router>
-                      <Toaster position="bottom-left" expand={false} closeButton duration={4000} />
+                      <PlatformToaster />
                       <StackedModalManager />
                       <NewModuleModal />
                       <Suspense fallback={<PageLoader label="Loading view..." />}>
@@ -371,6 +391,7 @@ const App = () => {
 
                 <Route path="lists" element={<Navigate to="/workspace/settings/platform-modules/global-lists" replace />} />
                 <Route path="branding" element={<BrandingSettingsPage />} />
+                <Route path="notifications" element={<NotificationSettingsPage />} />
                 <Route path="navigation" element={<NavigationManagementPage />} />
                 <Route path="navigation/builder" element={<NavigationSettingsPage />} />
                 <Route path="appearance" element={<Navigate to="/workspace/settings/branding" replace />} />

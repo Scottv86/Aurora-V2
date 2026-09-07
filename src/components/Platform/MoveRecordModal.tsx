@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  GitFork, 
-  ArrowRight, 
   Sparkles, 
   Check, 
   X, 
@@ -10,18 +8,13 @@ import {
   ArrowRightLeft, 
   Loader2, 
   AlertCircle,
-  HelpCircle,
-  Trash2,
   RefreshCw,
   FolderInput,
   GripVertical,
   Link2,
   Unlink,
   CheckCircle2,
-  Filter,
-  MousePointerClick,
-  Info,
-  ChevronDown
+  MousePointerClick
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
@@ -115,9 +108,9 @@ export const MoveRecordModal: React.FC<MoveRecordModalProps> = ({
   const availableTargetModules = useMemo(() => {
     return (modules || []).filter(m => {
       if (!m || m.id === sourceModuleId) return false;
-      if (m.type === 'PAGE' || m.type === 'SYSTEM') return false;
+      if ((m as any).type === 'PAGE' || (m as any).type === 'SYSTEM') return false;
       if (m.isGlobal && !m.layout && !m.config?.layout && !m.fields) return false;
-      if (m.isIntakeTriage || m.config?.isIntakeTriage) return false;
+      if ((m as any).isIntakeTriage || m.config?.isIntakeTriage) return false;
       return true;
     });
   }, [modules, sourceModuleId]);
@@ -369,7 +362,7 @@ const extractModuleFields = (mod?: any): any[] => {
     }
   };
 
-  const handleDragLeave = (e: React.DragEvent, targetFieldId: string) => {
+  const handleDragLeave = (_e: React.DragEvent, targetFieldId: string) => {
     // Only clear if actually leaving target element
     if (activeDropTargetId === targetFieldId) {
       setActiveDropTargetId(null);

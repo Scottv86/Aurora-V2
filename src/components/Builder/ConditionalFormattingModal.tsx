@@ -1,14 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
-  Sparkles, 
   Layers, 
   Palette, 
-  Type, 
   Check, 
-  Plus, 
-  Trash2, 
   AlertTriangle, 
   CheckCircle2, 
   Clock, 
@@ -22,7 +17,7 @@ import {
   Table as TableIcon
 } from 'lucide-react';
 import { cn, PRESET_FORMATTING_MAP } from '../../lib/utils';
-import { ConditionalFormattingRule, FormattingPreset, FormattingStyle, VisibilityRule } from '../../types/platform';
+import { ConditionalFormattingRule, FormattingPreset, VisibilityRule } from '../../types/platform';
 import { ConditionModal } from './ConditionModal';
 
 export interface ConditionalFormattingModalProps {

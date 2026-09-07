@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Database, Plus, Search, Trash2, Eye, Layers, ArrowRight, Sliders } from 'lucide-react';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 
 import { PageHeader } from '../../components/UI/PageHeader';
 import { Button } from '../../components/UI/Primitives';
@@ -19,7 +19,6 @@ import { builderCache } from '../../utils/builderCache';
 import { SavedQueryEntity } from '../../types/queryBuilder';
 
 export const QueriesLibraryPage: React.FC = () => {
-  const navigate = useNavigate();
   const location = useLocation();
   const { tenant } = usePlatform();
   const { session } = useAuth();

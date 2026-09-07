@@ -41,10 +41,6 @@ export const CollapsibleFieldGroup: React.FC<CollapsibleFieldGroupProps> = ({
     }
   };
 
-  const isCard = field.type === 'card';
-  const isAccordion = field.type === 'accordion';
-  const isTabs = field.type === 'tabs_nested';
-
   const getIcon = () => {
     if (field.iconName) {
       return <DynamicIcon name={field.iconName} size={14} />;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Plus, Trash2, Edit3, PenTool, Check, Loader2, Mail } from 'lucide-react';
+import { X, Plus, Edit3, PenTool, Check, Loader2 } from 'lucide-react';
 import { EmailSignature, EmailAccount } from '../../../types/inbox';
 import { InboxService } from '../../../services/inboxService';
 import { usePlatform } from '../../../hooks/usePlatform';

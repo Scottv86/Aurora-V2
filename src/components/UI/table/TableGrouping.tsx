@@ -1,6 +1,5 @@
 import React from 'react';
-import { ChevronRight, ChevronDown, Layers, Calculator, Hash } from 'lucide-react';
-import { cn } from '../Primitives';
+import { ChevronRight, ChevronDown } from 'lucide-react';
 import { Column } from '../Table';
 
 export type AggregateType = 'count' | 'sum' | 'avg' | 'min' | 'max';
@@ -108,7 +107,7 @@ export function resolveRecordDisplayValue(
 export function groupDataRecords<T>(
   data: T[],
   groupConfig: GroupConfig,
-  columns: Column<T>[],
+  _columns?: Column<T>[],
   assigneeOptions?: any[],
   filterFields?: any[]
 ): GroupSummary<T>[] {
@@ -216,7 +215,7 @@ export const GroupHeaderRow: React.FC<{
           {Object.keys(aggregates).length > 0 && (
             <div className="flex items-center gap-3 text-[11px]">
               {Object.entries(aggregates).map(([key, val]) => {
-                const [field, aggType] = key.split('_');
+                const [, aggType] = key.split('_');
                 return (
                   <div key={key} className="flex items-center gap-1 bg-white/70 dark:bg-zinc-900/70 px-2 py-0.5 rounded border border-zinc-200 dark:border-zinc-700">
                     <span className="text-zinc-400 uppercase text-[9px] font-bold">{aggType}:</span>

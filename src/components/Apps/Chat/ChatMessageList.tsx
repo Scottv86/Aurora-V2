@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { Hash, Lock, Pin, MessageSquare, Sparkles } from 'lucide-react';
+import { Hash, Lock, Pin, MessageSquare } from 'lucide-react';
 import { ChatMessage, ChatChannel } from '../../../types/chat';
 import { ChatMessageItem } from './ChatMessageItem';
 import { useChat } from '../../../context/ChatContext';
@@ -45,7 +45,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({ channel, messa
   };
 
   const grouped = groupMessagesByDate(messages);
-  const pinnedMessages = messages.filter(m => m.isPinned);
+  const pinnedMessages = channel.pinnedMessages || messages.filter(m => m.isPinned);
 
   if (isMessagesLoading && messages.length === 0) {
     return (
@@ -89,11 +89,11 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({ channel, messa
     <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
       <div className="max-w-4xl mx-auto w-full space-y-4">
         {/* Pinned Messages Banner */}
-        {channel.pinnedMessages && channel.pinnedMessages.length > 0 && (
+        {pinnedMessages && pinnedMessages.length > 0 && (
           <div className="w-full mb-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs font-semibold text-amber-600 dark:text-amber-400">
               <Pin size={14} className="fill-amber-500/20" />
-              <span>{channel.pinnedMessages.length} Pinned {channel.pinnedMessages.length === 1 ? 'Message' : 'Messages'}</span>
+              <span>{pinnedMessages.length} Pinned {pinnedMessages.length === 1 ? 'Message' : 'Messages'}</span>
             </div>
           </div>
         )}

@@ -1,15 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Inbox, 
   Mail, 
-  Send, 
-  Sparkles, 
-  Layers, 
-  Loader2, 
   PanelRightClose, 
-  PanelRightOpen,
-  Keyboard
+  PanelRightOpen
 } from 'lucide-react';
 import { EmailAccount, EmailThread, EmailMessage, InboxFolder, CustomFolder } from '../../types/inbox';
 import { InboxService } from '../../services/inboxService';
@@ -164,8 +158,8 @@ export const InboxApp: React.FC = () => {
 
   const [threads, setThreads] = useState<EmailThread[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [_isLoading, setIsLoading] = useState<boolean>(false);
 
   // Right Context Sidebar Visibility Toggle
   const [showContextSidebar, setShowContextSidebar] = useState<boolean>(true);
@@ -416,7 +410,7 @@ export const InboxApp: React.FC = () => {
 
   const getDefaultSenderAccountId = useCallback(() => {
     if (selectedAccountId && selectedAccountId !== 'all') return selectedAccountId;
-    const personal = accounts.find(a => a.type === 'PERSONAL' || a.provider === 'GOOGLE' || a.email.includes('@gmail'));
+    const personal = accounts.find(a => a.type === 'PERSONAL' || a.provider === 'gmail' || (a.provider as string) === 'google' || a.email.includes('@gmail'));
     return personal?.id || accounts[0]?.id;
   }, [selectedAccountId, accounts]);
 

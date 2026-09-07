@@ -22,7 +22,6 @@ import {
   PanelLeftOpen,
   User,
   Layout,
-  FileSpreadsheet,
   ClipboardPaste,
   ChevronDown
 } from 'lucide-react';
@@ -38,7 +37,7 @@ import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { DATA_API_URL, API_BASE_URL } from '../../config';
 import { FieldInput } from '../../components/FieldInput';
-import { builderCache, workspaceMotion } from '../../utils/builderCache';
+import { builderCache } from '../../utils/builderCache';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
 import { fetchModule, fetchRecords } from '../../services/dataService';
 import { cn, isFieldVisible, flattenFields, getFieldValue, checkCondition, evaluateExpression, evaluateFormula, slugify, evaluateFormattingRules } from '../../lib/utils';
@@ -568,7 +567,7 @@ const RecordActionsCell: React.FC<RecordActionsCellProps> = ({
   onQuickStatus,
   onQuickAssign,
   statusOptions = [],
-  members = [],
+  members: _members = [],
   currentUserId
 }) => {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
@@ -963,7 +962,6 @@ export const ModuleView = () => {
   };
   const [editingRecord, setEditingRecord] = useState<any | null>(null);
   const [totalRecords, setTotalRecords] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
 
   const [activeStepId, setActiveStepId] = useState<string | null>(null);
   const [activeQuickAction, setActiveQuickAction] = useState<any | null>(null);
@@ -1090,7 +1088,6 @@ export const ModuleView = () => {
       builderCache.set(recordsCacheKey, recs);
       if (!queueId) {
         setTotalRecords(recordsResult.total ?? recs.length);
-        setTotalPages(recordsResult.totalPages ?? (Math.ceil((recordsResult.total ?? recs.length) / pageSize) || 1));
       }
     }
   }, [recordsResult, queueId, recordsCacheKey, pageSize]);
@@ -1900,18 +1897,10 @@ export const ModuleView = () => {
     });
   }, [records, searchQuery, activeQueue, visibilityContext]);
 
-  // Sliced records for table rendering when queue is active
-  const slicedRecords = useMemo(() => {
-    if (!queueId) return filteredRecords;
-    const start = (page - 1) * pageSize;
-    return filteredRecords.slice(start, start + pageSize);
-  }, [filteredRecords, page, pageSize, queueId]);
-
   // Keep pagination totals in sync dynamically when queue matches change
   useEffect(() => {
     if (queueId) {
       setTotalRecords(filteredRecords.length);
-      setTotalPages(Math.ceil(filteredRecords.length / pageSize) || 1);
     }
   }, [filteredRecords, queueId, pageSize]);
 
@@ -5072,7 +5061,7 @@ export const ModuleView = () => {
               toast.error(err.message || 'Failed to update status');
             });
           }}
-          onBulkMove={(selectedIds, selectedItems, clearSelection) => {
+          onBulkMove={(_selectedIds, selectedItems, _clearSelection) => {
             setRecordsToMove(selectedItems);
           }}
           onBulkDelete={(selectedIds, _selectedItems, clearSelection) => {
@@ -6141,7 +6130,7 @@ export const ModuleView = () => {
           sourceModuleId={moduleData?.id || (typeof moduleId === 'string' ? moduleId : '')}
           sourceModuleName={moduleData?.name}
           sourceFields={allFields}
-          onSuccess={({ targetModuleId, targetModuleName, count }) => {
+          onSuccess={({ targetModuleId }) => {
             queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
             queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, targetModuleId] });
             setRecordsToMove(null);

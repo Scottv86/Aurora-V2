@@ -14,14 +14,11 @@ import {
   Settings, 
   Zap, 
   Layers, 
-  ChevronDown, 
   Mail, 
   Users, 
   Tag, 
-  CheckCircle2, 
-  AlertCircle,
-  Command,
-  PenTool
+  Command, 
+  PenTool 
 } from 'lucide-react';
 import { EmailAccount, InboxFolder, CustomFolder } from '../../../types/inbox';
 import { cn } from '../../../lib/utils';

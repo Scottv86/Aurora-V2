@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Plus, Trash2, Edit3, Command, FileText, Check, Loader2, Sparkles } from 'lucide-react';
+import { X, Plus, Trash2, Edit3, Command, FileText, Check, Loader2 } from 'lucide-react';
 import { EmailSnippet } from '../../../types/inbox';
 import { InboxService } from '../../../services/inboxService';
 import { usePlatform } from '../../../hooks/usePlatform';
-import { cn } from '../../../lib/utils';
 import { toast } from 'sonner';
 
 interface InboxSnippetsModalProps {

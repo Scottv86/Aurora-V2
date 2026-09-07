@@ -2,11 +2,9 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { 
   Database, 
   Layers, 
-  Key, 
   Sliders, 
   Zap, 
   Code, 
-  Sparkles,
   Columns as ColumnsIcon
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
@@ -72,7 +70,7 @@ export const SqlEditor: React.FC<SqlEditorProps> = ({
   const gutterRef = useRef<HTMLDivElement>(null);
   const suggestionsBoxRef = useRef<HTMLDivElement>(null);
 
-  const [cursorPos, setCursorPos] = useState<number>(0);
+  const [_cursorPos, setCursorPos] = useState<number>(0);
   const [showSuggestions, setShowSuggestions] = useState<boolean>(false);
   const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number>(0);

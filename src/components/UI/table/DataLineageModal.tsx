@@ -1,9 +1,8 @@
 import React from 'react';
 import { 
-  X, Sparkles, GitBranch, Clock, Calculator, ShieldCheck, 
-  ArrowRight, FileText, CheckCircle2, ChevronRight 
+  X, Sparkles, GitBranch, Clock, ShieldCheck, CheckCircle2 
 } from 'lucide-react';
-import { cn, Button } from '../Primitives';
+import { Button } from '../Primitives';
 import { LineageInfo } from './TableSemanticCells';
 
 export interface DataLineageModalProps {

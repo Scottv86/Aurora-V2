@@ -4,12 +4,8 @@ import {
   Users, 
   Pin, 
   FileText, 
-  Bell, 
-  Hash, 
-  Lock, 
   Info, 
   Download, 
-  Check, 
   UserPlus 
 } from 'lucide-react';
 import { motion } from 'motion/react';

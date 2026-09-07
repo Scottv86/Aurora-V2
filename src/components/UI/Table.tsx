@@ -5,7 +5,7 @@ import {
   ChevronLeft, ChevronRight, ArrowUpDown, ChevronUp, ChevronDown, 
   Check, Minus, Download, Trash2, UserCheck, Tag, X, Inbox, Search, Filter,
   BarChart3, Table as TableIcon, Edit3, MoreHorizontal,
-  Sparkles, Layers, FolderInput, Star
+  FolderInput, Star
 } from 'lucide-react';
 import { Skeleton } from './Skeleton';
 import { motion, AnimatePresence } from 'motion/react';
@@ -27,7 +27,7 @@ import {
   LineageInfo 
 } from './table/TableSemanticCells';
 import { SpreadsheetGrid } from './table/SpreadsheetGrid';
-import { GroupConfig, GroupHeaderRow, groupDataRecords, getColKey, getRecordValue } from './table/TableGrouping';
+import { GroupConfig, GroupHeaderRow, groupDataRecords, getRecordValue } from './table/TableGrouping';
 import { GroupBySelector } from './table/GroupBySelector';
 import { AskAuroraFilter } from './table/AskAuroraFilter';
 import { TableChartVisualizer } from './table/TableChartVisualizer';
@@ -224,7 +224,7 @@ export function Table<T extends { id: string | number }>({
   statusOptions = [],
   
   // Filter Bar
-  enableFilters = false,
+  enableFilters: _enableFilters = false,
   filterFields,
   filterState: controlledFilterState,
   onFilterChange,
@@ -263,7 +263,7 @@ export function Table<T extends { id: string | number }>({
   enableAskAurora = true,
   rowActions,
   renderRowActions,
-  enableLineage = true,
+  enableLineage: _enableLineage = true,
   onExplainLineage,
   rowClassName,
   rowStyle
@@ -411,7 +411,7 @@ export function Table<T extends { id: string | number }>({
     if (activeSearch && !isControlledSearch) {
       const q = activeSearch.toLowerCase();
       result = result.filter(item => {
-        return Object.entries(item).some(([key, val]) => {
+        return Object.entries(item).some(([_key, val]) => {
           if (val === null || val === undefined) return false;
           if (typeof val === 'object') {
             return JSON.stringify(val).toLowerCase().includes(q);
@@ -578,7 +578,6 @@ export function Table<T extends { id: string | number }>({
   // Density styles
   const paddingClass = density === 'compact' ? 'px-3 py-1.5' : density === 'spacious' ? 'px-6 py-4' : 'px-4 py-2.5';
   const checkboxPaddingClass = density === 'compact' ? 'py-1.5' : density === 'spacious' ? 'py-4' : 'py-2.5';
-  const actionsPadding = density === 'compact' ? 'px-3 py-1.5' : density === 'spacious' ? 'px-6 py-4' : 'px-4 py-2.5';
   const headerTextSize = density === 'compact' ? 'text-[10px]' : 'text-xs';
   const bodyTextSize = density === 'compact' ? 'text-xs' : 'text-sm';
 
@@ -783,7 +782,7 @@ export function Table<T extends { id: string | number }>({
             {/* Opt-In Spreadsheet Edit Mode Toggle */}
             {(enableSpreadsheetMode || onSaveBatch) && activeViewMode === 'table' && (
               <Button
-                variant={isEditMode ? 'primary' : 'outline'}
+                variant={isEditMode ? 'primary' : 'secondary'}
                 size="sm"
                 onClick={() => setEditMode(!isEditMode)}
                 className={cn(
@@ -936,7 +935,7 @@ export function Table<T extends { id: string | number }>({
                         <Skeleton variant="rounded" className="w-4 h-4 rounded-md mx-auto" />
                       </td>
                     )}
-                    {columns.map((col, j) => (
+                    {columns.map((_col, j) => (
                       <td key={j} className={cn("border-b border-zinc-200/50 dark:border-zinc-800/50", paddingClass)}>
                         <Skeleton variant="text" className="w-24 h-3 opacity-60" />
                       </td>

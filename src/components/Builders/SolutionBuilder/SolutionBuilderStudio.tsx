@@ -3,8 +3,6 @@ import {
   ArrowLeft, 
   Boxes, 
   Save, 
-  Maximize2, 
-  Minimize2, 
   CheckCircle2,
   FileText,
   PanelLeftOpen,
@@ -64,7 +62,7 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const returnUrl = (location.state as any)?.returnUrl || searchParams.get('returnUrl');
-  const { isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen, tenant, refreshModules } = usePlatform();
+  const { setIsBuilderFullscreen, tenant, refreshModules } = usePlatform();
 
   const [solutionId] = useState(initialSolution?.id || `sol_blank_${Date.now()}`);
   const [solutionName, setSolutionName] = useState(initialSolution?.name || 'Untitled Solution Blueprint');

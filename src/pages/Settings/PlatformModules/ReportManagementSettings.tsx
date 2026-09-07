@@ -3,7 +3,7 @@ import {
   BarChart2, Plus, ArrowLeft, ArrowRight, Trash2, Edit2, Eye, 
   Save, Check, BarChart, LineChart, 
   PieChart, Layers, Table, Activity, TrendingUp, Info, Printer,
-  GripVertical, Maximize2, Minimize2, Search, Layout
+  GripVertical, Search, Layout
 } from 'lucide-react';
 
 
@@ -480,7 +480,7 @@ const DEFAULT_REPORTS: Report[] = [];
 
 
 export const ReportManagementSettings: React.FC = () => {
-  const { tenant, modules, setBreadcrumbOverride, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
+  const { tenant, modules, setBreadcrumbOverride, isBuilderFullscreen, setIsBuilderFullscreen } = usePlatform();
   const { session, user } = useAuth();
 
   useEffect(() => {
@@ -558,14 +558,11 @@ setView('LIST');
   const [newRelPrimaryKey, setNewRelPrimaryKey] = useState('');
   const [newRelForeignKey, setNewRelForeignKey] = useState('');
   const [newRelType, setNewRelType] = useState<'left' | 'inner'>('left');
-  const [isAiBuilding, setIsAiBuilding] = useState(false);
 
   const [records, setRecords] = useState<any[]>([]);
   const [members, setMembers] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
   const [automations, setAutomations] = useState<any[]>([]);
-  const [availableModules, setAvailableModules] = useState<any[]>([]);
-  const [dataSources, setDataSources] = useState<any[]>([]);
   const [catalogItems, setCatalogItems] = useState<any[]>([]);
   const [sourcesLoading, setSourcesLoading] = useState(false);
 

@@ -5,14 +5,7 @@ import {
   Lock, 
   MessageSquare, 
   Phone, 
-  Video, 
-  Search, 
   Info, 
-  Pin, 
-  Users, 
-  Sparkles,
-  SlidersHorizontal,
-  MoreVertical,
   Plus
 } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';

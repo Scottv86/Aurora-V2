@@ -79,6 +79,7 @@ export interface ChatChannel {
   createdBy?: string;
   // For DMs: recipient info
   dmRecipient?: ChatUser;
+  pinnedMessages?: ChatMessage[];
 }
 
 export interface TypingIndicator {

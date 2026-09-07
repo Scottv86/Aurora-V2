@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { 
-  Columns,
-  Rows,
   Save,
   Plus,
   ListPlus,
@@ -21,8 +19,6 @@ import {
   LayoutGrid,
   Loader2,
   Search,
-  Maximize2,
-  Minimize2,
   ExternalLink,
   Globe,
   PanelLeft,
@@ -95,7 +91,7 @@ export const NavigationSettingsPage = () => {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const returnUrl = (location.state as any)?.returnUrl || searchParams.get('returnUrl');
-  const { tenant, menuConfig, updateMenuConfig, updateTenant, refetchContext, modules, members, teams, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
+  const { tenant, menuConfig, updateMenuConfig, updateTenant, refetchContext, modules, members, teams, isBuilderFullscreen, setIsBuilderFullscreen } = usePlatform();
   const { session } = useAuth();
 
   useEffect(() => {

@@ -9,9 +9,7 @@ import {
   Type,
   Table as TableIcon,
   CheckSquare,
-  Sparkles,
-  Maximize2,
-  Minimize2
+  Sparkles
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { DocumentTemplate } from '../types/platform';
@@ -34,7 +32,7 @@ export const DocumentTemplateBuilder: React.FC<DocumentTemplateBuilderProps> = (
   onSave,
   onCancel
 }) => {
-  const { tenant, user, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
+  const { tenant, user, setIsBuilderFullscreen } = usePlatform();
 
   useEffect(() => {
     setIsBuilderFullscreen(true);

@@ -1,13 +1,10 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   FileText, 
   Search, 
-  Filter, 
-  ChevronRight, 
   Clock, 
   User, 
   Sparkles,
-  MessageSquare,
   Zap,
   Database,
   CheckCircle2,
@@ -18,20 +15,15 @@ import {
   Columns,
   ArrowRight,
   ExternalLink,
-  ChevronDown,
   UserCheck,
   UserMinus,
-  Check,
   X,
   SlidersHorizontal,
   RefreshCw,
-  Layers,
-  Calendar,
-  Tag,
-  ArrowUpDown
+  Layers
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 
@@ -69,7 +61,6 @@ export const WorkQueue: React.FC<WorkQueueProps> = ({
   widgetProperties = {},
   className
 }) => {
-  const navigate = useNavigate();
   const { tenant, user: platformUser, isLoading: platformLoading, members, modules: platformModules } = usePlatform();
   const [page, setPage] = useState(1);
   const pageSize = widgetProperties?.pageSize || 25;
@@ -79,8 +70,8 @@ export const WorkQueue: React.FC<WorkQueueProps> = ({
   // View & UI states
   const [viewMode, setViewMode] = useState<WorkQueueViewMode>(widgetProperties?.viewMode || 'split');
   const [activeFilterTab, setActiveFilterTab] = useState<WorkQueueFilterTab>(widgetProperties?.defaultFilter || 'mine');
-  const [density, setDensity] = useState<'compact' | 'comfortable'>(widgetProperties?.density || 'comfortable');
-  const [showKpiRibbon, setShowKpiRibbon] = useState<boolean>(widgetProperties?.showKpiRibbon ?? true);
+  const [isDetailPaneOpen, setIsDetailPaneOpen] = useState(false);
+  const showKpiRibbon = widgetProperties?.showKpiRibbon ?? true;
   
   // Selection and Detail states
   const [selectedCase, setSelectedCase] = useState<any>(null);
@@ -88,7 +79,6 @@ export const WorkQueue: React.FC<WorkQueueProps> = ({
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [isGenModalOpen, setIsGenModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'details' | 'documents'>('details');
-  const [isDetailPaneOpen, setIsDetailPaneOpen] = useState(true);
 
   // Search & advanced filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -610,7 +600,7 @@ export const WorkQueue: React.FC<WorkQueueProps> = ({
                 {/* Direct Link to full Record */}
                 <Link
                   to={`/workspace/modules/${c.moduleId || 'general'}/records/${c.id}`}
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={(e: React.MouseEvent) => e.stopPropagation()}
                   title="Open full record"
                   className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
                 >
@@ -1271,6 +1261,23 @@ export const WorkQueue: React.FC<WorkQueueProps> = ({
         recordData={selectedCase}
         moduleId={selectedCase?.moduleId || 'general'}
       />
+
+      {viewMode !== 'split' && isDetailPaneOpen && selectedCase && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex justify-end" onClick={() => setIsDetailPaneOpen(false)}>
+          <div 
+            className="w-full max-w-xl bg-white dark:bg-zinc-900 h-full p-4 overflow-y-auto shadow-2xl relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setIsDetailPaneOpen(false)}
+              className="absolute top-4 right-4 z-10 p-1.5 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            >
+              <X size={16} />
+            </button>
+            {renderDetailPane()}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

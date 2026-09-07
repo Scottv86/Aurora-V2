@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
-  Save, X, Undo2, Redo2, Check, AlertCircle, 
-  HelpCircle, Edit3, ClipboardPaste, ArrowDown 
+  Save, X, Edit3 
 } from 'lucide-react';
 import { cn, Button } from '../Primitives';
 import { Column } from '../Table';
@@ -36,10 +35,6 @@ export function SpreadsheetGrid<T extends { id: string | number }>({
   const [selectedCell, setSelectedCell] = useState<CellPosition>({ rowIdx: 0, colIdx: 0 });
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [editValue, setEditValue] = useState<string>('');
-  
-  // History for Undo/Redo
-  const [history, setHistory] = useState<T[][]>([]);
-  const [historyIndex, setHistoryIndex] = useState<number>(-1);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -89,10 +84,6 @@ export function SpreadsheetGrid<T extends { id: string | number }>({
       return;
     }
 
-    // Save history
-    setHistory(prev => [...prev.slice(0, historyIndex + 1), JSON.parse(JSON.stringify(gridData))]);
-    setHistoryIndex(prev => prev + 1);
-
     // Update grid data
     const nextGridData = [...gridData];
     const updatedRow = { ...nextGridData[rowIdx] };
@@ -113,7 +104,7 @@ export function SpreadsheetGrid<T extends { id: string | number }>({
     });
 
     setIsEditing(false);
-  }, [selectedCell, editableColumns, gridData, historyIndex]);
+  }, [selectedCell, editableColumns, gridData]);
 
   // Keyboard navigation & Excel shortcuts
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -316,7 +307,7 @@ export function SpreadsheetGrid<T extends { id: string | number }>({
           </Button>
 
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
             onClick={onExitEditMode}
             className="h-7 text-xs"
@@ -361,7 +352,7 @@ export function SpreadsheetGrid<T extends { id: string | number }>({
                     </span>
                   </td>
 
-                  {editableColumns.map((col, cIdx) => {
+                  {editableColumns.map((_col, cIdx) => {
                     const isSelected = selectedCell.rowIdx === rIdx && selectedCell.colIdx === cIdx;
                     const cellVal = getCellValue(rIdx, cIdx);
                     const isCellEditing = isSelected && isEditing;

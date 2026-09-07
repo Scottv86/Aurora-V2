@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowUpRight, MessageSquare, Check, X, Hash, Lock, Users } from 'lucide-react';
+import { ArrowUpRight, Check, X, Hash, Lock, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
 export interface ChatToastPayload {

@@ -9,16 +9,12 @@ import {
   ChevronRight, 
   MessageSquare, 
   Users, 
-  Circle, 
-  Smile, 
-  MoreVertical,
-  Star,
-  Settings,
-  X,
-  ArrowLeft
+  Star, 
+  X, 
+  ArrowLeft 
 } from 'lucide-react';
 import { useChat } from '../../../context/ChatContext';
-import { ChatChannel, UserPresenceStatus } from '../../../types/chat';
+import { UserPresenceStatus } from '../../../types/chat';
 import { cn } from '../../../lib/utils';
 
 interface ChatSidebarProps {

@@ -2,14 +2,13 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  FileSpreadsheet, X, Check, AlertCircle, 
-  Trash2, Plus, ArrowRight, RefreshCw, Upload,
-  Filter, Layers, CheckCircle2, XCircle, Edit3,
-  HelpCircle, ChevronDown, Sparkles
+  FileSpreadsheet, X, AlertCircle, 
+  Trash2, Plus, RefreshCw, Upload,
+  CheckCircle2, Sparkles
 } from 'lucide-react';
 import { Button, AuroraSpinner } from '../UI/Primitives';
-import { Module, ModuleField } from '../../types/platform';
-import { flattenFields, isContainerField, cn, slugify } from '../../lib/utils';
+import { Module } from '../../types/platform';
+import { flattenFields, cn, slugify } from '../../lib/utils';
 import { bulkCreateRecords } from '../../services/dataService';
 import { toast } from 'sonner';
 

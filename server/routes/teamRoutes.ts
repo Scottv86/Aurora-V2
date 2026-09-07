@@ -25,6 +25,7 @@ router.get('/', async (req: TenantRequest, res) => {
         name: t.name,
         description: t.description,
         avatar: t.avatarUrl,
+        aiOverrides: t.aiOverrides || {},
         memberCount: humanCount,
         agentCount: agentCount
       };
@@ -41,14 +42,15 @@ router.post('/', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
     const tenantId = req.tenantId!;
-    const { name, description, avatarUrl } = req.body;
+    const { name, description, avatarUrl, aiOverrides } = req.body;
 
     const team = await db.team.create({
       data: {
         tenantId,
         name,
         description,
-        avatarUrl
+        avatarUrl,
+        aiOverrides: aiOverrides || null
       }
     });
 
@@ -57,6 +59,7 @@ router.post('/', async (req: TenantRequest, res) => {
       name: team.name,
       description: team.description,
       avatar: team.avatarUrl,
+      aiOverrides: team.aiOverrides || {},
       memberCount: 0,
       agentCount: 0
     };
@@ -101,6 +104,7 @@ router.get('/:id', async (req: TenantRequest, res) => {
       name: team.name,
       description: team.description,
       avatar: team.avatarUrl,
+      aiOverrides: team.aiOverrides || {},
       members: team.members.map(m => ({
         id: m.id,
         name: m.isSynthetic ? m.agent?.name : (m.user?.email.split('@')[0] || 'Unknown'),
@@ -117,13 +121,39 @@ router.get('/:id', async (req: TenantRequest, res) => {
   }
 });
 
+// PUT update team AI Overrides
+router.put('/:id/ai-overrides', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { id } = req.params;
+    const { aiOverrides } = req.body;
+
+    const existing = await db.team.findFirst({ where: { id, tenantId } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Team not found' });
+    }
+
+    const updated = await db.team.update({
+      where: { id },
+      data: { aiOverrides: aiOverrides || {} }
+    });
+
+    emitTenantUpdate(tenantId, 'team_updated', updated);
+    res.json({ success: true, aiOverrides: updated.aiOverrides });
+  } catch (err: any) {
+    console.error(`[TeamAPI] AI Overrides update error for team ${req.params.id}:`, err);
+    res.status(500).json({ error: err.message || 'Failed to update team AI overrides' });
+  }
+});
+
 // PATCH update team
 router.patch('/:id', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
     const tenantId = req.tenantId!;
     const { id } = req.params;
-    const { name, description, avatarUrl } = req.body;
+    const { name, description, avatarUrl, aiOverrides } = req.body;
 
     // Verify team existence first to provide a better error response if missing
     const existing = await db.team.findFirst({ where: { id } });
@@ -137,7 +167,8 @@ router.patch('/:id', async (req: TenantRequest, res) => {
       data: {
         name: name !== undefined ? name : undefined,
         description: description !== undefined ? description : undefined,
-        avatarUrl: avatarUrl !== undefined ? avatarUrl : undefined
+        avatarUrl: avatarUrl !== undefined ? avatarUrl : undefined,
+        aiOverrides: aiOverrides !== undefined ? aiOverrides : undefined
       }
     });
 
@@ -155,6 +186,7 @@ router.patch('/:id', async (req: TenantRequest, res) => {
       name: team.name,
       description: team.description,
       avatar: team.avatarUrl,
+      aiOverrides: team.aiOverrides || {},
       memberCount: 0, // Simplified for the immediate response
       agentCount: 0
     };

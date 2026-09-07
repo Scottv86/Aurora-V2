@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { Module, ModuleField } from "../types/platform";
 import { createFormulaContext } from "../lib/formulaEngine";
 import { API_BASE_URL } from "../config";
@@ -27,9 +27,10 @@ export const executeServerCompletion = async (
   prompt: string,
   systemInstruction?: string,
   responseMimeType?: string,
-  model?: string
+  model?: string,
+  feature?: string
 ): Promise<string> => {
-  const cacheKey = `${prompt}__${systemInstruction || ''}__${responseMimeType || ''}__${model || ''}`;
+  const cacheKey = `${prompt}__${systemInstruction || ''}__${responseMimeType || ''}__${model || ''}__${feature || ''}`;
 
   // 1. Check Cache
   const cached = responseCache.get(cacheKey);
@@ -66,7 +67,8 @@ export const executeServerCompletion = async (
           model,
           prompt,
           systemInstruction,
-          responseMimeType
+          responseMimeType,
+          feature: feature || 'ai:formula_assistant'
         })
       });
 
@@ -76,31 +78,21 @@ export const executeServerCompletion = async (
           responseCache.set(cacheKey, { timestamp: Date.now(), text: data.text });
           return data.text;
         }
-      }
-    } catch (serverErr) {
-      console.warn('[aiService] Server AI endpoint unreachable, attempting client GenAI:', serverErr);
-    }
-
-    // 4. Try Direct Client-Side Gemini SDK if VITE_GEMINI_API_KEY is available
-    const clientAI = getAI();
-    if (clientAI) {
-      try {
-        const response = await clientAI.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: prompt,
-          config: {
-            systemInstruction,
-            responseMimeType: responseMimeType as any
-          }
-        });
-        const text = response.text || '';
-        if (text) {
-          responseCache.set(cacheKey, { timestamp: Date.now(), text });
-          return text;
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        if (res.status === 403 || errData?.error?.code === 'AI_FEATURE_DISABLED') {
+          throw new Error(errData?.error?.message || 'This AI feature has been restricted by your platform administrator.');
         }
-      } catch (clientErr: any) {
-        console.warn('[aiService] Direct Client GenAI failed:', clientErr);
+        if (errData?.error?.message) {
+          throw new Error(errData.error.message);
+        }
       }
+    } catch (serverErr: any) {
+      if (serverErr.message?.includes('restricted') || serverErr.message?.includes('disabled')) {
+        throw serverErr;
+      }
+      console.warn('[aiService] Server AI endpoint error:', serverErr);
+      throw serverErr;
     }
 
     throw new Error('AI Gateway API key is missing or unconfigured. Please add your key in Settings > AI Services.');
@@ -158,7 +150,7 @@ Design a comprehensive solution including:
 
 Provide your response in a structured JSON format matching AISolution.`;
 
-  const text = await executeServerCompletion(prompt, systemInstruction, 'application/json');
+  const text = await executeServerCompletion(prompt, systemInstruction, 'application/json', undefined, 'ai:solution_builder');
 
   try {
     const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -181,7 +173,7 @@ Design a professional document template in HTML format with placeholders like {{
 
 Provide your response in a structured JSON format matching { name, content, description, suggestedFields }.`;
 
-  const text = await executeServerCompletion(prompt, systemInstruction, 'application/json');
+  const text = await executeServerCompletion(prompt, systemInstruction, 'application/json', undefined, 'ai:document_template');
 
   try {
     const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -207,7 +199,7 @@ Associations: ${JSON.stringify(data.associations || [])}
 Fields: ${fieldsString}
 Data: ${dataString}`;
 
-    const text = await executeServerCompletion(prompt);
+    const text = await executeServerCompletion(prompt, undefined, 'text/plain', undefined, 'ai:record_summary');
     return text || "Summary could not be generated.";
   } catch (error) {
     console.error("Error generating AI summary:", error);
@@ -250,7 +242,7 @@ STRICT RULES:
 5. Correctly handle singular vs plural requests (e.g. "first letter" = 1, "first 3 letters" = 3).
 6. For collection operations (SUM, AVG, COUNT), ensure the field is a list or repeatable group.`;
 
-    const text = await executeServerCompletion(prompt, systemInstruction);
+    const text = await executeServerCompletion(prompt, systemInstruction, 'text/plain', undefined, 'ai:formula_assistant');
     return text.trim().replace(/^```[a-z]*\n|```$/gi, '');
   } catch (error) {
     console.error("Error generating AI expression:", error);
@@ -287,7 +279,7 @@ STRICT RULES:
 5. Correct Field Keys if they are slightly misspelled (fuzzy match against the 'key' property).
 6. Boolean values (e.g. checkboxes) are evaluated as string literals ('true' or 'false'). For boolean checks, compare against string literals, e.g. {boolean_field} == 'true' or {boolean_field} != 'true', instead of raw true/false.`;
 
-    const text = await executeServerCompletion(`Fix expression: ${expression}`, systemInstruction);
+    const text = await executeServerCompletion(`Fix expression: ${expression}`, systemInstruction, 'text/plain', undefined, 'ai:formula_assistant');
     return text.trim().replace(/^```[a-z]*\n|```$/gi, '');
   } catch (error) {
     console.error("Error fixing AI expression:", error);
@@ -411,39 +403,18 @@ export const evaluateCalculations = (
  */
 export const generateTrainingQuestions = async (role: string, scopeDescription: string): Promise<string[]> => {
   try {
-    const ai = getAI();
-    if (!ai) return [
-      "What primary task should this agent perform?",
-      "What databases or modules does this agent need to read from?",
-      "Who should be notified if a problem is detected?"
-    ];
+    const prompt = `You are an expert AI architect. A user is provisioning a custom AI Agent on the Aurora Operating Platform.
+Agent Role: "${role}"
+Agent Scope/Task Description: "${scopeDescription}"
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: `You are an expert AI architect. A user is provisioning a custom AI Agent on the Aurora Operating Platform.
-      Agent Role: "${role}"
-      Agent Scope/Task Description: "${scopeDescription}"
+Generate a list of 3 to 4 specific, interactive questions that an administrator must answer to configure and "program" this agent's behavior, directives, logic, and operational guardrails.
+The questions should be practical, focused, and tailored exactly to this agent's role (e.g. if customer service, ask about tone, escalation; if auditor, ask about critical warning thresholds).
 
-      Generate a list of 3 to 4 specific, interactive questions that an administrator must answer to configure and "program" this agent's behavior, directives, logic, and operational guardrails.
-      The questions should be practical, focused, and tailored exactly to this agent's role (e.g. if customer service, ask about tone, escalation; if auditor, ask about critical warning thresholds).
+Provide your response in JSON format matching { "questions": ["Question 1", "Question 2", "Question 3"] }.`;
 
-      Provide your response in JSON format.`,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            questions: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING }
-            }
-          },
-          required: ["questions"]
-        } as any
-      }
-    });
-
-    const parsed = JSON.parse(response.text);
+    const systemInstruction = 'Output strictly valid JSON with property "questions" containing an array of strings.';
+    const responseText = await executeServerCompletion(prompt, systemInstruction, 'application/json', undefined, 'ai:workforce_onboarding');
+    const parsed = JSON.parse(responseText.replace(/```json/g, '').replace(/```/g, '').trim());
     return parsed.questions || [];
   } catch (error) {
     console.error("Error generating training questions:", error);
@@ -466,30 +437,25 @@ export const compileAgentDirectives = async (
   articles: { title: string; content: string }[]
 ): Promise<string> => {
   try {
-    const ai = getAI();
-    if (!ai) return `Role: ${role}\nScope: ${scopeDescription}\nDirectives compiled manually.`;
-
     const qas = questions.map((q, i) => `Q: ${q}\nA: ${answers[i] || "N/A"}`).join('\n');
     const articlesContent = articles.map(art => `Document: "${art.title}"\n${art.content}`).join('\n\n');
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: `You are an expert AI architect. Combine this agent's configuration into a cohesive, highly effective system prompt (directives) for this AI Agent operating on the Aurora Platform.
+    const prompt = `Combine this agent's configuration into a cohesive, highly effective system prompt (directives) for this AI Agent operating on the Aurora Platform.
 
-      Agent Role: "${role}"
-      Agent Scope: "${scopeDescription}"
+Agent Role: "${role}"
+Agent Scope: "${scopeDescription}"
 
-      Knowledge Base References:
-      ${articlesContent || "No specific documents connected."}
+Knowledge Base References:
+${articlesContent || "No specific documents connected."}
 
-      Interactive Interview Answers:
-      ${qas}
+Interactive Interview Answers:
+${qas}
 
-      Generate a complete, professional, and detailed system instruction prompt for this agent. It should dictate its role, workflow instructions, how it should consult the connected knowledge bases, response tone, and operational boundaries/guardrails.
-      Write ONLY the generated prompt content.`,
-    });
+Generate a complete, professional, and detailed system instruction prompt for this agent. It should dictate its role, workflow instructions, how it should consult the connected knowledge bases, response tone, and operational boundaries/guardrails.`;
 
-    return response.text.trim();
+    const systemInstruction = 'You are an expert AI architect. Write ONLY the generated prompt content with zero wrapper or conversational chatter.';
+    const responseText = await executeServerCompletion(prompt, systemInstruction, 'text/plain', undefined, 'ai:workforce_onboarding');
+    return responseText.trim();
   } catch (error) {
     console.error("Error compiling agent directives:", error);
     return `Role: ${role}\nScope: ${scopeDescription}\nConnected Knowledge Bases: ${articles.map(a => a.title).join(', ')}`;
@@ -1005,7 +971,7 @@ USER REQUEST / REFINEMENT PROMPT:
 Generate the complete updated solution blueprint JSON object.`;
 
   try {
-    const text = await executeServerCompletion(fullUserPrompt, systemInstruction, 'application/json', model);
+    const text = await executeServerCompletion(fullUserPrompt, systemInstruction, 'application/json', model, 'ai:solution_builder');
 
     updateSteps('s4', 'completed');
 
@@ -1048,7 +1014,9 @@ Output ONLY a JSON object matching this schema:
     const responseText = await executeServerCompletion(
       `Generate a form layout with proper fields for this request:\n"${prompt}"`,
       systemInstruction,
-      'application/json'
+      'application/json',
+      undefined,
+      'ai:form_builder'
     );
     const jsonStr = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
     const parsed = JSON.parse(jsonStr);

@@ -13,8 +13,6 @@ import {
   ChevronDown, 
   Trash2, 
   Loader2, 
-  Check, 
-  Layers,
   Bold,
   Italic,
   Underline,
@@ -30,8 +28,7 @@ import {
   Palette,
   Type,
   Undo,
-  Redo,
-  Code
+  Redo
 } from 'lucide-react';
 import { EmailAccount, EmailAttachment, EmailSnippet } from '../../../types/inbox';
 import { InboxService } from '../../../services/inboxService';
@@ -111,7 +108,7 @@ export const InboxComposerModal: React.FC<InboxComposerModalProps> = ({
 
   // AI Smart Compose (Ghost Completion) State
   const [smartComposeText, setSmartComposeText] = useState<string | null>(null);
-  const [isFetchingSuggestion, setIsFetchingSuggestion] = useState(false);
+  const [_isFetchingSuggestion, setIsFetchingSuggestion] = useState(false);
   const composeDebounceRef = useRef<any>(null);
 
   // Sync initial body into editor
@@ -128,7 +125,7 @@ export const InboxComposerModal: React.FC<InboxComposerModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       const activeId = initialAccountId || 
-        accounts.find(a => a.type === 'PERSONAL' || a.provider === 'GOOGLE' || a.email.includes('@gmail'))?.id || 
+        accounts.find(a => a.type === 'PERSONAL' || a.provider === 'gmail' || a.email.includes('@gmail'))?.id || 
         accounts[0]?.id;
       if (activeId) setAccountId(activeId);
       if (initialTo) setToInput(initialTo.join(', '));
@@ -309,7 +306,7 @@ export const InboxComposerModal: React.FC<InboxComposerModalProps> = ({
 
   const handleInsertSnippet = (snip: EmailSnippet) => {
     const interpolated = InboxService.interpolateTemplate(snip.content, {
-      'user.name': user?.name || user?.firstName || 'Staff',
+      'user.name': (user as any)?.name || (user as any)?.firstName || 'Staff',
       'user.email': user?.email || '',
       'tenant.name': tenant?.name || 'Aurora'
     });
@@ -327,7 +324,7 @@ export const InboxComposerModal: React.FC<InboxComposerModalProps> = ({
     const context = {
       'party.firstName': toInput.split('@')[0] || 'Customer',
       'tenant.name': tenant?.name || 'Aurora',
-      'user.name': user?.name || user?.firstName || 'Representative',
+      'user.name': (user as any)?.name || (user as any)?.firstName || 'Representative',
       'system.currentDate': new Date().toLocaleDateString()
     };
     const rawContent = tpl.content || '';

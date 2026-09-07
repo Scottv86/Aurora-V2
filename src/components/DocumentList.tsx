@@ -94,12 +94,14 @@ export const DocumentList: React.FC<DocumentListProps> = ({
     }
   };
 
-  const getStatusColor = (status: GeneratedDocument['status']) => {
+  const getStatusColor = (status: GeneratedDocument['status'] | string) => {
     switch (status) {
       case 'Draft': return 'bg-zinc-800 text-zinc-400 border-zinc-700';
       case 'Final': return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
       case 'Issued': return 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20';
       case 'Approved': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+      case 'Generated': return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+      case 'Signed': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
       default: return 'bg-zinc-800 text-zinc-400 border-zinc-700';
     }
   };

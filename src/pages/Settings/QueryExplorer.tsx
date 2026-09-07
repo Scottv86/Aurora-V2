@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Database, 
   Folder, 
@@ -16,8 +16,6 @@ import {
   Terminal,
   AlertTriangle,
   CheckCircle2,
-  Maximize2,
-  Minimize2,
   ArrowLeft,
   Sparkles
 } from 'lucide-react';
@@ -51,7 +49,7 @@ interface SchemaData {
 
 export const QueryExplorer = () => {
   const navigate = useNavigate();
-  const { tenant, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
+  const { tenant, isBuilderFullscreen, setIsBuilderFullscreen } = usePlatform();
   const { session } = useAuth();
 
   useEffect(() => {
@@ -81,10 +79,7 @@ export const QueryExplorer = () => {
   const [durationMs, setDurationMs] = useState(0);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [consoleMessage, setConsoleMessage] = useState<string>('Ready.');
-
-  // DOM Refs for Editor scroll sync & resizing
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const lineNumbersRef = useRef<HTMLDivElement>(null);
 
   // Sorting State
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
@@ -123,36 +118,6 @@ export const QueryExplorer = () => {
       fetchSchema();
     }
   }, [tenant?.id, token]);
-
-  // Handle scrolling of textarea to sync line numbers scroll
-  const handleScroll = () => {
-    if (textareaRef.current && lineNumbersRef.current) {
-      lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop;
-    }
-  };
-
-  // Keyboard shortcut listener: Ctrl+Enter to execute query, Tab to indent
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.ctrlKey && e.key === 'Enter') {
-      e.preventDefault();
-      handleExecuteQuery();
-    }
-    
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const start = e.currentTarget.selectionStart;
-      const end = e.currentTarget.selectionEnd;
-      const value = e.currentTarget.value;
-      
-      setSqlQuery(value.substring(0, start) + '  ' + value.substring(end));
-      
-      setTimeout(() => {
-        if (textareaRef.current) {
-          textareaRef.current.selectionStart = textareaRef.current.selectionEnd = start + 2;
-        }
-      }, 0);
-    }
-  };
 
   // Execute Query
   const handleExecuteQuery = async () => {
@@ -283,10 +248,6 @@ export const QueryExplorer = () => {
     link.click();
     document.body.removeChild(link);
   };
-
-  // Line numbering list
-  const lineCount = sqlQuery.split('\n').length;
-  const lineNumbers = Array.from({ length: Math.max(lineCount, 1) }, (_, i) => i + 1);
 
   // Sorting logic for results table
   const sortedResults = useMemo(() => {

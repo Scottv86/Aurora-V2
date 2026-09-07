@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { 
   ArrowLeft, 
   Save, 
@@ -21,8 +21,6 @@ import {
   Send, 
   BookOpen, 
   Radio,
-  Maximize2,
-  Minimize2,
   FileCode,
   Layers,
   X,
@@ -99,7 +97,7 @@ export const SiteBuilderPage: React.FC = () => {
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const returnUrl = (location.state as any)?.returnUrl || searchParams.get('returnUrl');
-  const { isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
+  const { isBuilderFullscreen, setIsBuilderFullscreen } = usePlatform();
   const { theme } = useTheme();
   const isLight = theme === 'light';
 

@@ -9,9 +9,7 @@ import {
   Workflow,
   Layers,
   Zap,
-  ChevronRight,
-  Maximize2,
-  Minimize2
+  ChevronRight
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';

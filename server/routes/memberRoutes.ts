@@ -37,7 +37,8 @@ router.get('/', async (req: TenantRequest, res) => {
       avatarUrl: m.avatarUrl || (m.isSynthetic ? undefined : `https://ui-avatars.com/api/?name=${encodeURIComponent(m.user?.email || m.firstName || 'U')}&background=random`),
       lastActive: m.isSynthetic ? 'Now' : 'Recent',
       isContractor: m.isContractor,
-      licenceType: m.licenceType
+      licenceType: m.licenceType,
+      aiOverrides: m.aiOverrides || {}
     }));
 
     // If no tenant members exist in tenantMember table, return registered users from User model
@@ -142,7 +143,8 @@ router.get('/:id', async (req: TenantRequest, res) => {
       licenceType: member.licenceType,
       aiHumour: member.aiHumour,
       workEmail: member.workEmail,
-      signature: member.signature
+      signature: member.signature,
+      aiOverrides: member.aiOverrides || {}
     };
 
     res.json(formatted);
@@ -361,7 +363,7 @@ router.post('/:id', authorize('manage:staff'), async (req: TenantRequest, res) =
       firstName, otherName, familyName, personalEmail, homeAddress, workArrangements,
       emergencyContact, dateOfBirth, gender, nationality, startDate, endDate,
       phoneNumbers, certifications, education, skills, permissionGroups,
-      avatarUrl, isContractor, licenceType, aiHumour, workEmail, signature
+      avatarUrl, isContractor, licenceType, aiHumour, workEmail, signature, aiOverrides
     } = req.body;
 
     const member = await db.tenantMember.findFirst({
@@ -379,6 +381,7 @@ router.post('/:id', authorize('manage:staff'), async (req: TenantRequest, res) =
         teamId: teamId !== undefined ? (teamId || null) : member.teamId,
         positionId: positionId !== undefined ? (positionId || null) : member.positionId,
         status: status || member.status,
+        aiOverrides: aiOverrides !== undefined ? aiOverrides : undefined,
         
         firstName: firstName !== undefined ? firstName : member.firstName,
         otherName: otherName !== undefined ? otherName : member.otherName,
@@ -484,6 +487,39 @@ router.post('/:id', authorize('manage:staff'), async (req: TenantRequest, res) =
   } catch (err: any) {
     console.error('[MemberAPI Update Error]', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT update member AI Overrides
+router.put('/:id/ai-overrides', authorize('manage:staff'), async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { id } = req.params;
+    const { aiOverrides } = req.body;
+
+    const existing = await db.tenantMember.findFirst({ where: { id, tenantId } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Member not found' });
+    }
+
+    const updated = await db.tenantMember.update({
+      where: { id },
+      data: { aiOverrides: aiOverrides || {} }
+    });
+
+    await recordAudit({
+      tenantId,
+      actorId: req.user!.uid,
+      action: 'MEMBER_AI_OVERRIDES_UPDATE',
+      resourceId: id,
+      newValue: updated.aiOverrides
+    });
+
+    res.json({ success: true, aiOverrides: updated.aiOverrides });
+  } catch (err: any) {
+    console.error(`[MemberAPI] AI Overrides update error for member ${req.params.id}:`, err);
+    res.status(500).json({ error: err.message || 'Failed to update member AI overrides' });
   }
 });
 

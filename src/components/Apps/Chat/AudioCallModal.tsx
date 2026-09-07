@@ -6,9 +6,6 @@ import {
   Video, 
   VideoOff, 
   Monitor, 
-  MessageSquare, 
-  Users, 
-  Sparkles,
   Volume2
 } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -16,7 +13,7 @@ import { useChat } from '../../../context/ChatContext';
 import { cn } from '../../../lib/utils';
 
 export const AudioCallModal: React.FC = () => {
-  const { activeChannel, isCallingOpen, setIsCallingOpen, users } = useChat();
+  const { activeChannel, isCallingOpen, setIsCallingOpen } = useChat();
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOn, setIsVideoOn] = useState(false);
   const [isSharingScreen, setIsSharingScreen] = useState(false);

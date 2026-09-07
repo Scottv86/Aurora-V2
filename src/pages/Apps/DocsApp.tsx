@@ -12,9 +12,7 @@ import {
   Briefcase,
   Users,
   ShieldAlert,
-  Trash2,
-  Maximize2,
-  Minimize2
+  Trash2
 } from 'lucide-react';
 import { DriveItem } from '../../types/drive';
 import { DriveService, sendToGlobalRecyclingBin } from '../../services/driveService';
@@ -63,7 +61,7 @@ const TEMPLATES = [
 
 export const DocsApp = () => {
   const navigate = useNavigate();
-  const { tenant, isBuilderFullscreen, setIsBuilderFullscreen, toggleBuilderFullscreen } = usePlatform();
+  const { tenant, isBuilderFullscreen, setIsBuilderFullscreen } = usePlatform();
   const { user, session } = useAuth();
 
   useEffect(() => {

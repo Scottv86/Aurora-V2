@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Layers, Settings, Filter, Table as TableIcon, Play, Save, X, Plus, Trash2,
-  Sparkles, Check, ChevronRight, Palette, Edit3, Sliders, AlertTriangle,
+  Sparkles, Check, ChevronRight, Palette, Edit3, Sliders,
   Layout, Columns, Kanban, CreditCard, Maximize2, PanelRight, SlidersHorizontal,
-  FolderKanban, Grid, CheckCircle2, ChevronDown
+  FolderKanban
 } from 'lucide-react';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { QueueEntity, ConditionalFormattingRule } from '../../../types/platform';
@@ -77,7 +77,7 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
   const [kanbanGroupBy, setKanbanGroupBy] = useState<string>(
     initialQueue?.queueConfig?.listSettings?.kanbanGroupBy || 'status'
   );
-  const [cardFields, setCardFields] = useState<string[]>(
+  const [cardFields] = useState<string[]>(
     initialQueue?.queueConfig?.listSettings?.cardFields || ['id', 'status', 'priority', 'assigneeId', 'createdAt']
   );
   const [tableDensity, setTableDensity] = useState<'compact' | 'standard' | 'spacious'>(
