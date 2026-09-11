@@ -8,33 +8,47 @@ const useMyContainerWidth = (loading: boolean) => {
 
   useEffect(() => {
     if (loading) return;
-    
-    const timer = setTimeout(() => {
-      const node = containerRef.current;
-      if (node) {
-        setWidth(node.offsetWidth || 1280);
-        setMounted(true);
-      }
-    }, 0);
-
-    const node = containerRef.current;
-    if (!node) {
-      return () => clearTimeout(timer);
-    }
 
     let observer: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== 'undefined') {
-      observer = new ResizeObserver((entries) => {
-        const entry = entries[0];
-        if (entry && entry.contentRect.width) {
-          setWidth(entry.contentRect.width);
+    let frameId: number;
+
+    const attachObserver = () => {
+      const node = containerRef.current;
+      if (node) {
+        if (node.offsetWidth > 0) {
+          setWidth(node.offsetWidth);
         }
-      });
-      observer.observe(node);
+        setMounted(true);
+
+        if (typeof ResizeObserver !== 'undefined' && !observer) {
+          observer = new ResizeObserver((entries) => {
+            const entry = entries[0];
+            if (entry && entry.contentRect.width > 0) {
+              setWidth(entry.contentRect.width);
+              setMounted(true);
+            }
+          });
+          observer.observe(node);
+        }
+        return true;
+      }
+      return false;
+    };
+
+    if (!attachObserver()) {
+      // Retry in next frames if containerRef hasn't attached to DOM yet
+      let attempts = 0;
+      const pollRef = () => {
+        if (!attachObserver() && attempts < 20) {
+          attempts++;
+          frameId = requestAnimationFrame(pollRef);
+        }
+      };
+      frameId = requestAnimationFrame(pollRef);
     }
 
     return () => {
-      clearTimeout(timer);
+      if (frameId) cancelAnimationFrame(frameId);
       if (observer) {
         observer.disconnect();
       }
@@ -145,7 +159,8 @@ import {
   Key,
   Edit2,
   Undo2,
-  Redo2
+  Redo2,
+  RefreshCw
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -201,9 +216,21 @@ import { ValidationRule } from '../lib/validationEngine';
 import { ValidationsTab } from './Builder/ValidationsTab';
 import { ConnectorsTab } from './Builder/ConnectorsTab';
 import { AutomationBuilder } from './Builders';
+import { SidebarItem } from './Navigation/SidebarItem';
 import { ConditionalFormattingModal } from './Builder/ConditionalFormattingModal';
 import { ConditionalFormattingRule } from '../types/platform';
 import { PRESET_FORMATTING_MAP } from '../lib/utils';
+import { MockDataGeneratorModal } from './Builder/MockDataGeneratorModal';
+import { generateMockDataset } from '../utils/mockDataGenerator';
+import { RollupExpressionEditor } from './Builder/RollupExpressionEditor';
+import { RelationshipConfigDrawer } from './Builder/RelationshipConfigDrawer';
+import { SchemaDiffModal } from './Builder/SchemaDiffModal';
+import { BuilderAICopilotDrawer } from './Builder/BuilderAICopilotDrawer';
+import { PublicFormPublishModal } from './Builder/PublicFormPublishModal';
+import { ScheduledDeploymentsDrawer } from './Builder/ScheduledDeploymentsDrawer';
+import { VersionHistoryDrawer } from './Builder/VersionHistoryDrawer';
+import { versionControlService } from '../utils/versionControlService';
+import { deploymentQueueService } from '../utils/deploymentQueueService';
 
 
 
@@ -458,6 +485,83 @@ const renderSubmoduleMock = (block: any) => {
             </table>
           </div>
         )}
+      </div>
+    </div>
+  );
+};
+
+// --- Mock Rollup Aggregate Renderer ---
+const renderRollupMock = (block: any) => {
+  const rollup = block.rollupConfig;
+  const agg = rollup?.aggregation || 'COUNT';
+  const targetMod = rollup?.targetModuleName || 'Target Module';
+  const targetField = rollup?.targetFieldName ? `.${rollup.targetFieldName}` : '';
+  const expr = `${agg}(${targetMod}${targetField})`;
+  const mockVal = agg === 'COUNT' ? '12' : agg === 'SUM' || agg === 'AVG' ? (rollup?.format === 'currency' ? '$42,500.00' : '42,500') : agg === 'MIN' || agg === 'MAX' ? '2026-03-15' : 'Active';
+
+  return (
+    <div className="pt-2 flex-1 flex flex-col justify-center">
+      <div className="p-3.5 bg-gradient-to-br from-indigo-50/80 to-purple-50/50 dark:from-indigo-950/20 dark:to-purple-950/10 border border-indigo-200/80 dark:border-indigo-800/40 rounded-2xl flex items-center justify-between gap-3 shadow-sm">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-indigo-600/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 border border-indigo-500/20">
+            <Calculator size={16} />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-indigo-500/15 text-indigo-700 dark:text-indigo-300">
+                {agg}
+              </span>
+              <span className="text-[10px] font-mono text-zinc-500 dark:text-zinc-400 truncate">
+                {rollup ? expr : 'No aggregate expression'}
+              </span>
+            </div>
+            <div className="text-sm font-black text-zinc-900 dark:text-white mt-0.5 tracking-tight">
+              {mockVal}
+            </div>
+          </div>
+        </div>
+        <div className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest bg-white dark:bg-zinc-900 px-2 py-1 rounded-lg border border-indigo-200/60 dark:border-indigo-800/40 shadow-xs shrink-0">
+          Rollup
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- Mock M2M Relationship Junction Renderer ---
+const renderRelationshipM2MMock = (block: any) => {
+  const rel = block.relationshipConfig;
+  const cardinality = rel?.cardinality || 'N:N';
+  const targetModName = rel?.targetModuleName || 'Linked Records';
+
+  return (
+    <div className="pt-2 flex-1 flex flex-col justify-between">
+      <div className="bg-white/5 dark:bg-zinc-950/20 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] overflow-hidden shadow-inner w-full flex flex-col flex-1">
+        <div className="px-4 py-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-4 select-none shrink-0 bg-zinc-50/50 dark:bg-zinc-900/30">
+          <div className="flex items-center gap-2">
+            <ArrowRightLeft size={13} className="text-indigo-500" />
+            <span className="text-[10px] font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">
+              {targetModName} ({cardinality})
+            </span>
+          </div>
+          <div className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-indigo-600 text-white rounded-lg text-[9px] font-bold cursor-not-allowed">
+            <Plus size={10} />
+            <span>Link {targetModName}</span>
+          </div>
+        </div>
+        <div className="p-3 grid grid-cols-2 gap-2 overflow-y-auto flex-1 scrollbar-hide min-h-[80px]">
+          {['Alpha Junction Record', 'Beta Junction Record'].map((name, i) => (
+            <div key={i} className="p-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-between gap-2 shadow-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-[8px] font-mono font-bold text-indigo-500">JN-{i + 1}</span>
+                <span className="text-[10px] font-bold text-zinc-800 dark:text-zinc-200 truncate">{name}</span>
+              </div>
+              <span className="px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                Linked
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -871,6 +975,9 @@ export interface Field {
   maxDateFieldId?: string;
   // Calculation formatting
   showAsCurrency?: boolean;
+  // Relational & Rollup configuration
+  rollupConfig?: any;
+  relationshipConfig?: any;
 }
 
 
@@ -987,9 +1094,11 @@ export const FIELD_CATEGORIES = [
   },
   {
     id: 'hierarchical',
-    label: 'Hierarchical',
+    label: 'Relational & Computed',
     fields: [
-      { id: 'sub_module', label: 'Sub-module', icon: Layers, defaultSpan: 6 },
+      { id: 'sub_module', label: '1:N Submodule Table', icon: Layers, defaultSpan: 12 },
+      { id: 'relationship_m2m', label: 'Many-to-Many Junction', icon: ArrowRightLeft, defaultSpan: 12 },
+      { id: 'rollup', label: 'Rollup Aggregate (SUM/COUNT)', icon: Calculator, defaultSpan: 6 },
     ]
   }
 ];
@@ -1547,54 +1656,6 @@ const FieldFormattingRulesEditor = ({
 
 // --- Components ---
 
-const generateMockData = (fields: Field[], count: number = 5) => {
-  const mocks: any[] = [];
-  const firstNames = ['James', 'Mary', 'Robert', 'Patricia', 'John', 'Jennifer', 'Michael', 'Linda'];
-  const lastNames = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis'];
-  const statuses = ['Active', 'Pending', 'Archived', 'Draft', 'Review'];
-
-  for (let i = 0; i < count; i++) {
-    const record: any = { id: `mock-${i}`, createdAt: new Date(Date.now() - Math.random() * 1000000000).toISOString() };
-    fields.forEach(f => {
-      switch (f.type) {
-        case 'text':
-          if (f.label.toLowerCase().includes('name')) {
-            record[f.id] = `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`;
-          } else {
-            record[f.id] = `Mock ${f.label} ${i + 1}`;
-          }
-          break;
-        case 'email':
-          record[f.id] = `${firstNames[Math.floor(Math.random() * firstNames.length)].toLowerCase()}@example.com`;
-          break;
-        case 'number':
-        case 'currency':
-          record[f.id] = Math.floor(Math.random() * 10000);
-          break;
-        case 'select':
-          if (f.options && f.options.length > 0) {
-            record[f.id] = f.options[Math.floor(Math.random() * f.options.length)];
-          } else {
-            record[f.id] = statuses[Math.floor(Math.random() * statuses.length)];
-          }
-          break;
-        case 'date':
-          record[f.id] = new Date(Date.now() - Math.random() * 1000000000).toISOString().split('T')[0];
-          break;
-        case 'checkbox':
-        case 'toggle':
-        case 'boolean':
-          record[f.id] = Math.random() > 0.5;
-          break;
-        default:
-          record[f.id] = '-';
-      }
-    });
-    mocks.push(record);
-  }
-  return mocks;
-};
-
 const FormCanvasItem = ({ fObj, isSelected, onSelect, onDelete, layout, isRestricted }: any) => {
   const {
     attributes,
@@ -1943,10 +2004,90 @@ export const ModuleEditor = () => {
   const [showMappingModal, setShowMappingModal] = useState(false);
   const [activeMappingIdx, setActiveMappingIdx] = useState<number | null>(null);
   const [activeMappingType, setActiveMappingType] = useState<'source' | 'target'>('target');
-  const mockData = React.useMemo(() => generateMockData(layout, 10), [layout.length]);
+  const [customMockData, setCustomMockData] = useState<any[] | null>(null);
+  const [isMockDataModalOpen, setIsMockDataModalOpen] = useState(false);
+  const [previewRole, setPreviewRole] = useState<string>('admin');
+  const [selectedSecurityRoleId, setSelectedSecurityRoleId] = useState<string>('admin');
+  const [editingRollupField, setEditingRollupField] = useState<Field | null>(null);
+  const [editingRelationshipField, setEditingRelationshipField] = useState<Field | null>(null);
+  const [fieldSecurity, setFieldSecurity] = useState<Record<string, Record<string, { read: boolean; write: boolean; masked: boolean; hidden: boolean }>>>({
+    admin: {},
+    manager: {},
+    staff: {},
+    guest: {}
+  });
+  const [persistedLayout, setPersistedLayout] = useState<Field[]>([]);
+  const [isSchemaDiffModalOpen, setIsSchemaDiffModalOpen] = useState(false);
+  const [schemaVersion, setSchemaVersion] = useState('1.0');
+  const [isAICopilotOpen, setIsAICopilotOpen] = useState(false);
+  const [isPublicPublishModalOpen, setIsPublicPublishModalOpen] = useState(false);
+  const [isScheduledDeploymentsOpen, setIsScheduledDeploymentsOpen] = useState(false);
+  const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading && layout && layout.length > 0 && id) {
+      versionControlService.seedInitialVersionIfEmpty(id, moduleSettings.name, {
+        layout,
+        tabs,
+        moduleSettings,
+        interfaceSettings,
+        forms,
+        validationRules,
+        fieldSecurity
+      });
+    }
+  }, [isLoading, id, moduleSettings.name]);
+  const [scheduledDeploymentsCount, setScheduledDeploymentsCount] = useState(0);
+
+  useEffect(() => {
+    const updateCount = () => {
+      const list = deploymentQueueService.getDeployments(id || undefined);
+      setScheduledDeploymentsCount(list.filter(d => d.status === 'SCHEDULED').length);
+    };
+    updateCount();
+    return deploymentQueueService.subscribe(updateCount);
+  }, [id]);
+
+  const pendingSchemaChangesCount = React.useMemo(() => {
+    const flatten = (fields: Field[]): Field[] => {
+      const list: Field[] = [];
+      const walk = (items: Field[]) => {
+        items.forEach(f => {
+          if (!['divider', 'spacer', 'heading', 'alert'].includes(f.type)) {
+            list.push(f);
+          }
+          if (f.fields && Array.isArray(f.fields)) walk(f.fields);
+        });
+      };
+      walk(fields);
+      return list;
+    };
+
+    const cur = flatten(layout);
+    const prev = flatten(persistedLayout);
+    const curMap = new Map(cur.map(f => [f.id, f]));
+    const prevMap = new Map(prev.map(f => [f.id, f]));
+
+    let count = 0;
+    cur.forEach(c => {
+      const p = prevMap.get(c.id);
+      if (!p || p.type !== c.type || p.name !== c.name || !!p.required !== !!c.required) {
+        count++;
+      }
+    });
+    prev.forEach(p => {
+      if (!curMap.has(p.id)) count++;
+    });
+
+    return count;
+  }, [layout, persistedLayout]);
+
+  const defaultMockData = React.useMemo(() => generateMockDataset(layout, { count: 10, domain: 'general' }), [layout]);
   const previewRecords = React.useMemo(() => {
-    return useRealData && realRecords.length > 0 ? realRecords : mockData;
-  }, [useRealData, realRecords, mockData]);
+    if (useRealData && realRecords.length > 0) return realRecords;
+    if (customMockData && customMockData.length > 0) return customMockData;
+    return defaultMockData;
+  }, [useRealData, realRecords, customMockData, defaultMockData]);
   const [rightSidebarTab, setRightSidebarTab] = useState<'inspector' | 'architect'>('inspector');
   const [architectMessages, setArchitectMessages] = useState<{ role: 'user' | 'assistant', content: string }[]>([
     { role: 'assistant', content: 'Hello! I am the Shadow Architect. How can I help you optimize your module today?' }
@@ -2558,12 +2699,18 @@ export const ModuleEditor = () => {
           });
         }
         
+        if (data.fieldSecurity || data.config?.fieldSecurity) {
+          setFieldSecurity(data.fieldSecurity || data.config?.fieldSecurity);
+        }
+
         setIsRestricted(!!data.isGlobal);
 
         setBreadcrumbOverride(id, data.name || 'Untitled Module');
 
         if (data.layout) {
-          setLayout(normalizeLayout(data.layout));
+          const normLayout = normalizeLayout(data.layout);
+          setLayout(normLayout);
+          setPersistedLayout(normLayout);
         }
         if (data.tabs) setTabs(data.tabs);
         if (data.validationRules) setValidationRules(data.validationRules);
@@ -2693,7 +2840,8 @@ export const ModuleEditor = () => {
         dataPopulationRules,
         workflows: workflow ? [workflow] : [],
         interfaceSettings,
-        validationRules
+        validationRules,
+        fieldSecurity
       };
 
       const url = isNew 
@@ -2786,6 +2934,7 @@ export const ModuleEditor = () => {
       await refreshModules();
       queryClient.invalidateQueries({ queryKey: ['module', tenant?.id, id] });
 
+      setPersistedLayout(layout);
       setIsDirty(false);
       if (isNew) {
         toast.success('Module created successfully!');
@@ -4850,28 +4999,6 @@ export const ModuleEditor = () => {
 
     return (
       <div className="space-y-4">
-        <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm">
-          <div className="space-y-0.5">
-            <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest font-black">Split View Preview</span>
-            <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase">List & Detail Split Layout</h3>
-          </div>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setSelectedId('__table_settings');
-            }}
-            className={cn(
-              "px-3 py-1.5 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 shadow-sm",
-              selectedId === '__table_settings'
-                ? "bg-indigo-500 text-white border-indigo-500 shadow-md shadow-indigo-500/20"
-                : "bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-            )}
-          >
-            <Settings size={11} className={selectedId === '__table_settings' ? "animate-spin-slow" : ""} />
-            Split View Settings
-          </button>
-        </div>
-
         {/* Dual Pane Container */}
         <div className="h-[560px] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden flex shadow-sm">
           {/* Left List Rail */}
@@ -5219,6 +5346,10 @@ export const ModuleEditor = () => {
                 </div>
               ) : block.type === 'sub_module' ? (
                 renderSubmoduleMock(block)
+              ) : block.type === 'relationship_m2m' ? (
+                renderRelationshipM2MMock(block)
+              ) : block.type === 'rollup' ? (
+                renderRollupMock(block)
               ) : block.type === 'lookup' ? (
                 <div className="pt-2">
                   <div className="h-11 w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-between px-4">
@@ -5333,6 +5464,15 @@ export const ModuleEditor = () => {
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border border-indigo-500/30 bg-indigo-500/10 text-indigo-500 ml-1">
                 {moduleSettings.category || 'Custom'}
               </span>
+              <button
+                type="button"
+                onClick={() => setIsVersionHistoryOpen(true)}
+                className="flex items-center gap-1 font-mono text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-all cursor-pointer shadow-sm ml-1"
+                title="View Version History & Rollback"
+              >
+                <History size={11} />
+                <span>{schemaVersion.startsWith('v') ? schemaVersion : `v${schemaVersion}`}</span>
+              </button>
             </div>
             {!isBuilderFullscreen && (
               <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mt-0.5">Visual Module Builder</p>
@@ -5372,6 +5512,20 @@ export const ModuleEditor = () => {
           </button>
 
           <button 
+            type="button"
+            onClick={() => setIsVersionHistoryOpen(true)}
+            className={cn(
+              "flex items-center gap-1.5 border rounded-xl font-bold transition-all uppercase tracking-wider bg-white/50 dark:bg-white/[0.01] border-zinc-200 dark:border-white/5 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white",
+              isBuilderFullscreen ? "px-2.5 py-1.5 text-[11px]" : "px-3 py-2 text-xs"
+            )}
+            title="Version History, Snapshots & Rollback"
+          >
+            <History size={14} className="text-indigo-500" />
+            <span className="font-mono">{schemaVersion.startsWith('v') ? schemaVersion : `v${schemaVersion}`}</span>
+            <span>History</span>
+          </button>
+
+          <button 
             onClick={() => setActiveTab(activeTab === 'preview' ? 'builder' : 'preview')}
             className={cn(
               "flex items-center gap-2 border rounded-xl font-bold transition-all uppercase tracking-wider",
@@ -5383,6 +5537,51 @@ export const ModuleEditor = () => {
           >
             <Eye size={15} />
             <span>{activeTab === 'preview' ? 'Exit Preview' : 'Preview'}</span>
+          </button>
+
+          <button 
+            onClick={() => setIsAICopilotOpen(!isAICopilotOpen)}
+            className={cn(
+              "flex items-center gap-1.5 border rounded-xl font-bold transition-all uppercase tracking-wider relative",
+              isBuilderFullscreen ? "px-2.5 py-1.5 text-[11px]" : "px-3 py-2 text-xs",
+              isAICopilotOpen 
+                ? "bg-gradient-to-r from-indigo-600 to-purple-600 border-indigo-500 text-white shadow-md shadow-indigo-500/20"
+                : "bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400 hover:border-indigo-500/40"
+            )}
+            title="In-Canvas AI Architect Copilot"
+          >
+            <Sparkles size={14} className={isAICopilotOpen ? "animate-spin" : ""} />
+            <span>AI Copilot</span>
+          </button>
+
+          <button 
+            onClick={() => setIsPublicPublishModalOpen(true)}
+            className={cn(
+              "flex items-center gap-1.5 border rounded-xl font-bold transition-all uppercase tracking-wider bg-white/50 dark:bg-white/[0.01] border-zinc-200 dark:border-white/5 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white",
+              isBuilderFullscreen ? "px-2.5 py-1.5 text-[11px]" : "px-3 py-2 text-xs"
+            )}
+            title="Public Intake Form & Embed Snippets"
+          >
+            <Globe size={14} />
+            <span>Public Form</span>
+          </button>
+
+          <button 
+            onClick={() => setIsSchemaDiffModalOpen(true)}
+            className={cn(
+              "flex items-center gap-1.5 border rounded-xl font-bold transition-all uppercase tracking-wider relative",
+              isBuilderFullscreen ? "px-2.5 py-1.5 text-[11px]" : "px-3.5 py-2 text-xs",
+              pendingSchemaChangesCount > 0
+                ? "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 shadow-sm"
+                : "bg-white/50 dark:bg-white/[0.01] border-zinc-200 dark:border-white/5 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+            )}
+            title="Review Schema Diff & Safe DDL Deployment Pipeline"
+          >
+            <Database size={14} />
+            <span>Deploy</span>
+            {pendingSchemaChangesCount > 0 && (
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+            )}
           </button>
 
           <button 
@@ -5414,8 +5613,8 @@ export const ModuleEditor = () => {
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        {/* 56px Vertical Icon Rail (Sites Builder Style) */}
-        <div className="w-[56px] shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 flex flex-col items-center py-3 space-y-1 z-20 overflow-y-auto no-scrollbar select-none">
+        {/* 56px Vertical Icon Rail */}
+        <div className="w-[56px] shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col items-center py-3 px-1.5 space-y-1.5 z-20 overflow-y-auto no-scrollbar select-none">
           {[
             { id: 'details', label: 'Setup', icon: Settings2 },
             { id: 'builder', label: 'Interface', icon: Layout },
@@ -5426,52 +5625,19 @@ export const ModuleEditor = () => {
             { id: 'automation', label: 'Automations', icon: BrainCircuit },
             { id: 'security', label: 'Security', icon: Lock },
             { id: 'deployment', label: 'Deployment', icon: Rocket }
-          ].map((t) => {
-            const Icon = t.icon;
-            const isActive = activeTab === t.id;
-            return (
-              <button
-                key={t.id}
-                onClick={() => {
-                  if (activeTab === 'preview') setActiveTab('builder');
-                  setActiveTab(t.id as any);
-                }}
-                className="w-full h-11 relative flex items-center justify-center cursor-pointer group transition-all"
-                title={t.label}
-              >
-                {/* Left Edge Accent Bar */}
-                {isActive && (
-                  <motion.span 
-                    layoutId="activeModuleTabIndicator"
-                    className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[20px] rounded-r-full shadow-sm z-10 bg-indigo-500"
-                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                  />
-                )}
-
-                {/* Micro-bounce icon */}
-                <motion.div 
-                  animate={{ scale: isActive ? [0.85, 1.15, 1] : 1 }}
-                  transition={{ duration: 0.25, ease: "easeOut" }}
-                  className="flex items-center justify-center"
-                >
-                  <Icon 
-                    size={19} 
-                    className={cn(
-                      "transition-colors duration-200",
-                      isActive 
-                        ? "text-indigo-600 dark:text-indigo-400 drop-shadow-[0_0_8px_rgba(99,102,241,0.4)]" 
-                        : "text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-zinc-200"
-                    )}
-                  />
-                </motion.div>
-
-                {/* Hover Tooltip */}
-                <span className="absolute left-full ml-2 px-2.5 py-1 bg-zinc-900 border border-zinc-800 text-zinc-100 text-[11px] font-semibold rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity shadow-xl z-50">
-                  {t.label}
-                </span>
-              </button>
-            );
-          })}
+          ].map((t) => (
+            <SidebarItem
+              key={t.id}
+              icon={t.icon}
+              label={t.label}
+              active={activeTab === t.id}
+              collapsed={true}
+              onClick={() => {
+                if (activeTab === 'preview') setActiveTab('builder');
+                setActiveTab(t.id as any);
+              }}
+            />
+          ))}
         </div>
 
         {/* Left Sidebar - Discovery Panel (When in Interface Builder) */}
@@ -6044,7 +6210,7 @@ export const ModuleEditor = () => {
           >
           {activeTab === 'builder' ? (
             activeViewMode === 'master' ? (
-              <div className="flex-1 flex flex-col overflow-hidden bg-zinc-100/60 dark:bg-[#0c0c0e] p-6 md:p-8 custom-scrollbar overflow-y-auto min-h-full">
+              <div className="flex-1 flex flex-col overflow-hidden bg-zinc-100/60 dark:bg-black p-6 md:p-8 custom-scrollbar overflow-y-auto min-h-full">
                 <div className="max-w-6xl mx-auto w-full space-y-6">
                   
                   {/* Master View In-Canvas Title Header matching ModuleView.tsx */}
@@ -6214,7 +6380,7 @@ export const ModuleEditor = () => {
                               </thead>
                               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50 select-none">
                                 {/* Renders dummy/mock rows */}
-                                {mockData.slice(0, 4).map((row, rIdx) => (
+                                {previewRecords.slice(0, 4).map((row: any, rIdx: number) => (
                                   <tr key={rIdx} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20 transition-colors">
                                     {/* Lead ID column */}
                                     <td className={cn(
@@ -6292,7 +6458,7 @@ export const ModuleEditor = () => {
             ) : (
               <div 
                 ref={scrollContainerRef}
-                className="w-full flex-1 overflow-y-auto custom-scrollbar relative p-6 md:p-8 bg-zinc-100/60 dark:bg-[#0c0c0e] flex justify-center items-start min-h-full"
+                className="w-full flex-1 overflow-y-auto custom-scrollbar relative p-6 md:p-8 bg-zinc-100/60 dark:bg-black flex justify-center items-start min-h-full"
               >
                 <div 
                   ref={canvasContainerRef}
@@ -7237,6 +7403,10 @@ export const ModuleEditor = () => {
                                         </div>
                                       ) : block.type === 'sub_module' ? (
                                         renderSubmoduleMock(block)
+                                      ) : block.type === 'relationship_m2m' ? (
+                                        renderRelationshipM2MMock(block)
+                                      ) : block.type === 'rollup' ? (
+                                        renderRollupMock(block)
                                       ) : block.type === 'lookup' ? (
                                         <div className="pt-2">
                                           <div className="h-11 w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-between px-4">
@@ -7422,11 +7592,21 @@ export const ModuleEditor = () => {
                               return (
                                 <div
                                   key={block.id}
+                                  data-grid={{
+                                    x: Math.max(0, (block.startCol || 1) - 1),
+                                    y: block.rowIndex || 0,
+                                    w: Math.max(1, Math.min(12, block.colSpan || 6)),
+                                    h: calculateHeight(block)
+                                  }}
                                   style={isNested ? { 
                                     gridColumn: viewportSize === 'mobile' ? 'span 1' : `${block.startCol || 1} / span ${block.colSpan || 12}`,
                                     gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${calculateHeight(block)}`,
                                     minHeight: `${calculateHeight(block) * GRID_CONFIG.rowHeight}px`
-                                  } : undefined}
+                                  } : (!rglMounted || (activeTab as string) === 'preview' ? {
+                                    gridColumn: viewportSize === 'mobile' ? 'span 1' : `${block.startCol || 1} / span ${block.colSpan || 6}`,
+                                    gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${calculateHeight(block)}`,
+                                    minHeight: `${calculateHeight(block) * GRID_CONFIG.rowHeight}px`
+                                  } : undefined)}
                                   onClick={(e) => {
                                     if (block.isDraggingPlaceholder) return;
                                     e.stopPropagation();
@@ -8303,6 +8483,10 @@ export const ModuleEditor = () => {
                                       </div>
                                     ) : block.type === 'sub_module' ? (
                                       renderSubmoduleMock(block)
+                                    ) : block.type === 'relationship_m2m' ? (
+                                      renderRelationshipM2MMock(block)
+                                    ) : block.type === 'rollup' ? (
+                                      renderRollupMock(block)
                                     ) : block.type === 'lookup' ? (
                                       <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center px-4 gap-2 shadow-sm dark:shadow-none">
                                         <Search size={14} className="text-zinc-400 dark:text-zinc-600" />
@@ -8453,7 +8637,17 @@ export const ModuleEditor = () => {
                             );
                           }
 
-                          return renderFieldBlocks(displayLayout);
+                          return (
+                            <div 
+                              className="w-full col-span-12 grid grid-cols-1 md:grid-cols-12"
+                              style={{ 
+                                gap: `${GRID_CONFIG.gap}px`,
+                                gridAutoRows: `${GRID_CONFIG.rowHeight}px`
+                              }}
+                            >
+                              {renderFieldBlocks(activeTabFields)}
+                            </div>
+                          );
                         })()}
 
                     </AnimatePresence>
@@ -8535,35 +8729,85 @@ export const ModuleEditor = () => {
                 {/* Absolute Border Overlay Layer */}
                 <div className="absolute inset-0 rounded-[32px] border border-zinc-200 dark:border-zinc-800 pointer-events-none z-30" />
                 {/* Preview Toolbar */}
-                <div className="h-16 border-b border-zinc-100 dark:border-zinc-900 bg-zinc-50/50 dark:bg-transparent px-8 flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <button 
-                      onClick={() => setPreviewView('table')}
-                      className={cn(
-                        "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
-                        previewView === 'table' ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
-                      )}
-                    >
-                      List
-                    </button>
-                    <button 
-                      className={cn(
-                        "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
-                        previewView === 'detail' ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20" : "text-zinc-500 opacity-50 cursor-not-allowed"
-                      )}
-                      disabled={!previewSelectedId}
-                    >
-                      Detail
-                    </button>
+                <div className="h-16 border-b border-zinc-100 dark:border-zinc-900 bg-zinc-50/50 dark:bg-transparent px-8 flex items-center justify-between gap-4 overflow-x-auto no-scrollbar">
+                  <div className="flex items-center gap-3 shrink-0">
+                    <div className="flex items-center bg-zinc-100/80 dark:bg-zinc-900 p-1 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                      <button 
+                        onClick={() => setPreviewView('table')}
+                        className={cn(
+                          "px-3.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                          previewView === 'table' ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                        )}
+                      >
+                        List
+                      </button>
+                      <button 
+                        onClick={() => previewSelectedId && setPreviewView('detail')}
+                        className={cn(
+                          "px-3.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                          previewView === 'detail' ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                        )}
+                        disabled={!previewSelectedId}
+                      >
+                        Detail
+                      </button>
+                    </div>
+
+                    {/* Role Simulation Switcher */}
+                    <div className="flex items-center gap-2 bg-zinc-100/80 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 px-3 py-1.5 rounded-xl shadow-sm">
+                      <ShieldCheck size={14} className="text-indigo-600 dark:text-indigo-400 shrink-0" />
+                      <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 shrink-0">Role:</span>
+                      <select
+                        value={previewRole}
+                        onChange={(e) => {
+                          setPreviewRole(e.target.value);
+                          const label = e.target.options[e.target.selectedIndex].text;
+                          toast.info(`Simulating view as: ${label}`);
+                        }}
+                        className="bg-transparent text-xs font-bold text-zinc-800 dark:text-zinc-200 outline-none cursor-pointer pr-1"
+                      >
+                        <option value="admin" className="bg-white dark:bg-zinc-900">Administrator</option>
+                        <option value="manager" className="bg-white dark:bg-zinc-900">Department Manager</option>
+                        <option value="staff" className="bg-white dark:bg-zinc-900">Standard Staff</option>
+                        <option value="guest" className="bg-white dark:bg-zinc-900">External Guest</option>
+                      </select>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-4">
+
+                  <div className="flex items-center gap-3 shrink-0">
+                    {/* Mock Data Generator & Quick Randomize */}
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setIsMockDataModalOpen(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-sm"
+                        title="Configure mock testing dataset"
+                      >
+                        <Sparkles size={12} />
+                        <span>Mock Sandbox ({previewRecords.length})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const regenerated = generateMockDataset(layout, { count: previewRecords.length || 10, domain: 'general' });
+                          setCustomMockData(regenerated);
+                          setUseRealData(false);
+                          toast.success("Randomized mock records");
+                        }}
+                        className="p-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
+                        title="Quick Randomize Records"
+                      >
+                        <RefreshCw size={12} />
+                      </button>
+                    </div>
+
                     {/* Database Mode Sliding Toggle Switch */}
-                    <div className="flex items-center gap-3 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/50 dark:border-zinc-800/80 px-4 py-1.5 rounded-full select-none shadow-sm">
+                    <div className="flex items-center gap-2.5 bg-zinc-100/80 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 px-3 py-1.5 rounded-xl select-none shadow-sm">
                       <span className={cn(
                         "text-[9px] font-black uppercase tracking-widest transition-colors",
                         !useRealData ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-400 dark:text-zinc-500"
                       )}>
-                        Mock Data
+                        Mock
                       </span>
                       <button
                         onClick={() => {
@@ -8571,25 +8815,25 @@ export const ModuleEditor = () => {
                           toast.info(!useRealData ? "Switched to Live Database Mode" : "Switched to Mock Data Mode");
                         }}
                         className={cn(
-                          "relative w-9 h-5 rounded-full transition-all duration-300 flex items-center p-0.5",
+                          "relative w-8 h-4 rounded-full transition-all duration-300 flex items-center p-0.5",
                           useRealData ? "bg-indigo-600" : "bg-zinc-300 dark:bg-zinc-700"
                         )}
                       >
                         <motion.div
-                          className="w-4 h-4 bg-white rounded-full shadow-md animate-in fade-in zoom-in duration-300"
+                          className="w-3 h-3 bg-white rounded-full shadow-md animate-in fade-in zoom-in duration-300"
                           layout
                           transition={{ type: 'spring', stiffness: 500, damping: 30 }}
                           animate={{ x: useRealData ? 16 : 0 }}
                         />
                       </button>
                       <span className={cn(
-                        "text-[9px] font-black uppercase tracking-widest transition-colors flex items-center gap-1.5",
+                        "text-[9px] font-black uppercase tracking-widest transition-colors flex items-center gap-1",
                         useRealData ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-400 dark:text-zinc-500"
                       )}>
-                        <span>Live Database</span>
+                        <span>Live DB</span>
                         {useRealData && (
                           isFetchingRealRecords ? (
-                            <span className="w-2 h-2 border-t-2 border-indigo-500 rounded-full animate-spin shrink-0 ml-1" />
+                            <span className="w-2 h-2 border-t-2 border-indigo-500 rounded-full animate-spin shrink-0 ml-0.5" />
                           ) : (
                             <span className="relative flex h-1.5 w-1.5">
                               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -8600,9 +8844,9 @@ export const ModuleEditor = () => {
                       </span>
                     </div>
 
-                    <div className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full flex items-center gap-1.5">
-                      <span className="w-1 h-1 bg-emerald-500 rounded-full animate-pulse" />
-                      <span className="text-[9px] font-black text-emerald-500 uppercase tracking-[0.2em]">Live Testing Mode</span>
+                    <div className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                      <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Sandbox Active</span>
                     </div>
                   </div>
                 </div>
@@ -8679,39 +8923,73 @@ export const ModuleEditor = () => {
                           .filter(block => (block.tabId === currentTabId || (!block.tabId && currentTabId === tabs[0]?.id)) && evaluateVisibilityRule(block.visibilityRule, moduleState))
                           .filter(block => {
                             const type = block.type?.toLowerCase();
-                            return showSystemFields || (type !== 'connector' && type !== 'automation' && type !== 'nexus_connector');
+                            if (!showSystemFields && (type === 'connector' || type === 'automation' || type === 'nexus_connector')) return false;
+                            const sec = fieldSecurity[previewRole]?.[block.id];
+                            if (sec?.hidden || sec?.read === false) return false;
+                            return true;
                           })
-                          .map((block) => (
-                          <div 
-                            key={block.id} 
-                            style={{ 
-                              gridColumn: viewportSize === 'mobile' ? 'span 1' : `${block.startCol || 1} / span ${block.colSpan || 12}`
-                            }}
-                            className="space-y-2.5"
-                          >
-                            <label className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest px-1 flex items-center gap-1.5 relative group/label">
-                              {block.label}
-                              {block.required && <span className="text-rose-500">*</span>}
-                              {block.tooltip && (
-                                <div className="relative cursor-help">
-                                  <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-                                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
-                                    {block.tooltip}
-                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-zinc-900" />
+                          .map((block) => {
+                            const sec = fieldSecurity[previewRole]?.[block.id];
+                            const isMasked = sec?.masked;
+                            const isReadOnly = sec?.write === false;
+
+                            return (
+                              <div 
+                                key={block.id} 
+                                style={{ 
+                                  gridColumn: viewportSize === 'mobile' ? 'span 1' : `${block.startCol || 1} / span ${block.colSpan || 12}`
+                                }}
+                                className="space-y-2.5 relative"
+                              >
+                                <div className="flex items-center justify-between px-1">
+                                  <label className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
+                                    {block.label}
+                                    {block.required && <span className="text-rose-500">*</span>}
+                                    {block.tooltip && (
+                                      <div className="relative cursor-help">
+                                        <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
+                                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                          {block.tooltip}
+                                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-zinc-900" />
+                                        </div>
+                                      </div>
+                                    )}
+                                  </label>
+                                  <div className="flex items-center gap-1.5">
+                                    {isMasked && (
+                                      <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                        Masked
+                                      </span>
+                                    )}
+                                    {isReadOnly && (
+                                      <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-zinc-100 dark:bg-zinc-800 text-zinc-500 border border-zinc-200 dark:border-zinc-700">
+                                        <Lock size={8} /> Read Only
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
-                              )}
-                            </label>
-                            <FieldInput 
-                              field={block}
-                              value={moduleState[block.id] ?? block.defaultValue}
-                              onChange={(val) => setModuleState(prev => ({ ...prev, [block.id]: val }))}
-                            />
-                            {block.helperText && (
-                              <p className="text-[10px] text-zinc-500 mt-0.5 font-medium px-1 italic absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{block.helperText}</p>
-                            )}
-                          </div>
-                        ))}
+                                {isMasked ? (
+                                  <div className="w-full px-4 py-2.5 rounded-xl border border-dashed border-amber-500/30 bg-amber-50/20 dark:bg-amber-950/10 text-xs font-mono tracking-widest text-amber-600 dark:text-amber-400 select-none">
+                                    ••••••••••••••••
+                                  </div>
+                                ) : (
+                                  <div className={cn(isReadOnly && "pointer-events-none opacity-80")}>
+                                    <FieldInput 
+                                      field={block}
+                                      value={moduleState[block.id] ?? block.defaultValue}
+                                      onChange={(val) => {
+                                        if (isReadOnly) return;
+                                        setModuleState(prev => ({ ...prev, [block.id]: val }));
+                                      }}
+                                    />
+                                  </div>
+                                )}
+                                {block.helperText && (
+                                  <p className="text-[10px] text-zinc-500 mt-0.5 font-medium px-1 italic absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{block.helperText}</p>
+                                )}
+                              </div>
+                            );
+                          })}
                       </div>
                     </div>
                   ) : (
@@ -8762,7 +9040,10 @@ export const ModuleEditor = () => {
                                   interfaceSettings.master.density === 'compact' ? 'px-4 py-2' : 
                                   interfaceSettings.master.density === 'spacious' ? 'px-8 py-5' : 'px-6 py-4'
                                 )}>#</th>
-                                {activeColumns.slice(0, 5).map(f => (
+                                {activeColumns.filter(f => {
+                                  const sec = fieldSecurity[previewRole]?.[f.id];
+                                  return !sec?.hidden && sec?.read !== false;
+                                }).slice(0, 5).map(f => (
                                   <th 
                                     key={f.id} 
                                     style={{ minWidth: f.columnWidth || 150 }} 
@@ -8772,7 +9053,14 @@ export const ModuleEditor = () => {
                                       interfaceSettings.master.density === 'spacious' ? 'px-8 py-5' : 'px-6 py-4'
                                     )}
                                   >
-                                    {f.label}
+                                    <div className="flex items-center gap-1.5">
+                                      <span>{f.label}</span>
+                                      {fieldSecurity[previewRole]?.[f.id]?.masked && (
+                                        <span className="px-1 py-0.5 rounded text-[7px] font-black uppercase bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                          Masked
+                                        </span>
+                                      )}
+                                    </div>
                                   </th>
                                 ))}
                                 <th className={cn(
@@ -8803,23 +9091,30 @@ export const ModuleEditor = () => {
                                     interfaceSettings.master.density === 'compact' ? 'px-4 py-2 text-[10px]' : 
                                     interfaceSettings.master.density === 'spacious' ? 'px-8 py-5 text-xs' : 'px-6 py-4 text-[10px]'
                                   )}>{idx + 1}</td>
-                                  {activeColumns.slice(0, 5).map(f => (
-                                    <td 
-                                      key={f.id} 
-                                      className={cn(
-                                        interfaceSettings.master.density === 'compact' ? 'px-4 py-2' : 
-                                        interfaceSettings.master.density === 'spacious' ? 'px-8 py-5' : 'px-6 py-4'
-                                      )}
-                                    >
-                                      <span className={cn(
-                                        "font-bold text-zinc-700 dark:text-zinc-300",
-                                        interfaceSettings.master.density === 'compact' ? 'text-[11px]' : 
-                                        interfaceSettings.master.density === 'spacious' ? 'text-sm' : 'text-xs'
-                                      )}>
-                                        {f.type === 'boolean' ? (record[f.id] ? 'Yes' : 'No') : String(record[f.id])}
-                                      </span>
-                                    </td>
-                                  ))}
+                                  {activeColumns.filter(f => {
+                                    const sec = fieldSecurity[previewRole]?.[f.id];
+                                    return !sec?.hidden && sec?.read !== false;
+                                  }).slice(0, 5).map(f => {
+                                    const isMasked = fieldSecurity[previewRole]?.[f.id]?.masked;
+                                    return (
+                                      <td 
+                                        key={f.id} 
+                                        className={cn(
+                                          interfaceSettings.master.density === 'compact' ? 'px-4 py-2' : 
+                                          interfaceSettings.master.density === 'spacious' ? 'px-8 py-5' : 'px-6 py-4'
+                                        )}
+                                      >
+                                        <span className={cn(
+                                          "font-bold text-zinc-700 dark:text-zinc-300",
+                                          interfaceSettings.master.density === 'compact' ? 'text-[11px]' : 
+                                          interfaceSettings.master.density === 'spacious' ? 'text-sm' : 'text-xs',
+                                          isMasked && "font-mono text-amber-600 dark:text-amber-400"
+                                        )}>
+                                          {isMasked ? '••••••••' : (f.type === 'boolean' ? (record[f.id] ? 'Yes' : 'No') : String(record[f.id] ?? '-'))}
+                                        </span>
+                                      </td>
+                                    );
+                                  })}
                                   <td className={cn(
                                     interfaceSettings.master.density === 'compact' ? 'px-4 py-2' : 
                                     interfaceSettings.master.density === 'spacious' ? 'px-8 py-5' : 'px-6 py-4'
@@ -9789,33 +10084,47 @@ export const ModuleEditor = () => {
               <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 space-y-2 flex flex-col">
                 <div className="mb-6 px-2">
                   <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Access Roles</h3>
+                  <p className="text-[11px] text-zinc-500 mt-1">Select a role to configure field permissions.</p>
                 </div>
                 <div className="space-y-2 flex-1 overflow-y-auto custom-scrollbar">
                   {[
-                    { id: 'admin', label: 'Administrator', icon: ShieldCheck },
-                    { id: 'manager', label: 'Department Manager', icon: Settings },
-                    { id: 'staff', label: 'Standard Staff', icon: Type },
-                    { id: 'guest', label: 'External Guest', icon: Globe }
+                    { id: 'admin', label: 'Administrator', icon: ShieldCheck, desc: 'Full governance & write access' },
+                    { id: 'manager', label: 'Department Manager', icon: Settings, desc: 'Operational record manager' },
+                    { id: 'staff', label: 'Standard Staff', icon: Type, desc: 'Daily execution & intake' },
+                    { id: 'guest', label: 'External Guest', icon: Globe, desc: 'Restricted external collaborator' }
                   ].map((role) => (
                     <button 
                       key={role.id}
+                      type="button"
+                      onClick={() => setSelectedSecurityRoleId(role.id)}
                       className={cn(
-                        "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-left",
-                        role.id === 'admin' 
-                          ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
-                          : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                        "w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition-all text-left",
+                        selectedSecurityRoleId === role.id 
+                          ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 shadow-sm"
+                          : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900 border border-transparent"
                       )}
                     >
-                      <role.icon size={14} />
-                      {role.label}
+                      <div className={cn(
+                        "w-7 h-7 rounded-xl flex items-center justify-center shrink-0",
+                        selectedSecurityRoleId === role.id ? "bg-indigo-600 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500"
+                      )}>
+                        <role.icon size={13} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-bold truncate">{role.label}</div>
+                        <div className="text-[10px] text-zinc-400 font-normal truncate">{role.desc}</div>
+                      </div>
                     </button>
                   ))}
                 </div>
-                <div className="mt-auto pt-4">
-                  <button className="w-full py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2">
-                    <Plus size={12} />
-                    New Role
-                  </button>
+                <div className="mt-auto pt-4 border-t border-zinc-100 dark:border-zinc-800">
+                  <div className="p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-zinc-200/60 dark:border-zinc-800">
+                    <span className="text-[10px] font-black uppercase text-zinc-400 tracking-wider block mb-1">Active Simulator Role</span>
+                    <div className="text-xs font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+                      <ShieldCheck size={13} />
+                      <span className="capitalize">{previewRole}</span>
+                    </div>
+                  </div>
                 </div>
               </aside>
 
@@ -9824,85 +10133,205 @@ export const ModuleEditor = () => {
                 <div className="max-w-none mx-auto space-y-12">
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
-                      <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Security & Governance</h2>
-                      <p className="text-zinc-500 text-sm">Define who can interact with this module and which data fields they can access.</p>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Security & Governance</h2>
+                        <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                          Role: {selectedSecurityRoleId}
+                        </span>
+                      </div>
+                      <p className="text-zinc-500 text-sm">Define access policies, visibility, and data masking for the <strong className="text-zinc-700 dark:text-zinc-300 capitalize">{selectedSecurityRoleId}</strong> role.</p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFieldSecurity(prev => {
+                            const updated = { ...(prev[selectedSecurityRoleId] || {}) };
+                            flattenFields(layout).forEach((f: any) => {
+                              updated[f.id] = { read: true, write: true, masked: false, hidden: false };
+                            });
+                            return { ...prev, [selectedSecurityRoleId]: updated };
+                          });
+                          toast.success(`Applied Full Access preset to ${selectedSecurityRoleId}`);
+                        }}
+                        className="px-3 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-[10px] font-black uppercase tracking-wider text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all"
+                      >
+                        Allow All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFieldSecurity(prev => {
+                            const updated = { ...(prev[selectedSecurityRoleId] || {}) };
+                            flattenFields(layout).forEach((f: any) => {
+                              updated[f.id] = { read: true, write: false, masked: false, hidden: false };
+                            });
+                            return { ...prev, [selectedSecurityRoleId]: updated };
+                          });
+                          toast.success(`Applied Read Only preset to ${selectedSecurityRoleId}`);
+                        }}
+                        className="px-3 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-[10px] font-black uppercase tracking-wider text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all"
+                      >
+                        Read Only
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFieldSecurity(prev => {
+                            const updated = { ...(prev[selectedSecurityRoleId] || {}) };
+                            flattenFields(layout).forEach((f: any) => {
+                              const label = (f.label || '').toLowerCase();
+                              const isSensitive = ['email', 'phone', 'tel', 'currency', 'money', 'number'].includes(f.type) || label.includes('ssn') || label.includes('tax') || label.includes('salary');
+                              updated[f.id] = {
+                                read: true,
+                                write: !isSensitive,
+                                masked: isSensitive,
+                                hidden: false
+                              };
+                            });
+                            return { ...prev, [selectedSecurityRoleId]: updated };
+                          });
+                          toast.success(`Applied Sensitive Data Masking to ${selectedSecurityRoleId}`);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[10px] font-black uppercase tracking-wider hover:bg-amber-500/20 transition-all"
+                      >
+                        Mask Sensitive
+                      </button>
                     </div>
                   </div>
 
-                  {/* Module Level Permissions */}
-                  <div className="space-y-6">
-                    <h3 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest">Global Module Access</h3>
-                    <div className="grid grid-cols-3 gap-6">
-                      {[
-                        { label: 'Create Records', desc: 'Allows users to submit new data entries.', icon: Plus },
-                        { label: 'Read All Records', desc: 'Allows viewing of all records in this module.', icon: Eye },
-                        { label: 'Export Data', desc: 'Allows CSV/JSON data extraction.', icon: Database }
-                      ].map((perm, i) => (
-                        <div key={i} className="p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] space-y-4">
-                          <div className="flex items-center justify-between">
-                            <div className="w-10 h-10 rounded-xl bg-zinc-50 dark:bg-zinc-800 flex items-center justify-center text-zinc-500">
-                              <perm.icon size={18} />
-                            </div>
-                            <div className="w-10 h-6 bg-emerald-500 rounded-full relative">
-                              <div className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full shadow-sm" />
-                            </div>
-                          </div>
-                          <div className="space-y-1">
-                            <h4 className="text-xs font-bold text-zinc-900 dark:text-white">{perm.label}</h4>
-                            <p className="text-[10px] text-zinc-500 leading-relaxed">{perm.desc}</p>
-                          </div>
-                        </div>
-                      ))}
+                  {/* Field Level Security Matrix */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest">Field-Level Security Matrix</h3>
+                      <span className="text-xs text-zinc-400">{flattenFields(layout).length} Schema Fields</span>
                     </div>
-                  </div>
 
-                  {/* Field Level Security */}
-                  <div className="space-y-6">
-                    <h3 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest">Field-Level Security (FLS)</h3>
                     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-xl shadow-indigo-500/5">
                       <table className="w-full text-left border-collapse">
                         <thead>
-                          <tr className="border-b border-zinc-100 dark:border-zinc-800/50">
+                          <tr className="border-b border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/50 dark:bg-zinc-800/30">
                             <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Field Name</th>
-                            <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Read</th>
-                            <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Write</th>
-                            <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Masked</th>
-                            <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Logic</th>
+                            <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Type</th>
+                            <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Can Read</th>
+                            <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Can Write</th>
+                            <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Mask Value</th>
+                            <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Hidden</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50">
-                          {layout.map((field) => (
-                            <tr key={field.id} className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
-                              <td className="px-6 py-4">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 dark:text-zinc-400 group-hover:bg-indigo-500/10 group-hover:text-indigo-500 transition-colors">
-                                    {(() => {
-                                      const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === field.type);
-                                      const Icon = fieldDef?.icon || GridIcon;
-                                      return <Icon size={14} />;
-                                    })()}
+                        <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50 text-xs">
+                          {flattenFields(layout).map((field: any) => {
+                            const roleConfig = fieldSecurity[selectedSecurityRoleId]?.[field.id] || {
+                              read: true,
+                              write: selectedSecurityRoleId !== 'guest',
+                              masked: false,
+                              hidden: false
+                            };
+
+                            const updatePerm = (key: 'read' | 'write' | 'masked' | 'hidden', val: boolean) => {
+                              setFieldSecurity(prev => ({
+                                ...prev,
+                                [selectedSecurityRoleId]: {
+                                  ...(prev[selectedSecurityRoleId] || {}),
+                                  [field.id]: {
+                                    ...roleConfig,
+                                    [key]: val
+                                  }
+                                }
+                              }));
+                            };
+
+                            return (
+                              <tr key={field.id} className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
+                                <td className="px-6 py-4">
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 dark:text-zinc-400 group-hover:bg-indigo-500/10 group-hover:text-indigo-500 transition-colors">
+                                      {(() => {
+                                        const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === field.type);
+                                        const Icon = fieldDef?.icon || GridIcon;
+                                        return <Icon size={14} />;
+                                      })()}
+                                    </div>
+                                    <div>
+                                      <span className="text-xs font-bold text-zinc-900 dark:text-white block">{field.label || field.name}</span>
+                                      <span className="text-[10px] text-zinc-400 font-mono">{field.id}</span>
+                                    </div>
                                   </div>
-                                  <span className="text-xs font-bold text-zinc-900 dark:text-white">{field.label}</span>
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 text-center">
-                                <div className="w-4 h-4 rounded border-2 border-emerald-500 bg-emerald-500/10 mx-auto flex items-center justify-center">
-                                  <div className="w-1.5 h-1.5 bg-emerald-500 rounded-sm" />
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 text-center">
-                                <div className="w-4 h-4 rounded border-2 border-emerald-500 bg-emerald-500/10 mx-auto flex items-center justify-center">
-                                  <div className="w-1.5 h-1.5 bg-emerald-500 rounded-sm" />
-                                </div>
-                              </td>
-                              <td className="px-6 py-4 text-center">
-                                <div className="w-4 h-4 rounded border-2 border-zinc-200 dark:border-zinc-800 mx-auto" />
-                              </td>
-                              <td className="px-6 py-4">
-                                <span className="text-[9px] font-bold text-zinc-400 italic">No restrictions</span>
-                              </td>
-                            </tr>
-                          ))}
+                                </td>
+
+                                <td className="px-6 py-4">
+                                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800">
+                                    {field.type}
+                                  </span>
+                                </td>
+
+                                {/* Read Toggle */}
+                                <td className="px-6 py-4 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => updatePerm('read', !roleConfig.read)}
+                                    className={cn(
+                                      "w-6 h-6 rounded-lg mx-auto flex items-center justify-center transition-all",
+                                      roleConfig.read
+                                        ? "bg-emerald-500/10 border-2 border-emerald-500 text-emerald-600 dark:text-emerald-400"
+                                        : "border-2 border-zinc-200 dark:border-zinc-700 text-transparent"
+                                    )}
+                                  >
+                                    {roleConfig.read && <Check size={13} strokeWidth={3} />}
+                                  </button>
+                                </td>
+
+                                {/* Write Toggle */}
+                                <td className="px-6 py-4 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => updatePerm('write', !roleConfig.write)}
+                                    className={cn(
+                                      "w-6 h-6 rounded-lg mx-auto flex items-center justify-center transition-all",
+                                      roleConfig.write
+                                        ? "bg-indigo-500/10 border-2 border-indigo-500 text-indigo-600 dark:text-indigo-400"
+                                        : "border-2 border-zinc-200 dark:border-zinc-700 text-transparent"
+                                    )}
+                                  >
+                                    {roleConfig.write && <Check size={13} strokeWidth={3} />}
+                                  </button>
+                                </td>
+
+                                {/* Masked Toggle */}
+                                <td className="px-6 py-4 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => updatePerm('masked', !roleConfig.masked)}
+                                    className={cn(
+                                      "w-6 h-6 rounded-lg mx-auto flex items-center justify-center transition-all",
+                                      roleConfig.masked
+                                        ? "bg-amber-500/10 border-2 border-amber-500 text-amber-600 dark:text-amber-400"
+                                        : "border-2 border-zinc-200 dark:border-zinc-700 text-transparent"
+                                    )}
+                                  >
+                                    {roleConfig.masked && <Check size={13} strokeWidth={3} />}
+                                  </button>
+                                </td>
+
+                                {/* Hidden Toggle */}
+                                <td className="px-6 py-4 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => updatePerm('hidden', !roleConfig.hidden)}
+                                    className={cn(
+                                      "w-6 h-6 rounded-lg mx-auto flex items-center justify-center transition-all",
+                                      roleConfig.hidden
+                                        ? "bg-rose-500/10 border-2 border-rose-500 text-rose-600 dark:text-rose-400"
+                                        : "border-2 border-zinc-200 dark:border-zinc-700 text-transparent"
+                                    )}
+                                  >
+                                    {roleConfig.hidden && <Check size={13} strokeWidth={3} />}
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -14691,6 +15120,83 @@ export const ModuleEditor = () => {
                         </div>
                       )}
 
+                      {selectedField.type === 'relationship_m2m' && (
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Many-to-Many Relationship</label>
+                            
+                            <div className="p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl space-y-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-500">
+                                  <ArrowRightLeft size={18} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <h4 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-tight truncate">
+                                    {selectedField.relationshipConfig?.targetModuleName || modules.find(m => m.id === selectedField.targetModuleId)?.name || 'Unconfigured Junction'}
+                                  </h4>
+                                  <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest mt-0.5">
+                                    {selectedField.relationshipConfig?.cardinality || 'N:N'} Junction Relational Link
+                                  </p>
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => setEditingRelationshipField(selectedField)}
+                                className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-500/10 flex items-center justify-center gap-1.5"
+                              >
+                                <Settings2 size={13} />
+                                <span>Configure Relationship & Junction...</span>
+                              </button>
+                            </div>
+                          </div>
+                          <p className="text-[9px] text-zinc-500 italic px-1 leading-normal">
+                            Many-to-Many Junction allows linking multiple records from target module with junction metadata and cascade policies.
+                          </p>
+                        </div>
+                      )}
+
+                      {selectedField.type === 'rollup' && (
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Rollup Aggregate Engine</label>
+                            
+                            <div className="p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl space-y-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-500">
+                                  <Calculator size={18} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-indigo-500/20 text-indigo-600 dark:text-indigo-400">
+                                      {selectedField.rollupConfig?.aggregation || 'COUNT'}
+                                    </span>
+                                    <span className="text-xs font-bold text-zinc-900 dark:text-white truncate">
+                                      {selectedField.rollupConfig?.targetModuleName || 'Target Module'}
+                                    </span>
+                                  </div>
+                                  <p className="text-[9px] text-zinc-400 font-mono mt-0.5 truncate">
+                                    {selectedField.rollupConfig?.targetFieldName ? `Field: ${selectedField.rollupConfig.targetFieldName}` : 'All matching child rows'}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => setEditingRollupField(selectedField)}
+                                className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-500/10 flex items-center justify-center gap-1.5"
+                              >
+                                <Sparkles size={13} />
+                                <span>Edit Rollup Aggregate Formula...</span>
+                              </button>
+                            </div>
+                          </div>
+                          <p className="text-[9px] text-zinc-500 italic px-1 leading-normal">
+                            Calculates dynamic aggregates (SUM, COUNT, AVG, MIN, MAX) over related child records with conditional filtering.
+                          </p>
+                        </div>
+                      )}
+
                       {selectedField.type === 'connector' && (
                         <div className="space-y-4">
                           <div className="space-y-2">
@@ -15405,6 +15911,178 @@ export const ModuleEditor = () => {
             title={`Record Table Formatting (${moduleSettings.name || 'Module'})`}
           />
         )}
+
+        {/* Mock Data Generator Sandbox Modal */}
+        <MockDataGeneratorModal
+          isOpen={isMockDataModalOpen}
+          onClose={() => setIsMockDataModalOpen(false)}
+          fields={flattenFields(layout)}
+          moduleName={moduleSettings.name}
+          onApplyDataset={(data) => {
+            setCustomMockData(data);
+            setUseRealData(false);
+          }}
+        />
+
+        {/* Relational Rollup Expression Modal */}
+        {editingRollupField && (
+          <RollupExpressionEditor
+            isOpen={!!editingRollupField}
+            onClose={() => setEditingRollupField(null)}
+            onSave={(config) => {
+              if (editingRollupField) {
+                updateField(editingRollupField.id, { 
+                  rollupConfig: config,
+                  label: editingRollupField.label === 'New Rollup' 
+                    ? `${config.aggregation} of ${(config as any).targetModuleName || 'Related'}` 
+                    : editingRollupField.label
+                });
+              }
+              setEditingRollupField(null);
+            }}
+            initialConfig={editingRollupField.rollupConfig}
+            relationshipFields={flattenFields(layout).filter(f => f.type === 'sub_module' || f.type === 'relationship_m2m' || f.type === 'lookup')}
+            availableModules={modules}
+            currentFieldLabel={editingRollupField.label}
+          />
+        )}
+
+        {/* Relational Configuration Drawer */}
+        {editingRelationshipField && (
+          <RelationshipConfigDrawer
+            isOpen={!!editingRelationshipField}
+            onClose={() => setEditingRelationshipField(null)}
+            onSave={(config) => {
+              if (editingRelationshipField) {
+                updateField(editingRelationshipField.id, {
+                  relationshipConfig: config,
+                  targetModuleId: config.targetModuleId,
+                  variant: config.displayMode
+                });
+              }
+              setEditingRelationshipField(null);
+            }}
+            initialConfig={editingRelationshipField.relationshipConfig || (editingRelationshipField.targetModuleId ? { targetModuleId: editingRelationshipField.targetModuleId } : undefined)}
+            availableModules={modules}
+            currentModuleId={id || 'current'}
+            fieldLabel={editingRelationshipField.label}
+          />
+        )}
+
+        {/* Safe Schema Diff & Migration Deployment Modal */}
+        <SchemaDiffModal
+          isOpen={isSchemaDiffModalOpen}
+          onClose={() => setIsSchemaDiffModalOpen(false)}
+          currentFields={flattenFields(layout)}
+          persistedFields={flattenFields(persistedLayout)}
+          moduleName={moduleSettings.name}
+          moduleId={id || 'new'}
+          currentVersion={schemaVersion}
+          onOpenQueue={() => {
+            setIsSchemaDiffModalOpen(false);
+            setIsScheduledDeploymentsOpen(true);
+          }}
+          onScheduled={() => {
+            setIsScheduledDeploymentsOpen(true);
+          }}
+          onDeploy={async ({ versionTag, releaseNotes }) => {
+            versionControlService.createSnapshot({
+              moduleId: id || 'new',
+              moduleName: moduleSettings.name,
+              versionTag,
+              name: `Release v${versionTag.replace('v', '')}`,
+              description: releaseNotes || 'Database schema migration executed and deployed to production.',
+              author: 'Developer / Admin',
+              isDeployed: true,
+              state: {
+                layout,
+                tabs,
+                moduleSettings,
+                interfaceSettings,
+                forms,
+                validationRules,
+                fieldSecurity
+              },
+              previousFields: persistedLayout
+            });
+            setSchemaVersion(versionTag.replace('v', ''));
+            setPersistedLayout([...layout]);
+            await handleSave();
+          }}
+        />
+
+        {/* In-Canvas AI Architect Copilot Drawer */}
+        <BuilderAICopilotDrawer
+          isOpen={isAICopilotOpen}
+          onClose={() => setIsAICopilotOpen(false)}
+          layout={layout}
+          tabs={tabs}
+          moduleName={moduleSettings.name}
+          onApplyChanges={(newLayout, description) => {
+            setLayout(newLayout);
+            if (description) {
+              toast.success(description);
+            }
+          }}
+        />
+
+        {/* Public Form Publish & Embed Studio Modal */}
+        <PublicFormPublishModal
+          isOpen={isPublicPublishModalOpen}
+          onClose={() => setIsPublicPublishModalOpen(false)}
+          moduleId={id || 'new'}
+          moduleName={moduleSettings.name}
+          formId={selectedFormId || undefined}
+          formName={forms.find(f => f.id === selectedFormId)?.name || 'Standard Intake Form'}
+        />
+
+        {/* Scheduled Deployments Manager Drawer */}
+        <ScheduledDeploymentsDrawer
+          isOpen={isScheduledDeploymentsOpen}
+          onClose={() => setIsScheduledDeploymentsOpen(false)}
+          moduleId={id || undefined}
+          moduleName={moduleSettings.name}
+          onDeployExecuted={async (dep) => {
+            setSchemaVersion(dep.versionTag.replace(/^v/, ''));
+            setPersistedLayout([...layout]);
+            await handleSave();
+          }}
+          onOpenDeployModal={() => {
+            setIsScheduledDeploymentsOpen(false);
+            setIsSchemaDiffModalOpen(true);
+          }}
+        />
+
+        {/* Version Control & Rollback History Drawer */}
+        <VersionHistoryDrawer
+          isOpen={isVersionHistoryOpen}
+          onClose={() => setIsVersionHistoryOpen(false)}
+          moduleId={id || 'new'}
+          moduleName={moduleSettings.name}
+          currentVersionTag={schemaVersion}
+          currentFields={flattenFields(layout)}
+          getCurrentState={() => ({
+            layout,
+            tabs,
+            moduleSettings,
+            interfaceSettings,
+            forms,
+            validationRules,
+            fieldSecurity
+          })}
+          onRollbackApplied={async (restoredState, newTag) => {
+            setLayout(restoredState.layout || []);
+            setTabs(restoredState.tabs || []);
+            if (restoredState.moduleSettings) setModuleSettings(restoredState.moduleSettings);
+            if (restoredState.interfaceSettings) setInterfaceSettings(restoredState.interfaceSettings);
+            if (restoredState.forms) setForms(restoredState.forms);
+            if (restoredState.validationRules) setValidationRules(restoredState.validationRules);
+            if (restoredState.fieldSecurity) setFieldSecurity(restoredState.fieldSecurity);
+            setPersistedLayout(restoredState.layout || []);
+            setSchemaVersion(newTag.replace('v', ''));
+            await handleSave();
+          }}
+        />
 
         {/* Command Palette */}
         <CommandPalette 

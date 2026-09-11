@@ -103,7 +103,7 @@ export type FieldType =
   | 'text' | 'longText' | 'textarea' | 'number' | 'checkbox' | 'boolean' | 'currency' | 'email' | 'phone' | 'address' | 'lookup' | 'user' | 'calculation' | 'ai_summary' | 'date' | 'select' | 'file'
   | 'radio' | 'checkboxGroup' | 'toggle' | 'slider' | 'time' | 'button' | 'buttonGroup' | 'icon' | 'card' | 'richtext' | 'accordion' | 'datatable' | 'stepper' 
   | 'timeline' | 'duallist' | 'treeview' | 'signature' | 'payment' | 'colorpicker' | 'map' | 'html' | 'qr_scanner' | 'canvas' | 'chat' | 'tabs_nested' 
-  | 'rating' | 'progress' | 'tag' | 'video' | 'audio' | 'heading' | 'divider' | 'spacer' | 'alert' | 'url' | 'fieldGroup' | 'group' | 'repeatableGroup' | 'autonumber' | 'connector' | 'automation' | 'sub_module' | 'placeholder';
+  | 'rating' | 'progress' | 'tag' | 'video' | 'audio' | 'heading' | 'divider' | 'spacer' | 'alert' | 'url' | 'fieldGroup' | 'group' | 'repeatableGroup' | 'autonumber' | 'connector' | 'automation' | 'sub_module' | 'rollup' | 'relationship_m2m' | 'placeholder';
 
 export interface VisibilityRule {
   id: string;
@@ -235,6 +235,10 @@ export interface ModuleField {
   // Calculation formatting
   showAsCurrency?: boolean;
   currencySymbol?: string;
+
+  // Relational & Rollup Configuration
+  rollupConfig?: any;
+  relationshipConfig?: any;
 
   // Cross-Builder Integration Mesh
   validationRuleId?: string;
