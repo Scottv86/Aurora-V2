@@ -21,7 +21,7 @@ const APPS: AppItem[] = [
   { id: 'drive', label: 'Drive', iconName: 'Folder', description: 'Personal & tenant shared storage', color: 'text-amber-500', to: '/workspace/apps/drive' },
   { id: 'query', label: 'Query Explorer', iconName: 'Terminal', description: 'Database schema, SQL runner & data explorer', color: 'text-indigo-500', to: '/workspace/apps/query' },
   { id: 'query-builder', label: 'Query Builder', iconName: 'Database', description: 'Author & save reusable dataset views', color: 'text-purple-500', to: '/workspace/settings/platform-modules/queries-library' },
-  { id: 'searches-studio', label: 'Searches', iconName: 'Search', description: 'Cross-module self-service searches for business users', color: 'text-indigo-500', to: '/workspace/settings/platform-modules/searches-library' },
+  { id: 'searches', label: 'Searches', iconName: 'Search', description: 'Cross-module self-service searches for business users', color: 'text-indigo-500', to: '/workspace/searches' },
   { id: 'kpi-manager', label: 'Metrics', iconName: 'Target', description: 'Semantic metric formulas, goals & threshold alerts', color: 'text-rose-500', to: '/workspace/settings/platform-modules/kpi-management' },
   { id: 'chat', label: 'Chat', iconName: 'MessageSquare', description: 'Real-time team messaging & channels', color: 'text-emerald-500', to: '/workspace/apps/chat' },
   { id: 'meet', label: 'Meet', iconName: 'Video', description: 'Video conferencing', color: 'text-rose-500' },

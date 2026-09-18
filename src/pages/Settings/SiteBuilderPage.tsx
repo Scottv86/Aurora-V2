@@ -81,6 +81,10 @@ import { InContextBuilderModal } from '../../components/Builders/Common/InContex
 import { FormBuilder } from '../../components/Builders/FormBuilder/FormBuilder';
 import { FormRenderer } from '../../components/Builders/FormBuilder/FormRenderer';
 import { UnsavedChangesModal } from '../../components/Common/UnsavedChangesModal';
+import { useAuth } from '../../hooks/useAuth';
+import { SearchRenderer } from '../../components/Search/SearchRenderer';
+import { fetchSavedSearches } from '../../services/searchService';
+import { SavedSearchEntity } from '../../types/searchBuilder';
 
 
 
@@ -97,9 +101,10 @@ export const SiteBuilderPage: React.FC = () => {
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const returnUrl = (location.state as any)?.returnUrl || searchParams.get('returnUrl');
-  const { isBuilderFullscreen, setIsBuilderFullscreen } = usePlatform();
+  const { isBuilderFullscreen, setIsBuilderFullscreen, tenant } = usePlatform();
   const { theme } = useTheme();
   const isLight = theme === 'light';
+  const { session } = useAuth();
 
   const [site, setSite] = useState<Site | null>(null);
   const [loading, setLoading] = useState(true);
@@ -339,6 +344,8 @@ export const SiteBuilderPage: React.FC = () => {
 
   // Workspace Modules List for Form Embed
   const [availableModules, setAvailableModules] = useState<{ id: string; name: string; type: string }[]>([]);
+  // Saved Searches List for Search Embed
+  const [availableSearches, setAvailableSearches] = useState<SavedSearchEntity[]>([]);
   
   // Mobile Hamburger Toggle in Preview
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -471,6 +478,16 @@ export const SiteBuilderPage: React.FC = () => {
             { id: 'mod-customer-feedback', name: 'Customer Feedback Survey', type: 'RECORD' },
             { id: 'mod-lead-registration', name: 'Lead Registration Form', type: 'RECORD' }
           ]);
+        }
+
+        // Fetch Saved Searches for Search Embedding
+        try {
+          const tId = (tenant as any)?.id || localStorage.getItem('aurora_tenant_id') || 'tenant-aurora-core';
+          const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+          const searches = await fetchSavedSearches(tId, token);
+          setAvailableSearches(searches || []);
+        } catch (searchErr) {
+          console.warn('Failed to load saved searches for site builder:', searchErr);
         }
 
         setTimeout(() => {
@@ -768,6 +785,7 @@ export const SiteBuilderPage: React.FC = () => {
       content_panel: 'Visual Layout Panel',
       vertical_spacer: 'Vertical Spacer & Gap',
       cms_collection_list: 'Dynamic Repeater',
+      search_embed: 'Federated Search View',
       data_table: 'Dynamic Data Table',
       record_card: 'Record Profile Card',
       record_lookup: 'Reference Lookup Bar',
@@ -807,7 +825,11 @@ export const SiteBuilderPage: React.FC = () => {
       type,
       enabled: true,
       title: customTitle || typeTitles[type] || 'New Building Block Widget',
-      targetModuleId: availableModules[0]?.id || ''
+      targetModuleId: availableModules[0]?.id || '',
+      searchId: type === 'search_embed' ? (availableSearches[0]?.id || '') : undefined,
+      searchLayout: type === 'search_embed' ? 'table' : undefined,
+      showSearchKpis: type === 'search_embed' ? true : undefined,
+      allowSearchExport: type === 'search_embed' ? true : undefined
     };
 
     setPages(prevPages => prevPages.map(p => {
@@ -1752,6 +1774,7 @@ export const SiteBuilderPage: React.FC = () => {
                     ]},
                     { category: '📊 Data, Records & Database', items: [
                       { type: 'cms_collection_list', title: 'Dynamic Repeater', desc: 'Dynamic repeater linked to workspace modules or submodules with contextual data binding.', icon: Database, color: 'text-indigo-400 bg-indigo-500/10' },
+                      { type: 'search_embed', title: 'Federated Search View', desc: 'Embed a saved cross-module search with live filters, cards/table view, and record inspection.', icon: Search, color: 'text-indigo-400 bg-indigo-500/10' },
                       { type: 'data_table', title: 'Dynamic Data Table', desc: 'Searchable data table with custom columns, filters, and record modal.', icon: Layers, color: 'text-cyan-400 bg-cyan-500/10' },
                       { type: 'record_card', title: 'Record Profile Card', desc: 'Inspector card for key-value record attributes & avatars.', icon: ShieldCheck, color: 'text-blue-400 bg-blue-500/10' },
                       { type: 'record_lookup', title: 'Reference Lookup Bar', desc: 'Universal search bar for tracking codes and reference IDs.', icon: Search, color: 'text-amber-400 bg-amber-500/10' },
@@ -3107,6 +3130,60 @@ export const SiteBuilderPage: React.FC = () => {
                         </div>
                       )}
 
+                      {/* FEDERATED SEARCH VIEW EMBED */}
+                      {w.type === 'search_embed' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-4 border border-indigo-500/30`}>
+                          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                            <div className="flex items-center gap-2">
+                              <Search size={18} className="text-indigo-400" />
+                              <div>
+                                <h4 className="text-sm font-bold text-white">{w.title || 'Federated Search View'}</h4>
+                                <p className="text-[11px] text-zinc-400">
+                                  {availableSearches.find(s => s.id === w.searchId)?.name 
+                                    ? `Saved Search: ${availableSearches.find(s => s.id === w.searchId)?.name}`
+                                    : (w.searchId ? `Search ID: ${w.searchId}` : 'No saved search selected')}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded-full border border-indigo-500/30 capitalize">
+                                {w.searchLayout || 'table'} View
+                              </span>
+                              {w.showSearchKpis !== false && (
+                                <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                                  KPIs
+                                </span>
+                              )}
+                              {w.allowSearchExport !== false && (
+                                <span className="text-[10px] font-bold text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-full border border-cyan-500/30">
+                                  CSV Export
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {w.searchId ? (
+                            <div className="pointer-events-none opacity-90 overflow-hidden rounded-xl">
+                              <SearchRenderer
+                                searchId={w.searchId}
+                                layout={w.searchLayout || 'table'}
+                                displayMode="compact"
+                                showKpis={w.showSearchKpis !== false}
+                                allowExport={w.allowSearchExport !== false}
+                              />
+                            </div>
+                          ) : (
+                            <div className="p-8 text-center border border-dashed border-indigo-500/30 rounded-2xl bg-indigo-500/5 text-zinc-400 space-y-2">
+                              <Search className="w-8 h-8 mx-auto text-indigo-400 opacity-70" />
+                              <p className="text-xs font-bold text-zinc-200">Select a Saved Search in Inspector</p>
+                              <p className="text-[11px] text-zinc-400 max-w-sm mx-auto">
+                                Choose which saved search to render on this portal page using the configuration drawer on the right.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* DYNAMIC DATA TABLE / GRID WIDGET */}
                       {(w.type === 'data_table' || w.type === 'record_grid') && (
                         <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-4 border border-cyan-500/20`}>
@@ -4341,6 +4418,79 @@ export const SiteBuilderPage: React.FC = () => {
                       </div>
                     )}
 
+                    {/* SEARCH EMBED INSPECTOR */}
+                    {selWidget.type === 'search_embed' && (
+                      <div className="space-y-4 pt-3 border-t border-zinc-500/20">
+                        <div className="flex items-center gap-2">
+                          <Search size={14} className="text-indigo-400" />
+                          <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">
+                            Federated Search Settings
+                          </span>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold opacity-70 uppercase tracking-wider mb-1">
+                            Target Saved Search
+                          </label>
+                          <select
+                            value={selWidget.searchId || ''}
+                            onChange={e => handleUpdateWidgetProp(selWidget.id, 'searchId', e.target.value)}
+                            className={`w-full px-2.5 py-1.5 border rounded-xl text-xs ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'}`}
+                          >
+                            <option value="">-- Choose a Saved Search --</option>
+                            {availableSearches.map(s => (
+                              <option key={s.id} value={s.id}>
+                                {s.name} ({s.category || s.scopeType || 'General'})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold opacity-70 uppercase tracking-wider mb-1">
+                            Result Layout Mode
+                          </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {(['table', 'cards'] as const).map(mode => (
+                              <button
+                                key={mode}
+                                type="button"
+                                onClick={() => handleUpdateWidgetProp(selWidget.id, 'searchLayout', mode)}
+                                className={`py-1.5 rounded-xl text-xs font-bold capitalize transition-all ${
+                                  (selWidget.searchLayout || 'table') === mode
+                                    ? 'bg-indigo-600 text-white shadow-md'
+                                    : isLight ? 'bg-zinc-100 text-zinc-700' : 'bg-zinc-900 text-zinc-400'
+                                }`}
+                              >
+                                {mode === 'table' ? '📊 Table Grid' : '🗂️ Card Grid'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 pt-2 border-t border-zinc-500/20">
+                          <label className="flex items-center justify-between text-xs cursor-pointer">
+                            <span className="font-medium opacity-80">Display KPI Stat Counters</span>
+                            <input
+                              type="checkbox"
+                              checked={selWidget.showSearchKpis !== false}
+                              onChange={e => handleUpdateWidgetProp(selWidget.id, 'showSearchKpis', e.target.checked)}
+                              className="rounded bg-zinc-900 border-zinc-700 text-indigo-600 focus:ring-0 cursor-pointer"
+                            />
+                          </label>
+                          <label className="flex items-center justify-between text-xs cursor-pointer">
+                            <span className="font-medium opacity-80">Allow Data Export (CSV / Excel)</span>
+                            <input
+                              type="checkbox"
+                              checked={selWidget.allowSearchExport !== false}
+                              onChange={e => handleUpdateWidgetProp(selWidget.id, 'allowSearchExport', e.target.checked)}
+                              className="rounded bg-zinc-900 border-zinc-700 text-indigo-600 focus:ring-0 cursor-pointer"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    )}
+
                     {/* DYNAMIC REPEATER FIELD MAPPER & SUBMODULE CONTEXT INSPECTOR */}
                     {selWidget.type === 'cms_collection_list' && (
                       <div className="space-y-4 pt-3 border-t border-zinc-500/20">
@@ -4851,6 +5001,13 @@ export const SiteBuilderPage: React.FC = () => {
                 desc: 'Dynamic data grid displaying live records from an Aurora workspace module with search and detail view modal.',
                 icon: Layers,
                 color: 'text-cyan-400 bg-cyan-500/10'
+              },
+              {
+                type: 'search_embed',
+                title: 'Federated Search View',
+                desc: 'Embed a saved cross-module search with live filters, cards/table view, and record inspection.',
+                icon: Search,
+                color: 'text-indigo-400 bg-indigo-500/10'
               },
               {
                 type: 'hero',

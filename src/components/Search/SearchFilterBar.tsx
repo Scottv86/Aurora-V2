@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   Search, X, Plus, User, 
   ChevronDown, Check, Clock,
-  RotateCcw, Sparkles, Filter
+  RotateCcw, Sparkles, Filter, Lock, Calendar
 } from 'lucide-react';
 import { Button } from '../UI/Primitives';
 import { SavedSearchEntity, SearchParameterExposed } from '../../types/searchBuilder';
@@ -22,6 +22,7 @@ export interface SearchFilterBarProps {
   isSearching?: boolean;
   className?: string;
   compact?: boolean;
+  lockedParameters?: string[];
 }
 
 export const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
@@ -33,7 +34,8 @@ export const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
   onResetFilters,
   onExecuteSearch,
   isSearching = false,
-  className
+  className,
+  lockedParameters = []
 }) => {
   const { modules, members, user } = usePlatform();
   const [showAddFilterMenu, setShowAddFilterMenu] = useState(false);
@@ -41,6 +43,9 @@ export const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
   const [userSearchText, setUserSearchText] = useState('');
   const [selectSearchText, setSelectSearchText] = useState('');
   const [dynamicControls, setDynamicControls] = useState<SearchParameterExposed[]>([]);
+  const [customRangeFrom, setCustomRangeFrom] = useState('');
+  const [customRangeTo, setCustomRangeTo] = useState('');
+  const [isCustomMode, setIsCustomMode] = useState(false);
   const addFilterRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -132,10 +137,32 @@ export const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
 
   const DATE_PRESETS = [
     { label: 'Today', value: 'today' },
+    { label: 'Yesterday', value: 'yesterday' },
+    { label: 'This Week', value: 'this_week' },
+    { label: 'This Month', value: 'this_month' },
     { label: 'Past 7 Days', value: 'past_7_days' },
     { label: 'Past 30 Days', value: 'past_30_days' },
-    { label: 'All Time', value: '' }
+    { label: 'Past 90 Days', value: 'past_90_days' },
+    { label: 'All Time', value: 'all_time' }
   ];
+
+  const handleOpenDateDropdown = (paramName: string, currentVal: any) => {
+    if (openDropdownKey === paramName) {
+      setOpenDropdownKey(null);
+      return;
+    }
+    if (typeof currentVal === 'string' && currentVal.startsWith('custom:')) {
+      const parts = currentVal.replace('custom:', '').split(',');
+      setCustomRangeFrom(parts[0] || '');
+      setCustomRangeTo(parts[1] || '');
+      setIsCustomMode(true);
+    } else {
+      setCustomRangeFrom('');
+      setCustomRangeTo('');
+      setIsCustomMode(false);
+    }
+    setOpenDropdownKey(paramName);
+  };
 
   return (
     <div className={cn("space-y-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 shadow-xs", className)}>
@@ -640,27 +667,52 @@ export const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
             );
           }
 
-          // Date Range Presets
-          if (ctrl.controlType === 'date_preset') {
+          // Date Range Presets & Custom Ranges
+          if (ctrl.controlType === 'date_preset' || ctrl.controlType === 'date_range') {
+            const isLocked = ctrl.isLocked || lockedParameters.includes(ctrl.parameterName);
             const activePreset = DATE_PRESETS.find(p => p.value === currentVal);
+            
+            const getDisplayLabel = () => {
+              if (!currentVal || currentVal === 'all_time' || currentVal === '') return 'All Time';
+              if (typeof currentVal === 'string' && currentVal.startsWith('custom:')) {
+                const [f, t] = currentVal.replace('custom:', '').split(',');
+                if (f && t) return `${f} – ${t}`;
+                if (f) return `From ${f}`;
+                if (t) return `Until ${t}`;
+                return 'Custom Range';
+              }
+              if (activePreset) return activePreset.label;
+              return String(currentVal);
+            };
+
+            const isFiltered = Boolean(currentVal && currentVal !== 'all_time' && currentVal !== '');
+
             return (
               <div key={ctrl.id} className="relative flex items-center" ref={isOpen ? dropdownRef : undefined}>
                 <button
-                  onClick={() => setOpenDropdownKey(isOpen ? null : ctrl.parameterName)}
+                  type="button"
+                  disabled={isLocked}
+                  onClick={() => !isLocked && handleOpenDateDropdown(ctrl.parameterName, currentVal)}
                   className={cn(
                     "flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all",
-                    currentVal 
+                    isLocked && "cursor-not-allowed opacity-85",
+                    isFiltered
                       ? "bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-300"
                       : "bg-zinc-50 dark:bg-zinc-950/40 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300"
                   )}
+                  title={isLocked ? "Date range is fixed by administrator" : "Click to select or customize date range"}
                 >
-                  <Clock size={13} className={currentVal ? "text-emerald-500" : "text-zinc-400"} />
+                  {isLocked ? (
+                    <Lock size={12} className="text-amber-500 shrink-0" />
+                  ) : (
+                    <Clock size={13} className={isFiltered ? "text-emerald-500 shrink-0" : "text-zinc-400 shrink-0"} />
+                  )}
                   <span>{ctrl.label}:</span>
-                  <span className="font-semibold text-zinc-900 dark:text-zinc-100">{activePreset?.label || currentVal || 'All Time'}</span>
-                  <ChevronDown size={12} className="opacity-60" />
+                  <span className="font-semibold text-zinc-900 dark:text-zinc-100">{getDisplayLabel()}</span>
+                  {!isLocked && <ChevronDown size={12} className="opacity-60" />}
                 </button>
 
-                {isDynamic && (
+                {isDynamic && !isLocked && (
                   <button
                     onClick={() => {
                       onParameterChange(ctrl.parameterName, '');
@@ -673,21 +725,97 @@ export const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
                   </button>
                 )}
 
-                {isOpen && (
-                  <div className="absolute left-0 top-full mt-1.5 w-44 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl p-1.5 z-50">
-                    {DATE_PRESETS.map(preset => (
-                      <button
-                        key={preset.value}
-                        onClick={() => {
-                          onParameterChange(ctrl.parameterName, preset.value);
-                          setOpenDropdownKey(null);
-                        }}
-                        className={cn("w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between", currentVal === preset.value ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 font-semibold" : "hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300")}
+                {isOpen && !isLocked && (
+                  <div className="absolute left-0 top-full mt-1.5 w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl p-2.5 z-50 space-y-2 animate-in fade-in zoom-in-95 duration-100">
+                    <div className="flex items-center justify-between px-1 pb-1 border-b border-zinc-100 dark:border-zinc-800">
+                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Date Period</span>
+                      <button 
+                        type="button" 
+                        onClick={() => setIsCustomMode(!isCustomMode)}
+                        className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                       >
-                        <span>{preset.label}</span>
-                        {currentVal === preset.value && <Check size={13} />}
+                        {isCustomMode ? 'Show Presets' : 'Custom Dates'}
                       </button>
-                    ))}
+                    </div>
+
+                    {!isCustomMode ? (
+                      <div className="space-y-0.5 max-h-56 overflow-y-auto custom-scrollbar">
+                        {DATE_PRESETS.map(preset => (
+                          <button
+                            key={preset.value}
+                            type="button"
+                            onClick={() => {
+                              onParameterChange(ctrl.parameterName, preset.value);
+                              setOpenDropdownKey(null);
+                            }}
+                            className={cn(
+                              "w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between cursor-pointer",
+                              currentVal === preset.value
+                                ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 font-semibold"
+                                : "hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+                            )}
+                          >
+                            <span>{preset.label}</span>
+                            {currentVal === preset.value && <Check size={13} />}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setIsCustomMode(true)}
+                          className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 flex items-center gap-1.5 mt-1 border-t border-zinc-100 dark:border-zinc-800 pt-1.5 cursor-pointer"
+                        >
+                          <Calendar size={13} />
+                          <span>Custom Date Range...</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5 pt-1">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">From Date</label>
+                          <input
+                            type="date"
+                            value={customRangeFrom}
+                            onChange={(e) => setCustomRangeFrom(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:border-indigo-500 text-zinc-900 dark:text-zinc-100"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">To Date</label>
+                          <input
+                            type="date"
+                            value={customRangeTo}
+                            onChange={(e) => setCustomRangeTo(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl outline-none focus:border-indigo-500 text-zinc-900 dark:text-zinc-100"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2 pt-1 border-t border-zinc-100 dark:border-zinc-800">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!customRangeFrom && !customRangeTo) {
+                                onParameterChange(ctrl.parameterName, '');
+                              } else {
+                                onParameterChange(ctrl.parameterName, `custom:${customRangeFrom},${customRangeTo}`);
+                              }
+                              setOpenDropdownKey(null);
+                            }}
+                            className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-xs cursor-pointer"
+                          >
+                            Apply Range
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onParameterChange(ctrl.parameterName, '');
+                              setOpenDropdownKey(null);
+                            }}
+                            className="px-3 py-1.5 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl text-xs text-zinc-500 cursor-pointer"
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

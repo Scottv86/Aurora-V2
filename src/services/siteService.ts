@@ -168,7 +168,8 @@ export interface SiteWidget {
     | 'activity_feed' | 'faq_accordion' | 'feature_grid' | 'tabbed_content' | 'pricing_table' 
     | 'testimonials' | 'cta_strip' | 'embed_iframe' | 'bottom_nav_bar' | 'floating_action_btn' 
     | 'push_prompt' | 'infinite_stream' | 'slider_carousel' | 'cms_collection_list'
-    | 'heading_block' | 'text_paragraph' | 'horizontal_rule' | 'content_panel' | 'vertical_spacer';
+    | 'heading_block' | 'text_paragraph' | 'horizontal_rule' | 'content_panel' | 'vertical_spacer'
+    | 'search_embed';
   enabled: boolean;
   title: string;
   subtitle?: string;
@@ -212,6 +213,10 @@ export interface SiteWidget {
   layoutColumns?: '1_col' | '2_col' | '3_col' | '4_col' | 'split_1_2' | 'split_2_1';
   customSnippet?: string;
   customBadge?: string;
+  searchId?: string;
+  searchLayout?: 'table' | 'cards';
+  showSearchKpis?: boolean;
+  allowSearchExport?: boolean;
 }
 
 export interface SiteAuthConfig {

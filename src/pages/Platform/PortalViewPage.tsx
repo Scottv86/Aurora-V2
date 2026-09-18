@@ -41,6 +41,7 @@ import {
 
 import { Site, SiteService, SitePage, ENTERPRISE_FONTS } from '../../services/siteService';
 import { toast } from 'sonner';
+import { SearchRenderer } from '../../components/Search/SearchRenderer';
 
 export const PortalViewPage = () => {
   const { siteId } = useParams<{ siteId: string }>();
@@ -1579,6 +1580,27 @@ export const PortalViewPage = () => {
                   w.spacerHeight === 'xl' ? 'h-16' :
                   w.spacerHeight === '2xl' ? 'h-24' : 'h-8'
                 }`} />
+              )}
+
+              {/* FEDERATED SEARCH VIEW */}
+              {w.type === 'search_embed' && (
+                <div className="w-full">
+                  {w.searchId ? (
+                    <SearchRenderer
+                      searchId={w.searchId}
+                      layout={w.searchLayout || 'table'}
+                      displayMode="full"
+                      showKpis={w.showSearchKpis !== false}
+                      allowExport={w.allowSearchExport !== false}
+                    />
+                  ) : (
+                    <div className="p-8 text-center border border-dashed border-zinc-800 rounded-2xl bg-zinc-900/40 text-zinc-400">
+                      <Search className="w-8 h-8 mx-auto mb-2 text-indigo-400 opacity-60" />
+                      <p className="text-sm font-semibold text-zinc-200">No Saved Search Configured</p>
+                      <p className="text-xs text-zinc-500 mt-1">Configure a search in Site Builder to display real-time query results.</p>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           );

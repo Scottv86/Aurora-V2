@@ -128,6 +128,8 @@ const DocsApp = lazy(() => import('./pages/Apps/DocsApp').then(m => ({ default: 
 const DocEditor = lazy(() => import('./pages/Apps/DocEditor').then(m => ({ default: m.DocEditor })));
 const InboxApp = lazy(() => import('./pages/Apps/InboxApp').then(m => ({ default: m.InboxApp })));
 const ChatApp = lazy(() => import('./pages/Apps/ChatApp').then(m => ({ default: m.ChatApp })));
+const SearchesDirectoryPage = lazy(() => import('./pages/Search/SearchesDirectoryPage').then(m => ({ default: m.SearchesDirectoryPage })));
+const SearchRunnerPage = lazy(() => import('./pages/Search/SearchRunnerPage').then(m => ({ default: m.SearchRunnerPage })));
 import { slugify } from './lib/utils';
 
 
@@ -356,6 +358,11 @@ const App = () => {
                 <Route path="apps/docs" element={<DocsApp />} />
                 <Route path="apps/docs/:documentId" element={<DocEditor />} />
                 <Route path="apps/query" element={<QueryExplorer />} />
+
+                {/* Federated Searches (Consumer Runtime) */}
+                <Route path="searches" element={<SearchesDirectoryPage />} />
+                <Route path="searches/:searchId" element={<SearchRunnerPage />} />
+                <Route path="searches/slug/:slug" element={<SearchRunnerPage />} />
               </Route>
 
               

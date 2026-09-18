@@ -98,7 +98,23 @@ router.get('/', async (req: TenantRequest, res: Response) => {
       orderBy: { updatedAt: 'desc' }
     });
 
-    res.json(searches);
+    const user = req.user;
+    const isSuperAdmin = user?.isSuperAdmin;
+    const userRole = (user?.roleId || '').toLowerCase();
+
+    // Filter searches based on RBAC if allowedRoleIds are defined
+    const visibleSearches = searches.filter((s: any) => {
+      if (isSuperAdmin) return true;
+      if (!s.allowedRoleIds || !Array.isArray(s.allowedRoleIds) || s.allowedRoleIds.length === 0) {
+        return true; // Public to all tenant members
+      }
+      return s.allowedRoleIds.some((r: string) => {
+        const roleLower = r.toLowerCase();
+        return roleLower === userRole || (userRole === 'admin' && (roleLower === 'admin' || roleLower === 'tenant admin'));
+      });
+    });
+
+    res.json(visibleSearches);
   } catch (err: any) {
     console.error('[SearchesAPI] GET / Error:', err);
     res.status(500).json({ error: err.message || 'Failed to fetch searches' });
@@ -120,6 +136,22 @@ router.get('/:id', async (req: TenantRequest, res: Response) => {
 
     if (!found) {
       return res.status(404).json({ error: 'Search not found' });
+    }
+
+    // RBAC validation
+    if (found.allowedRoleIds && Array.isArray(found.allowedRoleIds) && found.allowedRoleIds.length > 0) {
+      const user = req.user;
+      const isSuperAdmin = user?.isSuperAdmin;
+      const userRole = (user?.roleId || '').toLowerCase();
+
+      const hasAccess = isSuperAdmin || found.allowedRoleIds.some((r: string) => {
+        const roleLower = r.toLowerCase();
+        return roleLower === userRole || (userRole === 'admin' && (roleLower === 'admin' || roleLower === 'tenant admin'));
+      });
+
+      if (!hasAccess) {
+        return res.status(403).json({ error: 'You do not have permission to view or run this search.' });
+      }
     }
 
     res.json(found);
@@ -249,6 +281,39 @@ router.post('/compile', (req: TenantRequest, res: Response) => {
   }
 });
 
+// POST /api/searches/bulk-update - Bulk update records from search view
+router.post('/bulk-update', async (req: TenantRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId || 't1';
+    const { recordIds, updates = {} } = req.body;
+
+    if (!Array.isArray(recordIds) || recordIds.length === 0) {
+      return res.status(400).json({ error: 'recordIds must be a non-empty array' });
+    }
+
+    const dataToUpdate: any = {
+      updatedAt: new Date()
+    };
+
+    if (updates.status) {
+      dataToUpdate.status = updates.status;
+    }
+
+    const updated = await globalPrisma.record.updateMany({
+      where: {
+        tenantId,
+        id: { in: recordIds }
+      },
+      data: dataToUpdate
+    });
+
+    res.json({ success: true, count: updated.count });
+  } catch (err: any) {
+    console.error('[SearchesAPI] bulk-update Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to bulk update records' });
+  }
+});
+
 // POST /api/searches/execute - Execute parameterized search
 router.post('/execute', async (req: TenantRequest, res: Response) => {
   const startTime = Date.now();
@@ -333,23 +398,73 @@ router.post('/execute', async (req: TenantRequest, res: Response) => {
       } else if (key === 'assigneeId' || key === 'assignedTo' || key === 'allocatedTo') {
         const cleanAssignee = String(resolvedVal).replace(/'/g, "''");
         whereConditions.push(`(r.data->>'assigneeId' = '${cleanAssignee}' OR r.data->>'assignedTo' = '${cleanAssignee}')`);
-      } else if (key === 'datePreset') {
-        // Date presets
+      } else if (key === 'datePreset' || (typeof resolvedVal === 'string' && (resolvedVal.startsWith('custom:') || ['today', 'yesterday', 'this_week', 'this_month', 'past_7_days', 'past_30_days', 'past_90_days', '7d', '30d', '90d'].includes(resolvedVal)))) {
+        // Date presets & custom ranges
         const now = new Date();
-        if (resolvedVal === 'today') {
+        const dateColumn = (key === 'datePreset' || key === 'createdAt' || key === 'created_at')
+          ? 'r.created_at'
+          : (key === 'updatedAt' || key === 'updated_at' ? 'r.updated_at' : `(r.data->>'${key}')::timestamp`);
+
+        if (typeof resolvedVal === 'string' && resolvedVal.startsWith('custom:')) {
+          const parts = resolvedVal.replace('custom:', '').split(',');
+          const from = parts[0]?.trim();
+          const to = parts[1]?.trim();
+          if (from) {
+            const fromIso = from.includes('T') ? from : `${from}T00:00:00.000Z`;
+            whereConditions.push(`${dateColumn} >= '${fromIso.replace(/'/g, "''")}'`);
+          }
+          if (to) {
+            const toIso = to.includes('T') ? to : `${to}T23:59:59.999Z`;
+            whereConditions.push(`${dateColumn} <= '${toIso.replace(/'/g, "''")}'`);
+          }
+        } else if (typeof resolvedVal === 'object' && resolvedVal && (resolvedVal.from || resolvedVal.to)) {
+          if (resolvedVal.from) {
+            const fromIso = String(resolvedVal.from).includes('T') ? resolvedVal.from : `${resolvedVal.from}T00:00:00.000Z`;
+            whereConditions.push(`${dateColumn} >= '${fromIso.replace(/'/g, "''")}'`);
+          }
+          if (resolvedVal.to) {
+            const toIso = String(resolvedVal.to).includes('T') ? resolvedVal.to : `${resolvedVal.to}T23:59:59.999Z`;
+            whereConditions.push(`${dateColumn} <= '${toIso.replace(/'/g, "''")}'`);
+          }
+        } else if (resolvedVal === 'today') {
           const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-          whereConditions.push(`r.created_at >= '${start}'`);
+          whereConditions.push(`${dateColumn} >= '${start}'`);
+        } else if (resolvedVal === 'yesterday') {
+          const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).toISOString();
+          const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, -1).toISOString();
+          whereConditions.push(`${dateColumn} >= '${start}' AND ${dateColumn} <= '${end}'`);
+        } else if (resolvedVal === 'this_week') {
+          const day = now.getDay();
+          const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+          const start = new Date(now.getFullYear(), now.getMonth(), diff).toISOString();
+          whereConditions.push(`${dateColumn} >= '${start}'`);
+        } else if (resolvedVal === 'this_month') {
+          const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+          whereConditions.push(`${dateColumn} >= '${start}'`);
         } else if (resolvedVal === 'past_7_days' || resolvedVal === '7d') {
           const past7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
-          whereConditions.push(`r.created_at >= '${past7}'`);
+          whereConditions.push(`${dateColumn} >= '${past7}'`);
         } else if (resolvedVal === 'past_30_days' || resolvedVal === '30d') {
           const past30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
-          whereConditions.push(`r.created_at >= '${past30}'`);
+          whereConditions.push(`${dateColumn} >= '${past30}'`);
+        } else if (resolvedVal === 'past_90_days' || resolvedVal === '90d') {
+          const past90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString();
+          whereConditions.push(`${dateColumn} >= '${past90}'`);
         }
       } else if (key.endsWith('From')) {
-        whereConditions.push(`r.created_at >= '${String(resolvedVal).replace(/'/g, "''")}'`);
+        const fieldKey = key.slice(0, -4);
+        const dateColumn = (fieldKey === 'datePreset' || fieldKey === 'createdAt' || fieldKey === 'created_at')
+          ? 'r.created_at'
+          : (fieldKey === 'updatedAt' || fieldKey === 'updated_at' ? 'r.updated_at' : `(r.data->>'${fieldKey}')::timestamp`);
+        const fromIso = String(resolvedVal).includes('T') ? String(resolvedVal) : `${resolvedVal}T00:00:00.000Z`;
+        whereConditions.push(`${dateColumn} >= '${fromIso.replace(/'/g, "''")}'`);
       } else if (key.endsWith('To')) {
-        whereConditions.push(`r.created_at <= '${String(resolvedVal).replace(/'/g, "''")}'`);
+        const fieldKey = key.slice(0, -2);
+        const dateColumn = (fieldKey === 'datePreset' || fieldKey === 'createdAt' || fieldKey === 'created_at')
+          ? 'r.created_at'
+          : (fieldKey === 'updatedAt' || fieldKey === 'updated_at' ? 'r.updated_at' : `(r.data->>'${fieldKey}')::timestamp`);
+        const toIso = String(resolvedVal).includes('T') ? String(resolvedVal) : `${resolvedVal}T23:59:59.999Z`;
+        whereConditions.push(`${dateColumn} <= '${toIso.replace(/'/g, "''")}'`);
       } else {
         // Custom field on records.data
         const cleanKey = key.replace(/[^a-zA-Z0-9_]/g, '');

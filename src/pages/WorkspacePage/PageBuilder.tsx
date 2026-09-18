@@ -5,7 +5,7 @@ import * as Icons from 'lucide-react';
 import { 
   ArrowLeft, Save, Trash2, Settings, 
   Sparkles, Layout, Eye, Loader2, Cpu, GripVertical,
-  SlidersHorizontal
+  SlidersHorizontal, Search
 } from 'lucide-react';
 import ReactGridLayout from 'react-grid-layout';
 import { 
@@ -22,6 +22,9 @@ import { API_BASE_URL, DATA_API_URL } from '../../config';
 import { cn, slugify } from '../../lib/utils';
 import { ReportWidgetEmbed, getWidgetDefaultDimensions } from './WorkspacePageView';
 import { QueueRenderer } from '../../components/Builders/QueueBuilder/QueueRenderer';
+import { SearchRenderer } from '../../components/Search/SearchRenderer';
+import { fetchSavedSearches } from '../../services/searchService';
+import { SavedSearchEntity } from '../../types/searchBuilder';
 import { builderCache } from '../../utils/builderCache';
 import { UnsavedChangesModal } from '../../components/Common/UnsavedChangesModal';
 export { PageBuilderEngine } from '../../components/PageEngine';
@@ -812,6 +815,29 @@ const BuilderWidgetPreviewRenderer: React.FC<{ widget: any; tenant: any; session
       return <BuilderHeroPreview widget={widget} />;
     case 'faq':
       return <BuilderFaqPreview widget={widget} />;
+    case 'search-widget':
+    case 'search-view':
+    case 'advanced-search':
+      if (widget.properties?.searchId) {
+        return (
+          <div className="w-full h-full pointer-events-none scale-[0.96] origin-top bg-zinc-50/70 dark:bg-zinc-950/50 rounded-xl p-1 border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+            <SearchRenderer
+              searchId={widget.properties.searchId}
+              title={widget.title}
+              displayMode={widget.properties.displayMode || 'full'}
+              layout={widget.properties.layout || 'table'}
+              className="w-full h-full pointer-events-none"
+            />
+          </div>
+        );
+      }
+      return (
+        <div className="h-full flex flex-col items-center justify-center p-4 text-center border border-dashed border-indigo-200 dark:border-indigo-900/50 rounded-xl bg-indigo-50/20 dark:bg-indigo-950/20">
+          <Search size={24} className="text-indigo-500 mb-1.5" />
+          <h5 className="text-xs font-bold text-zinc-800 dark:text-zinc-200">Federated Search Embed</h5>
+          <p className="text-[10px] text-zinc-400 mt-0.5">Select a saved search in the properties drawer on the right.</p>
+        </div>
+      );
     default:
       return (
         <div className="h-full flex items-center justify-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50/50 dark:bg-zinc-950/40 text-[10px] text-zinc-400 font-medium">
@@ -894,6 +920,23 @@ export const PageBuilder = () => {
   const [showAIModal, setShowAIModal] = useState(false);
 
   const selectedWidget = widgets.find(w => w.id === selectedWidgetId);
+
+  // Available searches for embed widgets
+  const [availableSearches, setAvailableSearches] = useState<SavedSearchEntity[]>([]);
+
+  useEffect(() => {
+    const loadSearches = async () => {
+      if (!tenant?.id) return;
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      try {
+        const data = await fetchSavedSearches(tenant.id, token);
+        setAvailableSearches(data || []);
+      } catch (e) {
+        console.error('Failed to load searches in PageBuilder:', e);
+      }
+    };
+    loadSearches();
+  }, [tenant?.id, session?.access_token]);
 
   // Track user modifications after initial page load
   useEffect(() => {
@@ -1078,6 +1121,18 @@ export const PageBuilder = () => {
       case 'faq':
         title = 'Frequently Asked Questions';
         properties = {};
+        break;
+      case 'search-widget':
+      case 'search-view':
+      case 'advanced-search':
+        title = 'Federated Search View';
+        properties = {
+          searchId: availableSearches[0]?.id || '',
+          displayMode: 'full',
+          layout: 'table',
+          showKpis: true,
+          allowExport: true
+        };
         break;
     }
 
@@ -1283,6 +1338,7 @@ export const PageBuilder = () => {
               { type: 'stats-grid', label: 'Stats Metrics Grid', icon: Cpu, desc: 'Display summaries of key tenant parameters.' },
               { type: 'active-workflows', label: 'Active Workflows', icon: Icons.Workflow, desc: 'Show currently executing workflows.' },
               { type: 'queue', label: 'Work Queue Embed', icon: Icons.ListOrdered, desc: 'Embed any standalone or unified queue from your library.' },
+              { type: 'search-widget', label: 'Federated Search Embed', icon: Search, desc: 'Embed a cross-module search with live filters, cards/table view, and export.' },
               { type: 'work-queue', label: 'My Work Inbox', icon: Icons.ClipboardList, desc: 'Embed the personal work inbox for cases.' },
               { type: 'module-table', label: 'Module Records Table', icon: Icons.Database, desc: 'Display a paginated list of records from a module.' },
               { type: 'module-creator', label: 'Module Submission Form', icon: Icons.FileText, desc: 'Render a form to create entries in a module.' },
@@ -1929,6 +1985,139 @@ export const PageBuilder = () => {
                         }}
                         className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2.5 py-1.5 outline-none text-zinc-850 dark:text-white focus:border-indigo-500/50"
                       />
+                    </div>
+                  </div>
+                )}
+
+                {/* Federated Search properties */}
+                {(selectedWidget.type === 'search-widget' || selectedWidget.type === 'search-view' || selectedWidget.type === 'advanced-search') && (
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-zinc-500 uppercase tracking-wider block text-[11px]">Target Search</label>
+                      <select
+                        value={selectedWidget.properties?.searchId || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const targetSearch = availableSearches.find(s => s.id === val);
+                          setWidgets((prev: any[]) => prev.map(w => {
+                            if (w.id === selectedWidget.id) {
+                              return {
+                                ...w,
+                                title: targetSearch ? targetSearch.name : w.title,
+                                properties: {
+                                  ...w.properties,
+                                  searchId: val,
+                                  layout: targetSearch?.searchConfig?.defaultLayout || w.properties?.layout || 'table'
+                                }
+                              };
+                            }
+                            return w;
+                          }));
+                        }}
+                        className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2.5 py-2 outline-none text-xs text-zinc-850 dark:text-white focus:border-indigo-500/50"
+                      >
+                        <option value="">Select a saved search...</option>
+                        {availableSearches.map(s => (
+                          <option key={s.id} value={s.id}>
+                            {s.name} ({s.category || 'General'})
+                          </option>
+                        ))}
+                      </select>
+                      {availableSearches.length === 0 && (
+                        <p className="text-[10px] text-amber-500 mt-1">No saved searches found. Create one in Searches Studio.</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-zinc-500 uppercase tracking-wider block text-[11px]">Display Layout</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { id: 'table', label: 'Data Table' },
+                          { id: 'cards', label: 'Card Grid' }
+                        ].map(m => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => {
+                              setWidgets((prev: any[]) => prev.map(w => w.id === selectedWidget.id ? {
+                                ...w,
+                                properties: { ...w.properties, layout: m.id }
+                              } : w));
+                            }}
+                            className={cn(
+                              "py-2 px-3 rounded-xl border text-xs font-semibold transition-all",
+                              (selectedWidget.properties?.layout || 'table') === m.id
+                                ? "bg-indigo-50 dark:bg-indigo-950/60 border-indigo-500 text-indigo-700 dark:text-indigo-300"
+                                : "border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-zinc-300"
+                            )}
+                          >
+                            {m.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-zinc-500 uppercase tracking-wider block text-[11px]">Display Mode</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { id: 'full', label: 'Full View' },
+                          { id: 'compact', label: 'Compact Grid' }
+                        ].map(m => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => {
+                              setWidgets((prev: any[]) => prev.map(w => w.id === selectedWidget.id ? {
+                                ...w,
+                                properties: { ...w.properties, displayMode: m.id }
+                              } : w));
+                            }}
+                            className={cn(
+                              "py-2 px-3 rounded-xl border text-xs font-semibold transition-all",
+                              (selectedWidget.properties?.displayMode || 'full') === m.id
+                                ? "bg-indigo-50 dark:bg-indigo-950/60 border-indigo-500 text-indigo-700 dark:text-indigo-300"
+                                : "border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-zinc-300"
+                            )}
+                          >
+                            {m.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                        <input
+                          type="checkbox"
+                          checked={selectedWidget.properties?.showKpis !== false}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setWidgets((prev: any[]) => prev.map(w => w.id === selectedWidget.id ? {
+                              ...w,
+                              properties: { ...w.properties, showKpis: checked }
+                            } : w));
+                          }}
+                          className="rounded text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>Show KPI Analytics Ribbon</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                        <input
+                          type="checkbox"
+                          checked={selectedWidget.properties?.allowExport !== false}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setWidgets((prev: any[]) => prev.map(w => w.id === selectedWidget.id ? {
+                              ...w,
+                              properties: { ...w.properties, allowExport: checked }
+                            } : w));
+                          }}
+                          className="rounded text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>Allow CSV Data Export</span>
+                      </label>
                     </div>
                   </div>
                 )}

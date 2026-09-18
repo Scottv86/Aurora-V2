@@ -2,7 +2,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Layers, Sliders, Layout, Save, ArrowLeft, 
   Plus, Trash2, Check, Code, Eye, Columns,
-  ArrowUp, ArrowDown, EyeOff, RotateCcw, GripVertical, Search
+  ArrowUp, ArrowDown, EyeOff, RotateCcw, GripVertical, Search,
+  Shield, Lock, Unlock, Globe
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../UI/Primitives';
@@ -97,6 +98,14 @@ export const SearchBuilder: React.FC<SearchBuilderProps> = ({
   );
   const [targetModuleIds, setTargetModuleIds] = useState<string[]>(() => {
     if (initialSearch?.targetModuleIds?.length) return initialSearch.targetModuleIds;
+    return [];
+  });
+
+  // Governance & RBAC State: empty array means public to all roles
+  const [allowedRoleIds, setAllowedRoleIds] = useState<string[]>(() => {
+    if (initialSearch?.allowedRoleIds && Array.isArray(initialSearch.allowedRoleIds)) {
+      return initialSearch.allowedRoleIds;
+    }
     return [];
   });
 
@@ -514,6 +523,7 @@ export const SearchBuilder: React.FC<SearchBuilderProps> = ({
       isSearchEnabled: true,
       scopeType,
       targetModuleIds,
+      allowedRoleIds,
       searchConfig,
       columnsConfig,
       sql: generatedSql,
@@ -576,6 +586,7 @@ export const SearchBuilder: React.FC<SearchBuilderProps> = ({
     isSearchEnabled: true,
     scopeType,
     targetModuleIds,
+    allowedRoleIds,
     sql: generatedSql,
     parameters: generatedParameters,
     columnsConfig,
@@ -793,6 +804,112 @@ export const SearchBuilder: React.FC<SearchBuilderProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* Access & Visibility (Governance & RBAC) */}
+              <div className="p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl shadow-xs space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                      <Shield size={16} className="text-indigo-500" />
+                      Access & Visibility
+                    </h3>
+                    <p className="text-xs text-zinc-400 mt-0.5">Control who can discover and run this federated search</p>
+                  </div>
+                  <span className={cn(
+                    "px-2.5 py-1 rounded-full text-[11px] font-semibold flex items-center gap-1.5",
+                    allowedRoleIds.length === 0
+                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/50"
+                      : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200/50"
+                  )}>
+                    {allowedRoleIds.length === 0 ? <Globe size={12} /> : <Lock size={12} />}
+                    {allowedRoleIds.length === 0 ? 'Public to All' : `Restricted (${allowedRoleIds.length} Roles)`}
+                  </span>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setAllowedRoleIds([])}
+                    className={cn(
+                      "flex-1 p-3.5 rounded-2xl border text-left transition-all",
+                      allowedRoleIds.length === 0
+                        ? "border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/40 ring-1 ring-indigo-600"
+                        : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300"
+                    )}
+                  >
+                    <div className="flex items-center gap-2 font-bold text-xs text-zinc-900 dark:text-white">
+                      <Globe size={14} className="text-emerald-500" />
+                      <span>All Workspace Users (Public)</span>
+                    </div>
+                    <div className="text-[11px] text-zinc-500 mt-1">Available to all authenticated team members across the workspace</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (allowedRoleIds.length === 0) {
+                        setAllowedRoleIds(['Admin', 'Manager']);
+                      }
+                    }}
+                    className={cn(
+                      "flex-1 p-3.5 rounded-2xl border text-left transition-all",
+                      allowedRoleIds.length > 0
+                        ? "border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/40 ring-1 ring-indigo-600"
+                        : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300"
+                    )}
+                  >
+                    <div className="flex items-center gap-2 font-bold text-xs text-zinc-900 dark:text-white">
+                      <Lock size={14} className="text-amber-500" />
+                      <span>Restricted by Role (RBAC)</span>
+                    </div>
+                    <div className="text-[11px] text-zinc-500 mt-1">Only users with selected security roles will have access</div>
+                  </button>
+                </div>
+
+                {allowedRoleIds.length > 0 && (
+                  <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-2">
+                    <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">
+                      Permitted Roles
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { id: 'Admin', label: 'Tenant Admin' },
+                        { id: 'Developer', label: 'Developer / Builder' },
+                        { id: 'Manager', label: 'Manager' },
+                        { id: 'Staff', label: 'Standard User / Staff' }
+                      ].map(role => {
+                        const isSelected = allowedRoleIds.includes(role.id);
+                        return (
+                          <button
+                            key={role.id}
+                            type="button"
+                            onClick={() => {
+                              if (isSelected) {
+                                const next = allowedRoleIds.filter(r => r !== role.id);
+                                setAllowedRoleIds(next.length > 0 ? next : []);
+                              } else {
+                                setAllowedRoleIds(prev => [...prev, role.id]);
+                              }
+                            }}
+                            className={cn(
+                              "px-3 py-1.5 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition-all",
+                              isSelected
+                                ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-semibold"
+                                : "border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300"
+                            )}
+                          >
+                            <span className={cn(
+                              "w-2 h-2 rounded-full",
+                              isSelected ? "bg-indigo-500" : "bg-zinc-300 dark:bg-zinc-700"
+                            )} />
+                            <span>{role.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -850,7 +967,7 @@ export const SearchBuilder: React.FC<SearchBuilderProps> = ({
                         type: 'date_preset' as const,
                         label: 'Date Range',
                         desc: 'Calendar & relative presets',
-                        isAdded: exposedControls.some(c => c.parameterName === 'datePreset' || c.controlType === 'date_preset')
+                        isAdded: exposedControls.some(c => c.parameterName === 'datePreset' || c.controlType === 'date_preset' || c.controlType === 'date_range')
                       },
                       {
                         type: 'query' as const,
@@ -1038,10 +1155,95 @@ export const SearchBuilder: React.FC<SearchBuilderProps> = ({
                             </button>
                           )}
 
-                          {ctrl.defaultValue && (
-                            <span className="text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 px-2 py-0.5 rounded-md">
-                              Default: {String(ctrl.defaultValue)}
-                            </span>
+                          {(ctrl.controlType === 'date_preset' || ctrl.controlType === 'date_range') ? (
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {/* Date Preset Default Dropdown */}
+                              <div className="flex items-center gap-1.5 bg-zinc-50 dark:bg-zinc-950 px-2.5 py-1 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Default:</span>
+                                <select
+                                  value={ctrl.defaultValue?.startsWith('custom:') ? 'custom' : (ctrl.defaultValue || 'past_7_days')}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === 'custom') {
+                                      const today = new Date().toISOString().split('T')[0];
+                                      const past30 = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
+                                      setExposedControls(prev => prev.map(c => c.id === ctrl.id ? { ...c, defaultValue: `custom:${past30},${today}` } : c));
+                                    } else {
+                                      setExposedControls(prev => prev.map(c => c.id === ctrl.id ? { ...c, defaultValue: val } : c));
+                                    }
+                                  }}
+                                  className="text-xs bg-transparent font-semibold text-zinc-800 dark:text-zinc-200 outline-none cursor-pointer"
+                                >
+                                  <option value="today">Today</option>
+                                  <option value="yesterday">Yesterday</option>
+                                  <option value="this_week">This Week</option>
+                                  <option value="this_month">This Month</option>
+                                  <option value="past_7_days">Past 7 Days</option>
+                                  <option value="past_30_days">Past 30 Days</option>
+                                  <option value="past_90_days">Past 90 Days</option>
+                                  <option value="all_time">All Time (No Restriction)</option>
+                                  <option value="custom">Custom Fixed Range...</option>
+                                </select>
+                              </div>
+
+                              {/* Custom Date Pickers if 'custom' is selected */}
+                              {ctrl.defaultValue?.startsWith('custom:') && (
+                                <div className="flex items-center gap-1.5 bg-zinc-100 dark:bg-zinc-800/60 px-2 py-1 rounded-xl text-xs">
+                                  <input
+                                    type="date"
+                                    value={ctrl.defaultValue.replace('custom:', '').split(',')[0] || ''}
+                                    onChange={(e) => {
+                                      const currentTo = ctrl.defaultValue.replace('custom:', '').split(',')[1] || '';
+                                      setExposedControls(prev => prev.map(c => c.id === ctrl.id ? { ...c, defaultValue: `custom:${e.target.value},${currentTo}` } : c));
+                                    }}
+                                    className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-1.5 py-0.5 rounded text-[11px] outline-none text-zinc-800 dark:text-zinc-200"
+                                  />
+                                  <span className="text-zinc-400 text-xs">to</span>
+                                  <input
+                                    type="date"
+                                    value={ctrl.defaultValue.replace('custom:', '').split(',')[1] || ''}
+                                    onChange={(e) => {
+                                      const currentFrom = ctrl.defaultValue.replace('custom:', '').split(',')[0] || '';
+                                      setExposedControls(prev => prev.map(c => c.id === ctrl.id ? { ...c, defaultValue: `custom:${currentFrom},${e.target.value}` } : c));
+                                    }}
+                                    className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-1.5 py-0.5 rounded text-[11px] outline-none text-zinc-800 dark:text-zinc-200"
+                                  />
+                                </div>
+                              )}
+
+                              {/* Lock / Customize Toggle */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setExposedControls(prev => prev.map(c => c.id === ctrl.id ? { ...c, isLocked: !c.isLocked } : c));
+                                }}
+                                className={cn(
+                                  "text-[11px] font-medium px-2.5 py-1 rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer",
+                                  ctrl.isLocked
+                                    ? "bg-amber-50 dark:bg-amber-950/60 border-amber-200 dark:border-amber-800/80 text-amber-700 dark:text-amber-300 font-semibold"
+                                    : "bg-emerald-50/70 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-300 hover:border-emerald-300"
+                                )}
+                                title={ctrl.isLocked ? "Date range is locked for business users in workspace" : "Business users can define their own date range in workspace"}
+                              >
+                                {ctrl.isLocked ? (
+                                  <>
+                                    <Lock size={12} className="text-amber-500" />
+                                    <span>Fixed by Admin</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Unlock size={12} className="text-emerald-500" />
+                                    <span>User Customizable</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          ) : (
+                            ctrl.defaultValue && (
+                              <span className="text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 px-2 py-0.5 rounded-md">
+                                Default: {String(ctrl.defaultValue)}
+                              </span>
+                            )
                           )}
                           <button
                             onClick={() => setExposedControls(exposedControls.filter(c => c.id !== ctrl.id))}

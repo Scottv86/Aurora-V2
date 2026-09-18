@@ -41,6 +41,8 @@ import { QueueBuilder } from '../../components/Builders/QueueBuilder/QueueBuilde
 import { QueueEntity } from '../../types/platform';
 import { MenuItem, MenuSection } from '../../types/menu';
 import { SiteService, Site } from '../../services/siteService';
+import { fetchSavedSearches } from '../../services/searchService';
+import { SavedSearchEntity } from '../../types/searchBuilder';
 import { UnsavedChangesModal } from '../../components/Common/UnsavedChangesModal';
 
 // Types
@@ -168,9 +170,43 @@ export const NavigationSettingsPage = () => {
   }, [activeScope, menuConfigState, teams, positions, members]);
 
   // Modal / Add tool states
-  const [activeAddTool, setActiveAddTool] = useState<'link' | 'subtitle' | 'queue' | 'page' | 'system' | 'custom' | 'app' | 'site' | null>(null);
+  const [activeAddTool, setActiveAddTool] = useState<'link' | 'subtitle' | 'queue' | 'page' | 'system' | 'custom' | 'app' | 'site' | 'search' | null>(null);
   const [appSearchQuery, setAppSearchQuery] = useState('');
   const [siteSearchQuery, setSiteSearchQuery] = useState('');
+  const [searchFilterQuery, setSearchFilterQuery] = useState('');
+
+  // Saved Searches state
+  const [savedSearches, setSavedSearches] = useState<SavedSearchEntity[]>([]);
+  const [loadingSearches, setLoadingSearches] = useState(false);
+
+  const fetchSearches = async () => {
+    try {
+      setLoadingSearches(true);
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const data = await fetchSavedSearches(tenant?.id || 't1', token);
+      setSavedSearches(data || []);
+    } catch (err) {
+      console.error('Failed to fetch saved searches for navigation', err);
+    } finally {
+      setLoadingSearches(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeAddTool === 'search') {
+      fetchSearches();
+    }
+  }, [activeAddTool, tenant?.id]);
+
+  const filteredSavedSearches = useMemo(() => {
+    if (!searchFilterQuery.trim()) return savedSearches;
+    const q = searchFilterQuery.toLowerCase();
+    return savedSearches.filter(s => 
+      s.name.toLowerCase().includes(q) || 
+      (s.description || '').toLowerCase().includes(q) ||
+      (s.category || '').toLowerCase().includes(q)
+    );
+  }, [savedSearches, searchFilterQuery]);
 
   // Sites state
   const [sites, setSites] = useState<Site[]>([]);
@@ -372,6 +408,22 @@ export const NavigationSettingsPage = () => {
       setSelectedSectionId(sectionId);
       setActiveAddTool('site');
       return;
+    } else if (toolType === 'search') {
+      if (toolData.search) {
+        const search = toolData.search;
+        newItem = {
+          id: `search:${search.id}-${Date.now()}`,
+          label: search.name,
+          iconName: search.iconName || 'Search',
+          description: search.description,
+          to: `/workspace/searches/${search.id}`,
+          isVisible: true
+        };
+      } else {
+        setSelectedSectionId(sectionId);
+        setActiveAddTool('search');
+        return;
+      }
     }
 
     if (newItem) {
@@ -1146,6 +1198,24 @@ export const NavigationSettingsPage = () => {
               <div>
                 <h4 className="font-bold text-zinc-850 dark:text-white">Sites & Portals</h4>
                 <p className="text-[10px] text-zinc-450 dark:text-zinc-550 leading-normal mt-0.5">Link published websites, portals, and domains.</p>
+              </div>
+            </button>
+
+            {/* Saved Searches */}
+            <button
+              draggable={true}
+              onDragStart={(e) => {
+                e.dataTransfer.setData('application/json', JSON.stringify({ toolType: 'search' }));
+              }}
+              onClick={() => setActiveAddTool('search')}
+              className="flex items-start gap-3 p-3 rounded-2xl border border-zinc-200 dark:border-white/5 bg-white/40 dark:bg-white/[0.01] hover:border-indigo-500/40 hover:bg-indigo-500/[0.01] transition-all text-left group cursor-grab active:cursor-grabbing"
+            >
+              <div className="p-2.5 rounded-xl bg-zinc-100 dark:bg-white/5 text-zinc-400 group-hover:text-indigo-500 group-hover:scale-105 transition-all">
+                <Search size={16} />
+              </div>
+              <div>
+                <h4 className="font-bold text-zinc-850 dark:text-white">Saved Searches</h4>
+                <p className="text-[10px] text-zinc-450 dark:text-zinc-550 leading-normal mt-0.5">Pin federated cross-module searches from library.</p>
               </div>
             </button>
 
@@ -2015,6 +2085,112 @@ export const NavigationSettingsPage = () => {
 
             <div className="flex justify-end pt-2 border-t border-zinc-100 dark:border-zinc-800">
               <Button variant="ghost" onClick={() => { setActiveAddTool(null); setSiteSearchQuery(''); }}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SEARCH TOOL MODAL */}
+      {activeAddTool === 'search' && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                  <Search size={18} className="text-indigo-500" /> Select Saved Search
+                </h3>
+                {activeSections.find(s => s.id === selectedSectionId) && (
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    Adding to Category: <span className="font-semibold text-indigo-600 dark:text-indigo-400">{activeSections.find(s => s.id === selectedSectionId)?.title}</span>
+                  </p>
+                )}
+              </div>
+              <button onClick={() => { setActiveAddTool(null); setSearchFilterQuery(''); }} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 rounded-lg">
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Search Filter */}
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" size={15} />
+              <input
+                type="text"
+                placeholder="Search across saved searches..."
+                value={searchFilterQuery}
+                onChange={(e) => setSearchFilterQuery(e.target.value)}
+                autoFocus
+                className="w-full pl-9 pr-4 py-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700/60 rounded-xl text-xs font-medium outline-none focus:border-indigo-500 transition-colors text-zinc-900 dark:text-white"
+              />
+            </div>
+
+            <div className="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-1">
+              {loadingSearches ? (
+                <div className="py-8 flex flex-col items-center justify-center gap-2 text-zinc-400 text-xs">
+                  <Loader2 className="w-5 h-5 animate-spin text-indigo-500" />
+                  <span>Loading searches...</span>
+                </div>
+              ) : filteredSavedSearches.length === 0 ? (
+                <div className="py-8 text-center text-xs text-zinc-400 space-y-2">
+                  <p>No searches found matching "{searchFilterQuery}"</p>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setActiveAddTool(null);
+                      navigate('/workspace/settings/platform-modules/searches-library');
+                    }}
+                    className="gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10"
+                  >
+                    <Plus size={13} /> Create in Searches Studio
+                  </Button>
+                </div>
+              ) : (
+                filteredSavedSearches.map((search) => (
+                  <button
+                    key={search.id}
+                    onClick={() => {
+                      addItemToActiveSection({
+                        id: `search:${search.id}-${Date.now()}`,
+                        label: search.name,
+                        iconName: search.iconName || 'Search',
+                        description: search.description,
+                        to: `/workspace/searches/${search.id}`,
+                        isVisible: true
+                      });
+                      setActiveAddTool(null);
+                      setSearchFilterQuery('');
+                      toast.success(`Added "${search.name}" to navigation`);
+                    }}
+                    className="w-full flex items-center justify-between p-3.5 rounded-2xl border border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/40 hover:border-indigo-500 hover:bg-indigo-500/5 text-left transition-all group"
+                  >
+                    <div className="flex items-start gap-3 min-w-0 flex-1">
+                      <div className="p-2 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/50 text-indigo-500 shrink-0 group-hover:bg-indigo-500 group-hover:text-white transition-colors mt-0.5">
+                        <Search size={16} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-xs text-zinc-800 dark:text-zinc-200 truncate">{search.name}</span>
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-600 border border-indigo-500/20 uppercase tracking-wider">
+                            {search.category || 'Operations'}
+                          </span>
+                          <span className="text-[9px] font-medium px-1.5 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-400">
+                            {search.targetModuleIds?.length || 0} modules
+                          </span>
+                        </div>
+                        {search.description && (
+                          <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-1 mt-0.5">{search.description}</p>
+                        )}
+                        <p className="text-[10px] font-mono text-zinc-400 dark:text-zinc-500 mt-1">/workspace/searches/{search.id}</p>
+                      </div>
+                    </div>
+                    <Plus size={16} className="text-zinc-400 group-hover:text-indigo-500 shrink-0 ml-2" />
+                  </button>
+                ))
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-zinc-100 dark:border-zinc-800">
+              <Button variant="ghost" onClick={() => { setActiveAddTool(null); setSearchFilterQuery(''); }}>Close</Button>
             </div>
           </div>
         </div>
