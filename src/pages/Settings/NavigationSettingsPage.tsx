@@ -62,31 +62,7 @@ const COMMON_ICONS = [
   'MessageSquare', 'Calendar', 'Folder', 'Zap', 'Terminal', 'Heart', 'HelpCircle'
 ];
 
-const ALL_CATALOG_APPS = [
-  { id: 'inbox', label: 'Inbox', iconName: 'Inbox', to: '/workspace/apps/inbox' },
-  { id: 'docs', label: 'Documents', iconName: 'FileText', to: '/workspace/apps/docs' },
-  { id: 'drive', label: 'Drive', iconName: 'Folder', to: '/workspace/apps/drive' },
-  { id: 'query', label: 'Query', iconName: 'Database', to: '/workspace/apps/query' },
-  { id: 'chat', label: 'Chat', iconName: 'MessageSquare', to: '/workspace/apps/chat' },
-  { id: 'meet', label: 'Meet', iconName: 'Video', to: '/workspace/apps/meet' },
-  { id: 'calendar', label: 'Calendar', iconName: 'Calendar', to: '/workspace/apps/calendar' },
-  { id: 'notes', label: 'Notes', iconName: 'StickyNote', to: '/workspace/apps/notes' },
-  { id: 'reminders', label: 'Reminders', iconName: 'Bell', to: '/workspace/apps/reminders' },
-  { id: 'reports', label: 'Reports', iconName: 'BarChart3', to: '/workspace/apps/reports' },
-  { id: 'converter', label: 'File Converter', iconName: 'FileType', to: '/workspace/apps/converter' },
-  { id: 'feed', label: 'Feed', iconName: 'Rss', to: '/workspace/apps/feed' },
-  { id: 'draw', label: 'Draw', iconName: 'Palette', to: '/workspace/apps/draw' },
-  { id: 'whiteboard', label: 'Whiteboard', iconName: 'Presentation', to: '/workspace/apps/whiteboard' },
-  { id: 'calculator', label: 'Calculator', iconName: 'Calculator', to: '/workspace/apps/calculator' },
-  { id: 'snipper', label: 'Snipping Tool', iconName: 'Scissors', to: '/workspace/apps/snipper' },
-  { id: 'flowchart', label: 'Flowchart', iconName: 'Workflow', to: '/workspace/apps/flowchart' },
-  { id: 'pdf-editor', label: 'PDF Editor', iconName: 'FileEdit', to: '/workspace/apps/pdf-editor' },
-  { id: 'redact', label: 'Redact', iconName: 'EyeOff', to: '/workspace/apps/redact' },
-  { id: 'slideshow', label: 'Slideshow', iconName: 'MonitorPlay', to: '/workspace/apps/slideshow' },
-  { id: 'graphics', label: 'Graphics', iconName: 'Image', to: '/workspace/apps/graphics' },
-  { id: 'campaigns', label: 'Campaigns', iconName: 'Send', to: '/workspace/apps/campaigns' },
-  { id: 'spreadsheet', label: 'Spreadsheet', iconName: 'Table', to: '/workspace/apps/spreadsheet' }
-];
+import { AURORA_APPS, AppItem as CatalogAppItem } from '../../config/appsCatalog';
 
 export const NavigationSettingsPage = () => {
   const navigate = useNavigate();
@@ -169,9 +145,9 @@ export const NavigationSettingsPage = () => {
     }
   }, [activeScope, menuConfigState, teams, positions, members]);
 
-  // Modal / Add tool states
   const [activeAddTool, setActiveAddTool] = useState<'link' | 'subtitle' | 'queue' | 'page' | 'system' | 'custom' | 'app' | 'site' | 'search' | null>(null);
   const [appSearchQuery, setAppSearchQuery] = useState('');
+  const [appCategoryFilter, setAppCategoryFilter] = useState<string>('All');
   const [siteSearchQuery, setSiteSearchQuery] = useState('');
   const [searchFilterQuery, setSearchFilterQuery] = useState('');
 
@@ -744,7 +720,7 @@ export const NavigationSettingsPage = () => {
   }));
 
   const availableCatalogApps = useMemo(() => {
-    const list = [...ALL_CATALOG_APPS];
+    const list: CatalogAppItem[] = [...AURORA_APPS];
     if (tenant?.enabledApps && Array.isArray(tenant.enabledApps)) {
       for (const appId of tenant.enabledApps) {
         if (!list.some(a => a.id === appId)) {
@@ -752,7 +728,11 @@ export const NavigationSettingsPage = () => {
             id: appId,
             label: appId.charAt(0).toUpperCase() + appId.slice(1).replace(/-/g, ' '),
             iconName: 'Layout',
-            to: `/workspace/apps/${appId}`
+            description: 'Custom tenant utility application',
+            color: 'text-indigo-500',
+            to: `/workspace/apps/${appId}`,
+            category: 'Productivity',
+            status: 'active'
           });
         }
       }
@@ -761,12 +741,18 @@ export const NavigationSettingsPage = () => {
   }, [tenant?.enabledApps]);
 
   const filteredCatalogApps = useMemo(() => {
-    if (!appSearchQuery.trim()) return availableCatalogApps;
+    let list = availableCatalogApps;
+    if (appCategoryFilter !== 'All') {
+      list = list.filter(app => app.category === appCategoryFilter);
+    }
+    if (!appSearchQuery.trim()) return list;
     const q = appSearchQuery.toLowerCase().trim();
-    return availableCatalogApps.filter(app => 
-      app.label.toLowerCase().includes(q) || app.id.toLowerCase().includes(q)
+    return list.filter(app => 
+      app.label.toLowerCase().includes(q) || 
+      app.id.toLowerCase().includes(q) ||
+      (app.description && app.description.toLowerCase().includes(q))
     );
-  }, [availableCatalogApps, appSearchQuery]);
+  }, [availableCatalogApps, appSearchQuery, appCategoryFilter]);
 
   const isOverrideActive = activeScope.type !== 'default';
 
@@ -1924,33 +1910,62 @@ export const NavigationSettingsPage = () => {
 
       {activeAddTool === 'app' && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 max-w-2xl w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                <LayoutGrid size={18} className="text-indigo-500" /> Select Catalog App
-              </h3>
-              <button onClick={() => { setActiveAddTool(null); setAppSearchQuery(''); }} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 rounded-lg">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                  <LayoutGrid size={18} className="text-indigo-500" /> Select Catalog App
+                </h3>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  Pin Aurora workspace suite apps directly into your navigation menu.
+                </p>
+              </div>
+              <button onClick={() => { setActiveAddTool(null); setAppSearchQuery(''); setAppCategoryFilter('All'); }} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 rounded-lg">
                 <X size={16} />
               </button>
             </div>
 
-            {/* Search Filter */}
-            <div className="relative">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" size={15} />
-              <input
-                type="text"
-                placeholder="Search catalog apps (e.g. Query, Drive, Docs)..."
-                value={appSearchQuery}
-                onChange={(e) => setAppSearchQuery(e.target.value)}
-                autoFocus
-                className="w-full pl-9 pr-4 py-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700/60 rounded-xl text-xs font-medium outline-none focus:border-indigo-500 transition-colors text-zinc-900 dark:text-white"
-              />
+            {/* Search Filter & Category Tabs */}
+            <div className="space-y-2.5">
+              <div className="relative">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" size={15} />
+                <input
+                  type="text"
+                  placeholder="Search catalog apps (e.g. Searches, Query, Drive, Docs)..."
+                  value={appSearchQuery}
+                  onChange={(e) => setAppSearchQuery(e.target.value)}
+                  autoFocus
+                  className="w-full pl-9 pr-4 py-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700/60 rounded-xl text-xs font-medium outline-none focus:border-indigo-500 transition-colors text-zinc-900 dark:text-white"
+                />
+              </div>
+
+              {/* Category Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px] font-semibold custom-scrollbar">
+                {(['All', 'Productivity', 'Data & Search', 'Communication', 'Creation & Tools'] as const).map(cat => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setAppCategoryFilter(cat)}
+                    className={cn(
+                      "px-2.5 py-1 rounded-lg transition-colors whitespace-nowrap cursor-pointer",
+                      appCategoryFilter === cat
+                        ? "bg-indigo-600 text-white shadow-xs"
+                        : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                    )}
+                  >
+                    {cat}
+                  </button>
+                ))}
+                <span className="text-[10px] text-zinc-400 ml-auto pl-2 shrink-0">
+                  {filteredCatalogApps.length} apps
+                </span>
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 max-h-72 overflow-y-auto custom-scrollbar pr-1">
+            <div className="grid grid-cols-2 gap-2 max-h-80 overflow-y-auto custom-scrollbar pr-1">
               {filteredCatalogApps.length === 0 ? (
                 <div className="col-span-2 py-8 text-center text-xs text-zinc-400">
-                  No catalog apps matching "{appSearchQuery}"
+                  No catalog apps matching "{appSearchQuery}" in {appCategoryFilter}
                 </div>
               ) : (
                 filteredCatalogApps.map((app) => {
@@ -1968,16 +1983,39 @@ export const NavigationSettingsPage = () => {
                         });
                         setActiveAddTool(null);
                         setAppSearchQuery('');
+                        setAppCategoryFilter('All');
                       }}
-                      className="flex items-center justify-between p-3 rounded-2xl border border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/40 hover:border-indigo-500 hover:bg-indigo-500/5 text-left transition-all group"
+                      className="flex items-start justify-between p-3 rounded-2xl border border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/40 hover:border-indigo-500 hover:bg-indigo-500/5 text-left transition-all group cursor-pointer"
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="p-1.5 rounded-lg bg-white dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/50 text-indigo-500 shrink-0 group-hover:bg-indigo-500 group-hover:text-white transition-colors">
-                          <IconComp size={15} />
+                      <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                        <div className={cn(
+                          "p-2 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/50 shrink-0 group-hover:scale-105 transition-all shadow-xs",
+                          app.color || "text-indigo-500"
+                        )}>
+                          <IconComp size={16} />
                         </div>
-                        <span className="font-bold text-xs truncate text-zinc-800 dark:text-zinc-200">{app.label}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-xs truncate text-zinc-800 dark:text-zinc-200">{app.label}</span>
+                            {app.category && (
+                              <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
+                                {app.category}
+                              </span>
+                            )}
+                            {app.status === 'coming_soon' && (
+                              <span className="text-[8px] font-bold px-1 py-0.2 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 uppercase tracking-tighter">
+                                Preview
+                              </span>
+                            )}
+                          </div>
+                          {app.description && (
+                            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 line-clamp-1 mt-0.5">
+                              {app.description}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                      <Plus size={14} className="text-zinc-400 group-hover:text-indigo-500 shrink-0 ml-1" />
+                      <Plus size={14} className="text-zinc-400 group-hover:text-indigo-500 shrink-0 ml-1.5 mt-0.5" />
                     </button>
                   );
                 })
@@ -1985,7 +2023,7 @@ export const NavigationSettingsPage = () => {
             </div>
 
             <div className="flex justify-end pt-2 border-t border-zinc-100 dark:border-zinc-800">
-              <Button variant="ghost" onClick={() => { setActiveAddTool(null); setAppSearchQuery(''); }}>Close</Button>
+              <Button variant="ghost" onClick={() => { setActiveAddTool(null); setAppSearchQuery(''); setAppCategoryFilter('All'); }}>Close</Button>
             </div>
           </div>
         </div>

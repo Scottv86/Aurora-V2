@@ -62,6 +62,7 @@ model Tenant {
   inboxRules             InboxRule[]
   chatChannels           ChatChannel[]
   chatPresences          ChatUserPresence[]
+  brandKits              BrandKit[]
 
   @@map("tenants")
 }
@@ -1012,8 +1013,9 @@ model RecyclingBinItem {
 }
 
 model Site {
-  id          String   @id @default(cuid())
-  tenantId    String   @map("tenant_id")
+  id          String    @id @default(cuid())
+  tenantId    String    @map("tenant_id")
+  brandId     String?   @map("brand_id")
   name        String
   description String?
   category    String   // internal, external, public
@@ -1028,11 +1030,39 @@ model Site {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  brand       BrandKit? @relation(fields: [brandId], references: [id], onDelete: SetNull)
 
   @@index([tenantId])
   @@index([tenantId, category])
+  @@index([tenantId, brandId])
   @@map("sites")
+}
+
+model BrandKit {
+  id            String   @id @default(cuid())
+  tenantId      String   @map("tenant_id")
+  name          String
+  slug          String
+  description   String?
+  isDefault     Boolean  @default(false) @map("is_default")
+  assets        Json?    @default("{}")
+  colors        Json?    @default("{}")
+  typography    Json?    @default("{}")
+  styling       Json?    @default("{}")
+  voiceAndTone  Json?    @default("{}") @map("voice_and_tone")
+  emailDefaults Json?    @default("{}") @map("email_defaults")
+  metadata      Json?    @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sites         Site[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@index([tenantId, isDefault])
+  @@map("brand_kits")
 }
 
 model SolutionBlueprint {
@@ -1083,6 +1113,7 @@ model SavedQuery {
   targetModuleIds       Json     @default("[]") @map("target_module_ids")
   searchConfig          Json     @default("{}") @map("search_config")
   allowedRoleIds        Json     @default("[]") @map("allowed_role_ids")
+  downstreamUsagesCount Int      @default(0) @map("downstream_usages_count")
   createdAt             DateTime @default(now()) @map("created_at")
   updatedAt             DateTime @updatedAt @map("updated_at")
   tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)

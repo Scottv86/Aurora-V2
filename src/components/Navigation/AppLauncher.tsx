@@ -5,60 +5,15 @@ import { LayoutGrid, Search, ExternalLink, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { usePlatform } from '../../hooks/usePlatform';
-
-interface AppItem {
-  id: string;
-  label: string;
-  iconName: string;
-  description: string;
-  color: string;
-  to?: string;
-}
-
-const APPS: AppItem[] = [
-  { id: 'inbox', label: 'Inbox', iconName: 'Inbox', description: 'Unified communication hub', color: 'text-blue-500', to: '/workspace/apps/inbox' },
-  { id: 'docs', label: 'Documents', iconName: 'FileText', description: 'Collaborative documents & merge fields', color: 'text-indigo-500', to: '/workspace/apps/docs' },
-  { id: 'drive', label: 'Drive', iconName: 'Folder', description: 'Personal & tenant shared storage', color: 'text-amber-500', to: '/workspace/apps/drive' },
-  { id: 'query', label: 'Query Explorer', iconName: 'Terminal', description: 'Database schema, SQL runner & data explorer', color: 'text-indigo-500', to: '/workspace/apps/query' },
-  { id: 'query-builder', label: 'Query Builder', iconName: 'Database', description: 'Author & save reusable dataset views', color: 'text-purple-500', to: '/workspace/settings/platform-modules/queries-library' },
-  { id: 'searches', label: 'Searches', iconName: 'Search', description: 'Cross-module self-service searches for business users', color: 'text-indigo-500', to: '/workspace/searches' },
-  { id: 'kpi-manager', label: 'Metrics', iconName: 'Target', description: 'Semantic metric formulas, goals & threshold alerts', color: 'text-rose-500', to: '/workspace/settings/platform-modules/kpi-management' },
-  { id: 'chat', label: 'Chat', iconName: 'MessageSquare', description: 'Real-time team messaging & channels', color: 'text-emerald-500', to: '/workspace/apps/chat' },
-  { id: 'meet', label: 'Meet', iconName: 'Video', description: 'Video conferencing', color: 'text-rose-500' },
-  { id: 'calendar', label: 'Calendar', iconName: 'Calendar', description: 'Schedule and events', color: 'text-blue-600' },
-  { id: 'notes', label: 'Notes', iconName: 'StickyNote', description: 'Quick thoughts and ideas', color: 'text-yellow-500' },
-  { id: 'reminders', label: 'Reminders', iconName: 'Bell', description: 'Tasks and notifications', color: 'text-purple-500' },
-  { id: 'reports', label: 'Reports', iconName: 'BarChart3', description: 'Data insights and analytics', color: 'text-cyan-500' },
-  { id: 'converter', label: 'File converter', iconName: 'FileType', description: 'Convert files instantly', color: 'text-orange-500' },
-  { id: 'feed', label: 'Feed', iconName: 'Rss', description: 'Stay informed with your feed', color: 'text-red-500' },
-  { id: 'draw', label: 'Draw', iconName: 'Palette', description: 'Digital sketching canvas', color: 'text-pink-500' },
-  { id: 'whiteboard', label: 'Whiteboard', iconName: 'Presentation', description: 'Collaborative brainstorming', color: 'text-teal-500' },
-  { id: 'calculator', label: 'Calculator', iconName: 'Calculator', description: 'Advanced calculation tool', color: 'text-slate-500' },
-  { id: 'snipper', label: 'Snipping tool', iconName: 'Scissors', description: 'Capture your screen', color: 'text-violet-500' },
-  { id: 'flowchart', label: 'Flowchart', iconName: 'Workflow', description: 'Interactive visual process & diagram builder', color: 'text-cyan-600' },
-  { id: 'pdf-editor', label: 'PDF Editor', iconName: 'FileEdit', description: 'View, edit, and annotate PDF documents', color: 'text-red-500' },
-  { id: 'redact', label: 'Redact', iconName: 'EyeOff', description: 'Sanitize and obscure sensitive document data', color: 'text-zinc-600' },
-  { id: 'slideshow', label: 'Slideshow', iconName: 'MonitorPlay', description: 'Interactive slide decks & presentations', color: 'text-amber-500' },
-  { id: 'graphics', label: 'Graphics', iconName: 'Image', description: 'Graphic design & visual assets', color: 'text-fuchsia-500' },
-  { id: 'campaigns', label: 'Campaigns', iconName: 'Send', description: 'Email marketing & audience outreach', color: 'text-blue-500' },
-  { id: 'spreadsheet', label: 'Spreadsheet', iconName: 'Table', description: 'Data tables & financial models', color: 'text-emerald-500' },
-];
-
-const INITIAL_APP_IDS = [
-  'inbox', 'docs', 'drive', 'chat', 'meet', 'calendar', 'notes', 'reminders',
-  'reports', 'converter', 'feed', 'draw', 'whiteboard', 'calculator', 'snipper', 'flowchart'
-];
+import { getEnabledApps } from '../../config/appsCatalog';
 
 export const AppLauncher = () => {
   const navigate = useNavigate();
   const { tenant, setIsAppLauncherOpen, inboxUnreadCount } = usePlatform();
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Default to all apps if not specified, ensuring newly introduced suite apps are visible by default
-  const enabledApps = tenant?.enabledApps
-    ? APPS.map(a => a.id).filter(id => tenant.enabledApps!.includes(id) || !INITIAL_APP_IDS.includes(id))
-    : APPS.map(a => a.id);
-  const visibleApps = APPS.filter(app => enabledApps.includes(app.id));
+  // Sourced from centralized apps catalog with core suite app persistence
+  const visibleApps = getEnabledApps(tenant?.enabledApps);
 
   const filteredApps = visibleApps.filter(app => 
     app.label.toLowerCase().includes(searchQuery.toLowerCase()) ||

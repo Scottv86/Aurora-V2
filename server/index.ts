@@ -38,6 +38,7 @@ import kpiRoutes from './routes/kpiRoutes';
 import inboxRoutes from './routes/inboxRoutes';
 import chatRoutes from './routes/chatRoutes';
 import searchRoutes from './routes/searchRoutes';
+import brandKitRoutes from './routes/brandKitRoutes';
 
 
 
@@ -150,6 +151,7 @@ app.use('/api/saved-views', authenticate, requireTenantAccess, savedViewRoutes);
 app.use('/api/kpis', authenticate, requireTenantAccess, kpiRoutes);
 app.use('/api/inbox', authenticate, requireTenantAccess, inboxRoutes);
 app.use('/api/chat', authenticate, requireTenantAccess, chatRoutes);
+app.use('/api/brand-kits', authenticate, requireTenantAccess, brandKitRoutes);
 
 
 

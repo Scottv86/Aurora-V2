@@ -15,11 +15,13 @@ import {
   Network,
   BookOpen,
   Headphones,
-  Wand2
+  Wand2,
+  Palette
 } from 'lucide-react';
 
 import { useNavigate } from 'react-router-dom';
 import { SiteService, Site } from '../../services/siteService';
+import { useBrandKits } from '../../hooks/useBrandKits';
 import { toast } from 'sonner';
 
 interface NewSiteModalProps {
@@ -203,6 +205,7 @@ const SITE_TEMPLATES: SiteTemplate[] = [
 
 export const NewSiteModal: React.FC<NewSiteModalProps> = ({ isOpen, onClose, onSiteCreated }) => {
   const navigate = useNavigate();
+  const { brandKits, defaultBrandKit, resolveBrandTokens } = useBrandKits();
   const [view, setView] = useState<'choices' | 'blank_form' | 'templates' | 'ai_prompt'>('choices');
   const [loading, setLoading] = useState(false);
   const [installingId, setInstallingId] = useState<string | null>(null);
@@ -213,6 +216,7 @@ export const NewSiteModal: React.FC<NewSiteModalProps> = ({ isOpen, onClose, onS
   const [category, setCategory] = useState<'internal' | 'external' | 'public'>('internal');
   const [type, setType] = useState('Intranet Hub');
   const [domain, setDomain] = useState('');
+  const [selectedBrandId, setSelectedBrandId] = useState<string>('');
 
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -230,10 +234,11 @@ export const NewSiteModal: React.FC<NewSiteModalProps> = ({ isOpen, onClose, onS
       setCategory('internal');
       setType('Intranet Hub');
       setDomain('');
+      setSelectedBrandId(defaultBrandKit?.id || '');
       setAiPrompt('');
       setSearchQuery('');
     }
-  }, [isOpen]);
+  }, [isOpen, defaultBrandKit]);
 
   const filteredTemplates = SITE_TEMPLATES.filter(t => 
     t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -249,6 +254,8 @@ export const NewSiteModal: React.FC<NewSiteModalProps> = ({ isOpen, onClose, onS
     setLoading(true);
     try {
       const generatedDomain = domain.trim() || `${name.toLowerCase().replace(/\s+/g, '-')}.aurora.internal`;
+      const brandTokens = resolveBrandTokens(selectedBrandId || defaultBrandKit?.id);
+      
       const newSiteData: Partial<Site> = {
         name,
         description: description || 'Custom enterprise site portal.',
@@ -257,11 +264,14 @@ export const NewSiteModal: React.FC<NewSiteModalProps> = ({ isOpen, onClose, onS
         domain: generatedDomain,
         status: 'active',
         access: category === 'public' ? 'Public' : 'Authenticated',
+        brandId: selectedBrandId || defaultBrandKit?.id || undefined,
         branding: {
-          accentColor: '#3b82f6',
+          accentColor: brandTokens.accentColor || '#3b82f6',
+          logoUrl: brandTokens.logoLight || brandTokens.logoDark || '',
           headerTitle: name,
-          footerText: 'Powered by Aurora Platform',
-          headerLayout: 'top_right'
+          footerText: `Powered by ${brandTokens.brandName || 'Aurora Platform'}`,
+          headerLayout: 'top_right',
+          fontFamily: (brandTokens.headingFont?.toLowerCase().includes('outfit') ? 'outfit' : brandTokens.headingFont?.toLowerCase().includes('mono') ? 'mono' : 'sans') as any
         },
         pages: [
           {
@@ -295,6 +305,7 @@ export const NewSiteModal: React.FC<NewSiteModalProps> = ({ isOpen, onClose, onS
     setInstallingId(template.id);
     toast.info(`Provisioning ${template.name}...`);
     try {
+      const brandTokens = resolveBrandTokens(selectedBrandId || defaultBrandKit?.id);
       const newSiteData: Partial<Site> = {
         name: template.name,
         description: template.description,
@@ -303,10 +314,12 @@ export const NewSiteModal: React.FC<NewSiteModalProps> = ({ isOpen, onClose, onS
         domain: `${template.name.toLowerCase().replace(/\s+/g, '-')}.aurora.internal`,
         status: 'active',
         access: template.category === 'public' ? 'Public' : 'Authenticated',
+        brandId: selectedBrandId || defaultBrandKit?.id || undefined,
         branding: {
-          accentColor: template.category === 'public' ? '#10b981' : template.category === 'external' ? '#f59e0b' : '#3b82f6',
+          accentColor: brandTokens.accentColor || (template.category === 'public' ? '#10b981' : template.category === 'external' ? '#f59e0b' : '#3b82f6'),
+          logoUrl: brandTokens.logoLight || brandTokens.logoDark || '',
           headerTitle: template.name,
-          footerText: 'Powered by Aurora Platform',
+          footerText: `Powered by ${brandTokens.brandName || 'Aurora Platform'}`,
           headerLayout: 'top_right'
         },
         pages: template.pages
@@ -600,6 +613,30 @@ export const NewSiteModal: React.FC<NewSiteModalProps> = ({ isOpen, onClose, onS
                       />
                     </div>
                   </div>
+
+                  {/* Brand Profile Selector */}
+                  {brandKits.length > 0 && (
+                    <div>
+                      <label className="block text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                        <Palette size={12} className="text-indigo-500" />
+                        <span>Brand Profile / Theme</span>
+                      </label>
+                      <select
+                        value={selectedBrandId}
+                        onChange={e => setSelectedBrandId(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                      >
+                        {brandKits.map(brand => (
+                          <option key={brand.id} value={brand.id}>
+                            {brand.name} {brand.isDefault ? '(Default)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
+                        Automatically applies brand logos, color tokens, typography scales, and footer copyright.
+                      </p>
+                    </div>
+                  )}
 
                   <div className="pt-3 flex justify-end">
                     <button

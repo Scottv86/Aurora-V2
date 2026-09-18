@@ -42,6 +42,9 @@ router.get('/', async (req: TenantRequest, res: Response) => {
 
     const sites = await (db as any).site.findMany({
       where: whereClause,
+      include: {
+        brand: true
+      },
       orderBy: { updatedAt: 'desc' }
     });
 
@@ -60,7 +63,10 @@ router.get('/:id', async (req: TenantRequest, res: Response) => {
     const { id } = req.params;
 
     const site = await (db as any).site.findFirst({
-      where: { id, tenantId }
+      where: { id, tenantId },
+      include: {
+        brand: true
+      }
     });
 
     if (!site) {
@@ -86,6 +92,7 @@ router.post('/', async (req: TenantRequest, res: Response) => {
       domain, 
       status, 
       access, 
+      brandId,
       branding, 
       navConfig, 
       pagesConfig, 
@@ -128,25 +135,13 @@ router.post('/', async (req: TenantRequest, res: Response) => {
         isHome: true,
         widgets: [
           { id: 'w-hero', type: 'hero', enabled: true, title: `Welcome to ${name}`, subtitle: description || 'Your official self-service portal hub.' },
-          { id: 'w-announcements', type: 'announcements', enabled: true, title: 'Portal News & Updates' },
-          { id: 'w-status', type: 'status_widget', enabled: true, title: 'Live System Health Status' }
+          { id: 'w-quick-links', type: 'quick_links', enabled: true, title: 'Frequently Used Services & Links' }
         ]
       },
       {
-        id: 'page-bonds',
-        title: 'Property Bond Lodgement',
-        slug: '/bonds',
-        description: 'Lodge and manage property bonds directly with the Aurora Tenancy Register.',
-        isHome: false,
-        widgets: [
-          { id: 'w-bond-hub', type: 'bond_lodgement', enabled: true, title: 'Property Bond Lodgement Portal' },
-          { id: 'w-record-grid', type: 'record_grid', enabled: true, title: 'Live Tenancy Records Feed' }
-        ]
-      },
-      {
-        id: 'page-tracker',
-        title: 'Status Tracker & Live Chat',
-        slug: '/tracker',
+        id: 'page-status',
+        title: 'Track Status',
+        slug: '/status',
         description: 'Track application progress and chat live with online support staff.',
         isHome: false,
         widgets: [
@@ -191,6 +186,7 @@ router.post('/', async (req: TenantRequest, res: Response) => {
     const site = await (db as any).site.create({
       data: {
         tenantId,
+        brandId: brandId || null,
         name,
         description: description || 'No description provided.',
         category: siteCategory,
@@ -202,6 +198,9 @@ router.post('/', async (req: TenantRequest, res: Response) => {
         navConfig: defaultNavConfig,
         pagesConfig: defaultPagesConfig,
         metrics: metrics || defaultMetricMapping[siteCategory] || { metricLabel: 'Active Members', metricValue: '1' }
+      },
+      include: {
+        brand: true
       }
     });
 
@@ -226,6 +225,7 @@ router.put('/:id', async (req: TenantRequest, res: Response) => {
       domain, 
       status, 
       access, 
+      brandId,
       branding, 
       navConfig, 
       pagesConfig, 
@@ -250,10 +250,14 @@ router.put('/:id', async (req: TenantRequest, res: Response) => {
         domain: domain !== undefined ? domain : existing.domain,
         status: status !== undefined ? status : existing.status,
         access: access !== undefined ? access : existing.access,
+        brandId: brandId !== undefined ? brandId : existing.brandId,
         branding: branding !== undefined ? branding : existing.branding,
         navConfig: navConfig !== undefined ? navConfig : existing.navConfig,
         pagesConfig: pagesConfig !== undefined ? pagesConfig : existing.pagesConfig,
         metrics: metrics !== undefined ? metrics : existing.metrics
+      },
+      include: {
+        brand: true
       }
     });
 

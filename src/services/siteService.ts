@@ -299,6 +299,8 @@ export interface Site {
   domain: string;
   status: 'active' | 'draft' | 'offline';
   access: 'Public' | 'Authenticated' | 'Restricted' | 'Admin Only';
+  brandId?: string;
+  brand?: any;
   branding?: SiteBranding;
   navConfig?: SiteNavItem[];
   pagesConfig?: any;

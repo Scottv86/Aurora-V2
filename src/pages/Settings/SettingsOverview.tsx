@@ -69,15 +69,6 @@ const SETTINGS_ITEMS: SettingItem[] = [
     tags: ['email', 'inbox', 'imap', 'smtp', 'gmail', 'outlook', 'mailboxes', 'connections', 'shared inbox', 'oauth']
   },
   {
-    id: 'branding',
-    label: 'Branding',
-    description: 'Logo, brand colors, and customization themes.',
-    icon: 'Palette',
-    to: '/workspace/settings/branding',
-    category: 'General & Security',
-    tags: ['theme', 'colors', 'dark mode', 'branding', 'logo']
-  },
-  {
     id: 'notifications',
     label: 'Notifications',
     description: 'Toast positioning, sound chimes, alert durations, and notification preferences.',
@@ -96,6 +87,15 @@ const SETTINGS_ITEMS: SettingItem[] = [
     to: '/workspace/settings/platform-modules/solutions',
     category: 'Build & Customize',
     tags: ['solutions', 'blueprints', 'bundles', 'packages', 'deploy']
+  },
+  {
+    id: 'brand-builder-builder',
+    label: 'Brands',
+    description: 'Design global brand profiles, color palettes, typography scales, letterheads, and AI voice guidelines.',
+    icon: 'Palette',
+    to: '/workspace/settings/brand-builder',
+    category: 'Build & Customize',
+    tags: ['brand', 'branding', 'brand builder', 'brand kit', 'theme', 'tokens', 'colors', 'logos', 'typography', 'letterhead', 'voice']
   },
   {
     id: 'platform-modules',

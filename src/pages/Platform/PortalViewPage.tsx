@@ -270,11 +270,12 @@ export const PortalViewPage = () => {
     );
   }
 
-  const accentColor = site.branding?.accentColor || '#6366f1';
+  const brand = (site as any).brand;
+  const accentColor = site.branding?.accentColor || brand?.colors?.accent || brand?.colors?.primary || '#6366f1';
   const headerTitle = site.branding?.headerTitle || site.name;
-  const footerText = site.branding?.footerText || 'Powered by Aurora Platform';
-  const headerLayout = site.branding?.headerLayout || site.branding?.themeConfig?.headerLayout || 'top_right';
-  const navLinkStyle = site.branding?.navLinkStyle || site.branding?.themeConfig?.navLinkStyle || 'underline';
+  const footerText = site.branding?.footerText || (brand?.name ? `Powered by ${brand.name}` : 'Powered by Aurora Platform');
+  const headerLayout = site.branding?.headerLayout || site.branding?.themeConfig?.headerLayout || brand?.styling?.headerLayout || 'top_right';
+  const navLinkStyle = site.branding?.navLinkStyle || site.branding?.themeConfig?.navLinkStyle || brand?.styling?.navLinkStyle || 'underline';
 
   const getWidgetGridClass = (layout?: string) => {
     switch (layout) {

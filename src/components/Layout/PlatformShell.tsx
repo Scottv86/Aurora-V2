@@ -522,7 +522,6 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         { label: 'Subscription', icon: CreditCard, to: '/workspace/settings/subscription' },
         { label: 'AI Services', icon: Sparkles, to: '/workspace/settings/ai-services' },
         { label: 'Email & Inboxes', icon: LucideIcons.Mail, to: '/workspace/settings/email-connections' },
-        { label: 'Branding', icon: Palette, to: '/workspace/settings/branding' },
         { label: 'Notifications', icon: LucideIcons.Bell, to: '/workspace/settings/notifications' },
       ]
     },
@@ -531,6 +530,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       icon: Layout,
       items: [
         { label: 'Solutions', icon: LucideIcons.Boxes, to: '/workspace/settings/platform-modules/solutions' },
+        { label: 'Brands', icon: Palette, to: '/workspace/settings/brand-builder' },
         { label: 'Modules', icon: Layers, to: '/workspace/settings/platform-modules' },
         { label: 'Lists', icon: LucideIcons.ListTodo, to: '/workspace/settings/platform-modules/global-lists' },
         { label: 'Queries', icon: LucideIcons.Database, to: '/workspace/settings/platform-modules/queries-library' },

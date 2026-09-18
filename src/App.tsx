@@ -106,6 +106,8 @@ const SiteBuilderPage = lazy(() => import('./pages/Settings/SiteBuilderPage').th
 const PortalViewPage = lazy(() => import('./pages/Platform/PortalViewPage').then(m => ({ default: m.PortalViewPage })));
 
 const BrandingSettingsPage = lazy(() => import('./pages/Settings/BrandingSettingsPage').then(m => ({ default: m.BrandingSettingsPage })));
+const BrandBuilderPage = lazy(() => import('./pages/Settings/BrandBuilderPage').then(m => ({ default: m.BrandBuilderPage })));
+const BrandStudioPage = lazy(() => import('./pages/Settings/BrandStudioPage').then(m => ({ default: m.BrandStudioPage })));
 const NotificationSettingsPage = lazy(() => import('./pages/Settings/NotificationSettingsPage').then(m => ({ default: m.NotificationSettingsPage })));
 const NavigationSettingsPage = lazy(() => import('./pages/Settings/NavigationSettingsPage').then(m => ({ default: m.NavigationSettingsPage })));
 const NavigationManagementPage = lazy(() => import('./pages/Settings/NavigationManagementPage').then(m => ({ default: m.NavigationManagementPage })));
@@ -392,6 +394,7 @@ const App = () => {
                  <Route path="builder/:id" element={<ModuleEditor />} />
                  <Route path="builder/page/:id" element={<PageBuilder />} />
                  <Route path="builder/site/:siteId" element={<SiteBuilderPage />} />
+                 <Route path="builder/brand/:brandId" element={<BrandStudioPage />} />
                  <Route path="builder/agent" element={<AgentBuilderStudio />} />
                  <Route path="builder/agent/:id" element={<AgentBuilderStudio />} />
                  <Route path="agent-builder" element={<AgentBuilderStudio />} />
@@ -402,11 +405,12 @@ const App = () => {
                 <Route path="apps" element={<Navigate to="/workspace/settings" replace />} />
 
                 <Route path="lists" element={<Navigate to="/workspace/settings/platform-modules/global-lists" replace />} />
-                <Route path="branding" element={<BrandingSettingsPage />} />
+                <Route path="brand-builder" element={<BrandBuilderPage />} />
+                <Route path="branding" element={<BrandBuilderPage />} />
                 <Route path="notifications" element={<NotificationSettingsPage />} />
                 <Route path="navigation" element={<NavigationManagementPage />} />
                 <Route path="navigation/builder" element={<NavigationSettingsPage />} />
-                <Route path="appearance" element={<Navigate to="/workspace/settings/branding" replace />} />
+                <Route path="appearance" element={<Navigate to="/workspace/settings/brand-builder" replace />} />
                 <Route path="platform-modules" element={<PlatformModulesSettings />}>
                    <Route path="people-organisations" element={<PeopleOrgSettings />} />
                    <Route path="entities" element={<Navigate to="people-organisations" replace />} />
