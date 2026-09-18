@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Layout, Cpu, Workflow, FileText, 
-  HelpCircle, Sparkles, Monitor, Tablet, Smartphone, ListOrdered, Boxes
+  HelpCircle, Sparkles, Monitor, Tablet, Smartphone, ListOrdered, Boxes, Search
 } from 'lucide-react';
 import { UniversalWidgetRenderer } from './UniversalWidgetRenderer';
 import { cn } from '../../lib/utils';
@@ -103,6 +103,7 @@ export const PageBuilderEngine: React.FC<PageBuilderEngineProps> = ({
             <div className="space-y-1.5">
               {[
                 { type: 'accessible-modules', label: 'Module Directory', icon: Boxes },
+                { type: 'search-view', label: 'Advanced Search', icon: Search },
                 { type: 'queue', label: 'Work Queue Embed', icon: ListOrdered },
                 { type: 'standalone-form', label: 'Standalone Form', icon: FileText },
                 { type: 'stats-grid', label: 'Stats Metrics Grid', icon: Cpu },

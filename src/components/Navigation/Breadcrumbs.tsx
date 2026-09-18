@@ -77,6 +77,8 @@ const PATH_MAP: Record<string, string> = {
   queues: 'Queues',
   'queues-management': 'Queues',
   'queries-library': 'Queries',
+  'searches-library': 'Searches',
+  searches: 'Searches',
   'kpi-management': 'Metrics',
   'kpi-library': 'Metrics',
   agents: 'Agents',

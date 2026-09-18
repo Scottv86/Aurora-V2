@@ -1,5 +1,6 @@
 import React from 'react';
 import { FormRenderer, QueueRenderer } from '../Builders';
+import { SearchRenderer } from '../Search/SearchRenderer';
 import { WorkQueue } from '../WorkQueue';
 import { 
   Database, Globe, Cpu, ShieldCheck, Workflow, 
@@ -204,6 +205,23 @@ export const UniversalWidgetRenderer: React.FC<UniversalWidgetProps> = ({
               </div>
             ))}
           </div>
+        </div>
+      );
+
+    case 'search-view':
+    case 'search-widget':
+    case 'advanced-search':
+      return (
+        <div className="relative group bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-4 shadow-sm overflow-hidden h-full flex flex-col">
+          <SearchRenderer
+            searchId={widget.properties?.searchId}
+            title={widget.title}
+            displayMode={widget.properties?.displayMode || 'full'}
+            layout={widget.properties?.layout || 'table'}
+            presetParameters={widget.properties?.presetParameters}
+            lockedParameters={widget.properties?.lockedParameters}
+            className="w-full h-full flex-1"
+          />
         </div>
       );
 

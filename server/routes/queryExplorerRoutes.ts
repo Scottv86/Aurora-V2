@@ -270,12 +270,21 @@ function validateQuerySecurity(query: string, allowedTables: string[]): { isVali
   }
 
   // 4. Validate Table References in FROM/JOIN clauses
-  const fromJoinRegex = /(?:from|join)\s+(?:"([^"]+)"|([a-zA-Z_][a-zA-Z0-9_]*))/gi;
+  // Must be standalone word 'from' or 'join', not preceded by ':' (e.g. :datePresetFrom)
+  const fromJoinRegex = /(?<!:)\b(?:from|join)\b\s+(?:"([^"]+)"|([a-zA-Z_][a-zA-Z0-9_]*))/gi;
   const matches = [...cleaned.matchAll(fromJoinRegex)];
   
+  const SQL_SYNTAX_KEYWORDS = ['is', 'null', 'where', 'on', 'select', 'case', 'when', 'then', 'else', 'end', 'values', 'lateral'];
+
   for (const match of matches) {
     const rawTableName = match[1] || match[2];
     const tableName = rawTableName.toLowerCase();
+    
+    // Ignore false positives on SQL keywords or parameter fragments
+    if (SQL_SYNTAX_KEYWORDS.includes(tableName)) {
+      continue;
+    }
+
     const cleanName = tableName.replace(/_/g, ' ');
     
     const isAllowedPhysical = PHYSICAL_TABLES_WHITELIST.includes(tableName);

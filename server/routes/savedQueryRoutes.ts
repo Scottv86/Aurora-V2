@@ -59,7 +59,12 @@ router.post('/', async (req: TenantRequest, res: Response) => {
       parameters, 
       columnsConfig, 
       status, 
-      cacheTtlSeconds 
+      cacheTtlSeconds,
+      isSearchEnabled,
+      scopeType,
+      targetModuleIds,
+      searchConfig,
+      allowedRoleIds
     } = req.body;
 
     if (!name) {
@@ -98,6 +103,11 @@ router.post('/', async (req: TenantRequest, res: Response) => {
           columnsConfig: Array.isArray(columnsConfig) ? columnsConfig : existing.columnsConfig,
           status: status || existing.status,
           cacheTtlSeconds: typeof cacheTtlSeconds === 'number' ? cacheTtlSeconds : existing.cacheTtlSeconds,
+          isSearchEnabled: isSearchEnabled !== undefined ? isSearchEnabled : existing.isSearchEnabled,
+          scopeType: scopeType || existing.scopeType,
+          targetModuleIds: Array.isArray(targetModuleIds) ? targetModuleIds : existing.targetModuleIds,
+          searchConfig: searchConfig !== undefined ? searchConfig : existing.searchConfig,
+          allowedRoleIds: Array.isArray(allowedRoleIds) ? allowedRoleIds : existing.allowedRoleIds,
           updatedAt: new Date()
         }
       });
@@ -119,7 +129,11 @@ router.post('/', async (req: TenantRequest, res: Response) => {
         columnsConfig: Array.isArray(columnsConfig) ? columnsConfig : [],
         status: status || 'DRAFT',
         cacheTtlSeconds: typeof cacheTtlSeconds === 'number' ? cacheTtlSeconds : 0,
-        downstreamUsagesCount: 0
+        isSearchEnabled: isSearchEnabled ?? false,
+        scopeType: scopeType || 'MULTI_MODULE',
+        targetModuleIds: Array.isArray(targetModuleIds) ? targetModuleIds : [],
+        searchConfig: searchConfig || {},
+        allowedRoleIds: Array.isArray(allowedRoleIds) ? allowedRoleIds : []
       }
     });
 
@@ -158,7 +172,11 @@ router.put('/:id', async (req: TenantRequest, res: Response) => {
         ...(req.body.columnsConfig ? { columnsConfig: req.body.columnsConfig } : {}),
         ...(req.body.status ? { status: req.body.status } : {}),
         ...(typeof req.body.cacheTtlSeconds === 'number' ? { cacheTtlSeconds: req.body.cacheTtlSeconds } : {}),
-        ...(typeof req.body.downstreamUsagesCount === 'number' ? { downstreamUsagesCount: req.body.downstreamUsagesCount } : {}),
+        ...(req.body.isSearchEnabled !== undefined ? { isSearchEnabled: req.body.isSearchEnabled } : {}),
+        ...(req.body.scopeType ? { scopeType: req.body.scopeType } : {}),
+        ...(Array.isArray(req.body.targetModuleIds) ? { targetModuleIds: req.body.targetModuleIds } : {}),
+        ...(req.body.searchConfig !== undefined ? { searchConfig: req.body.searchConfig } : {}),
+        ...(Array.isArray(req.body.allowedRoleIds) ? { allowedRoleIds: req.body.allowedRoleIds } : {}),
         updatedAt: new Date()
       }
     });

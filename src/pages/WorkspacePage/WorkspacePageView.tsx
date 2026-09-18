@@ -22,6 +22,7 @@ import { motion } from 'motion/react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, Legend } from 'recharts';
 import { FormRenderer } from '../../components/Builders/FormBuilder/FormRenderer';
 import { QueueRenderer } from '../../components/Builders/QueueBuilder/QueueRenderer';
+import { SearchRenderer } from '../../components/Search/SearchRenderer';
 import { Table, Column } from '../../components/UI/Table';
 import { createFormulaContext } from '../../lib/formulaEngine';
 
@@ -39,6 +40,9 @@ export const getWidgetDefaultDimensions = (type: string) => {
     case 'chart': return { w: 6, h: 5, minW: 4, minH: 3 };
     case 'report': return { w: 12, h: 8, minW: 6, minH: 4 };
     case 'standalone-form': return { w: 6, h: 6, minW: 4, minH: 4 };
+    case 'search-view':
+    case 'search-widget':
+    case 'advanced-search': return { w: 12, h: 7, minW: 6, minH: 4 };
     default: return { w: 6, h: 5, minW: 4, minH: 3 };
   }
 };
@@ -454,7 +458,22 @@ const WidgetRenderer = React.memo(({ widget, tenant, session }: { widget: any, t
         </div>
       );
 
-
+    case 'search-view':
+    case 'search-widget':
+    case 'advanced-search':
+      return (
+        <div className="w-full h-full flex flex-col p-1 overflow-hidden">
+          <SearchRenderer
+            searchId={widget.properties?.searchId}
+            title={widget.title}
+            displayMode={widget.properties?.displayMode || 'full'}
+            layout={widget.properties?.layout || 'table'}
+            presetParameters={widget.properties?.presetParameters}
+            lockedParameters={widget.properties?.lockedParameters}
+            className="w-full h-full flex-1"
+          />
+        </div>
+      );
 
     case 'accessible-modules':
     case 'module-directory':

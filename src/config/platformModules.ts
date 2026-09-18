@@ -154,6 +154,15 @@ export const PLATFORM_MODULES: PlatformModule[] = [
     path: '/workspace/settings/platform-modules/queries-library'
   },
   {
+    id: 'searches-library',
+    name: 'Searches',
+    slug: 'searches-library',
+    iconName: 'Search',
+    isCore: true,
+    description: 'Design and manage self-service, cross-module searches with dynamic filters for business users.',
+    path: '/workspace/settings/platform-modules/searches-library'
+  },
+  {
     id: 'kpi-management',
     name: 'Metrics',
     slug: 'kpi-management',

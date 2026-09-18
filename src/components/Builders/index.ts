@@ -13,3 +13,4 @@ export * from './QueueBuilder/QueueRenderer';
 export * from './QueryBuilder/QueryBuilder';
 export * from './KpiBuilder/KpiBuilder';
 export * from './AgentBuilder';
+export * from './SearchBuilder/SearchBuilder';

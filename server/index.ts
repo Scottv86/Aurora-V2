@@ -37,6 +37,7 @@ import savedViewRoutes from './routes/savedViewRoutes';
 import kpiRoutes from './routes/kpiRoutes';
 import inboxRoutes from './routes/inboxRoutes';
 import chatRoutes from './routes/chatRoutes';
+import searchRoutes from './routes/searchRoutes';
 
 
 
@@ -144,6 +145,7 @@ app.use('/api/validations', authenticate, requireTenantAccess, validationRoutes)
 app.use('/api/solutions', authenticate, requireTenantAccess, solutionRoutes);
 app.use('/api/queues', authenticate, requireTenantAccess, queueRoutes);
 app.use('/api/saved-queries', authenticate, requireTenantAccess, savedQueryRoutes);
+app.use('/api/searches', authenticate, requireTenantAccess, searchRoutes);
 app.use('/api/saved-views', authenticate, requireTenantAccess, savedViewRoutes);
 app.use('/api/kpis', authenticate, requireTenantAccess, kpiRoutes);
 app.use('/api/inbox', authenticate, requireTenantAccess, inboxRoutes);

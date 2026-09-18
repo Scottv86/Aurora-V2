@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Database, 
   Play, 
@@ -22,7 +22,9 @@ import {
   Minimize2, 
   Tag, 
   Code, 
-  Info
+  Info,
+  Split,
+  X
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../UI/Primitives';
@@ -30,7 +32,7 @@ import { usePlatform } from '../../../hooks/usePlatform';
 import { useAuth } from '../../../hooks/useAuth';
 import { API_BASE_URL } from '../../../config';
 import { supabase } from '../../../lib/supabase';
-import { cn } from '../../../lib/utils';
+import { cn, flattenFields } from '../../../lib/utils';
 import { UnsavedChangesModal } from '../../Common/UnsavedChangesModal';
 import { 
   SavedQueryEntity, 
@@ -40,6 +42,8 @@ import {
   QueryStatus 
 } from '../../../types/queryBuilder';
 import { SqlEditor } from './SqlEditor';
+import { JsonViewerModal, FieldMetaInfo } from './JsonViewerModal';
+import { JsonCellRenderer } from './JsonCellRenderer';
 
 interface QueryBuilderProps {
   initialQuery?: SavedQueryEntity | null;
@@ -66,12 +70,22 @@ interface SchemaData {
   customModules: TableSchema[];
 }
 
+interface DisplayColumn {
+  id: string;
+  baseCol: string;
+  subKey?: string;
+  rawKey?: string;
+  label: string;
+  slug?: string;
+  isVirtual: boolean;
+}
+
 export const QueryBuilder: React.FC<QueryBuilderProps> = ({
   initialQuery,
   onClose,
   onSaveSuccess
 }) => {
-  const { tenant } = usePlatform();
+  const { tenant, modules = [] } = usePlatform();
   const { session } = useAuth();
   const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || localStorage.getItem('aurora_token') || 'dev-token';
   const tenantId = tenant?.id || 't1';
@@ -85,6 +99,7 @@ export const QueryBuilder: React.FC<QueryBuilderProps> = ({
   const [newTagInput, setNewTagInput] = useState('');
   const [status, setStatus] = useState<QueryStatus>(initialQuery?.status || 'DRAFT');
   const [cacheTtl, setCacheTtl] = useState<number>(initialQuery?.cacheTtlSeconds || 0);
+  const [isSearchEnabled, setIsSearchEnabled] = useState<boolean>((initialQuery as any)?.isSearchEnabled || false);
   const [isDirty, setIsDirty] = useState(false);
   // SQL & Mode State
   const [sqlQuery, setSqlQuery] = useState<string>(
@@ -198,6 +213,235 @@ LIMIT 50;`
   const [queryError, setQueryError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  // JSON Blobs & Column Unpacker State
+  const [inspectingJson, setInspectingJson] = useState<{
+    isOpen: boolean;
+    columnName: string;
+    data: any;
+    rowIndex?: number;
+  } | null>(null);
+
+  const [unpackedColumns, setUnpackedColumns] = useState<Record<string, {
+    enabled: boolean;
+    selectedKeys?: string[];
+  }>>({});
+  const [activeUnpackDropdown, setActiveUnpackDropdown] = useState<string | null>(null);
+  const [unpackSearchFilter, setUnpackSearchFilter] = useState('');
+
+  // Comprehensive Field Dictionary that maps field IDs and names to Human Labels, Slugs, and Types
+  const fieldDictionary = useMemo<Record<string, FieldMetaInfo>>(() => {
+    const dict: Record<string, FieldMetaInfo> = {};
+
+    // 1. Common system record fields
+    const systemFields: FieldMetaInfo[] = [
+      { id: 'id', label: 'Record ID', name: 'id', type: 'UUID' },
+      { id: '_record_key', label: 'Record Key', name: 'record_key', type: 'TEXT' },
+      { id: 'assigneeId', label: 'Assignee', name: 'assignee_id', type: 'USER' },
+      { id: 'status', label: 'Status', name: 'status', type: 'BADGE' },
+      { id: 'created_at', label: 'Created At', name: 'created_at', type: 'TIMESTAMP' },
+      { id: 'updated_at', label: 'Updated At', name: 'updated_at', type: 'TIMESTAMP' },
+      { id: 'module_id', label: 'Module ID', name: 'module_id', type: 'UUID' }
+    ];
+    systemFields.forEach(f => {
+      dict[f.id] = f;
+      if (f.name) dict[f.name] = f;
+    });
+
+    // 2. Extract fields from all tenant modules via usePlatform
+    if (Array.isArray(modules)) {
+      modules.forEach((mod: any) => {
+        const layoutFields = flattenFields(mod.layout || mod.config?.layout || mod.fields || []);
+        layoutFields.forEach((f: any) => {
+          if (!f) return;
+          const info: FieldMetaInfo = {
+            id: f.id || f.name,
+            label: f.label || f.name || f.id,
+            name: f.name || (f.label ? f.label.toLowerCase().replace(/[^a-z0-9_]/g, '_') : f.id),
+            type: f.type || 'text',
+            moduleName: mod.name
+          };
+
+          if (f.id) dict[f.id] = info;
+          if (f.name) dict[f.name] = info;
+        });
+      });
+    }
+
+    // 3. Extract columns from schema.customModules (from /api/query-explorer/schema)
+    if (schema.customModules && Array.isArray(schema.customModules)) {
+      schema.customModules.forEach((mod: TableSchema) => {
+        if (Array.isArray(mod.columns)) {
+          mod.columns.forEach((col: ColumnSchema) => {
+            if (!dict[col.name]) {
+              dict[col.name] = {
+                id: col.name,
+                label: col.label || col.name,
+                name: col.name,
+                type: col.type,
+                moduleName: mod.displayName || mod.name
+              };
+            }
+          });
+        }
+      });
+    }
+
+    return dict;
+  }, [modules, schema.customModules]);
+
+  // Analyze results to discover which columns are JSON/JSONB blobs and what top-level keys they contain
+  const jsonColumnMeta = useMemo(() => {
+    if (results.length === 0) return {};
+    const meta: Record<string, { isJson: boolean; keys: string[] }> = {};
+    const baseCols = Object.keys(results[0]);
+
+    baseCols.forEach(col => {
+      let isJson = false;
+      const keySet = new Set<string>();
+
+      for (const row of results.slice(0, 100)) {
+        const val = row[col];
+        if (val !== null && typeof val === 'object') {
+          isJson = true;
+          if (!Array.isArray(val)) {
+            Object.keys(val).forEach(k => keySet.add(k));
+          }
+        } else if (typeof val === 'string' && (val.trim().startsWith('{') || val.trim().startsWith('['))) {
+          try {
+            const parsed = JSON.parse(val);
+            if (parsed && typeof parsed === 'object') {
+              isJson = true;
+              if (!Array.isArray(parsed)) {
+                Object.keys(parsed).forEach(k => keySet.add(k));
+              }
+            }
+          } catch {
+            // not json
+          }
+        }
+      }
+
+      if (isJson) {
+        meta[col] = { isJson: true, keys: Array.from(keySet) };
+      }
+    });
+
+    return meta;
+  }, [results]);
+
+  // Computed columns including unpacked virtual columns
+  const displayColumns = useMemo<DisplayColumn[]>(() => {
+    if (results.length === 0) return [];
+    const baseCols = Object.keys(results[0]);
+    const cols: DisplayColumn[] = [];
+
+    baseCols.forEach(col => {
+      cols.push({
+        id: col,
+        baseCol: col,
+        label: col,
+        isVirtual: false
+      });
+
+      const unpackConfig = unpackedColumns[col];
+      const colMeta = jsonColumnMeta[col];
+      if (unpackConfig?.enabled && colMeta && colMeta.keys.length > 0) {
+        const activeKeys: string[] = unpackConfig.selectedKeys && unpackConfig.selectedKeys.length > 0
+          ? unpackConfig.selectedKeys
+          : colMeta.keys;
+
+        activeKeys.forEach((k: string) => {
+          const fieldMeta = fieldDictionary[k];
+          cols.push({
+            id: `${col}.${k}`,
+            baseCol: col,
+            subKey: k,
+            rawKey: k,
+            label: fieldMeta?.label || k,
+            slug: fieldMeta?.name || (fieldMeta?.label ? fieldMeta.label.toLowerCase().replace(/[^a-z0-9_]/g, '_') : k),
+            isVirtual: true
+          });
+        });
+      }
+    });
+
+    return cols;
+  }, [results, unpackedColumns, jsonColumnMeta, fieldDictionary]);
+
+  const toggleUnpackColumn = (colName: string) => {
+    setUnpackedColumns(prev => {
+      const current = prev[colName];
+      const colMeta = jsonColumnMeta[colName];
+      if (current?.enabled) {
+        return {
+          ...prev,
+          [colName]: { ...current, enabled: false }
+        };
+      } else {
+        return {
+          ...prev,
+          [colName]: {
+            enabled: true,
+            selectedKeys: current?.selectedKeys || (colMeta ? colMeta.keys : [])
+          }
+        };
+      }
+    });
+  };
+
+  const toggleSubKey = (colName: string, subKey: string) => {
+    setUnpackedColumns(prev => {
+      const current = prev[colName];
+      const colMeta = jsonColumnMeta[colName];
+      const allKeys = colMeta ? colMeta.keys : [];
+      const currentSelected = current?.selectedKeys || allKeys;
+
+      const newSelected = currentSelected.includes(subKey)
+        ? currentSelected.filter((k: string) => k !== subKey)
+        : [...currentSelected, subKey];
+
+      return {
+        ...prev,
+        [colName]: {
+          enabled: true,
+          selectedKeys: newSelected
+        }
+      };
+    });
+  };
+
+  // Promote a JSON path into the SQL SELECT statement
+  const handlePromoteToSql = (colName: string, path: string[], asAlias: string) => {
+    let expr = '';
+    if (path.length === 1) {
+      expr = `${colName}->>'${path[0]}'`;
+    } else {
+      const leading = path.slice(0, -1).map(p => `'${p}'`).join('->');
+      const last = path[path.length - 1];
+      expr = `${colName}->${leading}->>'${last}'`;
+    }
+    const cleanAlias = asAlias.replace(/[^a-zA-Z0-9_]/g, '_');
+    const sqlFragment = `${expr} AS ${cleanAlias}`;
+
+    if (sqlQuery.includes(expr)) {
+      toast.info(`'${expr}' is already in your query`);
+      return;
+    }
+
+    const fromMatch = sqlQuery.match(/\bFROM\b/i);
+    if (fromMatch && fromMatch.index !== undefined) {
+      const beforeFrom = sqlQuery.slice(0, fromMatch.index).trimEnd();
+      const afterFrom = sqlQuery.slice(fromMatch.index);
+      const separator = beforeFrom.endsWith(',') ? '\n  ' : ',\n  ';
+      const updated = `${beforeFrom}${separator}${sqlFragment}\n${afterFrom}`;
+      setSqlQuery(updated);
+      toast.success(`Added ${sqlFragment} to SQL SELECT clause`);
+    } else {
+      setSqlQuery(prev => `${prev}\n-- Added column:\nSELECT ${sqlFragment}`);
+      toast.success(`Added ${sqlFragment} to query`);
+    }
+  };
+
   // DOM Refs
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -250,20 +494,40 @@ LIMIT 50;`
   // Interpolate Parameters for execution
   const buildExecutableQuery = () => {
     let executableSql = sqlQuery;
+
+    // Automatically bind :tenantId if present in SQL
+    executableSql = executableSql.replace(/:tenantId\b/g, `'${tenantId}'`);
+
     parameters.forEach(p => {
-      const val = testParamValues[p.name] !== undefined ? testParamValues[p.name] : (p.defaultValue || '');
-      const regex = new RegExp(`:${p.name}\\b`, 'g');
+      const val = testParamValues[p.name] !== undefined ? testParamValues[p.name] : (p.defaultValue ?? '');
+      const escapedName = p.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+      const regex = new RegExp(`:${escapedName}\\b`, 'g');
       if (p.type === 'number') {
         const numVal = Number(val) || 0;
         executableSql = executableSql.replace(regex, numVal.toString());
       } else if (p.type === 'boolean') {
         executableSql = executableSql.replace(regex, val ? 'true' : 'false');
       } else {
-        // Escaped string literal
-        const escaped = String(val).replace(/'/g, "''");
-        executableSql = executableSql.replace(regex, `'${escaped}'`);
+        // Escaped string literal or NULL if empty
+        if (val === '' || val === null || val === undefined) {
+          executableSql = executableSql.replace(regex, 'NULL');
+        } else {
+          const escaped = String(val).replace(/'/g, "''");
+          executableSql = executableSql.replace(regex, `'${escaped}'`);
+        }
       }
     });
+
+    // Replace any remaining parameters like :foo that are in SQL but weren't defined in parameters
+    executableSql = executableSql.replace(/:([a-zA-Z0-9_]+)\b/g, (_, paramKey) => {
+      if (paramKey.toLowerCase() === 'tenantid') return `'${tenantId}'`;
+      const val = testParamValues[paramKey];
+      if (val !== undefined && val !== null && val !== '') {
+        return `'${String(val).replace(/'/g, "''")}'`;
+      }
+      return 'NULL';
+    });
+
     return executableSql;
   };
 
@@ -317,6 +581,13 @@ LIMIT 50;`
             const sampleVal = rows[0][k];
             if (typeof sampleVal === 'number') guessedType = 'number';
             else if (typeof sampleVal === 'boolean') guessedType = 'boolean';
+            else if (sampleVal !== null && typeof sampleVal === 'object') guessedType = 'json';
+            else if (typeof sampleVal === 'string' && (sampleVal.trim().startsWith('{') || sampleVal.trim().startsWith('['))) {
+              try {
+                JSON.parse(sampleVal);
+                guessedType = 'json';
+              } catch {}
+            }
             else if (k.toLowerCase().includes('date') || k.toLowerCase().includes('created') || k.toLowerCase().includes('updated')) guessedType = 'date';
             else if (k.toLowerCase().includes('status') || k.toLowerCase().includes('priority')) guessedType = 'badge';
 
@@ -371,8 +642,24 @@ LIMIT 50;`
       parameters,
       columnsConfig,
       status: targetStatus,
-      cacheTtlSeconds: cacheTtl
-    };
+      cacheTtlSeconds: cacheTtl,
+      isSearchEnabled,
+      searchConfig: isSearchEnabled ? {
+        defaultLayout: 'table',
+        pageSize: 25,
+        allowExport: true,
+        allowPersonalPresets: true,
+        enableInstantSearch: true,
+        exposedControls: parameters.map(p => ({
+          id: p.id,
+          parameterName: p.name,
+          fieldKey: p.name,
+          label: p.label || p.name,
+          controlType: p.type === 'user_id' ? 'user' : (p.type === 'date_range' ? 'date_preset' : 'text'),
+          defaultValue: p.defaultValue
+        }))
+      } : undefined
+    } as any;
 
     try {
       const { data: sessData } = await supabase.auth.getSession();
@@ -528,6 +815,26 @@ LIMIT 50;`
 
           <div className="h-4 w-px bg-zinc-800" />
 
+          {/* Business Search Toggle */}
+          <button
+            type="button"
+            onClick={() => {
+              setIsSearchEnabled(!isSearchEnabled);
+              setIsDirty(true);
+              toast.info(isSearchEnabled ? 'Business Search view disabled' : 'Business Search view enabled for this query');
+            }}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all",
+              isSearchEnabled
+                ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/40"
+                : "bg-zinc-800/80 text-zinc-400 border-zinc-700 hover:text-zinc-200"
+            )}
+            title="Expose this query as a self-service search for business users"
+          >
+            <Search size={13} className={isSearchEnabled ? "text-indigo-400" : "text-zinc-400"} />
+            <span>Search View: {isSearchEnabled ? 'ON' : 'OFF'}</span>
+          </button>
+
           {/* Save Draft */}
           <Button
             variant="secondary"
@@ -644,8 +951,8 @@ LIMIT 50;`
                         {expandedNodes['tables-folder'] && (
                           <div className="p-2 space-y-1 bg-zinc-950/60 border-t border-zinc-800/60">
                             {schema.physicalTables
-                              .filter(t => !schemaSearch || t.name.toLowerCase().includes(schemaSearch.toLowerCase()))
-                              .map(table => (
+                              .filter((t: TableSchema) => !schemaSearch || t.name.toLowerCase().includes(schemaSearch.toLowerCase()))
+                              .map((table: TableSchema) => (
                                 <div key={table.name} className="space-y-0.5">
                                   <button
                                     onClick={() => insertTextAtCursor(table.name)}
@@ -656,8 +963,8 @@ LIMIT 50;`
                                   </button>
                                   <div className="pl-4 space-y-0.5">
                                     {table.columns
-                                      .filter(c => !schemaSearch || c.name.toLowerCase().includes(schemaSearch.toLowerCase()))
-                                      .map(col => (
+                                      .filter((c: ColumnSchema) => !schemaSearch || c.name.toLowerCase().includes(schemaSearch.toLowerCase()))
+                                      .map((col: ColumnSchema) => (
                                         <button
                                           key={col.name}
                                           onClick={() => insertTextAtCursor(col.name)}
@@ -693,8 +1000,8 @@ LIMIT 50;`
                         {expandedNodes['modules-folder'] && (
                           <div className="p-2 space-y-1 bg-zinc-950/60 border-t border-zinc-800/60">
                             {schema.customModules
-                              .filter(m => !schemaSearch || (m.displayName || m.name).toLowerCase().includes(schemaSearch.toLowerCase()))
-                              .map(mod => (
+                              .filter((m: TableSchema) => !schemaSearch || (m.displayName || m.name).toLowerCase().includes(schemaSearch.toLowerCase()))
+                              .map((mod: TableSchema) => (
                                 <div key={mod.name} className="space-y-0.5">
                                   <button
                                     onClick={() => insertTextAtCursor(`"${mod.displayName || mod.name}"`)}
@@ -704,7 +1011,7 @@ LIMIT 50;`
                                     <span className="text-[10px] text-zinc-500 group-hover:text-zinc-300">{mod.columns.length} fields</span>
                                   </button>
                                   <div className="pl-4 space-y-0.5">
-                                    {mod.columns.map(col => (
+                                    {mod.columns.map((col: ColumnSchema) => (
                                       <button
                                         key={col.name}
                                         onClick={() => insertTextAtCursor(col.name)}
@@ -1038,13 +1345,42 @@ LIMIT 50;`
               {/* Bottom Actions & Size Toggle */}
               <div className="flex items-center gap-2">
                 {results.length > 0 && bottomTab === 'results' && (
-                  <button
-                    onClick={exportToCSV}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs border border-zinc-700 transition-all"
-                  >
-                    <Download size={13} />
-                    <span>Export CSV</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {/* JSON Column Unpacker Quick Summary */}
+                    {Object.keys(jsonColumnMeta).length > 0 && (
+                      <div className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-400">
+                        <span className="text-zinc-500 font-mono">JSON:</span>
+                        {Object.entries(jsonColumnMeta).map(([cName, meta]: [string, { isJson: boolean; keys: string[] }]) => {
+                          const isUnpacked = unpackedColumns[cName]?.enabled;
+                          return (
+                            <button
+                              key={cName}
+                              type="button"
+                              onClick={() => toggleUnpackColumn(cName)}
+                              className={cn(
+                                "px-1.5 py-0.5 rounded text-[10px] font-mono transition-all flex items-center gap-1 cursor-pointer",
+                                isUnpacked
+                                  ? "bg-indigo-600 text-white font-semibold"
+                                  : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700"
+                              )}
+                              title={isUnpacked ? `Collapse ${cName}` : `Unpack ${cName} (${meta.keys.length} keys)`}
+                            >
+                              <Split size={9} />
+                              <span>{cName} ({meta.keys.length})</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <button
+                      onClick={exportToCSV}
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs border border-zinc-700 transition-all"
+                    >
+                      <Download size={13} />
+                      <span>Export CSV</span>
+                    </button>
+                  </div>
                 )}
 
                 <div className="flex items-center gap-1 pl-2 border-l border-zinc-800 text-zinc-400">
@@ -1081,27 +1417,234 @@ LIMIT 50;`
                     <table className="w-full text-left text-xs border-collapse font-sans">
                       <thead>
                         <tr className="border-b border-zinc-800 bg-zinc-900/60 text-zinc-400 font-semibold">
-                          {Object.keys(results[0]).map(col => (
-                            <th key={col} className="px-3.5 py-2 whitespace-nowrap font-mono text-[11px]">
-                              {col}
-                            </th>
-                          ))}
+                          {displayColumns.map((col: DisplayColumn) => {
+                            const isJson = jsonColumnMeta[col.baseCol]?.isJson;
+                            const isUnpacked = unpackedColumns[col.baseCol]?.enabled;
+                            const availableKeys = jsonColumnMeta[col.baseCol]?.keys || [];
+                            const activeKeys = unpackedColumns[col.baseCol]?.selectedKeys || availableKeys;
+
+                            if (col.isVirtual && col.subKey) {
+                              return (
+                                <th 
+                                  key={col.id} 
+                                  className="px-3 py-2 whitespace-nowrap font-mono text-[11px] bg-indigo-950/30 border-b border-indigo-800/40 text-indigo-200"
+                                >
+                                  <div className="flex items-center justify-between gap-2.5">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="text-[9px] px-1 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-sans uppercase font-bold tracking-wider">
+                                        JSON
+                                      </span>
+                                      <span className="text-zinc-500 font-mono text-[10px]">{col.baseCol}.</span>
+                                      <span className="font-bold text-white font-sans">{col.label}</span>
+                                      {col.slug && col.slug !== col.label && (
+                                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-950/70 border border-indigo-800/40 text-indigo-300 font-mono">
+                                          {col.slug}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const alias = col.slug || col.label || col.subKey!;
+                                          handlePromoteToSql(col.baseCol, [col.subKey!], alias);
+                                        }}
+                                        title={`Add to SQL SELECT: ${col.baseCol}->>'${col.subKey}' AS ${col.slug || col.subKey}`}
+                                        className="px-1.5 py-0.5 text-[10px] bg-indigo-600/30 hover:bg-indigo-600/60 text-indigo-200 rounded border border-indigo-500/30 flex items-center gap-0.5 transition-colors cursor-pointer"
+                                      >
+                                        <Plus size={10} />
+                                        <span>SQL</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleSubKey(col.baseCol, col.subKey!)}
+                                        title="Hide this column"
+                                        className="p-1 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 rounded transition-colors cursor-pointer"
+                                      >
+                                        <X size={11} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </th>
+                              );
+                            }
+
+                            return (
+                              <th key={col.id} className="px-3.5 py-2 whitespace-nowrap font-mono text-[11px] relative">
+                                <div className="flex items-center justify-between gap-3">
+                                  <span className={cn(isJson && "text-indigo-300 font-semibold")}>
+                                    {col.label}
+                                  </span>
+
+                                  {isJson && availableKeys.length > 0 && (
+                                    <div className="flex items-center gap-1 font-sans">
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleUnpackColumn(col.baseCol)}
+                                        className={cn(
+                                          "px-2 py-0.5 rounded text-[10px] font-semibold transition-all flex items-center gap-1 cursor-pointer",
+                                          isUnpacked
+                                            ? "bg-indigo-600 text-white shadow-xs"
+                                            : "bg-zinc-800 hover:bg-indigo-600/30 text-zinc-300 hover:text-indigo-200 border border-zinc-700"
+                                        )}
+                                        title={isUnpacked ? "Collapse back into single JSON cell" : `Unpack ${availableKeys.length} JSON properties into columns`}
+                                      >
+                                        <Split size={10} />
+                                        <span>{isUnpacked ? 'Collapse' : `Unpack (${availableKeys.length})`}</span>
+                                      </button>
+
+                                      {isUnpacked && (
+                                        <div className="relative">
+                                          <button
+                                            type="button"
+                                            onClick={() => setActiveUnpackDropdown(activeUnpackDropdown === col.baseCol ? null : col.baseCol)}
+                                            className="p-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 cursor-pointer"
+                                            title="Configure visible sub-columns"
+                                          >
+                                            <ChevronDown size={11} />
+                                          </button>
+
+                                          {activeUnpackDropdown === col.baseCol && (
+                                            <div className="absolute right-0 top-full mt-1.5 z-30 w-72 p-2.5 rounded-2xl bg-zinc-900 border border-zinc-700 shadow-2xl space-y-2 text-left">
+                                              <div className="flex items-center justify-between pb-1.5 border-b border-zinc-800 text-[10px] text-zinc-400">
+                                                <span className="font-semibold text-zinc-200">Visible Fields ({activeKeys.length}/{availableKeys.length})</span>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setUnpackedColumns(prev => ({
+                                                      ...prev,
+                                                      [col.baseCol]: {
+                                                        enabled: true,
+                                                        selectedKeys: activeKeys.length === availableKeys.length ? [] : [...availableKeys]
+                                                      }
+                                                    }));
+                                                  }}
+                                                  className="text-indigo-400 hover:underline cursor-pointer font-medium"
+                                                >
+                                                  {activeKeys.length === availableKeys.length ? 'Hide all' : 'Show all'}
+                                                </button>
+                                              </div>
+
+                                              {/* Search in dropdown */}
+                                              <div className="relative">
+                                                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" />
+                                                <input
+                                                  type="text"
+                                                  value={unpackSearchFilter}
+                                                  onChange={e => setUnpackSearchFilter(e.target.value)}
+                                                  placeholder="Search label, slug, or ID..."
+                                                  className="w-full pl-7 pr-3 py-1 text-xs bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 font-sans"
+                                                />
+                                              </div>
+
+                                              <div className="max-h-56 overflow-y-auto space-y-0.5 py-1">
+                                                {availableKeys
+                                                  .filter((k: string) => {
+                                                    if (!unpackSearchFilter.trim()) return true;
+                                                    const q = unpackSearchFilter.toLowerCase();
+                                                    const meta = fieldDictionary[k];
+                                                    return (
+                                                      k.toLowerCase().includes(q) ||
+                                                      meta?.label.toLowerCase().includes(q) ||
+                                                      meta?.name?.toLowerCase().includes(q) ||
+                                                      (meta?.moduleName && meta.moduleName.toLowerCase().includes(q))
+                                                    );
+                                                  })
+                                                  .map((k: string) => {
+                                                    const isChecked = activeKeys.includes(k);
+                                                    const meta = fieldDictionary[k];
+                                                    return (
+                                                      <label key={k} className="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-zinc-800/80 cursor-pointer text-zinc-200 transition-colors">
+                                                        <input
+                                                          type="checkbox"
+                                                          checked={isChecked}
+                                                          onChange={() => toggleSubKey(col.baseCol, k)}
+                                                          className="mt-0.5 rounded border-zinc-700 bg-zinc-950 text-indigo-500 focus:ring-0"
+                                                        />
+                                                        <div className="flex-1 min-w-0">
+                                                          <div className="flex items-center justify-between gap-1">
+                                                            <span className="font-semibold text-xs text-white truncate font-sans">
+                                                              {meta?.label || k}
+                                                            </span>
+                                                            {meta?.moduleName && (
+                                                              <span className="text-[9px] px-1 py-0.2 rounded bg-zinc-800 text-zinc-400 shrink-0">
+                                                                {meta.moduleName}
+                                                              </span>
+                                                            )}
+                                                          </div>
+                                                          <div className="flex items-center gap-1 text-[10px] text-zinc-500 font-mono truncate">
+                                                            {meta?.name && <span className="text-indigo-400">{meta.name}</span>}
+                                                            {meta?.name && <span>•</span>}
+                                                            <span>{k}</span>
+                                                          </div>
+                                                        </div>
+                                                      </label>
+                                                    );
+                                                  })}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </th>
+                            );
+                          })}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-800/60">
                         {results.slice(0, 100).map((row, rIdx) => (
                           <tr key={rIdx} className="hover:bg-zinc-800/40 transition-colors">
-                            {Object.keys(results[0]).map(col => (
-                              <td key={col} className="px-3.5 py-2 whitespace-nowrap text-zinc-300 font-mono text-[11px]">
-                                {row[col] === null ? (
-                                  <span className="text-zinc-600 italic">null</span>
-                                ) : typeof row[col] === 'object' ? (
-                                  JSON.stringify(row[col])
-                                ) : (
-                                  String(row[col])
-                                )}
-                              </td>
-                            ))}
+                            {displayColumns.map((col: DisplayColumn) => {
+                              if (col.isVirtual && col.subKey) {
+                                let rawVal = row[col.baseCol];
+                                if (typeof rawVal === 'string' && (rawVal.trim().startsWith('{') || rawVal.trim().startsWith('['))) {
+                                  try { rawVal = JSON.parse(rawVal); } catch {}
+                                }
+                                const subVal = rawVal?.[col.subKey];
+                                return (
+                                  <td key={col.id} className="px-3 py-2 whitespace-nowrap text-zinc-300 font-mono text-[11px] bg-indigo-950/10">
+                                    {subVal === null || subVal === undefined ? (
+                                      <span className="text-zinc-600 italic">null</span>
+                                    ) : typeof subVal === 'object' ? (
+                                      <JsonCellRenderer
+                                        value={subVal}
+                                        columnName={`${col.baseCol}.${col.subKey}`}
+                                        rowIndex={rIdx}
+                                        fieldDictionary={fieldDictionary}
+                                        onInspect={(c, val, idx) => setInspectingJson({ isOpen: true, columnName: c, data: val, rowIndex: idx })}
+                                      />
+                                    ) : (
+                                      String(subVal)
+                                    )}
+                                  </td>
+                                );
+                              }
+
+                              const val = row[col.baseCol];
+                              const isColJson = jsonColumnMeta[col.baseCol]?.isJson;
+
+                              return (
+                                <td key={col.id} className="px-3.5 py-2 whitespace-nowrap text-zinc-300 font-mono text-[11px]">
+                                  {val === null || val === undefined ? (
+                                    <span className="text-zinc-600 italic">null</span>
+                                  ) : isColJson || typeof val === 'object' || (typeof val === 'string' && (val.trim().startsWith('{') || val.trim().startsWith('['))) ? (
+                                    <JsonCellRenderer
+                                      value={val}
+                                      columnName={col.baseCol}
+                                      rowIndex={rIdx}
+                                      fieldDictionary={fieldDictionary}
+                                      onInspect={(c, v, idx) => setInspectingJson({ isOpen: true, columnName: c, data: v, rowIndex: idx })}
+                                    />
+                                  ) : (
+                                    String(val)
+                                  )}
+                                </td>
+                              );
+                            })}
                           </tr>
                         ))}
                       </tbody>
@@ -1149,6 +1692,7 @@ LIMIT 50;`
                             <option value="badge">Status Badge</option>
                             <option value="avatar">User Avatar</option>
                             <option value="link">Record Link</option>
+                            <option value="json">JSON Blob</option>
                           </select>
                         </div>
                       </div>
@@ -1199,6 +1743,18 @@ LIMIT 50;`
             onClose();
           }}
           onCancel={() => setShowUnsavedConfirm(false)}
+        />
+      )}
+
+      {inspectingJson && (
+        <JsonViewerModal
+          isOpen={inspectingJson.isOpen}
+          columnName={inspectingJson.columnName}
+          data={inspectingJson.data}
+          rowIndex={inspectingJson.rowIndex}
+          fieldDictionary={fieldDictionary}
+          onClose={() => setInspectingJson(null)}
+          onPromoteToSql={(col, path, alias) => handlePromoteToSql(col, path, alias)}
         />
       )}
     </div>

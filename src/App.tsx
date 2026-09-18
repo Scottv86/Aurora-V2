@@ -67,6 +67,7 @@ const WorkflowsLibraryPage = lazy(() => import('./pages/Settings/WorkflowsLibrar
 const ValidationsLibraryPage = lazy(() => import('./pages/Settings/ValidationsLibraryPage').then(m => ({ default: m.ValidationsLibraryPage })));
 const QueuesLibraryPage = lazy(() => import('./pages/Settings/QueuesLibraryPage').then(m => ({ default: m.QueuesLibraryPage })));
 const QueriesLibraryPage = lazy(() => import('./pages/Settings/QueriesLibraryPage').then(m => ({ default: m.QueriesLibraryPage })));
+const SearchesLibraryPage = lazy(() => import('./pages/Settings/SearchesLibraryPage').then(m => ({ default: m.SearchesLibraryPage })));
 const KpiLibraryPage = lazy(() => import('./pages/Settings/KpiLibraryPage').then(m => ({ default: m.KpiLibraryPage })));
 const AgentsLibraryPage = lazy(() => import('./pages/Settings/AgentsLibraryPage').then(m => ({ default: m.AgentsLibraryPage })));
 const AgentBuilderStudio = lazy(() => import('./components/Builders/AgentBuilder/AgentBuilderStudio').then(m => ({ default: m.AgentBuilderStudio })));
@@ -426,6 +427,8 @@ const App = () => {
                    <Route path="financial-management" element={<ComingSoon title="Financial Management" description="Financial settings, tax configurations, and payment processing rules." />} />
                    <Route path="queues-management" element={<QueuesLibraryPage />} />
                    <Route path="queries-library" element={<QueriesLibraryPage />} />
+                   <Route path="searches-library" element={<SearchesLibraryPage />} />
+                   <Route path="searches" element={<Navigate to="/workspace/settings/platform-modules/searches-library" replace />} />
                    <Route path="kpi-management" element={<KpiLibraryPage />} />
                    <Route path="kpi-library" element={<KpiLibraryPage />} />
                    <Route path="records-management" element={<RecordsManagementSettings />} />
@@ -437,6 +440,7 @@ const App = () => {
                  <Route path="solutions" element={<Navigate to="/workspace/settings/platform-modules/solutions" replace />} />
                  <Route path="solution" element={<Navigate to="/workspace/settings/platform-modules/solutions" replace />} />
                  <Route path="queries" element={<Navigate to="/workspace/settings/platform-modules/queries-library" replace />} />
+                 <Route path="searches" element={<Navigate to="/workspace/settings/platform-modules/searches-library" replace />} />
                  <Route path="kpis" element={<Navigate to="/workspace/settings/platform-modules/kpi-management" replace />} />
                  <Route path="metrics" element={<Navigate to="/workspace/settings/platform-modules/kpi-management" replace />} />
                  <Route path="content" element={<Navigate to="/workspace/settings/platform-modules/document-generation" replace />} />

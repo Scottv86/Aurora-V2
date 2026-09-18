@@ -158,9 +158,16 @@
 }
 
 .scrollbar-hide,
-.no-scrollbar {
+.no-scrollbar,
+.scrollbar-none {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar,
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
 
 .custom-scrollbar {

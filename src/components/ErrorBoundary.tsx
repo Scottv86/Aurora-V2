@@ -34,6 +34,8 @@ export class ErrorBoundary extends Component<Props, State> {
       let errorMessage = "An unexpected error occurred.";
       let isFirestoreError = false;
 
+      const isModuleLoadError = /Failed to fetch dynamically imported module|Importing a module script failed/i.test(this.state.error?.message || '');
+
       try {
         if (this.state.error?.message) {
           const parsed = JSON.parse(this.state.error.message);
@@ -44,7 +46,11 @@ export class ErrorBoundary extends Component<Props, State> {
         }
       } catch (e) {
         // Not a JSON error message
-        errorMessage = this.state.error?.message || errorMessage;
+        if (isModuleLoadError) {
+          errorMessage = "A required application module failed to load. This typically occurs when the development server restarts or is offline. Reloading the application usually resolves this.";
+        } else {
+          errorMessage = this.state.error?.message || errorMessage;
+        }
       }
 
       return (

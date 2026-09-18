@@ -10,17 +10,24 @@ export interface QueryParameter {
   description?: string;
 }
 
-export type ColumnDisplayType = 'text' | 'number' | 'currency' | 'date' | 'badge' | 'avatar' | 'boolean' | 'link';
+export type ColumnDisplayType = 'text' | 'number' | 'currency' | 'date' | 'badge' | 'avatar' | 'boolean' | 'link' | 'json';
 
 export interface QueryColumnConfig {
-  name: string;        // Field name returned from SQL
+  name: string;        // Field name returned from SQL or data JSON key
   label: string;       // Custom display label
   type: ColumnDisplayType;
   visible: boolean;
+  moduleId?: string;
+  moduleName?: string;
+  isCustom?: boolean;
   formatOptions?: {
     currencyCode?: string;
     dateFormat?: string;
     badgeColors?: Record<string, string>;
+    jsonOptions?: {
+      isUnpacked?: boolean;
+      unpackedKeys?: string[];
+    };
   };
 }
 

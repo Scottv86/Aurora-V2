@@ -1078,13 +1078,17 @@ model SavedQuery {
   columnsConfig         Json     @default("[]") @map("columns_config")
   status                String   @default("DRAFT")
   cacheTtlSeconds       Int      @default(0) @map("cache_ttl_seconds")
-  downstreamUsagesCount Int      @default(0) @map("downstream_usages_count")
+  isSearchEnabled       Boolean  @default(false) @map("is_search_enabled")
+  scopeType             String   @default("MULTI_MODULE") @map("scope_type")
+  targetModuleIds       Json     @default("[]") @map("target_module_ids")
+  searchConfig          Json     @default("{}") @map("search_config")
+  allowedRoleIds        Json     @default("[]") @map("allowed_role_ids")
   createdAt             DateTime @default(now()) @map("created_at")
   updatedAt             DateTime @updatedAt @map("updated_at")
   tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, slug])
-  @@index([tenantId])
+  @@index([tenantId, isSearchEnabled])
   @@map("saved_queries")
 }
 

@@ -534,6 +534,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         { label: 'Modules', icon: Layers, to: '/workspace/settings/platform-modules' },
         { label: 'Lists', icon: LucideIcons.ListTodo, to: '/workspace/settings/platform-modules/global-lists' },
         { label: 'Queries', icon: LucideIcons.Database, to: '/workspace/settings/platform-modules/queries-library' },
+        { label: 'Searches', icon: LucideIcons.Search, to: '/workspace/settings/platform-modules/searches-library' },
         { label: 'Metrics', icon: LucideIcons.Target, to: '/workspace/settings/platform-modules/kpi-management' },
         { label: 'Rules', icon: LucideIcons.ShieldCheck, to: '/workspace/settings/platform-modules/validations-library' },
         { label: 'Integrations', icon: LucideIcons.Plug, to: '/workspace/settings/platform-modules/integration-management' },
@@ -741,7 +742,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
               <div className={cn(collapsed ? "space-y-1" : "space-y-6")}>
                 {/* System Governance / Super Admin Mode */}
                 {isAdminPath && (
-                  <div className={cn("flex flex-col h-full", isSidebarReallyOpen ? "space-y-6" : "space-y-1")}>
+                  <div className={cn(isSidebarReallyOpen ? "space-y-6" : "space-y-1")}>
                     {isSidebarReallyOpen && (
                       <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-[0.2em] px-3 flex items-center gap-2">
                         <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse" />
@@ -749,7 +750,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                       </div>
                     )}
                     
-                    <div className={cn("overflow-y-auto custom-scrollbar flex-1", isSidebarReallyOpen ? "space-y-6" : "space-y-1")}>
+                    <div className={cn(isSidebarReallyOpen ? "space-y-6" : "space-y-1")}>
                       {[
                         {
                           category: 'Overview',
@@ -922,7 +923,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                 )}
 
                 {!isAdminPath && isSettingsMode && (
-                  <div className={cn("flex flex-col h-full", isSidebarReallyOpen ? "space-y-6" : "space-y-1")}>
+                  <div className={cn(isSidebarReallyOpen ? "space-y-6" : "space-y-1")}>
                     {isSidebarReallyOpen && (
                       <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-[0.2em] px-3 flex items-center gap-2">
                         <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse" />
@@ -930,7 +931,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
                       </div>
                     )}
 
-                    <div className={cn("overflow-y-auto custom-scrollbar flex-1", isSidebarReallyOpen ? "space-y-6" : "space-y-1")}>
+                    <div className={cn(isSidebarReallyOpen ? "space-y-6" : "space-y-1")}>
                       {filteredSettingsGroups.map((group) => {
                         const isGroupCollapsed = !settingsSearchQuery && !!collapsedSections[`settings_${group.category}`];
                         return (

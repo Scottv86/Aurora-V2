@@ -125,6 +125,15 @@ const SETTINGS_ITEMS: SettingItem[] = [
     tags: ['queries', 'sql', 'datasets', 'views', 'builder', 'analytics', 'data']
   },
   {
+    id: 'searches-library',
+    label: 'Searches',
+    description: 'Design and deploy self-service cross-module searches with dynamic filters for business users.',
+    icon: 'Search',
+    to: '/workspace/settings/platform-modules/searches-library',
+    category: 'Build & Customize',
+    tags: ['searches', 'filter', 'views', 'explorer', 'cross-module', 'builder', 'data']
+  },
+  {
     id: 'kpi-management',
     label: 'Metrics',
     description: 'Define semantic calculation formulas, targets, and alert thresholds.',
