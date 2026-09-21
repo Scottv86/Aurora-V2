@@ -12,6 +12,9 @@ export type SolutionArtifactType =
   | 'INTEGRATION' 
   | 'REPORT' 
   | 'METRIC'
+  | 'KPI'
+  | 'BRAND'
+  | 'SEARCH'
   | 'CONTENT'
   | 'TEMPLATE' 
   | 'GLOBAL_LIST' 
@@ -80,6 +83,8 @@ export interface SolutionBlueprint {
   workflowsCount: number;
   formsCount: number;
   metricsCount?: number;
+  brandsCount?: number;
+  searchesCount?: number;
   contentCount?: number;
   agentsCount?: number;
   artifactsCount?: number;

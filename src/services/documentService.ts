@@ -1,4 +1,5 @@
 import { DocumentTemplate, GeneratedDocument } from '../types/platform';
+import { queryTemplateCatalog } from './templateService';
 
 const STORAGE_KEY_TEMPLATES = 'aurora_document_templates_v2';
 const STORAGE_KEY_DOCUMENTS = 'aurora_generated_documents_v1';
@@ -176,11 +177,42 @@ function saveStoredDocuments(documents: GeneratedDocument[]) {
   }
 }
 
+export function getDocumentTemplates(): DocumentTemplate[] {
+  return getStoredTemplates();
+}
+
 export const DocumentService = {
   async getTemplates(tenantId?: string, moduleId?: string) {
     console.log(`[DocumentService] Fetching templates for tenant ${tenantId}, module ${moduleId}`);
-    const all = getStoredTemplates();
-    return all.filter(t => {
+    let dbTemplates: DocumentTemplate[] = [];
+    try {
+      const res = await queryTemplateCatalog({ builderType: 'DOCUMENT', includePayload: true }, undefined, tenantId);
+      if (res.templates && res.templates.length > 0) {
+        dbTemplates = res.templates.map((t: any) => {
+          const payload = (t.payload || t.schemaPayload || {}) as any;
+          return {
+            id: t.slug.replace(/^doc-/, ''),
+            tenantId: t.tenantId || 'default',
+            name: t.name,
+            type: (payload.type as any) || 'letter',
+            description: t.description,
+            status: 'Published' as const,
+            version: t.version || 1,
+            metadata: payload.metadata || {},
+            content: payload.content || '',
+            createdAt: t.createdAt,
+            updatedAt: t.updatedAt,
+            createdBy: 'system'
+          };
+        });
+      }
+    } catch (err) {
+      console.warn('[DocumentService] Failed to load DB templates, falling back to local:', err);
+    }
+
+    const localStored = getStoredTemplates();
+    const combined = [...dbTemplates, ...localStored.filter(l => !dbTemplates.some(d => d.id === l.id))];
+    return combined.filter(t => {
       const matchesTenant = !tenantId || !t.tenantId || t.tenantId === tenantId || t.tenantId === 'default';
       const matchesModule = !moduleId || !t.moduleId || t.moduleId === moduleId;
       return matchesTenant && matchesModule;
@@ -190,7 +222,7 @@ export const DocumentService = {
   async getTemplatesByType(tenantId?: string, type?: DocumentTemplate['type'], moduleId?: string) {
     const all = await this.getTemplates(tenantId, moduleId);
     if (!type) return all;
-    return all.filter(t => (t.type || 'letter') === type);
+    return all.filter((t: DocumentTemplate) => (t.type || 'letter') === type);
   },
 
   async saveTemplate(tenantId: string, template: Partial<DocumentTemplate>) {

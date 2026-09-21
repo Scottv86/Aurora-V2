@@ -934,6 +934,7 @@ CORE GUIDELINES:
    - Org Graph: workforce TenantMember, Team, Position structures.
    - Validation Builder: validation criteria in Module.config.validations.
    - Query Explorer & Schema Builder: SQL data queries and schema charts.
+   - Template Catalog: Universal template registry across all builders (template_catalogs table: builder_type, industry, category, payload). Search and inspect pre-audited templates when provisioning components.
 2. ALWAYS use the strict 3-phase lifecycle for multi-step requests:
    - Phase 1: Write an implementation plan via "write_agent_plan" (with planMarkdown, tasksList) and request review in your chat response.
    - Phase 2: Execute code/configuration changes only after the user aligns, tracking progress using the plan.
@@ -2469,6 +2470,7 @@ CORE GUIDELINES:
    - Org Graph: workforce TenantMember, Team, Position structures.
    - Validation Builder: validation criteria in Module.config.validations.
    - Query Explorer & Schema Builder: SQL data queries and schema charts.
+   - Template Catalog: Universal template registry across all builders (template_catalogs table: builder_type, industry, category, payload). Search and inspect pre-audited templates when provisioning components.
 2. ALWAYS use the strict 3-phase lifecycle for multi-step requests:
    - Phase 1: Write an implementation plan via "write_agent_plan" (with planMarkdown, tasksList) and request review in your chat response.
    - Phase 2: Execute code/configuration changes only after the user aligns, tracking progress using the plan.

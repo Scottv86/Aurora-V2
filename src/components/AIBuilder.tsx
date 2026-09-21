@@ -9,7 +9,9 @@ import {
   Workflow,
   Layers,
   Zap,
-  ChevronRight
+  ChevronRight,
+  Palette,
+  Search
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -140,6 +142,47 @@ export const AIBuilder = () => {
       });
 
       await Promise.all(promises);
+
+      // Deploy brand kits if defined
+      if (result.brands && result.brands.length > 0) {
+        for (const b of result.brands) {
+          try {
+            await fetch('http://localhost:3001/api/brand-kits', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'x-tenant-id': tenant.id
+              },
+              body: JSON.stringify(b)
+            });
+          } catch (err) {
+            console.warn("Failed to deploy brand kit", err);
+          }
+        }
+      }
+
+      // Deploy searches if defined
+      if (result.searches && result.searches.length > 0) {
+        for (const s of result.searches) {
+          try {
+            await fetch('http://localhost:3001/api/searches', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'x-tenant-id': tenant.id
+              },
+              body: JSON.stringify({
+                ...s,
+                isSearchEnabled: true
+              })
+            });
+          } catch (err) {
+            console.warn("Failed to deploy search", err);
+          }
+        }
+      }
 
       toast.success("Solution architected and deployed successfully!");
       setStep(3);
@@ -352,6 +395,65 @@ export const AIBuilder = () => {
                       ))}
                     </div>
                   </div>
+
+                  {result?.brands && result.brands.length > 0 && (
+                    <div className="space-y-4">
+                      <h4 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2">
+                        <Palette size={14} />
+                        Brand Identity
+                      </h4>
+                      <div className="space-y-3">
+                        {result.brands.map((b: any, i: number) => (
+                          <div key={i} className="p-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-bold text-zinc-900 dark:text-white">{b.name}</p>
+                              {b.voiceAndTone?.tone && (
+                                <span className="text-[10px] px-2 py-0.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-full font-medium">
+                                  {b.voiceAndTone.tone}
+                                </span>
+                              )}
+                            </div>
+                            {b.colors && (
+                              <div className="flex items-center gap-1.5 pt-1">
+                                {Object.entries(b.colors).slice(0, 5).map(([key, val]: [string, any]) => (
+                                  <div 
+                                    key={key} 
+                                    className="w-5 h-5 rounded-full border border-black/10 dark:border-white/10 shadow-xs" 
+                                    style={{ backgroundColor: typeof val === 'string' ? val : undefined }}
+                                    title={`${key}: ${val}`}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {result?.searches && result.searches.length > 0 && (
+                    <div className="space-y-4">
+                      <h4 className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2">
+                        <Search size={14} />
+                        Federated Searches
+                      </h4>
+                      <div className="space-y-3">
+                        {result.searches.map((s: any, i: number) => (
+                          <div key={i} className="p-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-xl space-y-1.5">
+                            <p className="text-sm font-bold text-zinc-900 dark:text-white">{s.name}</p>
+                            {s.description && (
+                              <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">{s.description}</p>
+                            )}
+                            <div className="flex items-center gap-2 pt-1">
+                              <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">
+                                {s.scopeType || 'MULTI_MODULE'}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

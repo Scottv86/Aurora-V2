@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import { AgentBlueprint } from '../../types/agent';
 import { DEFAULT_AGENT_TOOLS } from '../../services/agentBuilderService';
+import { usePlatform } from '../../hooks/usePlatform';
+import { queryTemplateCatalog, getTemplateById, getCachedTemplateCatalog } from '../../services/templateService';
 
 export interface NewAgentModalProps {
   isOpen: boolean;
@@ -158,20 +160,78 @@ export const NewAgentModal: React.FC<NewAgentModalProps> = ({
   onSelectBlank,
   onSelectTemplate
 }) => {
+  const { tenant } = usePlatform();
   const [view, setView] = useState<'choices' | 'templates'>('choices');
   const [searchQuery, setSearchQuery] = useState('');
+  const [templates, setTemplates] = useState<AgentBlueprint[]>(() => {
+    const cached = getCachedTemplateCatalog({ builderType: 'AGENT', includePayload: true }, tenant?.id);
+    if (cached?.templates && cached.templates.length > 0) {
+      return cached.templates.map((t: any) => {
+        const payload = (t.payload || t.schemaPayload) || {};
+        return {
+          id: t.id,
+          name: t.name,
+          roleTitle: t.category || payload.roleTitle || 'Specialist',
+          description: t.description,
+          status: 'ACTIVE' as const,
+          version: t.version || 'v1.0.0',
+          updatedAt: new Date().toISOString(),
+          modelConfig: payload.modelConfig || { model: 'gemini-2.5-flash', temperature: 0.2 },
+          systemInstructions: payload.systemInstructions || `You are ${t.name}.`,
+          tools: payload.tools || [],
+          guardrails: payload.guardrails || {},
+          fewShotExamples: payload.fewShotExamples || [],
+          knowledgeSources: payload.knowledgeSources || [],
+          workforceMapping: payload.workforceMapping || { teamName: 'Operations', isAutonomous: true }
+        };
+      });
+    }
+    return TEMPLATE_AGENTS;
+  });
 
   React.useEffect(() => {
     if (isOpen) {
       setView('choices');
       setSearchQuery('');
-    }
-  }, [isOpen]);
 
-  const filteredTemplates = TEMPLATE_AGENTS.filter(t =>
+      queryTemplateCatalog({ builderType: 'AGENT', includePayload: true }, undefined, tenant?.id)
+        .then(async (res) => {
+          if (res.templates && res.templates.length > 0) {
+            const loaded: AgentBlueprint[] = await Promise.all(
+              res.templates.map(async (t) => {
+                const full = await getTemplateById(t.id, undefined, tenant?.id);
+                const payload = (full?.payload as any) || {};
+                return {
+                  id: t.id,
+                  name: t.name,
+                  roleTitle: t.category || payload.roleTitle || 'Specialist',
+                  description: t.description,
+                  status: 'ACTIVE' as const,
+                  version: t.version || 'v1.0.0',
+                  updatedAt: new Date().toISOString(),
+                  modelConfig: payload.modelConfig || { model: 'gemini-2.5-flash', temperature: 0.2 },
+                  systemInstructions: payload.systemInstructions || `You are ${t.name}.`,
+                  tools: payload.tools || [],
+                  guardrails: payload.guardrails || {},
+                  fewShotExamples: payload.fewShotExamples || [],
+                  knowledgeSources: payload.knowledgeSources || [],
+                  workforceMapping: payload.workforceMapping || { teamName: 'Operations', isAutonomous: true }
+                };
+              })
+            );
+            setTemplates(loaded);
+          }
+        })
+        .catch((err) => {
+          console.warn('[NewAgentModal] Failed to load remote agent templates, using local fallback:', err);
+        });
+    }
+  }, [isOpen, tenant?.id]);
+
+  const filteredTemplates = templates.filter(t =>
     t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     t.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.roleTitle.toLowerCase().includes(searchQuery.toLowerCase())
+    (t.roleTitle || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const modalNode = (

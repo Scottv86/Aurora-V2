@@ -25,6 +25,7 @@ import { DeleteConfirmationModal } from '../../../components/Common/DeleteConfir
 import { UnsavedChangesModal } from '../../../components/Common/UnsavedChangesModal';
 import { API_BASE_URL } from '../../../config';
 import { builderCache } from '../../../utils/builderCache';
+import { queryTemplateCatalog, getTemplateById, getCachedTemplateCatalog } from '../../../services/templateService';
 
 
 
@@ -97,7 +98,7 @@ export interface Report {
 }
 
 // Templates Definitions
-const REPORT_TEMPLATES = [
+export const REPORT_TEMPLATES = [
   {
     id: 'case_backlog',
     name: 'Case Backlog & SLA Performance',
@@ -501,7 +502,7 @@ export const ReportManagementSettings: React.FC = () => {
       setView('BUILDER');
       setIsBuilderFullscreen(true);
     } else {
-setView('LIST');
+      setView('LIST');
       setIsBuilderFullscreen(false);
     }
   }, [location.search, setIsBuilderFullscreen]);
@@ -516,6 +517,54 @@ setView('LIST');
   const [showCreatorModal, setShowCreatorModal] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [generatingAI, setGeneratingAI] = useState(false);
+  const [dbReportTemplates, setDbReportTemplates] = useState<any[]>(() => {
+    const cached = getCachedTemplateCatalog({ builderType: 'REPORT', includePayload: true }, tenant?.id);
+    if (cached?.templates && cached.templates.length > 0) {
+      return cached.templates.map((t: any) => {
+        const payload = (t.payload || t.schemaPayload || {}) as any;
+        return {
+          id: t.slug.replace(/^rep-/, ''),
+          slug: t.slug,
+          name: t.name,
+          description: t.description,
+          config: payload.config || payload
+        };
+      });
+    }
+    return [];
+  });
+
+  // Load report templates dynamically from database
+  useEffect(() => {
+    let isMounted = true;
+    const fetchTemplates = async () => {
+      try {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const res = await queryTemplateCatalog({ builderType: 'REPORT', includePayload: true }, token, tenant?.id);
+        if (isMounted && res.templates && res.templates.length > 0) {
+          const mapped = res.templates.map((t: any) => {
+            const payload = (t.payload || t.schemaPayload || {}) as any;
+            return {
+              id: t.slug.replace(/^rep-/, ''),
+              slug: t.slug,
+              name: t.name,
+              description: t.description,
+              config: payload.config || payload
+            };
+          });
+          setDbReportTemplates(mapped);
+        }
+      } catch (err) {
+        console.error('Failed to load report templates from DB catalog:', err);
+      }
+    };
+    fetchTemplates();
+    return () => {
+      isMounted = false;
+    };
+  }, [session?.access_token, tenant?.id]);
+
+  const activeReportTemplates = dbReportTemplates.length > 0 ? dbReportTemplates : REPORT_TEMPLATES;
 
   // Builder States
   const [currentReport, setCurrentReport] = useState<Report | null>(null);
@@ -649,74 +698,63 @@ setView('LIST');
     });
   }, [reports, activeTab, searchQuery]);
 
-  // Create report handlers
-  const handleCreateBlank = async () => {
+  // Create report handlers (Draft-first: populate editor state without saving until user hits Save)
+  const handleCreateBlank = () => {
     if (!tenant?.id) return;
-    try {
-      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-      const res = await fetch(`${API_BASE_URL}/api/reports`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'x-tenant-id': tenant.id
-        },
-        body: JSON.stringify({
-          name: 'Untitled Report',
-          description: 'Custom report built from scratch.',
-          status: 'Draft',
-          config: {
-            dataSource: { type: 'local', tables: ['records'] },
-            widgets: []
-          },
-          createdBy: user?.email || 'Admin'
-        })
-      });
-      if (!res.ok) throw new Error('Failed to create report');
-      const newReport = await res.json();
-      setReports(prev => [newReport, ...prev]);
-      setCurrentReport(newReport);
-      setSelectedWidgetId(null);
-      setIsPreview(false);
-      navigate('?mode=builder');
-      setShowCreatorModal(false);
-      toast.success('Blank report created!');
-    } catch (err: any) {
-      toast.error(err.message || 'Error creating report');
-    }
+    const draftReport: Report = {
+      id: `draft_${Date.now()}`,
+      tenantId: tenant.id,
+      name: 'Untitled Report',
+      description: 'Custom report built from scratch.',
+      status: 'Draft',
+      config: {
+        dataSource: { type: 'local', tables: ['records'] },
+        widgets: []
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      createdBy: user?.email || 'Admin'
+    };
+    setCurrentReport(draftReport);
+    setSelectedWidgetId(null);
+    setIsPreview(false);
+    setIsReportDirty(true);
+    navigate('?mode=builder');
+    setShowCreatorModal(false);
+    toast.success('Blank report draft created!');
   };
 
-  const handleCreateTemplate = async (template: typeof REPORT_TEMPLATES[0]) => {
+  const handleCreateTemplate = async (template: { id?: string; slug?: string; name: string; description: string; config: any }) => {
     if (!tenant?.id) return;
-    try {
-      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-      const res = await fetch(`${API_BASE_URL}/api/reports`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'x-tenant-id': tenant.id
-        },
-        body: JSON.stringify({
-          name: template.name,
-          description: template.description,
-          status: 'Draft',
-          config: template.config,
-          createdBy: user?.email || 'Admin'
-        })
-      });
-      if (!res.ok) throw new Error('Failed to create template report');
-      const newReport = await res.json();
-      setReports(prev => [newReport, ...prev]);
-      setCurrentReport(newReport);
-      setSelectedWidgetId(null);
-      setIsPreview(false);
-      navigate('?mode=builder');
-      setShowCreatorModal(false);
-      toast.success(`Report created from template: ${template.name}`);
-    } catch (err: any) {
-      toast.error(err.message || 'Error creating report from template');
+    let config = template.config;
+    if (!config || !config.widgets || config.widgets.length === 0) {
+      const templateId = template.slug || template.id;
+      if (templateId) {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const full = await getTemplateById(templateId, token, tenant?.id);
+        if (full?.payload) {
+          config = full.payload.config || full.payload;
+        }
+      }
     }
+    const draftReport: Report = {
+      id: `draft_${Date.now()}`,
+      tenantId: tenant.id,
+      name: template.name,
+      description: template.description || 'Report built from template.',
+      status: 'Draft',
+      config: config || { dataSource: { type: 'local', tables: ['records'] }, widgets: [] },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      createdBy: user?.email || 'Admin'
+    };
+    setCurrentReport(draftReport);
+    setSelectedWidgetId(null);
+    setIsPreview(false);
+    setIsReportDirty(true);
+    navigate('?mode=builder');
+    setShowCreatorModal(false);
+    toast.success(`Loaded "${template.name}" template into editor draft`);
   };
 
   const handleCreateAI = async (customPrompt?: string) => {
@@ -725,8 +763,6 @@ setView('LIST');
     setGeneratingAI(true);
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-      
-      // 1. Ask server to generate using Gemini
       const aiResponse = await fetch(`${API_BASE_URL}/api/reports/ai-builder`, {
         method: 'POST',
         headers: {
@@ -737,35 +773,27 @@ setView('LIST');
         body: JSON.stringify({ prompt: promptToUse })
       });
       if (!aiResponse.ok) throw new Error('AI builder failed to generate report');
-      
       const aiResult = await aiResponse.json();
-      
-      // 2. Save generated report to DB
-      const res = await fetch(`${API_BASE_URL}/api/reports`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'x-tenant-id': tenant.id
-        },
-        body: JSON.stringify({
-          name: aiResult.name || 'AI Generated Report',
-          description: aiResult.description || 'Report automatically drafted by AI.',
-          status: 'Draft',
-          config: aiResult.config,
-          createdBy: 'Aurora AI Builder'
-        })
-      });
-      if (!res.ok) throw new Error('Failed to save AI report');
-      const newReport = await res.json();
-      setReports(prev => [newReport, ...prev]);
-      setCurrentReport(newReport);
+
+      const draftReport: Report = {
+        id: `draft_${Date.now()}`,
+        tenantId: tenant.id,
+        name: aiResult.name || 'AI Generated Report',
+        description: aiResult.description || 'Report automatically drafted by AI.',
+        status: 'Draft',
+        config: aiResult.config || { dataSource: { type: 'local', tables: ['records'] }, widgets: [] },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdBy: user?.email || 'Aurora AI'
+      };
+      setCurrentReport(draftReport);
       setSelectedWidgetId(null);
       setIsPreview(false);
+      setIsReportDirty(true);
       navigate('?mode=builder');
       setShowCreatorModal(false);
       setAiPrompt('');
-      toast.success('AI Report built and loaded!');
+      toast.success('AI Report generated into editor draft!');
     } catch (err: any) {
       toast.error(err.message || 'Error generating AI report');
     } finally {
@@ -815,8 +843,13 @@ setView('LIST');
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       const updatedStatus = statusOverride || currentReport.status;
-      const res = await fetch(`${API_BASE_URL}/api/reports/${currentReport.id}`, {
-        method: 'PUT',
+      const isNew = !currentReport.id || currentReport.id.startsWith('draft_') || currentReport.id === 'new';
+
+      const url = isNew ? `${API_BASE_URL}/api/reports` : `${API_BASE_URL}/api/reports/${currentReport.id}`;
+      const method = isNew ? 'POST' : 'PUT';
+
+      const res = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
@@ -826,15 +859,19 @@ setView('LIST');
           name: currentReport.name,
           description: currentReport.description,
           config: currentReport.config,
-          status: updatedStatus
+          status: updatedStatus,
+          createdBy: currentReport.createdBy || user?.email || 'Admin'
         })
       });
       if (!res.ok) throw new Error('Failed to save report');
-      const updatedReport = await res.json();
-      setCurrentReport(updatedReport);
+      const savedReport = await res.json();
+      setCurrentReport(savedReport);
       setIsReportDirty(false);
-      // Update reports list state
-      setReports(prev => prev.map(r => r.id === updatedReport.id ? updatedReport : r));
+      if (isNew) {
+        setReports(prev => [savedReport, ...prev.filter(r => r.id !== currentReport.id)]);
+      } else {
+        setReports(prev => prev.map(r => r.id === savedReport.id ? savedReport : r));
+      }
       toast.success(statusOverride ? `Report published!` : 'Report draft saved successfully.');
     } catch (err: any) {
       toast.error(err.message || 'Failed to save report changes');
@@ -1664,7 +1701,7 @@ setView('LIST');
             onGenerateAI={(prompt) => {
               handleCreateAI(prompt);
             }}
-            templates={REPORT_TEMPLATES}
+            templates={activeReportTemplates}
             generatingAI={generatingAI}
           />
 

@@ -29,7 +29,13 @@ import {
   Key,
   Target,
   TrendingUp,
-  Mail
+  Mail,
+  Palette,
+  Search,
+  SlidersHorizontal,
+  Filter,
+  Code,
+  Type
 } from 'lucide-react';
 import { SolutionArtifact, SavedNote } from '../../../types/solutions';
 import { DrivePickerModal } from '../../Drive/DrivePickerModal';
@@ -169,6 +175,12 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
       case 'AGENT':
         navigate('/workspace/settings/platform-modules/agents-library');
         break;
+      case 'BRAND':
+        navigate('/workspace/settings/brand-builder');
+        break;
+      case 'SEARCH':
+        navigate('/workspace/settings/platform-modules/searches-library');
+        break;
       default:
         toast.info(`Opening ${activeArtifact.name} in dedicated builder...`);
         break;
@@ -178,6 +190,26 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
 
   const getArtifactTileTheme = (art: SolutionArtifact) => {
     switch (art.type) {
+      case 'BRAND':
+        return {
+          bg: 'bg-pink-500/10 dark:bg-pink-500/15',
+          border: 'border-pink-500/30 hover:border-pink-500/60',
+          text: 'text-pink-600 dark:text-pink-400',
+          badge: 'bg-pink-500/20 text-pink-500',
+          icon: Palette,
+          badgeLabel: 'BRAND KIT',
+          categoryLabel: 'Brand & Identity Design System'
+        };
+      case 'SEARCH':
+        return {
+          bg: 'bg-cyan-500/10 dark:bg-cyan-500/15',
+          border: 'border-cyan-500/30 hover:border-cyan-500/60',
+          text: 'text-cyan-600 dark:text-cyan-400',
+          badge: 'bg-cyan-500/20 text-cyan-500',
+          icon: Search,
+          badgeLabel: 'SAVED SEARCH',
+          categoryLabel: 'Federated Searches Studio'
+        };
       case 'AGENT':
         return {
           bg: 'bg-violet-500/10 dark:bg-violet-500/15',
@@ -189,7 +221,7 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
           categoryLabel: 'Digital Coworker & Copilot'
         };
       case 'METRIC':
-      case 'KPI' as any:
+      case 'KPI':
         return {
           bg: 'bg-emerald-500/10 dark:bg-emerald-500/15',
           border: 'border-emerald-500/30 hover:border-emerald-500/60',
@@ -359,6 +391,421 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
     if (!art) return null;
 
     switch (art.type) {
+      case 'BRAND': {
+        /* BRAND KIT & DESIGN SYSTEM PREVIEW */
+        const brand = art.content || {};
+        const colors = brand.colors || {
+          primary: '#4f46e5',
+          secondary: '#0f172a',
+          accent: '#f59e0b',
+          background: '#f8fafc',
+          surface: '#ffffff',
+          text: '#0f172a',
+          muted: '#64748b',
+          border: '#e2e8f0',
+          chartPalette: ['#4f46e5', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
+        };
+        const typography = brand.typography || {
+          headingFont: 'Inter, sans-serif',
+          bodyFont: 'Inter, sans-serif',
+          monoFont: 'JetBrains Mono, monospace',
+          fontSizeScale: 'medium'
+        };
+        const styling = brand.styling || {
+          borderRadius: '16px',
+          buttonStyle: 'rounded',
+          elevation: 'subtle',
+          headerLayout: 'top_right',
+          navLinkStyle: 'pill'
+        };
+        const voiceAndTone = brand.voiceAndTone || {
+          tone: 'Professional & Authoritative',
+          tagline: 'Operational Excellence & Trust',
+          boilerplate: 'Official enterprise platform portal powered by Aurora.',
+          audiencePersona: 'Public citizens, enterprise reviewers, and operations stakeholders'
+        };
+        const emailDefaults = brand.emailDefaults || {
+          signatureTemplate: 'Official Administration Team | Aurora Platform',
+          disclaimer: 'This electronic transmission is intended solely for official communications.'
+        };
+
+        const colorList = [
+          { key: 'Primary', value: colors.primary, desc: 'Brand accent & actions' },
+          { key: 'Secondary', value: colors.secondary, desc: 'Headers & strong elements' },
+          { key: 'Accent', value: colors.accent, desc: 'Highlights & alerts' },
+          { key: 'Background', value: colors.background, desc: 'Page backdrop' },
+          { key: 'Surface', value: colors.surface, desc: 'Cards & containers' },
+          { key: 'Text', value: colors.text, desc: 'Primary typography' },
+          { key: 'Muted', value: colors.muted, desc: 'Subtext & captions' },
+          { key: 'Border', value: colors.border, desc: 'Dividers & strokes' }
+        ];
+
+        return (
+          <div className={`bg-white/90 dark:bg-zinc-900/90 border border-pink-500/30 rounded-3xl p-6 shadow-2xl space-y-6 ${isFullscreen ? 'max-w-6xl mx-auto' : ''}`}>
+            {/* Header Banner */}
+            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4">
+              <div className="flex items-center gap-3.5">
+                <div className="p-3.5 rounded-2xl bg-gradient-to-br from-pink-500/20 to-rose-500/20 text-pink-500 border border-pink-500/30 shadow-inner">
+                  <Palette size={24} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-black text-zinc-900 dark:text-white flex items-center gap-2">
+                      <span>{art.name}</span>
+                    </h3>
+                    <span className="px-2.5 py-0.5 text-[10px] font-black uppercase rounded-full bg-pink-500/10 text-pink-500 border border-pink-500/20">
+                      {brand.slug || 'brand-kit'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-500 font-medium mt-0.5">
+                    {art.description || 'Corporate visual identity system, color tokens, typography scales, and UI styling'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleOpenDedicatedBuilder}
+                  className="px-3.5 py-1.5 rounded-xl bg-pink-600 hover:bg-pink-700 text-white font-bold text-xs shadow-md shadow-pink-500/20 transition-all flex items-center gap-1.5 cursor-pointer"
+                  title="Open in Brand Builder"
+                >
+                  <Palette size={14} />
+                  <span>Open in Brand Builder</span>
+                  <ArrowRight size={13} />
+                </button>
+
+                <button
+                  onClick={() => {
+                    const jsonStr = JSON.stringify(brand, null, 2);
+                    navigator.clipboard.writeText(jsonStr);
+                    toast.success('Brand tokens JSON copied to clipboard!');
+                  }}
+                  className="p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
+                  title="Copy Brand JSON"
+                >
+                  <Copy size={14} />
+                </button>
+              </div>
+            </div>
+
+            {/* Color Palette Swatches */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-black uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                <Palette size={13} className="text-pink-500" />
+                <span>Color Tokens &amp; Theme Palette</span>
+              </h4>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                {colorList.map((c, idx) => (
+                  <div key={idx} className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 flex items-center gap-3 shadow-xs">
+                    <div
+                      className="w-8 h-8 rounded-xl border border-black/10 dark:border-white/10 shadow-sm shrink-0"
+                      style={{ backgroundColor: c.value }}
+                    />
+                    <div className="min-w-0">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[11px] font-bold text-zinc-900 dark:text-white">{c.key}</span>
+                        <span className="text-[9px] font-mono font-bold text-zinc-400">{c.value}</span>
+                      </div>
+                      <p className="text-[9.5px] text-zinc-500 truncate mt-0.5">{c.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Data Visualization Chart Ribbon */}
+              {Array.isArray(colors.chartPalette) && colors.chartPalette.length > 0 && (
+                <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 flex items-center justify-between gap-3">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400 shrink-0">Chart Data Palette:</span>
+                  <div className="flex items-center gap-1.5 flex-1 overflow-x-auto py-0.5">
+                    {colors.chartPalette.map((hex: string, idx: number) => (
+                      <div
+                        key={idx}
+                        className="h-6 flex-1 min-w-[32px] rounded-lg shadow-xs flex items-center justify-center text-[8.5px] font-mono font-black text-white/90"
+                        style={{ backgroundColor: hex }}
+                        title={hex}
+                      >
+                        {hex}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Typography & UI Styling Showcase */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Typography Preview */}
+              <div className="p-5 bg-zinc-50 dark:bg-zinc-950 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                    <Type size={13} className="text-indigo-500" />
+                    <span>Typography Hierarchy</span>
+                  </h4>
+                  <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+                    Scale: {typography.fontSizeScale || 'medium'}
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="pb-2 border-b border-zinc-200/60 dark:border-zinc-800/60">
+                    <span className="text-[10px] font-bold text-zinc-400 font-mono">Headings • {typography.headingFont}</span>
+                    <h3 className="text-lg font-black text-zinc-900 dark:text-white tracking-tight mt-0.5" style={{ fontFamily: typography.headingFont }}>
+                      {voiceAndTone.tagline || 'Excellence in Enterprise Solutions'}
+                    </h3>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-zinc-400 font-mono">Body • {typography.bodyFont}</span>
+                    <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed font-medium mt-0.5" style={{ fontFamily: typography.bodyFont }}>
+                      {voiceAndTone.boilerplate || 'Empowering multi-module operational continuity and rapid system deployment across enterprise tenant domains.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* UI Component Styling Preview */}
+              <div className="p-5 bg-zinc-50 dark:bg-zinc-950 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                    <SlidersHorizontal size={13} className="text-pink-500" />
+                    <span>UI Styling &amp; Controls</span>
+                  </h4>
+                  <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-pink-500/10 text-pink-500 border border-pink-500/20">
+                    Radius: {styling.borderRadius || '16px'}
+                  </span>
+                </div>
+
+                <div className="space-y-3 pt-1">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      style={{
+                        backgroundColor: colors.primary,
+                        borderRadius: styling.buttonStyle === 'pill' ? '9999px' : styling.borderRadius || '16px'
+                      }}
+                      className="px-4 py-2 text-white font-bold text-xs shadow-md cursor-pointer hover:opacity-95 transition-opacity"
+                    >
+                      Primary Action Button
+                    </button>
+                    <button
+                      type="button"
+                      style={{
+                        borderColor: colors.border,
+                        borderRadius: styling.buttonStyle === 'pill' ? '9999px' : styling.borderRadius || '16px'
+                      }}
+                      className="px-4 py-2 border bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 font-bold text-xs shadow-xs"
+                    >
+                      Secondary Control
+                    </button>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800 flex items-center justify-between text-xs">
+                    <span className="font-bold text-zinc-700 dark:text-zinc-300">Tone &amp; Demeanor:</span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 font-bold text-[10px]">
+                      {voiceAndTone.tone || 'Professional & Reassuring'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Voice, Persona & Email Defaults */}
+            <div className="p-4 bg-gradient-to-r from-pink-500/10 via-purple-500/5 to-indigo-500/10 rounded-2xl border border-pink-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <span className="text-[10px] font-black uppercase tracking-wider text-pink-600 dark:text-pink-400">Official Notice Signature &amp; Footer</span>
+                <p className="text-xs font-bold text-zinc-900 dark:text-white">
+                  {emailDefaults.signatureTemplate || 'Official Registry Team • Powered by Aurora Platform'}
+                </p>
+                <p className="text-[10.5px] text-zinc-500 font-medium">
+                  {emailDefaults.disclaimer || 'Confidential and official enterprise transmission.'}
+                </p>
+              </div>
+
+              <span className="px-3 py-1 rounded-xl bg-white dark:bg-zinc-900 border border-pink-500/30 text-pink-600 dark:text-pink-400 text-xs font-black shadow-xs shrink-0">
+                DEFAULT BRAND KIT
+              </span>
+            </div>
+          </div>
+        );
+      }
+
+      case 'SEARCH': {
+        /* FEDERATED SAVED SEARCH & DISCOVERY PREVIEW */
+        const search = art.content || {};
+        const searchConfig = search.searchConfig || {
+          defaultLayout: 'table',
+          pageSize: 15,
+          allowExport: true,
+          exposedControls: [
+            { id: 'c1', parameterName: 'keyword', fieldKey: 'title', label: 'Keyword Search', controlType: 'text', placeholder: 'Filter by title, reference, or description...' },
+            { id: 'c2', parameterName: 'status', fieldKey: 'status', label: 'Status Filter', controlType: 'status' },
+            { id: 'c3', parameterName: 'dateRange', fieldKey: 'created_at', label: 'Date Window', controlType: 'date_preset' }
+          ]
+        };
+        const exposedControls = Array.isArray(searchConfig.exposedControls) ? searchConfig.exposedControls : [];
+        const columns = Array.isArray(search.columnsConfig) && search.columnsConfig.length > 0
+          ? search.columnsConfig
+          : [
+              { key: 'title', label: 'Record Title / Subject', visible: true, sortable: true },
+              { key: 'status', label: 'Status', visible: true, sortable: true },
+              { key: 'module_name', label: 'Module', visible: true, sortable: false },
+              { key: 'assignee_id', label: 'Assignee', visible: true, sortable: false },
+              { key: 'created_at', label: 'Created Date', visible: true, sortable: true }
+            ];
+
+        return (
+          <div className={`bg-white/90 dark:bg-zinc-900/90 border border-cyan-500/30 rounded-3xl p-6 shadow-2xl space-y-5 ${isFullscreen ? 'max-w-6xl mx-auto' : ''}`}>
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4">
+              <div className="flex items-center gap-3.5">
+                <div className="p-3.5 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-teal-500/20 text-cyan-500 border border-cyan-500/30 shadow-inner">
+                  <Search size={24} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-black text-zinc-900 dark:text-white flex items-center gap-2">
+                      <span>{art.name}</span>
+                    </h3>
+                    <span className="px-2.5 py-0.5 text-[10px] font-black uppercase rounded-full bg-cyan-500/10 text-cyan-500 border border-cyan-500/20">
+                      {search.scopeType || 'MULTI_MODULE'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-500 font-medium mt-0.5">
+                    {art.description || 'Federated cross-module search definition with parameterized filter controls and result schemas'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleOpenDedicatedBuilder}
+                  className="px-3.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-xs shadow-md shadow-cyan-500/20 transition-all flex items-center gap-1.5 cursor-pointer"
+                  title="Open in Searches Studio"
+                >
+                  <Search size={14} />
+                  <span>Open in Searches Studio</span>
+                  <ArrowRight size={13} />
+                </button>
+
+                <button
+                  onClick={() => {
+                    const sqlStr = search.sql || 'SELECT * FROM records;';
+                    navigator.clipboard.writeText(sqlStr);
+                    toast.success('Search SQL copied to clipboard!');
+                  }}
+                  className="p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
+                  title="Copy Search SQL"
+                >
+                  <Code size={14} />
+                </button>
+              </div>
+            </div>
+
+            {/* Interactive Search Controls Bar Mockup */}
+            <div className="p-4 bg-zinc-50 dark:bg-zinc-950 rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                  <Filter size={12} className="text-cyan-500" />
+                  <span>Live Search &amp; Filter Controls ({exposedControls.length} Active Controls)</span>
+                </span>
+                <span className="text-[10px] text-cyan-500 font-bold">Instant Search Enabled</span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5">
+                <div className="relative flex-1 min-w-[220px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                  <input
+                    type="text"
+                    readOnly
+                    value=""
+                    placeholder={exposedControls[0]?.placeholder || 'Search by record key, title, or keywords...'}
+                    className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl py-2 pl-9 pr-3 text-xs text-zinc-800 dark:text-zinc-200"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs font-semibold text-zinc-700 dark:text-zinc-300 flex items-center gap-2">
+                    <span className="text-zinc-400">Status:</span>
+                    <span className="text-cyan-500 font-bold">All Statuses</span>
+                    <ChevronDown size={13} className="text-zinc-400" />
+                  </div>
+
+                  <div className="px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs font-semibold text-zinc-700 dark:text-zinc-300 flex items-center gap-2">
+                    <span className="text-zinc-400">Date:</span>
+                    <span>Last 30 Days</span>
+                    <ChevronDown size={13} className="text-zinc-400" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Results Grid Data Table Mockup */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-black uppercase tracking-wider text-zinc-400">
+                  Query Projection Viewport ({searchConfig.defaultLayout || 'table'} layout)
+                </h4>
+                <div className="flex items-center gap-1.5 text-[10px] font-bold text-zinc-400">
+                  <span className="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800">Page Size: {searchConfig.pageSize || 15}</span>
+                  <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500">Export Allowed</span>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-2xl border border-zinc-200 dark:border-zinc-800">
+                <table className="w-full text-left text-xs font-sans">
+                  <thead className="bg-zinc-100 dark:bg-zinc-950 text-zinc-500 uppercase text-[10px] tracking-wider border-b border-zinc-200 dark:border-zinc-800">
+                    <tr>
+                      {columns.map((col: any, idx: number) => (
+                        <th key={idx} className="p-3 font-bold">
+                          {col.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800 text-zinc-800 dark:text-zinc-200">
+                    {[
+                      { title: 'Grant Intake Application #2026-081', status: 'Submitted', module: 'Intake Records', assignee: 'Jane Smith', date: '2026-09-20' },
+                      { title: 'Urgent Patient Case Escalation', status: 'In Review', module: 'Incident Triage', assignee: 'Alex Chen', date: '2026-09-19' },
+                      { title: 'Quarterly Compliance Verification', status: 'Approved', module: 'Audit Hub', assignee: 'Registrar Team', date: '2026-09-18' }
+                    ].map((row, rIdx) => (
+                      <tr key={rIdx} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
+                        <td className="p-3 font-bold text-zinc-900 dark:text-white">{row.title}</td>
+                        <td className="p-3">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            row.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-500' :
+                            row.status === 'In Review' ? 'bg-amber-500/10 text-amber-500' :
+                            'bg-cyan-500/10 text-cyan-500'
+                          }`}>
+                            {row.status}
+                          </span>
+                        </td>
+                        <td className="p-3 font-medium text-zinc-600 dark:text-zinc-400">{row.module}</td>
+                        <td className="p-3 font-medium text-zinc-600 dark:text-zinc-400">{row.assignee}</td>
+                        <td className="p-3 font-mono text-[10px] text-zinc-400">{row.date}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Compiled SQL Query Block */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                  <Code size={12} className="text-cyan-500" />
+                  <span>Compiled PostgreSQL Query</span>
+                </span>
+                <span className="text-[9.5px] font-mono text-zinc-400">Parameterized Execution</span>
+              </div>
+              <div className="p-4 bg-zinc-950 rounded-2xl border border-zinc-800 font-mono text-[11px] text-cyan-400 overflow-x-auto leading-relaxed shadow-inner">
+                {search.sql || 'SELECT r.id, r.module_id, m.name AS module_name, r.status, COALESCE(r.data->>\'title\', r.id) AS title, r.created_at FROM records r JOIN modules m ON m.id = r.module_id WHERE r.tenant_id = :tenantId AND r.status != \'archived\' ORDER BY r.created_at DESC;'}
+              </div>
+            </div>
+          </div>
+        );
+      }
+
       case 'AGENT':
         /* AUTONOMOUS AGENT BLUEPRINT PREVIEW */
         const agentContent = art.content || {};

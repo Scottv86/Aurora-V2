@@ -186,6 +186,36 @@ class SolutionArtifactRegistryManager {
       targetBuilderRoute: '/workspace/settings/platform-modules/agents-library',
       renderPreview: (_artifact) => null
     });
+
+    // 14. BRAND (Brand Builder & Corporate Identity)
+    this.registerPlugin({
+      type: 'BRAND',
+      label: 'Brand Kit & Design System',
+      description: 'Corporate visual identity, color palettes, typography scale, UI styling, and voice & tone guidelines',
+      iconName: 'Palette',
+      targetBuilderRoute: '/workspace/settings/brand-builder',
+      renderPreview: (_artifact) => null
+    });
+
+    // 15. SEARCH (Federated Saved Searches & Query Studio)
+    this.registerPlugin({
+      type: 'SEARCH',
+      label: 'Federated Saved Search & Discovery',
+      description: 'Multi-module & single-module parameterized search queries, exposed filter controls, and interactive result views',
+      iconName: 'Search',
+      targetBuilderRoute: '/workspace/settings/platform-modules/searches-library',
+      renderPreview: (_artifact) => null
+    });
+
+    // 16. KPI (Alias for METRIC)
+    this.registerPlugin({
+      type: 'KPI',
+      label: 'Semantic Business Metric / KPI',
+      description: 'Calculated metrics, aggregation formulas, target thresholds and trend indicators',
+      iconName: 'Target',
+      targetBuilderRoute: '/workspace/settings/platform-modules/kpi-management',
+      renderPreview: (_artifact) => null
+    });
   }
 }
 

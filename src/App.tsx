@@ -308,6 +308,7 @@ const App = () => {
                 <Route path="automations" element={<Navigate to="/workspace/settings/automations" replace />} />
                 <Route path="reports" element={<Navigate to="/workspace/settings/reports" replace />} />
                 <Route path="platform/entities" element={<Navigate to="/workspace/platform/people-organisations" replace />} />
+                <Route path="platform/entities/:id" element={<NavigateWithParams to="/workspace/platform/people-organisations/:id" replace />} />
                 <Route path="platform" element={<NavigateWithSearch to="/workspace/platform/people-organisations" replace />} />
                 <Route path="modules" element={<NavigateWithSearch to="/workspace/settings/modules" replace />} />
                 <Route path="pages" element={<NavigateWithSearch to="/workspace/settings/pages" replace />} />
@@ -315,8 +316,10 @@ const App = () => {
                 <Route path="testing" element={<Navigate to="/workspace/settings/testing" replace />} />
                 
                 {/* Platform Core Modules */}
-                <Route path="platform/people-organisations" element={<PeopleOrgSettings />} />
-                <Route path="platform/work-distribution" element={<IntakeSettingsPage />} />
+                <Route path="platform/people-organisations" element={<PeopleOrgDirectory />} />
+                <Route path="platform/people-organisations/:id" element={<PeopleOrgDetail />} />
+                <Route path="platform/work-distribution" element={<TriageInboxPage />} />
+                <Route path="platform/intake" element={<Navigate to="/workspace/platform/work-distribution" replace />} />
                 <Route path="platform/knowledge-base" element={<KnowledgeBaseSettings />} />
                 <Route path="platform/pricing-catalog" element={<PricingCatalogSettings />} />
                 <Route path="platform/inventory-manager" element={<InventoryManagerSettings />} />
@@ -350,8 +353,6 @@ const App = () => {
                 {/* Platform Operations */}
                 <Route path="my-work" element={<MyWorkRouteWrapper />} />
                 <Route path="queue" element={<Navigate to="/workspace/my-work" replace />} />
-                <Route path="platform/work-distribution" element={<TriageInboxPage />} />
-                <Route path="platform/intake" element={<Navigate to="/workspace/platform/work-distribution" replace />} />
                 
                 {/* Aurora Utility Apps */}
                 <Route path="apps/inbox" element={<InboxApp />} />

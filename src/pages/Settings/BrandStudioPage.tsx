@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Palette, 
@@ -77,9 +77,11 @@ const GOOGLE_FONTS = [
 export const BrandStudioPage: React.FC = () => {
   const { brandId } = useParams<{ brandId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { 
     brandKits, 
     loading: kitsLoading, 
+    createBrandKit,
     updateBrandKit, 
     setDefaultBrandKit,
     generateAIPalette 
@@ -94,21 +96,35 @@ export const BrandStudioPage: React.FC = () => {
   const [showAiModal, setShowAiModal] = useState(false);
   const [isLogoStudioOpen, setIsLogoStudioOpen] = useState(false);
 
-  // Sync route param to local state
+  // Sync route param or draft state to local state
   useEffect(() => {
+    const draftBrand = (location.state as any)?.draftBrand;
+    if (brandId === 'new' || draftBrand) {
+      if (draftBrand) {
+        setBrand(JSON.parse(JSON.stringify(draftBrand)));
+        return;
+      }
+    }
     if (brandKits.length > 0) {
       const matched = brandKits.find(b => b.id === brandId) || brandKits[0];
       if (matched) {
         setBrand(JSON.parse(JSON.stringify(matched)));
       }
     }
-  }, [brandId, brandKits]);
+  }, [brandId, brandKits, location.state]);
 
   const handleSave = async () => {
     if (!brand) return;
     setIsSaving(true);
     try {
-      await updateBrandKit(brand.id, brand);
+      const isNew = brandId === 'new' || brand.id === 'new' || !brand.id;
+      if (isNew) {
+        const created = await createBrandKit(brand);
+        setBrand(created);
+        navigate(`/workspace/settings/builder/brand/${created.id}`, { replace: true });
+      } else {
+        await updateBrandKit(brand.id, brand);
+      }
     } catch (err) {
       // toast is handled in hook
     } finally {

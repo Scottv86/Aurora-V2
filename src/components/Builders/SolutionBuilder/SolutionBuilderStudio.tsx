@@ -203,7 +203,7 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
         setConnectedModules(result.modules);
       }
 
-      if (result.specArtifact || result.formArtifact || result.workflowArtifact || result.permissionArtifact || result.moduleArtifact || (result.modules && result.modules.length > 0)) {
+      if (result.specArtifact || result.formArtifact || result.workflowArtifact || result.permissionArtifact || result.moduleArtifact || result.brandArtifact || result.searchArtifact || result.metricArtifact || (result.modules && result.modules.length > 0)) {
         const updatedArtifacts: SolutionArtifact[] = [...artifacts];
 
         // 1. ALWAYS Process Solution Design Proposal FIRST
@@ -392,6 +392,66 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
           });
         }
 
+        // 9. Process Brand Kit & Styling Design System Artifacts
+        if (result.brandArtifact) {
+          const brandIdx = updatedArtifacts.findIndex(a => a.type === 'BRAND');
+          const newBrandArt: SolutionArtifact = {
+            id: result.brandArtifact.id || `art_brand_${Date.now()}`,
+            name: result.brandArtifact.name || 'Brand Kit & Design System',
+            type: 'BRAND',
+            description: result.brandArtifact.description || 'Corporate visual identity, color scheme & typography tokens',
+            content: result.brandArtifact
+          };
+          if (brandIdx >= 0) updatedArtifacts[brandIdx] = newBrandArt;
+          else updatedArtifacts.push(newBrandArt);
+        }
+
+        if (Array.isArray(result.brandArtifacts) && result.brandArtifacts.length > 0) {
+          result.brandArtifacts.forEach((bk: any, idx: number) => {
+            const bkId = bk.id || `art_brand_${Date.now()}_${idx}`;
+            const bkIdx = updatedArtifacts.findIndex(a => a.id === bkId || (a.type === 'BRAND' && a.name === bk.name));
+            const artObj: SolutionArtifact = {
+              id: bkId,
+              name: bk.name || `Brand Kit ${idx + 1}`,
+              type: 'BRAND',
+              description: bk.description || 'Corporate visual identity system',
+              content: bk
+            };
+            if (bkIdx >= 0) updatedArtifacts[bkIdx] = artObj;
+            else updatedArtifacts.push(artObj);
+          });
+        }
+
+        // 10. Process Federated Saved Search & Discovery Artifacts
+        if (result.searchArtifact) {
+          const searchIdx = updatedArtifacts.findIndex(a => a.type === 'SEARCH');
+          const newSearchArt: SolutionArtifact = {
+            id: result.searchArtifact.id || `art_search_${Date.now()}`,
+            name: result.searchArtifact.name || 'Federated Saved Search',
+            type: 'SEARCH',
+            description: result.searchArtifact.description || 'Cross-module query with parameterized filter controls',
+            content: result.searchArtifact
+          };
+          if (searchIdx >= 0) updatedArtifacts[searchIdx] = newSearchArt;
+          else updatedArtifacts.push(newSearchArt);
+        }
+
+        if (Array.isArray(result.searchArtifacts) && result.searchArtifacts.length > 0) {
+          result.searchArtifacts.forEach((srch: any, idx: number) => {
+            const srchId = srch.id || `art_search_${Date.now()}_${idx}`;
+            const srchIdx = updatedArtifacts.findIndex(a => a.id === srchId || (a.type === 'SEARCH' && a.name === srch.name));
+            const artObj: SolutionArtifact = {
+              id: srchId,
+              name: srch.name || `Saved Search ${idx + 1}`,
+              type: 'SEARCH',
+              description: srch.description || 'Federated discovery query definition',
+              content: srch
+            };
+            if (srchIdx >= 0) updatedArtifacts[srchIdx] = artObj;
+            else updatedArtifacts.push(artObj);
+          });
+        }
+
         setArtifacts(updatedArtifacts);
       }
 
@@ -434,6 +494,8 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
       const dynamicDescription = specArt?.description || (specArt?.content as any)?.title || (chatMessages.find(m => m.role === 'self')?.text ? `Enterprise solution blueprint for "${chatMessages.find(m => m.role === 'self')?.text}"` : `Comprehensive solution blueprint combining ${artifacts.length} builder artifacts.`);
 
       const metricsCount = artifacts.filter(a => a.type === 'METRIC' || (a.type as any) === 'KPI').length;
+      const brandsCount = artifacts.filter(a => a.type === 'BRAND').length;
+      const searchesCount = artifacts.filter(a => a.type === 'SEARCH').length;
       const contentCount = artifacts.filter(a => a.type === 'CONTENT' || a.type === 'TEMPLATE').length;
       const formsCount = artifacts.filter(a => a.type === 'FORM').length;
       const workflowsCount = artifacts.filter(a => a.type === 'WORKFLOW').length;
@@ -451,6 +513,8 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
         formsCount,
         workflowsCount,
         metricsCount,
+        brandsCount,
+        searchesCount,
         contentCount,
         agentsCount,
         artifactsCount: artifacts.length,
@@ -540,6 +604,8 @@ export const SolutionBuilderStudio: React.FC<SolutionBuilderStudioProps> = ({
 
   const handleExportSpecMarkdown = () => {
     const metricsArts = artifacts.filter(a => a.type === 'METRIC' || (a.type as any) === 'KPI');
+    const brandsArts = artifacts.filter(a => a.type === 'BRAND');
+    const searchesArts = artifacts.filter(a => a.type === 'SEARCH');
     const contentArts = artifacts.filter(a => a.type === 'CONTENT' || a.type === 'TEMPLATE');
 
     const specMarkdown = `# Solution Architecture Specification: ${solutionName}
@@ -565,22 +631,32 @@ ${connectedModules.map(m => `### Module: ${m.name} (${m.type})\n- **Fields Count
 
 ---
 
-## 3. Semantic Business Metrics & KPIs
+## 3. Brand Identity & Design System
+${brandsArts.map(b => `### Brand Kit: ${b.name}\n- **Slug**: ${b.content?.slug || 'brand'}\n- **Tone / Tagline**: ${b.content?.voiceAndTone?.tagline || b.content?.voiceAndTone?.tone || 'Official'}\n- **Primary Color**: \`${b.content?.colors?.primary || '#4f46e5'}\` | Secondary: \`${b.content?.colors?.secondary || '#0f172a'}\` | Accent: \`${b.content?.colors?.accent || '#f59e0b'}\`\n- **Typography**: ${b.content?.typography?.headingFont || 'Inter'} (Headings) / ${b.content?.typography?.bodyFont || 'Inter'} (Body)\n- **UI Styling**: Corner Radius: \`${b.content?.styling?.borderRadius || '16px'}\` | Button: \`${b.content?.styling?.buttonStyle || 'rounded'}\`\n- **Description**: ${b.description || ''}`).join('\n\n') || '- No custom brand kits configured'}
+
+---
+
+## 4. Federated Searches & Discovery Queries
+${searchesArts.map(s => `### Search: ${s.name} (${s.content?.scopeType || 'MULTI_MODULE'})\n- **Slug**: ${s.content?.slug || 'search'}\n- **Target Modules Count**: ${s.content?.targetModuleIds?.length || 0}\n- **Exposed Filters**: ${(s.content?.searchConfig?.exposedControls || []).map((c: any) => c.label || c.parameterName).join(', ') || 'Default filters'}\n- **Compiled SQL**: \n\`\`\`sql\n${s.content?.sql || 'SELECT * FROM records;'}\n\`\`\`\n- **Description**: ${s.description || ''}`).join('\n\n') || '- No saved searches configured'}
+
+---
+
+## 5. Semantic Business Metrics & KPIs
 ${metricsArts.map(m => `### Metric: ${m.name}\n- **Source**: ${m.content?.sourceType || 'module_record'} (${m.content?.sourceConfig?.aggregateType || 'count'} aggregation)\n- **Target**: ${m.content?.targetValue ?? 'N/A'}\n- **Time Horizon**: ${m.content?.timeHorizon || 'trailing_30d'}\n- **Description**: ${m.description || ''}`).join('\n\n') || '- No specific metrics configured'}
 
 ---
 
-## 4. Content Templates & Transactional Documents
+## 6. Content Templates & Transactional Documents
 ${contentArts.map(c => `### Content: ${c.name} (${c.content?.type || 'letter'})\n- **Subject / Notice**: ${c.content?.metadata?.subject || c.name}\n- **Blocks Count**: ${c.content?.blocks?.length || 0}\n- **Description**: ${c.description || ''}`).join('\n\n') || '- No content templates configured'}
 
 ---
 
-## 5. Solution Artifacts & Layout Specs
+## 7. Solution Artifacts & Layout Specs
 ${artifacts.map(a => `### Artifact: ${a.name} (${a.type})\n\`\`\`json\n${JSON.stringify(a.content, null, 2)}\n\`\`\``).join('\n\n')}
 
 ---
 
-## 6. Process Automation & Execution Matrix
+## 8. Process Automation & Execution Matrix
 - Trigger ON_FORM_SUBMIT -> Assign Service -> Generate Welcome Pack & Output Notice
 - SLA Escalation Rule: 4 Hours threshold
 `;

@@ -63,6 +63,7 @@ model Tenant {
   chatChannels           ChatChannel[]
   chatPresences          ChatUserPresence[]
   brandKits              BrandKit[]
+  templateCatalogs       TemplateCatalog[]
 
   @@map("tenants")
 }
@@ -1474,5 +1475,36 @@ model ChatUserPresence {
 
   @@index([tenantId, presence])
   @@map("chat_user_presences")
+}
+
+model TemplateCatalog {
+  id              String   @id @default(cuid())
+  slug            String
+  builderType     String   @map("builder_type")
+  name            String
+  description     String?
+  industry        String?
+  category        String?
+  department      String?
+  tags            Json?
+  icon            String?
+  thumbnailUrl    String?  @map("thumbnail_url")
+  version         String   @default("1.0.0")
+  isSystem        Boolean  @default(true) @map("is_system")
+  tenantId        String?  @map("tenant_id")
+  popularityScore Int      @default(0) @map("popularity_score")
+  complexity      String?  @default("Intermediate")
+  dependencies    Json?
+  payload         Json
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant          Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([slug, tenantId])
+  @@index([builderType], map: "TemplateCatalog_builderType_idx")
+  @@index([industry], map: "TemplateCatalog_industry_idx")
+  @@index([tenantId], map: "TemplateCatalog_tenantId_idx")
+  @@map("template_catalogs")
 }
 

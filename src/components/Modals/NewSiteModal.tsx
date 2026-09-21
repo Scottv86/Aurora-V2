@@ -20,8 +20,10 @@ import {
 } from 'lucide-react';
 
 import { useNavigate } from 'react-router-dom';
-import { SiteService, Site } from '../../services/siteService';
+import { Site } from '../../services/siteService';
 import { useBrandKits } from '../../hooks/useBrandKits';
+import { usePlatform } from '../../hooks/usePlatform';
+import { queryTemplateCatalog, getTemplateById, getCachedTemplateCatalog } from '../../services/templateService';
 import { toast } from 'sonner';
 
 interface NewSiteModalProps {
@@ -41,7 +43,7 @@ interface SiteTemplate {
   pages: any[];
 }
 
-const SITE_TEMPLATES: SiteTemplate[] = [
+export const SITE_TEMPLATES: SiteTemplate[] = [
   {
     id: 'tpl-intranet',
     name: 'Corporate Intranet Hub',
@@ -207,8 +209,6 @@ export const NewSiteModal: React.FC<NewSiteModalProps> = ({ isOpen, onClose, onS
   const navigate = useNavigate();
   const { brandKits, defaultBrandKit, resolveBrandTokens } = useBrandKits();
   const [view, setView] = useState<'choices' | 'blank_form' | 'templates' | 'ai_prompt'>('choices');
-  const [loading, setLoading] = useState(false);
-  const [installingId, setInstallingId] = useState<string | null>(null);
 
   // Blank Form State
   const [name, setName] = useState('');
@@ -224,8 +224,28 @@ export const NewSiteModal: React.FC<NewSiteModalProps> = ({ isOpen, onClose, onS
   // AI Prompt State
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiGenerating, setAiGenerating] = useState(false);
+  const { tenant } = usePlatform();
+  const [templates, setTemplates] = useState<SiteTemplate[]>(() => {
+    const cached = getCachedTemplateCatalog({ builderType: 'SITE', includePayload: true }, tenant?.id);
+    if (cached?.templates && cached.templates.length > 0) {
+      return cached.templates.map(t => {
+        const p = (t.payload || t.schemaPayload) || {};
+        return {
+          id: t.id,
+          name: t.name,
+          category: (t.category || 'internal') as any,
+          type: p.type || t.category || 'Intranet Hub',
+          description: t.description,
+          icon: Network,
+          pageCount: p.pages?.length || 1,
+          pages: p.pages || []
+        };
+      });
+    }
+    return SITE_TEMPLATES;
+  });
 
-  // Reset modal state when opened
+  // Reset modal state and load templates when opened
   React.useEffect(() => {
     if (isOpen) {
       setView('choices');
@@ -237,108 +257,117 @@ export const NewSiteModal: React.FC<NewSiteModalProps> = ({ isOpen, onClose, onS
       setSelectedBrandId(defaultBrandKit?.id || '');
       setAiPrompt('');
       setSearchQuery('');
-    }
-  }, [isOpen, defaultBrandKit]);
 
-  const filteredTemplates = SITE_TEMPLATES.filter(t => 
+      queryTemplateCatalog({ builderType: 'SITE', includePayload: true }, undefined, tenant?.id)
+        .then(async (res) => {
+          if (res.templates && res.templates.length > 0) {
+            const loaded: SiteTemplate[] = await Promise.all(
+              res.templates.map(async (t) => {
+                const full = await getTemplateById(t.id, undefined, tenant?.id);
+                const p = full?.payload || {};
+                return {
+                  id: t.id,
+                  name: t.name,
+                  category: (t.category || 'internal') as any,
+                  type: p.type || t.category || 'Intranet Hub',
+                  description: t.description,
+                  icon: Network,
+                  pageCount: p.pages?.length || 1,
+                  pages: p.pages || []
+                };
+              })
+            );
+            setTemplates(loaded);
+          }
+        })
+        .catch((err) => {
+          console.warn('[NewSiteModal] Failed to load remote site templates, using local fallback:', err);
+        });
+    }
+  }, [isOpen, defaultBrandKit, tenant?.id]);
+
+  const filteredTemplates = templates.filter(t => 
     t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     t.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
     t.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleCreateBlank = async () => {
+  const handleCreateBlank = () => {
     if (!name.trim()) {
       toast.error('Please enter a Site Name.');
       return;
     }
-    setLoading(true);
-    try {
-      const generatedDomain = domain.trim() || `${name.toLowerCase().replace(/\s+/g, '-')}.aurora.internal`;
-      const brandTokens = resolveBrandTokens(selectedBrandId || defaultBrandKit?.id);
-      
-      const newSiteData: Partial<Site> = {
-        name,
-        description: description || 'Custom enterprise site portal.',
-        category,
-        type,
-        domain: generatedDomain,
-        status: 'active',
-        access: category === 'public' ? 'Public' : 'Authenticated',
-        brandId: selectedBrandId || defaultBrandKit?.id || undefined,
-        branding: {
-          accentColor: brandTokens.accentColor || '#3b82f6',
-          logoUrl: brandTokens.logoLight || brandTokens.logoDark || '',
-          headerTitle: name,
-          footerText: `Powered by ${brandTokens.brandName || 'Aurora Platform'}`,
-          headerLayout: 'top_right',
-          fontFamily: (brandTokens.headingFont?.toLowerCase().includes('outfit') ? 'outfit' : brandTokens.headingFont?.toLowerCase().includes('mono') ? 'mono' : 'sans') as any
-        },
-        pages: [
-          {
-            id: `p-home-${Date.now()}`,
-            title: 'Home',
-            slug: '/',
-            description: 'Main portal homepage.',
-            isHome: true,
-            parentId: null,
-            widgets: [
-              { id: `w-hero-${Date.now()}`, type: 'hero', enabled: true, title: `Welcome to ${name}`, subtitle: description || 'Portal home page.' }
-            ]
-          }
-        ]
-      };
+    const generatedDomain = domain.trim() || `${name.toLowerCase().replace(/\s+/g, '-')}.aurora.internal`;
+    const brandTokens = resolveBrandTokens(selectedBrandId || defaultBrandKit?.id);
+    
+    const draftSite: Partial<Site> = {
+      id: 'new',
+      name,
+      description: description || 'Custom enterprise site portal.',
+      category,
+      type,
+      domain: generatedDomain,
+      status: 'active',
+      access: category === 'public' ? 'Public' : 'Authenticated',
+      brandId: selectedBrandId || defaultBrandKit?.id || undefined,
+      branding: {
+        accentColor: brandTokens.accentColor || '#3b82f6',
+        logoUrl: brandTokens.logoLight || brandTokens.logoDark || '',
+        headerTitle: name,
+        footerText: `Powered by ${brandTokens.brandName || 'Aurora Platform'}`,
+        headerLayout: 'top_right',
+        fontFamily: (brandTokens.headingFont?.toLowerCase().includes('outfit') ? 'outfit' : brandTokens.headingFont?.toLowerCase().includes('mono') ? 'mono' : 'sans') as any
+      },
+      pages: [
+        {
+          id: `p-home-${Date.now()}`,
+          title: 'Home',
+          slug: '/',
+          description: 'Main portal homepage.',
+          isHome: true,
+          parentId: null,
+          widgets: [
+            { id: `w-hero-${Date.now()}`, type: 'hero', enabled: true, title: `Welcome to ${name}`, subtitle: description || 'Portal home page.' }
+          ]
+        }
+      ]
+    };
 
-      const created = await SiteService.createSite(newSiteData);
-      toast.success(`Site "${created.name}" created successfully!`);
-      if (onSiteCreated) onSiteCreated(created);
-      onClose();
-      navigate(`/workspace/settings/builder/site/${created.id}`);
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to create site.');
-    } finally {
-      setLoading(false);
-    }
+    if (onSiteCreated) onSiteCreated(draftSite as Site);
+    onClose();
+    navigate('/workspace/settings/builder/site/new', { state: { draftSite } });
+    toast.success(`Created blank portal draft for "${name}"`);
   };
 
-  const handleInstallTemplate = async (template: SiteTemplate) => {
-    setLoading(true);
-    setInstallingId(template.id);
-    toast.info(`Provisioning ${template.name}...`);
-    try {
-      const brandTokens = resolveBrandTokens(selectedBrandId || defaultBrandKit?.id);
-      const newSiteData: Partial<Site> = {
-        name: template.name,
-        description: template.description,
-        category: template.category,
-        type: template.type,
-        domain: `${template.name.toLowerCase().replace(/\s+/g, '-')}.aurora.internal`,
-        status: 'active',
-        access: template.category === 'public' ? 'Public' : 'Authenticated',
-        brandId: selectedBrandId || defaultBrandKit?.id || undefined,
-        branding: {
-          accentColor: brandTokens.accentColor || (template.category === 'public' ? '#10b981' : template.category === 'external' ? '#f59e0b' : '#3b82f6'),
-          logoUrl: brandTokens.logoLight || brandTokens.logoDark || '',
-          headerTitle: template.name,
-          footerText: `Powered by ${brandTokens.brandName || 'Aurora Platform'}`,
-          headerLayout: 'top_right'
-        },
-        pages: template.pages
-      };
+  const handleInstallTemplate = (template: SiteTemplate) => {
+    const brandTokens = resolveBrandTokens(selectedBrandId || defaultBrandKit?.id);
+    const draftSite: Partial<Site> = {
+      id: 'new',
+      name: template.name,
+      description: template.description,
+      category: template.category,
+      type: template.type,
+      domain: `${template.name.toLowerCase().replace(/\s+/g, '-')}.aurora.internal`,
+      status: 'active',
+      access: template.category === 'public' ? 'Public' : 'Authenticated',
+      brandId: selectedBrandId || defaultBrandKit?.id || undefined,
+      branding: {
+        accentColor: brandTokens.accentColor || (template.category === 'public' ? '#10b981' : template.category === 'external' ? '#f59e0b' : '#3b82f6'),
+        logoUrl: brandTokens.logoLight || brandTokens.logoDark || '',
+        headerTitle: template.name,
+        footerText: `Powered by ${brandTokens.brandName || 'Aurora Platform'}`,
+        headerLayout: 'top_right'
+      },
+      pages: template.pages
+    };
 
-      const created = await SiteService.createSite(newSiteData);
-      toast.success(`${template.name} template deployed successfully!`);
-      if (onSiteCreated) onSiteCreated(created);
-      onClose();
-      navigate(`/workspace/settings/builder/site/${created.id}`);
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to deploy template.');
-    } finally {
-      setLoading(false);
-      setInstallingId(null);
-    }
+    if (onSiteCreated) onSiteCreated(draftSite as Site);
+    onClose();
+    navigate('/workspace/settings/builder/site/new', { state: { draftSite } });
+    toast.success(`Loaded "${template.name}" template into site builder draft`);
   };
 
-  const handleGenerateAI = async () => {
+  const handleGenerateAI = () => {
     if (!aiPrompt.trim()) {
       toast.error('Please enter a description for AI site generation.');
       return;
@@ -346,12 +375,13 @@ export const NewSiteModal: React.FC<NewSiteModalProps> = ({ isOpen, onClose, onS
     setAiGenerating(true);
     toast.info('Aurora AI is generating your site schema & layout...');
 
-    setTimeout(async () => {
+    setTimeout(() => {
       try {
         const titleMatch = aiPrompt.match(/(?:for|a|an)\s+([A-Za-z0-9\s]+?)(?:\s+portal|\s+site|\s+hub|\s+page|$)/i);
         const siteName = titleMatch ? `${titleMatch[1].trim()} Portal` : 'AI Generated Portal';
         
-        const created = await SiteService.createSite({
+        const draftSite: Partial<Site> = {
+          id: 'new',
           name: siteName,
           description: aiPrompt,
           category: 'internal',
@@ -390,18 +420,18 @@ export const NewSiteModal: React.FC<NewSiteModalProps> = ({ isOpen, onClose, onS
               ]
             }
           ]
-        });
+        };
 
-        toast.success(`AI Portal "${created.name}" generated!`);
-        if (onSiteCreated) onSiteCreated(created);
+        if (onSiteCreated) onSiteCreated(draftSite as Site);
+        toast.success(`AI Portal "${siteName}" draft generated!`);
         onClose();
-        navigate(`/workspace/settings/builder/site/${created.id}`);
+        navigate('/workspace/settings/builder/site/new', { state: { draftSite } });
       } catch (err: any) {
         toast.error(err.message || 'Failed to generate AI site.');
       } finally {
         setAiGenerating(false);
       }
-    }, 1200);
+    }, 600);
   };
 
   if (!isOpen) return null;
@@ -641,11 +671,10 @@ export const NewSiteModal: React.FC<NewSiteModalProps> = ({ isOpen, onClose, onS
                   <div className="pt-3 flex justify-end">
                     <button
                       onClick={handleCreateBlank}
-                      disabled={loading}
-                      className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-500/20 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                      className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-500/20 flex items-center gap-2 cursor-pointer"
                     >
-                      {loading ? <Loader2 size={16} className="animate-spin" /> : <Layers size={16} />}
-                      <span>{loading ? 'Creating Site...' : 'Create Blank Site & Open Studio'}</span>
+                      <Layers size={16} />
+                      <span>Create Blank Site & Open Studio</span>
                     </button>
                   </div>
                 </div>
@@ -679,7 +708,6 @@ export const NewSiteModal: React.FC<NewSiteModalProps> = ({ isOpen, onClose, onS
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[50vh] overflow-y-auto pr-1 custom-scrollbar">
                   {filteredTemplates.map(template => {
                     const TemplateIcon = template.icon;
-                    const isInstalling = installingId === template.id;
 
                     return (
                       <div
@@ -709,20 +737,10 @@ export const NewSiteModal: React.FC<NewSiteModalProps> = ({ isOpen, onClose, onS
                           </span>
                           <button
                             onClick={() => handleInstallTemplate(template)}
-                            disabled={loading}
-                            className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-sm"
+                            className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm hover:shadow-amber-500/20"
                           >
-                            {isInstalling ? (
-                              <>
-                                <Loader2 size={14} className="animate-spin" />
-                                <span>Deploying...</span>
-                              </>
-                            ) : (
-                              <>
-                                <span>Deploy Template</span>
-                                <ArrowRight size={14} />
-                              </>
-                            )}
+                            <span>Use Template</span>
+                            <ArrowRight size={14} />
                           </button>
                         </div>
                       </div>

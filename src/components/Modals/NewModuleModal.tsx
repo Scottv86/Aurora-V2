@@ -9,7 +9,6 @@ import {
   ArrowRight, 
   ArrowLeft, 
   Search, 
-  Loader2, 
   Sparkles, 
   Layers
 } from 'lucide-react';
@@ -19,17 +18,41 @@ import { MODULES } from '../../constants/modules';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { toast } from 'sonner';
+import { queryTemplateCatalog, getTemplateById, getCachedTemplateCatalog } from '../../services/templateService';
 
 export const NewModuleModal: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { isOpen, closeNewModuleModal, view, setView } = useNewModuleModal();
-  const { tenant, refreshModules } = usePlatform();
+  const { tenant } = usePlatform();
   const { session } = useAuth();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [installingId, setInstallingId] = useState<string | null>(null);
+  const [dbTemplates, setDbTemplates] = useState<any[]>(() => {
+    const cached = getCachedTemplateCatalog({ builderType: 'MODULE', includePayload: true }, tenant?.id);
+    if (cached?.templates && cached.templates.length > 0) {
+      return cached.templates
+        .filter((t: any) => t.slug !== 'mod-people_org')
+        .map((t: any) => {
+          const payload = (t.payload || t.schemaPayload || {}) as any;
+          const fields = payload.layout || payload.fields || [];
+          return {
+            id: t.slug.replace(/^mod-/, ''),
+            slug: t.slug,
+            name: t.name,
+            description: t.description,
+            category: t.category || payload.category || 'General',
+            fields: fields,
+            layout: fields,
+            icon: payload.icon || undefined,
+            schemaPayload: payload,
+            payload: payload
+          };
+        });
+    }
+    return [];
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(() => dbTemplates.length === 0);
 
   // Auto-close modal once target route has mounted
   React.useEffect(() => {
@@ -38,61 +61,98 @@ export const NewModuleModal: React.FC = () => {
     }
   }, [location.pathname, isOpen, closeNewModuleModal]);
 
-  const selectableTemplates = MODULES.filter(t => t.id !== 'people_org');
+  // Dynamically load module templates from database
+  React.useEffect(() => {
+    if (!isOpen) return;
+    let isMounted = true;
 
-  const filteredTemplates = selectableTemplates.filter(t => 
+    const loadDbTemplates = async () => {
+      try {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const res = await queryTemplateCatalog({ builderType: 'MODULE', includePayload: true }, token, tenant?.id);
+        if (isMounted && res.templates && res.templates.length > 0) {
+          const mapped = res.templates
+            .filter((t: any) => t.slug !== 'mod-people_org')
+            .map((t: any) => {
+              const payload = (t.payload || t.schemaPayload || {}) as any;
+              const fields = payload.layout || payload.fields || [];
+              return {
+                id: t.slug.replace(/^mod-/, ''),
+                slug: t.slug,
+                name: t.name,
+                description: t.description,
+                category: t.category || payload.category || 'General',
+                fields: fields,
+                layout: fields,
+                icon: payload.icon || undefined,
+                schemaPayload: payload,
+                payload: payload
+              };
+            });
+          setDbTemplates(mapped);
+        }
+      } catch (err) {
+        console.error('Failed to load module templates from DB catalog:', err);
+        if (isMounted && dbTemplates.length === 0) {
+          const fallback = MODULES.filter(t => t.id !== 'people_org');
+          setDbTemplates(fallback);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadDbTemplates();
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, session?.access_token, tenant?.id]);
+
+  const filteredTemplates = dbTemplates.filter(t => 
     t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     t.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     t.category?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleInstallTemplate = async (template: any) => {
-    if (!tenant?.id) {
-      toast.error('Workspace tenant not identified.');
-      return;
-    }
-    setLoading(true);
-    setInstallingId(template.id);
-    toast.info(`Provisioning ${template.name} module template...`);
-    
-    try {
+  const handleSelectTemplate = async (template: any) => {
+    let payload = template.payload || template.schemaPayload;
+    if (!payload || (!payload.layout?.length && !payload.fields?.length)) {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-      const { icon, isEnabled, ...serializableMod } = template;
-      
-      const response = await fetch(`http://localhost:3001/api/data/modules`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'x-tenant-id': tenant.id
-        },
-        body: JSON.stringify({
-          ...serializableMod,
-          id: undefined,
-          templateId: template.id,
-          isTemplate: false,
-          isGlobal: template.id === 'people_org',
-          category: template.category || 'Custom',
-          iconName: template.icon?.name || 'Layers',
-          enabled: true,
-          status: 'ACTIVE'
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to install module template');
+      const full = await getTemplateById(template.slug || template.id, token, tenant?.id);
+      if (full?.payload) {
+        payload = full.payload;
       }
-
-      const createdMod = await response.json();
-      await refreshModules();
-      toast.success(`${template.name} template installed successfully!`);
-      navigate(`/workspace/settings/builder/${createdMod.id || createdMod.module?.id || ''}`);
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to install template');
-    } finally {
-      setLoading(false);
-      setInstallingId(null);
     }
+    const { icon, isEnabled, ...serializableMod } = template;
+    const modData = payload || serializableMod;
+    const resolvedFields = (modData.layout?.length > 0 ? modData.layout : (modData.fields || []));
+    
+    closeNewModuleModal();
+    navigate('/workspace/settings/builder/new', {
+      state: {
+        templateData: {
+          name: template.name,
+          description: template.description || '',
+          category: template.category || modData.category || 'Custom',
+          iconName: template.icon?.name || modData.iconName || 'Layers',
+          type: modData.type || 'RECORD',
+          fields: resolvedFields,
+          layout: resolvedFields,
+          tabs: modData.tabs || [],
+          forms: modData.forms || [],
+          connectorMappings: modData.connectorMappings || [],
+          dataPopulationRules: modData.dataPopulationRules || [],
+          workflows: modData.workflows || [],
+          recordKeyPrefix: modData.recordKeyPrefix || '',
+          recordKeySuffix: modData.recordKeySuffix || '',
+          nextKeyNumber: modData.nextKeyNumber || 1,
+          config: modData.config || {}
+        }
+      }
+    });
+    toast.success(`Loaded "${template.name}" template into builder draft`);
   };
 
   const handleStartBlank = () => {
@@ -254,65 +314,78 @@ export const NewModuleModal: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[50vh] overflow-y-auto pr-1 custom-scrollbar">
-                  {filteredTemplates.map((template) => {
-                    const TemplateIcon = template.icon || Layers;
-                    const isInstalling = installingId === template.id;
-
-                    return (
+                {isLoading ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[50vh] overflow-y-auto pr-1 custom-scrollbar">
+                    {[1, 2, 3, 4].map((n) => (
                       <div
-                        key={template.id}
-                        className="p-5 bg-zinc-50/50 dark:bg-zinc-950/50 border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl flex flex-col justify-between gap-4 hover:border-indigo-500/30 transition-all"
+                        key={n}
+                        className="p-5 bg-zinc-50/50 dark:bg-zinc-950/50 border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl flex flex-col justify-between gap-4 animate-pulse"
                       >
                         <div className="flex items-start gap-3">
-                          <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 shrink-0">
-                            <TemplateIcon size={20} />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h4 className="text-sm font-bold text-zinc-900 dark:text-white">{template.name}</h4>
-                              <span className="px-2 py-0.5 text-[9px] font-bold rounded-full bg-zinc-200/60 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
-                                {template.category || 'General'}
-                              </span>
-                            </div>
-                            <p className="text-xs text-zinc-500 leading-relaxed mt-1 line-clamp-2">
-                              {template.description || 'Pre-configured module template with fields and actions.'}
-                            </p>
+                          <div className="w-10 h-10 rounded-xl bg-zinc-200 dark:bg-zinc-800 shrink-0" />
+                          <div className="flex-1 space-y-2">
+                            <div className="h-4 bg-zinc-200 dark:bg-zinc-800 rounded w-2/3" />
+                            <div className="h-3 bg-zinc-200/60 dark:bg-zinc-800/60 rounded w-full" />
+                            <div className="h-3 bg-zinc-200/60 dark:bg-zinc-800/60 rounded w-4/5" />
                           </div>
                         </div>
-
                         <div className="flex items-center justify-between pt-2 border-t border-zinc-200/50 dark:border-zinc-800/50">
-                          <span className="text-[10px] text-zinc-400 font-medium">
-                            {(template as any).fields?.length || 0} fields preconfigured
-                          </span>
-                          <button
-                            onClick={() => handleInstallTemplate(template)}
-                            disabled={loading}
-                            className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors flex items-center gap-1.5 disabled:opacity-50"
-                          >
-                            {isInstalling ? (
-                              <>
-                                <Loader2 size={14} className="animate-spin" />
-                                <span>Installing...</span>
-                              </>
-                            ) : (
-                              <>
-                                <span>Install Template</span>
-                                <ArrowRight size={14} />
-                              </>
-                            )}
-                          </button>
+                          <div className="h-3 bg-zinc-200/60 dark:bg-zinc-800/60 rounded w-24" />
+                          <div className="h-7 bg-zinc-200 dark:bg-zinc-800 rounded-xl w-24" />
                         </div>
                       </div>
-                    );
-                  })}
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[50vh] overflow-y-auto pr-1 custom-scrollbar">
+                    {filteredTemplates.map((template) => {
+                      const TemplateIcon = template.icon || Layers;
 
-                  {filteredTemplates.length === 0 && (
-                    <div className="col-span-2 text-center py-8 text-zinc-400 text-xs">
-                      No templates match "{searchQuery}"
-                    </div>
-                  )}
-                </div>
+                      return (
+                        <div
+                          key={template.id}
+                          className="p-5 bg-zinc-50/50 dark:bg-zinc-950/50 border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl flex flex-col justify-between gap-4 hover:border-indigo-500/30 transition-all"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 shrink-0">
+                              <TemplateIcon size={20} />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-sm font-bold text-zinc-900 dark:text-white">{template.name}</h4>
+                                <span className="px-2 py-0.5 text-[9px] font-bold rounded-full bg-zinc-200/60 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                                  {template.category || 'General'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-zinc-500 leading-relaxed mt-1 line-clamp-2">
+                                {template.description || 'Pre-configured module template with fields and actions.'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between pt-2 border-t border-zinc-200/50 dark:border-zinc-800/50">
+                            <span className="text-[10px] text-zinc-400 font-medium">
+                              {(template as any).fields?.length || 0} fields preconfigured
+                            </span>
+                            <button
+                              onClick={() => handleSelectTemplate(template)}
+                              className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm hover:shadow-indigo-500/20"
+                            >
+                              <span>Use Template</span>
+                              <ArrowRight size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {filteredTemplates.length === 0 && (
+                      <div className="col-span-2 text-center py-8 text-zinc-400 text-xs">
+                        No templates match "{searchQuery}"
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

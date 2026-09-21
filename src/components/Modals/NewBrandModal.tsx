@@ -18,6 +18,8 @@ import { useNavigate } from 'react-router-dom';
 import { useBrandKits } from '../../hooks/useBrandKits';
 import { BrandKit } from '../../services/brandKitService';
 import { generateBrandLogoSuite, LogoMarkType } from '../../services/logoGeneratorEngine';
+import { usePlatform } from '../../hooks/usePlatform';
+import { queryTemplateCatalog, getTemplateById, getCachedTemplateCatalog } from '../../services/templateService';
 import { toast } from 'sonner';
 
 interface NewBrandModalProps {
@@ -61,7 +63,7 @@ interface BrandTemplate {
   };
 }
 
-const BRAND_TEMPLATES: BrandTemplate[] = [
+export const BRAND_TEMPLATES: BrandTemplate[] = [
   {
     id: 'tpl-indigo-tech',
     name: 'Aurora Indigo Enterprise',
@@ -234,13 +236,16 @@ const BRAND_TEMPLATES: BrandTemplate[] = [
   }
 ];
 
-export const NewBrandModal: React.FC<NewBrandModalProps> = ({ isOpen, onClose, onBrandCreated }) => {
+export const NewBrandModal: React.FC<NewBrandModalProps> = ({
+  isOpen,
+  onClose,
+  onBrandCreated
+}) => {
   const navigate = useNavigate();
-  const { brandKits, createBrandKit, generateAIPalette } = useBrandKits();
+  const { brandKits, generateAIPalette } = useBrandKits();
+  const { tenant } = usePlatform();
 
   const [view, setView] = useState<'choices' | 'blank_form' | 'templates' | 'ai_prompt'>('choices');
-  const [loading, setLoading] = useState(false);
-  const [installingId, setInstallingId] = useState<string | null>(null);
 
   // Blank Form State
   const [name, setName] = useState('');
@@ -252,8 +257,27 @@ export const NewBrandModal: React.FC<NewBrandModalProps> = ({ isOpen, onClose, o
   // AI Prompt State
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiGenerating, setAiGenerating] = useState(false);
+  const [templates, setTemplates] = useState<BrandTemplate[]>(() => {
+    const cached = getCachedTemplateCatalog({ builderType: 'BRAND', includePayload: true }, tenant?.id);
+    if (cached?.templates && cached.templates.length > 0) {
+      return cached.templates.map(t => {
+        const p = (t.payload || t.schemaPayload) || {};
+        return {
+          id: t.id,
+          name: t.name,
+          category: t.category,
+          description: t.description,
+          colors: p.colors || { primary: '#4f46e5', secondary: '#6366f1', accent: '#06b6d4', background: '#09090b', surface: '#18181b', text: '#f4f4f5', muted: '#a1a1aa' },
+          typography: p.typography || { headingFont: 'Plus Jakarta Sans', bodyFont: 'Inter' },
+          styling: p.styling,
+          voiceAndTone: p.voiceAndTone
+        };
+      });
+    }
+    return BRAND_TEMPLATES;
+  });
 
-  // Reset modal state when opened
+  // Reset modal state and load templates when opened
   React.useEffect(() => {
     if (isOpen) {
       setView('choices');
@@ -261,83 +285,127 @@ export const NewBrandModal: React.FC<NewBrandModalProps> = ({ isOpen, onClose, o
       setNewDescription('');
       setAiPrompt('');
       setSearchQuery('');
-    }
-  }, [isOpen]);
 
-  const filteredTemplates = BRAND_TEMPLATES.filter(t => 
+      queryTemplateCatalog({ builderType: 'BRAND', includePayload: true }, undefined, tenant?.id)
+        .then(async (res) => {
+          if (res.templates && res.templates.length > 0) {
+            const loaded: BrandTemplate[] = await Promise.all(
+              res.templates.map(async (t) => {
+                const full = await getTemplateById(t.id, undefined, tenant?.id);
+                const p = full?.payload || {};
+                return {
+                  id: t.id,
+                  name: t.name,
+                  category: t.category,
+                  description: t.description,
+                  colors: p.colors || { primary: '#4f46e5', secondary: '#6366f1', accent: '#06b6d4', background: '#09090b', surface: '#18181b', text: '#f4f4f5', muted: '#a1a1aa' },
+                  typography: p.typography || { headingFont: 'Plus Jakarta Sans', bodyFont: 'Inter' },
+                  styling: p.styling,
+                  voiceAndTone: p.voiceAndTone
+                };
+              })
+            );
+            setTemplates(loaded);
+          }
+        })
+        .catch((err) => {
+          console.warn('[NewBrandModal] Failed to load remote brand templates, using local fallback:', err);
+        });
+    }
+  }, [isOpen, tenant?.id]);
+
+  const filteredTemplates = templates.filter(t => 
     t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     t.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
     t.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleCreateBlank = async () => {
+  const handleCreateBlank = () => {
     if (!name.trim()) {
       toast.error('Please enter a Brand Name.');
       return;
     }
-    setLoading(true);
-    try {
-      const created = await createBrandKit({
-        name: name.trim(),
-        description: description.trim() || undefined,
-        isDefault: brandKits.length === 0
-      });
-      if (onBrandCreated) onBrandCreated(created);
-      onClose();
-      navigate(`/workspace/settings/builder/brand/${created.id}`);
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to create brand profile.');
-    } finally {
-      setLoading(false);
-    }
+    const draftBrand: any = {
+      id: 'new',
+      tenantId: tenant?.id || '',
+      name: name.trim(),
+      description: description.trim() || undefined,
+      isDefault: brandKits.length === 0,
+      colors: {
+        primary: '#4f46e5',
+        secondary: '#0ea5e9',
+        accent: '#6366f1',
+        background: '#09090b',
+        surface: '#18181b',
+        text: '#f4f4f5',
+        muted: '#a1a1aa',
+        border: '#27272a',
+        chartPalette: ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6']
+      },
+      typography: {
+        headingFont: 'Plus Jakarta Sans',
+        bodyFont: 'Inter',
+        monoFont: 'JetBrains Mono',
+        fontSizeScale: 'normal'
+      },
+      styling: {
+        borderRadius: 'xl',
+        shadowLevel: 'medium'
+      },
+      assets: {}
+    };
+    if (onBrandCreated) onBrandCreated(draftBrand);
+    onClose();
+    navigate('/workspace/settings/builder/brand/new', { state: { draftBrand } });
+    toast.success(`Created blank brand draft for "${name.trim()}"`);
   };
 
-  const handleInstallTemplate = async (template: BrandTemplate) => {
-    setLoading(true);
-    setInstallingId(template.id);
-    toast.info(`Deploying ${template.name}...`);
-    try {
-      let markType: LogoMarkType = 'hexagon_shield';
-      if (template.id.includes('helix') || template.id.includes('tech')) markType = 'orbital_helix';
-      else if (template.id.includes('health') || template.id.includes('bio')) markType = 'bio_leaf';
-      else if (template.id.includes('cyber')) markType = 'cyber_spark';
-      else if (template.id.includes('slate')) markType = 'diamond_apex';
-      else if (template.id.includes('violet')) markType = 'monogram_squircle';
+  const handleInstallTemplate = (template: BrandTemplate) => {
+    let markType: LogoMarkType = 'hexagon_shield';
+    if (template.id.includes('helix') || template.id.includes('tech')) markType = 'orbital_helix';
+    else if (template.id.includes('health') || template.id.includes('bio')) markType = 'bio_leaf';
+    else if (template.id.includes('cyber')) markType = 'cyber_spark';
+    else if (template.id.includes('slate')) markType = 'diamond_apex';
+    else if (template.id.includes('violet')) markType = 'monogram_squircle';
 
-      const logoSuite = generateBrandLogoSuite({
-        brandName: template.name.replace(/\s+(Enterprise|Studio|AI|Minimal|Health & Bio).*$/i, ''),
-        tagline: template.voiceAndTone?.tagline,
-        markType,
-        layout: 'horizontal',
-        colors: template.colors,
-        fontFamily: template.typography?.headingFont || 'Plus Jakarta Sans'
-      });
+    const logoSuite = generateBrandLogoSuite({
+      brandName: template.name.replace(/\s+(Enterprise|Studio|AI|Minimal|Health & Bio).*$/i, ''),
+      tagline: template.voiceAndTone?.tagline,
+      markType,
+      layout: 'horizontal',
+      colors: template.colors,
+      fontFamily: template.typography?.headingFont || 'Plus Jakarta Sans'
+    });
 
-      const created = await createBrandKit({
-        name: template.name,
-        description: template.description,
-        isDefault: brandKits.length === 0,
-        colors: template.colors,
-        typography: template.typography,
-        styling: template.styling,
-        voiceAndTone: template.voiceAndTone,
-        assets: {
-          logoLight: logoSuite.dataUrlLight,
-          logoDark: logoSuite.dataUrlDark,
-          favicon: logoSuite.faviconDataUrl,
-          iconMark: logoSuite.faviconDataUrl
-        }
-      });
-      toast.success(`${template.name} design system deployed!`);
-      if (onBrandCreated) onBrandCreated(created);
-      onClose();
-      navigate(`/workspace/settings/builder/brand/${created.id}`);
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to deploy template.');
-    } finally {
-      setLoading(false);
-      setInstallingId(null);
-    }
+    const draftBrand: any = {
+      id: 'new',
+      tenantId: tenant?.id || '',
+      name: template.name,
+      description: template.description,
+      isDefault: brandKits.length === 0,
+      colors: {
+        ...template.colors,
+        border: (template.colors as any).border || '#27272a'
+      },
+      typography: {
+        ...template.typography,
+        monoFont: (template.typography as any).monoFont || 'JetBrains Mono',
+        fontSizeScale: 'normal'
+      },
+      styling: template.styling,
+      voiceAndTone: template.voiceAndTone,
+      assets: {
+        logoLight: logoSuite.dataUrlLight,
+        logoDark: logoSuite.dataUrlDark,
+        favicon: logoSuite.faviconDataUrl,
+        iconMark: logoSuite.faviconDataUrl
+      }
+    };
+
+    if (onBrandCreated) onBrandCreated(draftBrand);
+    onClose();
+    navigate('/workspace/settings/builder/brand/new', { state: { draftBrand } });
+    toast.success(`Loaded "${template.name}" template into brand studio draft`);
   };
 
   const handleGenerateAI = async () => {
@@ -370,12 +438,28 @@ export const NewBrandModal: React.FC<NewBrandModalProps> = ({ isOpen, onClose, o
         fontFamily: suggestion.typography?.headingFont || 'Plus Jakarta Sans'
       });
 
-      const created = await createBrandKit({
+      const draftBrand: any = {
+        id: 'new',
+        tenantId: tenant?.id || '',
         name: brandName,
         description: aiPrompt,
         isDefault: brandKits.length === 0,
-        colors: suggestion.colors,
-        typography: suggestion.typography,
+        colors: (suggestion.colors as any) || {
+          primary: '#4f46e5',
+          secondary: '#0ea5e9',
+          accent: '#6366f1',
+          background: '#09090b',
+          surface: '#18181b',
+          text: '#f4f4f5',
+          muted: '#a1a1aa',
+          border: '#27272a',
+          chartPalette: ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6']
+        },
+        typography: {
+          ...suggestion.typography,
+          monoFont: 'JetBrains Mono',
+          fontSizeScale: 'normal'
+        },
         styling: suggestion.styling,
         voiceAndTone: suggestion.voiceAndTone,
         assets: {
@@ -384,12 +468,12 @@ export const NewBrandModal: React.FC<NewBrandModalProps> = ({ isOpen, onClose, o
           favicon: logoSuite.faviconDataUrl,
           iconMark: logoSuite.faviconDataUrl
         }
-      });
+      };
 
-      toast.success('AI Brand Profile created successfully with vector logos!');
-      if (onBrandCreated) onBrandCreated(created);
+      if (onBrandCreated) onBrandCreated(draftBrand);
+      toast.success('AI Brand Profile generated into editor draft!');
       onClose();
-      navigate(`/workspace/settings/builder/brand/${created.id}`);
+      navigate('/workspace/settings/builder/brand/new', { state: { draftBrand } });
     } catch (err: any) {
       toast.error(err.message || 'Failed to generate AI brand profile.');
     } finally {
@@ -555,11 +639,10 @@ export const NewBrandModal: React.FC<NewBrandModalProps> = ({ isOpen, onClose, o
                   <div className="pt-3 flex justify-end">
                     <button
                       onClick={handleCreateBlank}
-                      disabled={loading}
-                      className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-500/20 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                      className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-500/20 flex items-center gap-2 cursor-pointer"
                     >
-                      {loading ? <Loader2 size={16} className="animate-spin" /> : <Layers size={16} />}
-                      <span>{loading ? 'Creating Brand...' : 'Create Blank Brand & Open Studio'}</span>
+                      <Layers size={16} />
+                      <span>Create Blank Brand & Open Studio</span>
                     </button>
                   </div>
                 </div>
@@ -592,8 +675,6 @@ export const NewBrandModal: React.FC<NewBrandModalProps> = ({ isOpen, onClose, o
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[50vh] overflow-y-auto pr-1 custom-scrollbar">
                   {filteredTemplates.map(template => {
-                    const isInstalling = installingId === template.id;
-
                     return (
                       <div
                         key={template.id}
@@ -634,11 +715,10 @@ export const NewBrandModal: React.FC<NewBrandModalProps> = ({ isOpen, onClose, o
 
                         <button
                           onClick={() => handleInstallTemplate(template)}
-                          disabled={loading}
-                          className="w-full py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold text-xs rounded-xl border border-amber-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                          className="w-full py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold text-xs rounded-xl border border-amber-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm hover:shadow-amber-500/10"
                         >
-                          {isInstalling ? <Loader2 size={14} className="animate-spin" /> : <LayoutGrid size={14} />}
-                          <span>{isInstalling ? 'Deploying...' : 'Use Template & Open Studio'}</span>
+                          <LayoutGrid size={14} />
+                          <span>Use Template & Open Studio</span>
                         </button>
                       </div>
                     );

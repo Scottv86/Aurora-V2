@@ -22,6 +22,7 @@ import {
 import { ModuleField } from '../../types/platform';
 import { usePlatform } from '../../hooks/usePlatform';
 import { generateFormWithAI } from '../../services/aiService';
+import { queryTemplateCatalog, getTemplateById, getCachedTemplateCatalog } from '../../services/templateService';
 import { toast } from 'sonner';
 
 export interface FormTemplateItem {
@@ -147,7 +148,7 @@ export interface NewFormModalProps {
   onSelectBlank: () => void;
   onSelectTemplate: (template: FormTemplateItem) => void;
   onSelectModule: (module: any) => void;
-  onSelectAIGenerated: (generatedForm: { name: string; description: string; schema: { layout: ModuleField[] } }) => void;
+  onSelectAIGenerated: (form: any) => void;
 }
 
 export const NewFormModal: React.FC<NewFormModalProps> = ({
@@ -158,11 +159,29 @@ export const NewFormModal: React.FC<NewFormModalProps> = ({
   onSelectModule,
   onSelectAIGenerated
 }) => {
-  const { modules } = usePlatform();
+  const { modules, tenant } = usePlatform();
   const [view, setView] = useState<'choices' | 'templates' | 'modules' | 'ai_prompt'>('choices');
   const [searchQuery, setSearchQuery] = useState('');
   const [aiPrompt, setAiPrompt] = useState('');
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [templates, setTemplates] = useState<FormTemplateItem[]>(() => {
+    const cached = getCachedTemplateCatalog({ builderType: 'FORM', includePayload: true });
+    if (cached?.templates && cached.templates.length > 0) {
+      return cached.templates.map(t => {
+        const payload = (t.payload || t.schemaPayload) || {};
+        return {
+          id: t.id,
+          name: t.name,
+          category: t.category,
+          description: t.description,
+          icon: FileText,
+          fieldsCount: payload.layout?.length || 4,
+          schema: payload
+        };
+      });
+    }
+    return FORM_TEMPLATES;
+  });
 
   React.useEffect(() => {
     if (isOpen) {
@@ -170,10 +189,35 @@ export const NewFormModal: React.FC<NewFormModalProps> = ({
       setSearchQuery('');
       setAiPrompt('');
       setIsGeneratingAI(false);
-    }
-  }, [isOpen]);
 
-  const filteredTemplates = FORM_TEMPLATES.filter(t =>
+      // Load form templates dynamically from DB catalog with fallback
+      queryTemplateCatalog({ builderType: 'FORM', includePayload: true }, undefined, tenant?.id)
+        .then(async (res) => {
+          if (res.templates && res.templates.length > 0) {
+            const loaded: FormTemplateItem[] = await Promise.all(
+              res.templates.map(async (t) => {
+                const full = await getTemplateById(t.id, undefined, tenant?.id);
+                return {
+                  id: t.id,
+                  name: t.name,
+                  category: t.category,
+                  description: t.description,
+                  icon: FileText,
+                  fieldsCount: full?.payload?.layout?.length || 4,
+                  schema: full?.payload || { layout: [] }
+                };
+              })
+            );
+            setTemplates(loaded);
+          }
+        })
+        .catch((err) => {
+          console.warn('[NewFormModal] Failed to fetch remote templates, using local fallback:', err);
+        });
+    }
+  }, [isOpen, tenant?.id]);
+
+  const filteredTemplates = templates.filter(t =>
     t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     t.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
     t.category.toLowerCase().includes(searchQuery.toLowerCase())

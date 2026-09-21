@@ -14,6 +14,8 @@ import {
   FileText
 } from 'lucide-react';
 import { SolutionBlueprint } from '../../types/solutions';
+import { usePlatform } from '../../hooks/usePlatform';
+import { queryTemplateCatalog, getTemplateById, getCachedTemplateCatalog } from '../../services/templateService';
 
 export interface NewSolutionModalProps {
   isOpen: boolean;
@@ -22,7 +24,153 @@ export interface NewSolutionModalProps {
   onSelectTemplate: (template: SolutionBlueprint) => void;
 }
 
-export const TEMPLATE_SOLUTIONS: SolutionBlueprint[] = [];
+export const TEMPLATE_SOLUTIONS: SolutionBlueprint[] = [
+  {
+    id: 'sol_tpl_support_ops',
+    name: 'Customer Support & Incident Escalation Suite',
+    description: 'End-to-end customer support ticket intake, AI triage copilot, escalation workflow, and SLA resolution tracking.',
+    category: 'Customer Operations',
+    version: 'v1.0.0',
+    status: 'ACTIVE',
+    modulesCount: 2,
+    workflowsCount: 1,
+    formsCount: 1,
+    agentsCount: 1,
+    metricsCount: 1,
+    artifactsCount: 4,
+    author: 'Aurora System',
+    updatedAt: new Date().toISOString(),
+    contextSources: [],
+    connectedModules: [
+      { id: 'service-requests', name: 'Service Requests', type: 'WORK_ITEM', fieldsCount: 5, linked: true },
+      { id: 'people_org', name: 'People & Organisation', type: 'RECORD', fieldsCount: 4, linked: true }
+    ],
+    artifacts: [
+      {
+        id: 'art_form_intake',
+        name: 'Customer Support Ticket Intake',
+        type: 'FORM',
+        description: 'Priority support request intake with issue classification.',
+        content: {
+          layout: [
+            { id: 'user_email', label: 'Requester Email', type: 'email', required: true, colSpan: 6 },
+            { id: 'category', label: 'Issue Category', type: 'select', options: ['Billing', 'Bug Report', 'Feature Request', 'Account Access'], required: true, colSpan: 6 },
+            { id: 'priority', label: 'Urgency', type: 'select', options: ['Low', 'Medium', 'High', 'Urgent'], required: true, colSpan: 6 },
+            { id: 'subject', label: 'Summary', type: 'text', required: true, colSpan: 6 },
+            { id: 'issue', label: 'Detailed Description', type: 'textarea', required: true, colSpan: 12 }
+          ]
+        }
+      },
+      {
+        id: 'art_agent_support',
+        name: 'Support & Triage Copilot',
+        type: 'AGENT',
+        description: 'Autonomous Tier-1 support agent that categorizes tickets, suggests resolution steps, and alerts Slack.',
+        content: {
+          roleTitle: 'Tier-1 Support & Routing Specialist',
+          modelConfig: { model: 'gemini-2.5-flash', temperature: 0.2 },
+          systemInstructions: 'Triage customer inquiries, categorize urgency, summarize technical issues, and route to specialized squads.'
+        }
+      },
+      {
+        id: 'art_flow_escalation',
+        name: 'Ticket Triage & Escalation Pipeline',
+        type: 'WORKFLOW',
+        description: 'Automated status progression and escalation path for high-priority support issues.',
+        content: {
+          nodes: [
+            { id: 'n1', label: 'Form Submitted', type: 'TRIGGER', status: 'completed' },
+            { id: 'n2', label: 'Run AI Urgency Classification', type: 'ACTION', status: 'active' },
+            { id: 'n3', label: 'Assign Support Specialist', type: 'ACTION', status: 'pending' }
+          ]
+        }
+      },
+      {
+        id: 'art_kpi_sla',
+        name: 'First Response SLA Rate',
+        type: 'KPI',
+        description: 'Percentage of customer tickets receiving initial response within 1 hour.',
+        content: {
+          targetValue: 95,
+          trendDirection: 'higher_is_better',
+          timeHorizon: 'trailing_30d'
+        }
+      }
+    ]
+  },
+  {
+    id: 'sol_tpl_financial_disputes',
+    name: 'Financial Dispute Triage & Reconciliation Hub',
+    description: 'Inspect transaction discrepancies, coordinate Stripe reconciliation, and enforce human sign-off for large refunds.',
+    category: 'Financial Services & Fintech',
+    version: 'v1.0.0',
+    status: 'ACTIVE',
+    modulesCount: 2,
+    workflowsCount: 1,
+    formsCount: 1,
+    agentsCount: 1,
+    metricsCount: 1,
+    artifactsCount: 4,
+    author: 'Aurora System',
+    updatedAt: new Date().toISOString(),
+    contextSources: [],
+    connectedModules: [
+      { id: 'invoices', name: 'Invoices & Disputes', type: 'FINANCIAL', fieldsCount: 6, linked: true },
+      { id: 'people_org', name: 'Clients & Accounts', type: 'RECORD', fieldsCount: 4, linked: true }
+    ],
+    artifacts: [
+      {
+        id: 'art_form_dispute',
+        name: 'Billing Dispute Intake Form',
+        type: 'FORM',
+        description: 'Collect transaction ID, disputed charge amount, and client statement.',
+        content: {
+          layout: [
+            { id: 'tx_id', label: 'Transaction / Charge ID', type: 'text', required: true, colSpan: 6 },
+            { id: 'dispute_amount', label: 'Disputed Amount ($)', type: 'number', required: true, colSpan: 6 },
+            { id: 'reason', label: 'Dispute Reason', type: 'select', options: ['Duplicate Charge', 'Unrecognized Charge', 'Service Not Received', 'Incorrect Amount'], required: true, colSpan: 12 },
+            { id: 'details', label: 'Dispute Details', type: 'textarea', required: true, colSpan: 12 }
+          ]
+        }
+      },
+      {
+        id: 'art_agent_disputes',
+        name: 'Invoice & Dispute Analyst',
+        type: 'AGENT',
+        description: 'Autonomous financial auditor cross-referencing ledger records and flagging high-value refunds for approval.',
+        content: {
+          roleTitle: 'Financial Triage & Disputes Analyst',
+          modelConfig: { model: 'gemini-2.5-flash', temperature: 0.15 },
+          guardrails: { requireHumanApproval: true, approvalThresholdAmount: 500 }
+        }
+      },
+      {
+        id: 'art_flow_dispute_approval',
+        name: 'Dispute Review & Sign-Off Pipeline',
+        type: 'WORKFLOW',
+        description: 'Approval pipeline routing disputes above $500 to Finance Supervisor.',
+        content: {
+          nodes: [
+            { id: 'w1', label: 'Dispute Lodged', type: 'TRIGGER', status: 'completed' },
+            { id: 'w2', label: 'Automated Ledger Reconciliation', type: 'ACTION', status: 'active' },
+            { id: 'w3', label: 'Supervisor Sign-off', type: 'DECISION', status: 'pending' }
+          ]
+        }
+      },
+      {
+        id: 'art_kpi_resolution',
+        name: 'Dispute Recovery & Resolution Time',
+        type: 'KPI',
+        description: 'Average business days taken to resolve payment disputes.',
+        content: {
+          targetValue: 2,
+          trendDirection: 'lower_is_better',
+          timeHorizon: 'trailing_30d'
+        }
+      }
+    ]
+  }
+];
 
 export const NewSolutionModal: React.FC<NewSolutionModalProps> = ({
   isOpen,
@@ -30,17 +178,81 @@ export const NewSolutionModal: React.FC<NewSolutionModalProps> = ({
   onSelectBlank,
   onSelectTemplate
 }) => {
+  const { tenant } = usePlatform();
   const [view, setView] = useState<'choices' | 'templates'>('choices');
   const [searchQuery, setSearchQuery] = useState('');
+  const [templates, setTemplates] = useState<SolutionBlueprint[]>(() => {
+    const cached = getCachedTemplateCatalog({ builderType: 'SOLUTION', includePayload: true }, tenant?.id);
+    if (cached?.templates && cached.templates.length > 0) {
+      return cached.templates.map((t: any) => {
+        const p = (t.payload || t.schemaPayload) || {};
+        return {
+          id: t.id,
+          name: t.name,
+          description: t.description,
+          category: t.category,
+          version: t.version || 'v1.0.0',
+          status: 'ACTIVE',
+          modulesCount: p.modulesCount || 2,
+          workflowsCount: p.workflowsCount || 1,
+          formsCount: p.formsCount || 1,
+          agentsCount: p.agentsCount || 1,
+          metricsCount: p.metricsCount || 1,
+          artifactsCount: p.artifactsCount || 4,
+          author: 'Aurora System',
+          updatedAt: (t as any).updatedAt || new Date().toISOString(),
+          contextSources: [] as any[],
+          connectedModules: p.connectedModules || [],
+          artifacts: p.artifacts || []
+        };
+      });
+    }
+    return TEMPLATE_SOLUTIONS;
+  });
 
   React.useEffect(() => {
     if (isOpen) {
       setView('choices');
       setSearchQuery('');
-    }
-  }, [isOpen]);
 
-  const filteredTemplates = TEMPLATE_SOLUTIONS.filter(t =>
+      queryTemplateCatalog({ builderType: 'SOLUTION', includePayload: true }, undefined, tenant?.id)
+        .then(async (res) => {
+          if (res.templates && res.templates.length > 0) {
+            const loaded: SolutionBlueprint[] = await Promise.all(
+              res.templates.map(async (t) => {
+                const full = await getTemplateById(t.id, undefined, tenant?.id);
+                const p = full?.payload || {};
+                return {
+                  id: t.id,
+                  name: t.name,
+                  description: t.description,
+                  category: t.category,
+                  version: t.version || 'v1.0.0',
+                  status: 'ACTIVE',
+                  modulesCount: p.modulesCount || 2,
+                  workflowsCount: p.workflowsCount || 1,
+                  formsCount: p.formsCount || 1,
+                  agentsCount: p.agentsCount || 1,
+                  metricsCount: p.metricsCount || 1,
+                  artifactsCount: p.artifactsCount || 4,
+                  author: 'Aurora System',
+                  updatedAt: (t as any).updatedAt || new Date().toISOString(),
+                  contextSources: [] as any[],
+                  connectedModules: p.connectedModules || [],
+                  artifacts: p.artifacts || []
+                };
+              })
+            );
+            setTemplates(loaded);
+          }
+        })
+        .catch((err) => {
+          console.warn('[NewSolutionModal] Failed loading remote solution templates, using local fallback:', err);
+        });
+    }
+  }, [isOpen, tenant?.id]);
+
+  const filteredTemplates = templates.filter(t =>
     t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     t.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
     t.category.toLowerCase().includes(searchQuery.toLowerCase())

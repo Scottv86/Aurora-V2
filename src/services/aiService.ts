@@ -2,6 +2,7 @@ import { GoogleGenAI } from "@google/genai";
 import { Module, ModuleField } from "../types/platform";
 import { createFormulaContext } from "../lib/formulaEngine";
 import { API_BASE_URL } from "../config";
+import { queryTemplateCatalog } from "./templateService";
 
 let aiInstance: GoogleGenAI | null = null;
 
@@ -122,6 +123,22 @@ export interface AISolution {
     description: string;
     targetModuleId: string;
   }[];
+  brands?: Array<{
+    name: string;
+    description?: string;
+    colors?: any;
+    typography?: any;
+    styling?: any;
+  }>;
+  searches?: Array<{
+    name: string;
+    description?: string;
+    category?: string;
+    scopeType?: string;
+    targetModuleIds?: string[];
+    sql?: string;
+    searchConfig?: any;
+  }>;
   reasoning: string;
 }
 
@@ -614,6 +631,101 @@ export interface SolutionOrchestrationResult {
   };
   contentArtifacts?: any[];
   templateArtifact?: any;
+  brandArtifact?: {
+    id: string;
+    name: string;
+    slug?: string;
+    description?: string;
+    isDefault?: boolean;
+    assets?: {
+      logoLight?: string;
+      logoDark?: string;
+      iconMark?: string;
+      favicon?: string;
+      letterheadBanner?: string;
+    };
+    colors?: {
+      primary: string;
+      secondary: string;
+      accent: string;
+      background: string;
+      surface: string;
+      text: string;
+      muted: string;
+      border: string;
+      chartPalette: string[];
+    };
+    typography?: {
+      headingFont: string;
+      bodyFont: string;
+      monoFont: string;
+      fontSizeScale: 'compact' | 'medium' | 'spacious';
+    };
+    styling?: {
+      borderRadius: string;
+      buttonStyle: 'rounded' | 'pill' | 'square';
+      elevation: 'flat' | 'subtle' | 'elevated';
+      headerLayout?: 'top_right' | 'centered' | 'minimal' | 'full_banner';
+      navLinkStyle?: 'underline' | 'pill' | 'glow' | 'minimal';
+    };
+    voiceAndTone?: {
+      tone?: string;
+      boilerplate?: string;
+      tagline?: string;
+      audiencePersona?: string;
+      guidelines?: string;
+    };
+    emailDefaults?: {
+      signatureTemplate?: string;
+      disclaimer?: string;
+      socialLinks?: Record<string, string>;
+    };
+  };
+  brandArtifacts?: any[];
+  searchArtifact?: {
+    id: string;
+    name: string;
+    slug?: string;
+    description?: string;
+    category?: string;
+    iconName?: string;
+    scopeType?: 'SINGLE_MODULE' | 'MULTI_MODULE' | 'PLATFORM';
+    targetModuleIds?: string[];
+    sql?: string;
+    parameters?: Array<{
+      id: string;
+      name: string;
+      label: string;
+      type: string;
+      defaultValue?: any;
+    }>;
+    columnsConfig?: Array<{
+      key: string;
+      label: string;
+      visible: boolean;
+      sortable?: boolean;
+      width?: string;
+    }>;
+    searchConfig?: {
+      defaultLayout?: 'table' | 'cards' | 'split';
+      pageSize?: number;
+      allowExport?: boolean;
+      allowPersonalPresets?: boolean;
+      enableInstantSearch?: boolean;
+      exposedControls?: Array<{
+        id: string;
+        parameterName: string;
+        fieldKey: string;
+        label: string;
+        controlType: string;
+        placeholder?: string;
+        defaultValue?: any;
+        options?: Array<{ label: string; value: string }>;
+      }>;
+      defaultSort?: { key: string; direction: 'asc' | 'desc' };
+    };
+  };
+  searchArtifacts?: any[];
 }
 
 
@@ -865,6 +977,83 @@ Operational Directives:
         }
       ],
       content: `<h2>Official Notice: ${topic} Registration</h2><p>Submission Reference: <strong>{{f_ref}}</strong></p><p>Status: <strong>{{f_status}}</strong></p>`
+    },
+    brandArtifact: {
+      id: `art_brand_${Date.now()}`,
+      name: `${topic} Brand Kit`,
+      slug: `${topic.toLowerCase().replace(/[^a-z0-9]/g, '-')}-brand`,
+      description: `Official corporate visual identity, color scheme, typography and design tokens for ${topic}`,
+      isDefault: false,
+      colors: {
+        primary: cleanPrompt.includes('finance') ? '#059669' : cleanPrompt.includes('hr') ? '#8b5cf6' : cleanPrompt.includes('health') || cleanPrompt.includes('birth') ? '#0284c7' : '#4f46e5',
+        secondary: '#0f172a',
+        accent: '#f59e0b',
+        background: '#f8fafc',
+        surface: '#ffffff',
+        text: '#0f172a',
+        muted: '#64748b',
+        border: '#e2e8f0',
+        chartPalette: ['#4f46e5', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
+      },
+      typography: {
+        headingFont: 'Inter, sans-serif',
+        bodyFont: 'Inter, sans-serif',
+        monoFont: 'JetBrains Mono, monospace',
+        fontSizeScale: 'medium'
+      },
+      styling: {
+        borderRadius: '16px',
+        buttonStyle: 'rounded',
+        elevation: 'subtle',
+        headerLayout: 'top_right',
+        navLinkStyle: 'pill'
+      },
+      voiceAndTone: {
+        tone: 'Authoritative, clear, and reassuring',
+        tagline: `Excellence in ${topic} Administration`,
+        boilerplate: `Official ${topic} operational portal powered by Aurora Enterprise Platform.`,
+        audiencePersona: 'Public citizens, enterprise reviewers, and operations stakeholders',
+        guidelines: 'Ensure all public communications adhere to accessibility standards.'
+      },
+      emailDefaults: {
+        signatureTemplate: `Official ${topic} Registry Team | Aurora Platform`,
+        disclaimer: 'This electronic transmission is intended solely for official communications.',
+        socialLinks: { website: 'https://aurora.io', support: 'support@aurora.io' }
+      }
+    },
+    searchArtifact: {
+      id: `art_search_${Date.now()}`,
+      name: `${topic} Directory & Search`,
+      slug: `${topic.toLowerCase().replace(/[^a-z0-9]/g, '-')}-search`,
+      description: `Federated multi-module search query across ${topic} records with parameterized filtering`,
+      category: 'Discovery & Audit',
+      iconName: 'Search',
+      scopeType: 'MULTI_MODULE',
+      targetModuleIds: [customModules[0]?.id || 'mod_1'],
+      sql: `SELECT r.id, r.module_id, m.name AS module_name, r.status, COALESCE(r.data->>'title', r.data->>'f_title', r.id) AS title, r.data->>'assigneeId' AS assignee_id, r.created_at FROM records r JOIN modules m ON m.id = r.module_id WHERE r.tenant_id = :tenantId AND r.status != 'archived' AND (:status IS NULL OR :status = '' OR r.status = :status) ORDER BY r.created_at DESC;`,
+      parameters: [
+        { id: 'p_status', name: 'status', label: 'Record Status', type: 'string' },
+        { id: 'p_keyword', name: 'keyword', label: 'Search Term', type: 'string' }
+      ],
+      columnsConfig: [
+        { key: 'title', label: 'Record Title / Subject', visible: true, sortable: true },
+        { key: 'status', label: 'Processing Status', visible: true, sortable: true },
+        { key: 'module_name', label: 'Target Module', visible: true, sortable: false },
+        { key: 'assignee_id', label: 'Assigned Stakeholder', visible: true, sortable: false },
+        { key: 'created_at', label: 'Submission Date', visible: true, sortable: true }
+      ],
+      searchConfig: {
+        defaultLayout: 'table',
+        pageSize: 15,
+        allowExport: true,
+        allowPersonalPresets: true,
+        enableInstantSearch: true,
+        exposedControls: [
+          { id: 'c_keyword', parameterName: 'keyword', fieldKey: 'title', label: 'Keyword Search', controlType: 'text', placeholder: 'Search records by name, reference, or description...' },
+          { id: 'c_status', parameterName: 'status', fieldKey: 'status', label: 'Record Status', controlType: 'status', options: [{ label: 'All Statuses', value: '' }, { label: 'Submitted', value: 'Submitted' }, { label: 'In Review', value: 'In Review' }, { label: 'Approved', value: 'Approved' }] },
+          { id: 'c_date', parameterName: 'dateRange', fieldKey: 'created_at', label: 'Date Range', controlType: 'date_preset' }
+        ]
+      }
     }
   };
 };
@@ -897,6 +1086,9 @@ export const generateThinkingStepsForPrompt = (
   if (p.includes('add') || p.includes('remove') || p.includes('update') || p.includes('change') || p.includes('modify') || p.includes('field') || p.includes('node') || p.includes('title') || p.includes('agent')) {
     let target = 'solution artifact';
     if (p.includes('agent') || p.includes('bot') || p.includes('copilot') || p.includes('assistant')) target = 'AI Agent Coworker';
+    else if (p.includes('brand') || p.includes('palette') || p.includes('theme') || p.includes('styling') || p.includes('color')) target = 'Brand & Identity Kit';
+    else if (p.includes('search') || p.includes('query') || p.includes('lookup') || p.includes('filter') || p.includes('directory')) target = 'Federated Saved Search';
+    else if (p.includes('metric') || p.includes('kpi') || p.includes('sla') || p.includes('threshold')) target = 'Semantic Metric / KPI';
     else if (p.includes('form')) target = 'Form Layout';
     else if (p.includes('workflow') || p.includes('flow')) target = 'Workflow Diagram';
     else if (p.includes('report') || p.includes('chart')) target = 'Report Dashboard';
@@ -924,7 +1116,7 @@ export const generateThinkingStepsForPrompt = (
     { id: 's1', label: `Ingesting ${contextSourcesCount > 0 ? `${contextSourcesCount} context document(s)` : 'workspace requirements'} & evaluating prompt intent`, status: 'active' },
     { id: 's2', label: 'Architecting solution vision, RBAC security model & API endpoints', status: 'pending' },
     { id: 's3', label: 'Generating relational database modules, tables & validation schemas', status: 'pending' },
-    { id: 's4', label: 'Constructing interactive forms, process workflows, AI agent coworkers & analytics dashboards', status: 'pending' }
+    { id: 's4', label: 'Constructing interactive forms, workflows, AI agents, brand kits, saved searches & KPI metrics', status: 'pending' }
   ];
 };
 
@@ -996,9 +1188,13 @@ You are fully aware of all specialized Builders in the Aurora platform:
 12. Reports & Analytics Builder (Dashboards, KPI ribbons, query visualizers & chart queries)
 13. Roles & Security Matrix Builder (RBAC permissions, scopes & access policies)
 14. Autonomous Agent Builder (AI digital coworkers, domain specialists, workflow copilots, tool bindings & safety guardrails)
+15. Brand & Styling Kit Builder (Corporate visual identity, color schemes [primary, secondary, accent, surface, background, border, text, chartPalette], typography scale, button styles, corner radii, and voice & tone guidelines)
+16. Federated Searches & Discovery Studio (Cross-module and single-module parameterized search queries, exposed interactive filter controls [text, user, status, date_preset, select], column configurations, card/table layouts, and compiled SQL)
 
 CRITICAL MANDATE: You MUST ALWAYS generate a "specArtifact" ("Solution Design") FIRST for every request. The specArtifact is the primary technical architecture proposal document that outlines the solution vision, business goals, data schema hierarchy, process workflows, RBAC matrix, and API endpoints. Always include specArtifact as the primary artifact in your JSON response. 
 Whenever a solution involves operational performance tracking or KPIs, ALSO synthesize a "metricArtifact" for key business metric tracking.
+Whenever a solution involves distinct branding, client portals, external themes, or official notices, ALSO synthesize a "brandArtifact" for visual design tokens.
+Whenever a solution involves querying records, multi-module lookup, audit search, or directory discovery, ALSO synthesize a "searchArtifact" for federated search configuration.
 Whenever a solution involves transactional communications, official receipts, certificates, letters, or notifications, ALSO synthesize a "contentArtifact" for automated document generation.
 Whenever a solution involves task automation, document processing, triage, or conversational assistance, ALSO synthesize an "agentArtifact" for an autonomous digital coworker tailored to this solution.
 
@@ -1023,6 +1219,70 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this schema:
     "name": "Solution Design",
     "description": "Comprehensive technical architecture specification plan.",
     "markdownContent": "# Solution Architecture & Vision\\n\\n## Executive Summary..."
+  },
+  "brandArtifact": {
+    "id": "art_brand_1",
+    "name": "Enterprise Brand Kit",
+    "slug": "enterprise-brand",
+    "description": "Corporate visual identity, color scheme, typography and design tokens.",
+    "colors": {
+      "primary": "#4f46e5",
+      "secondary": "#0f172a",
+      "accent": "#f59e0b",
+      "background": "#f8fafc",
+      "surface": "#ffffff",
+      "text": "#0f172a",
+      "muted": "#64748b",
+      "border": "#e2e8f0",
+      "chartPalette": ["#4f46e5", "#06b6d4", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"]
+    },
+    "typography": {
+      "headingFont": "Inter, sans-serif",
+      "bodyFont": "Inter, sans-serif",
+      "monoFont": "JetBrains Mono, monospace",
+      "fontSizeScale": "medium"
+    },
+    "styling": {
+      "borderRadius": "16px",
+      "buttonStyle": "rounded",
+      "elevation": "subtle",
+      "headerLayout": "top_right",
+      "navLinkStyle": "pill"
+    },
+    "voiceAndTone": {
+      "tone": "Professional, reassuring, and clear",
+      "tagline": "Empowering Operational Excellence",
+      "boilerplate": "Official enterprise portal powered by Aurora."
+    }
+  },
+  "searchArtifact": {
+    "id": "art_search_1",
+    "name": "Records Directory & Federated Search",
+    "slug": "records-search",
+    "description": "Cross-module search query across records with parameterized filter controls.",
+    "category": "Discovery",
+    "scopeType": "MULTI_MODULE",
+    "targetModuleIds": ["mod_clients"],
+    "sql": "SELECT r.id, r.module_id, m.name AS module_name, r.status, COALESCE(r.data->>'title', r.id) AS title, r.created_at FROM records r JOIN modules m ON m.id = r.module_id WHERE r.tenant_id = :tenantId AND r.status != 'archived' ORDER BY r.created_at DESC;",
+    "parameters": [
+      { "id": "p_status", "name": "status", "label": "Status", "type": "string" }
+    ],
+    "columnsConfig": [
+      { "key": "title", "label": "Record Title", "visible": true, "sortable": true },
+      { "key": "status", "label": "Status", "visible": true, "sortable": true },
+      { "key": "created_at", "label": "Created At", "visible": true, "sortable": true }
+    ],
+    "searchConfig": {
+      "defaultLayout": "table",
+      "pageSize": 15,
+      "allowExport": true,
+      "allowPersonalPresets": true,
+      "enableInstantSearch": true,
+      "exposedControls": [
+        { "id": "c_keyword", "parameterName": "keyword", "fieldKey": "title", "label": "Keyword", "controlType": "text" },
+        { "id": "c_status", "parameterName": "status", "fieldKey": "status", "label": "Status", "controlType": "status" }
+      ]
+    }
   },
   "agentArtifact": {
     "id": "art_agent_1",
@@ -1117,12 +1377,27 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this schema:
   }
 }`;
 
+  let candidateTemplatesSummary = '';
+  try {
+    const catalogRes = await queryTemplateCatalog({ search: prompt.slice(0, 50), limit: 8 });
+    if (catalogRes.templates && catalogRes.templates.length > 0) {
+      candidateTemplatesSummary = catalogRes.templates.map(t => 
+        `- [${t.builderType}] "${t.name}" (ID: ${t.id}, Category: ${t.category}): ${t.description}`
+      ).join('\n');
+    }
+  } catch (_e) {
+    // Graceful fallback if offline
+  }
+
   const fullUserPrompt = `
 CONTEXT DOCUMENTS:
 ${contextSummaryText || 'No attached context documents.'}
 
 CURRENT EXISTING ARTIFACTS IN THIS SOLUTION BLUEPRINT:
 ${existingArtifactsSummary || 'No artifacts generated yet.'}
+
+CANDIDATE TEMPLATES AVAILABLE IN CATALOG (Use & adapt these proven blueprints where applicable):
+${candidateTemplatesSummary || 'No specific catalog matches found; synthesize clean standardized components.'}
 
 USER REQUEST / REFINEMENT PROMPT:
 "${prompt}"

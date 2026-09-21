@@ -38,7 +38,10 @@ router.get('/', async (req: TenantRequest, res) => {
           modulesCount: sol.modulesCount ?? modules.length,
           workflowsCount: sol.workflowsCount ?? artifacts.filter((a: any) => a.type === 'WORKFLOW').length,
           formsCount: sol.formsCount ?? artifacts.filter((a: any) => a.type === 'FORM').length,
-          artifactsCount: sol.artifactsCount ?? artifacts.length
+          artifactsCount: sol.artifactsCount ?? artifacts.length,
+          metricsCount: sol.metricsCount ?? artifacts.filter((a: any) => a.type === 'METRIC' || a.type === 'KPI').length,
+          brandsCount: sol.brandsCount ?? artifacts.filter((a: any) => a.type === 'BRAND').length,
+          searchesCount: sol.searchesCount ?? artifacts.filter((a: any) => a.type === 'SEARCH').length
         };
       });
     }
@@ -353,7 +356,144 @@ router.post('/:id/deploy', async (req: TenantRequest, res) => {
       }
     }
 
-    // 7. Update Blueprint Status to PUBLISHED
+    // 7. Provision Brand Identities (BrandKit Table)
+    const brandArtifacts = artifacts.filter((a: any) => a.type === 'BRAND');
+    for (const bArt of brandArtifacts) {
+      try {
+        const bContent = bArt.content || {};
+        if (db.brandKit || globalPrisma.brandKit) {
+          const brandKitModel = db.brandKit || globalPrisma.brandKit;
+          const brandSlug = bContent.slug || bArt.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `brand-${bArt.id}`;
+          const brandData = {
+            name: bArt.name || bContent.name || 'Brand Identity',
+            slug: brandSlug,
+            description: bArt.description || bContent.description || 'Enterprise Brand Kit provisioned by Solution Builder',
+            isDefault: Boolean(bContent.isDefault),
+            assets: bContent.assets || {},
+            colors: bContent.colors || {
+              primary: '#6366f1',
+              secondary: '#4f46e5',
+              accent: '#ec4899',
+              background: '#ffffff',
+              surface: '#f8fafc',
+              text: '#0f172a',
+              muted: '#64748b',
+              border: '#e2e8f0',
+              chartPalette: ['#6366f1', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6']
+            },
+            typography: bContent.typography || {
+              headingFont: 'Plus Jakarta Sans',
+              bodyFont: 'Inter',
+              monoFont: 'JetBrains Mono',
+              fontSizeScale: 'medium'
+            },
+            styling: bContent.styling || {
+              borderRadius: '12px',
+              buttonStyle: 'rounded',
+              elevation: 'subtle',
+              headerLayout: 'top_right',
+              navLinkStyle: 'underline'
+            },
+            voiceAndTone: bContent.voiceAndTone || {
+              tone: 'Professional & Modern',
+              boilerplate: `${bArt.name} delivers modern workflows and platform excellence.`,
+              tagline: 'Modern Platform Excellence',
+              prohibitedWords: ['synergy', 'disruptive'],
+              audiencePersona: 'Enterprise operators and stakeholders'
+            },
+            emailDefaults: bContent.emailDefaults || {
+              signatureTemplate: 'standard',
+              disclaimer: 'This email is confidential and intended solely for the recipient.',
+              socialLinks: {}
+            },
+            metadata: {
+              ...(bContent.metadata || {}),
+              provisionedBySolution: id,
+              artifactId: bArt.id
+            }
+          };
+
+          const existing = await brandKitModel.findFirst({
+            where: { tenantId, OR: [{ id: `brand_${bArt.id}` }, { slug: brandSlug }] }
+          });
+
+          if (existing) {
+            await brandKitModel.update({
+              where: { id: existing.id },
+              data: brandData
+            });
+          } else {
+            await brandKitModel.create({
+              data: {
+                id: `brand_${bArt.id}`,
+                tenantId,
+                ...brandData
+              }
+            });
+          }
+          provisionedResources.push(`Brand Kit: ${bArt.name}`);
+        }
+      } catch (e) {
+        console.warn(`[SolutionDeployer] Brand Kit error for ${bArt.name}:`, e);
+      }
+    }
+
+    // 8. Provision Federated Searches (SavedQuery Table with isSearchEnabled = true)
+    const searchArtifacts = artifacts.filter((a: any) => a.type === 'SEARCH');
+    for (const sArt of searchArtifacts) {
+      try {
+        const sContent = sArt.content || {};
+        if (db.savedQuery || globalPrisma.savedQuery) {
+          const queryModel = db.savedQuery || globalPrisma.savedQuery;
+          const searchSlug = sContent.slug || sArt.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `search-${sArt.id}`;
+          const searchData = {
+            name: sArt.name || sContent.name || 'Federated Search',
+            slug: searchSlug,
+            description: sArt.description || sContent.description || 'Federated cross-module search provisioned by Solution Builder',
+            category: sContent.category || 'Operations',
+            tags: Array.isArray(sContent.tags) ? sContent.tags : ['solution', 'search'],
+            iconName: sContent.iconName || 'Search',
+            isSearchEnabled: true,
+            scopeType: sContent.scopeType || 'MULTI_MODULE',
+            targetModuleIds: Array.isArray(sContent.targetModuleIds) ? sContent.targetModuleIds : [],
+            searchConfig: sContent.searchConfig || {},
+            allowedRoleIds: Array.isArray(sContent.allowedRoleIds) ? sContent.allowedRoleIds : [],
+            sql: sContent.sql || '',
+            parameters: Array.isArray(sContent.parameters) ? sContent.parameters : [],
+            columnsConfig: Array.isArray(sContent.columnsConfig) ? sContent.columnsConfig : [],
+            status: sContent.status || 'PUBLISHED',
+            cacheTtlSeconds: typeof sContent.cacheTtlSeconds === 'number' ? sContent.cacheTtlSeconds : 0
+          };
+
+          const existing = await queryModel.findFirst({
+            where: { tenantId, OR: [{ id: `search_${sArt.id}` }, { slug: searchSlug }] }
+          });
+
+          if (existing) {
+            await queryModel.update({
+              where: { id: existing.id },
+              data: {
+                ...searchData,
+                updatedAt: new Date()
+              }
+            });
+          } else {
+            await queryModel.create({
+              data: {
+                id: `search_${sArt.id}`,
+                tenantId,
+                ...searchData
+              }
+            });
+          }
+          provisionedResources.push(`Federated Search: ${sArt.name}`);
+        }
+      } catch (e) {
+        console.warn(`[SolutionDeployer] Saved Search error for ${sArt.name}:`, e);
+      }
+    }
+
+    // 9. Update Blueprint Status to PUBLISHED
     await model.update({
       where: { id },
       data: { status: 'PUBLISHED' }

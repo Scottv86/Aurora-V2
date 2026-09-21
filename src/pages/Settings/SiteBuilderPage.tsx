@@ -368,6 +368,56 @@ export const SiteBuilderPage: React.FC = () => {
   useEffect(() => {
     const fetchSiteAndModules = async () => {
       if (!siteId) return;
+
+      if (siteId === 'new') {
+        const draftSite = (location.state as any)?.draftSite;
+        if (draftSite) {
+          setSite(draftSite);
+          setName(draftSite.name || 'New Portal');
+          setDescription(draftSite.description || '');
+          setCategory(draftSite.category || 'internal');
+          setType(draftSite.type || '');
+          setDomain(draftSite.domain || '');
+          setStatus(draftSite.status || 'draft');
+          setAccess(draftSite.access || 'Authenticated');
+
+          const branding = draftSite.branding || {
+            accentColor: '#6366f1',
+            logoUrl: '',
+            headerTitle: draftSite.name || 'New Portal',
+            footerText: 'Powered by Aurora Platform',
+            headerLayout: 'top_right'
+          };
+          setAccentColor(branding.accentColor || '#6366f1');
+          setLogoUrl(branding.logoUrl || '');
+          setHeaderTitle(branding.headerTitle || draftSite.name || 'New Portal');
+          setFooterText(branding.footerText || 'Powered by Aurora Platform');
+          setHeaderLayout(branding.headerLayout || 'top_right');
+
+          const initialPages: SitePage[] = Array.isArray(draftSite.pages) && draftSite.pages.length > 0
+            ? draftSite.pages
+            : [
+                {
+                  id: 'page-home',
+                  title: 'Home Portal',
+                  slug: '/',
+                  description: 'Main portal home page.',
+                  isHome: true,
+                  parentId: null,
+                  widgets: [
+                    { id: 'w-hero', type: 'hero', enabled: true, title: `Welcome to ${draftSite.name}`, subtitle: draftSite.description }
+                  ]
+                }
+              ];
+          setPages(initialPages);
+          setActivePageId(initialPages[0]?.id || 'page-home');
+          setNavItems(initialPages.map(p => ({ id: `nav-${p.id}`, label: p.title, path: p.slug })));
+          setIsDirty(true);
+        }
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
         const data = await SiteService.getSiteById(siteId);
@@ -1160,10 +1210,20 @@ export const SiteBuilderPage: React.FC = () => {
 
 
 
-      const updated = await SiteService.updateSite(site.id, updatedData);
-      setSite(updated);
-      setIsDirty(false);
-      toast.success(`Multi-page site "${name}" saved successfully!`);
+      let updated: Site;
+      const isNew = siteId === 'new' || site.id === 'new' || !site.id;
+      if (isNew) {
+        updated = await SiteService.createSite(updatedData);
+        setSite(updated);
+        setIsDirty(false);
+        toast.success(`Multi-page site "${name}" created and saved successfully!`);
+        navigate(`/workspace/settings/builder/site/${updated.id}`, { replace: true });
+      } else {
+        updated = await SiteService.updateSite(site.id, updatedData);
+        setSite(updated);
+        setIsDirty(false);
+        toast.success(`Multi-page site "${name}" saved successfully!`);
+      }
     } catch (err: any) {
       toast.error(err.message || 'Failed to save site configuration.');
     } finally {

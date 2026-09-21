@@ -2602,7 +2602,41 @@ export const ModuleEditor = () => {
     if (!tenant?.id) return;
     
     if (id === 'new') {
-      setBreadcrumbOverride('new', 'New Custom Module');
+      const templateData = (location.state as any)?.templateData;
+      if (templateData) {
+        setModuleSettings(prev => ({
+          ...prev,
+          name: templateData.name || 'New Module',
+          description: templateData.description || '',
+          category: templateData.category || 'Custom',
+          iconName: templateData.iconName || 'Layers',
+          type: (templateData.type as ModuleType) || 'RECORD',
+          status: 'ACTIVE',
+          recordKeyPrefix: templateData.recordKeyPrefix || '',
+          recordKeySuffix: templateData.recordKeySuffix || '',
+          nextKeyNumber: templateData.nextKeyNumber || 1,
+          titleFieldId: templateData.config?.titleFieldId || '',
+          subtitleFieldIds: templateData.config?.subtitleFieldIds || [],
+          customerRefPrefix: templateData.config?.customerRefPrefix || '',
+          customerRefSuffix: templateData.config?.customerRefSuffix || '',
+          customerRefNextNumber: templateData.config?.customerRefNextNumber || 10001,
+        }));
+        const tplFields = templateData.layout?.length > 0 ? templateData.layout : (templateData.fields || []);
+        if (tplFields.length > 0) {
+          const norm = normalizeLayout(tplFields);
+          setLayout(norm);
+          setPersistedLayout(norm);
+        }
+        if (templateData.tabs?.length > 0) setTabs(templateData.tabs);
+        if (templateData.forms?.length > 0) setForms(templateData.forms);
+        if (templateData.workflows?.length > 0) setWorkflow(templateData.workflows[0]);
+        if (templateData.connectorMappings) setConnectorMappings(templateData.connectorMappings);
+        if (templateData.dataPopulationRules) setDataPopulationRules(templateData.dataPopulationRules);
+        setBreadcrumbOverride('new', `${templateData.name} (Draft)`);
+        setIsDirty(true);
+      } else {
+        setBreadcrumbOverride('new', 'New Custom Module');
+      }
       setIsLoading(false);
       return;
     }
