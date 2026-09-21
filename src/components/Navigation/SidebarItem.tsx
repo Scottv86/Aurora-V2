@@ -21,6 +21,7 @@ interface SidebarItemProps {
   hasChildren?: boolean;
   isExpanded?: boolean;
   onToggleExpand?: (e: React.MouseEvent) => void;
+  disableTooltip?: boolean;
 }
 
 export const SidebarItem = ({ 
@@ -35,7 +36,8 @@ export const SidebarItem = ({
   className,
   hasChildren,
   isExpanded,
-  onToggleExpand
+  onToggleExpand,
+  disableTooltip
 }: SidebarItemProps) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -60,7 +62,7 @@ export const SidebarItem = ({
   };
 
   const handleMouseEnter = () => {
-    if (collapsed) {
+    if (collapsed && !disableTooltip) {
       updateCoords();
       setIsHovered(true);
     }
@@ -164,7 +166,7 @@ export const SidebarItem = ({
       </button>
 
       {/* Collapsed mode hover slide-out label: single unified block covering the icon and expanding to the right over the app */}
-      {collapsed && isHovered && coords && typeof document !== 'undefined' && createPortal(
+      {!disableTooltip && collapsed && isHovered && coords && typeof document !== 'undefined' && createPortal(
         <div 
           style={{ 
             position: 'fixed', 

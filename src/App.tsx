@@ -130,6 +130,7 @@ const DocsApp = lazy(() => import('./pages/Apps/DocsApp').then(m => ({ default: 
 const DocEditor = lazy(() => import('./pages/Apps/DocEditor').then(m => ({ default: m.DocEditor })));
 const InboxApp = lazy(() => import('./pages/Apps/InboxApp').then(m => ({ default: m.InboxApp })));
 const ChatApp = lazy(() => import('./pages/Apps/ChatApp').then(m => ({ default: m.ChatApp })));
+const FeedApp = lazy(() => import('./pages/Apps/FeedApp').then(m => ({ default: m.FeedApp })));
 const SearchesDirectoryPage = lazy(() => import('./pages/Search/SearchesDirectoryPage').then(m => ({ default: m.SearchesDirectoryPage })));
 const SearchRunnerPage = lazy(() => import('./pages/Search/SearchRunnerPage').then(m => ({ default: m.SearchRunnerPage })));
 import { slugify } from './lib/utils';
@@ -355,6 +356,8 @@ const App = () => {
                 <Route path="queue" element={<Navigate to="/workspace/my-work" replace />} />
                 
                 {/* Aurora Utility Apps */}
+                <Route path="apps/feed" element={<FeedApp />} />
+                <Route path="feed" element={<Navigate to="/workspace/apps/feed" replace />} />
                 <Route path="apps/inbox" element={<InboxApp />} />
                 <Route path="inbox" element={<Navigate to="/workspace/apps/inbox" replace />} />
                 <Route path="apps/drive" element={<DriveApp />} />

@@ -52,6 +52,7 @@ import { useModalStack } from '../../context/ModalStackContext';
 import { ShareRecordModal } from '../../components/Platform/ShareRecordModal';
 import { MoveRecordModal } from '../../components/Platform/MoveRecordModal';
 import { BulkPasteRecordModal } from '../../components/Platform/BulkPasteRecordModal';
+import { RecordActivityDrawer } from '../../components/Platform/RecordActivityDrawer';
 
 const InlineAssigneeCell = ({
   record,
@@ -538,6 +539,7 @@ const InlineParticipantCell = ({
 interface RecordActionsCellProps {
   record: any;
   onView?: () => void;
+  onViewActivity?: () => void;
   onShare: () => void;
   onDelete: () => void;
   onDuplicate: () => void;
@@ -556,6 +558,7 @@ interface RecordActionsCellProps {
 const RecordActionsCell: React.FC<RecordActionsCellProps> = ({
   record,
   onView,
+  onViewActivity,
   onShare,
   onDelete,
   onDuplicate,
@@ -666,6 +669,21 @@ const RecordActionsCell: React.FC<RecordActionsCellProps> = ({
         <LucideIcons.Share2 size={13} />
       </button>
 
+      {/* 3b. Quick Activity Feed & Audit Trail */}
+      {onViewActivity && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onViewActivity();
+          }}
+          className="p-1.5 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition-all cursor-pointer"
+          title="View Activity Feed & Audit Trail"
+        >
+          <LucideIcons.History size={13} />
+        </button>
+      )}
+
       {/* 4. Quick Star */}
       {onToggleStar && (
         <button
@@ -721,6 +739,21 @@ const RecordActionsCell: React.FC<RecordActionsCellProps> = ({
           <div className="px-2.5 py-1.5 mb-1 border-b border-zinc-100 dark:border-zinc-800 text-[10px] uppercase font-bold tracking-wider text-zinc-400">
             {record._record_key || 'Record Actions'}
           </div>
+
+          {/* Activity Feed in Menu */}
+          {onViewActivity && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowMoreMenu(false);
+                onViewActivity();
+              }}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-left hover:bg-zinc-100 dark:hover:bg-zinc-800/80 transition-colors cursor-pointer"
+            >
+              <LucideIcons.History size={13} className="text-indigo-500" />
+              <span>View Activity Feed</span>
+            </button>
+          )}
 
           {/* Star / Unstar in menu */}
           {onToggleStar && (
@@ -951,6 +984,7 @@ export const ModuleView = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState<string | null>(null);
   const [recordToShare, setRecordToShare] = useState<any | null>(null);
+  const [activityRecord, setActivityRecord] = useState<any | null>(null);
   const [recordsToMove, setRecordsToMove] = useState<any[] | null>(null);
   const [page, setPage] = useState(1);
   const [userPageSize, setUserPageSize] = useState<number | null>(null);
@@ -2656,6 +2690,7 @@ export const ModuleView = () => {
                       <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
                         <RecordActionsCell
                           record={rec}
+                          onViewActivity={() => setActivityRecord(rec)}
                           onShare={() => setRecordToShare(rec)}
                           onDelete={() => setRecordToDelete(rec.id)}
                           onDuplicate={() => handleDuplicateRecord(rec)}
@@ -4933,6 +4968,7 @@ export const ModuleView = () => {
             <RecordActionsCell
               record={record}
               onView={() => handleRecordClick(String(record.id))}
+              onViewActivity={() => setActivityRecord(record)}
               onShare={() => setRecordToShare(record)}
               onDelete={() => setRecordToDelete(record.id)}
               onDuplicate={() => handleDuplicateRecord(record)}
@@ -6118,6 +6154,19 @@ export const ModuleView = () => {
           record={recordToShare}
           moduleId={moduleData?.id || (typeof moduleId === 'string' ? moduleId : '')}
           moduleName={moduleData?.name}
+        />
+      )}
+
+      {/* Record Activity & Audit Drawer */}
+      {activityRecord && (
+        <RecordActivityDrawer
+          isOpen={!!activityRecord}
+          onClose={() => setActivityRecord(null)}
+          recordId={activityRecord.id}
+          recordKey={activityRecord._record_key}
+          recordTitle={activityRecord.premises_name || activityRecord.name || activityRecord.title}
+          moduleName={moduleData?.name}
+          moduleId={moduleData?.id || (typeof moduleId === 'string' ? moduleId : '')}
         />
       )}
 

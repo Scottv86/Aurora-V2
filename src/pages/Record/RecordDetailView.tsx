@@ -32,6 +32,7 @@ import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { UserAvatarWithPresence } from '../../components/Common/UserPresenceBadge';
 import { ShareRecordModal } from '../../components/Platform/ShareRecordModal';
+import { RecordActivityDrawer } from '../../components/Platform/RecordActivityDrawer';
 import { MODULES } from '../../constants/modules';
 import { DATA_API_URL, API_BASE_URL } from '../../config';
 import { FieldInput } from '../../components/FieldInput';
@@ -195,6 +196,7 @@ export const RecordDetailView = ({
   const [editData, setEditData] = useState<Record<string, any>>({});
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showActivityDrawer, setShowActivityDrawer] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showVisualizer, setShowVisualizer] = useState(false);
   const [lookupData, setLookupData] = useState<Record<string, any[]>>({});
@@ -2844,6 +2846,17 @@ export const RecordDetailView = ({
               </AnimatePresence>
             </div>
 
+            {/* Activity Feed Button */}
+            <button
+              type="button"
+              onClick={() => setShowActivityDrawer(true)}
+              className="h-8 px-2.5 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-200 shadow-xs cursor-pointer hover:border-indigo-500/30"
+              title="View Record Activity & Audit Trail"
+            >
+              <History size={12} className="text-indigo-500" />
+              <span className="hidden sm:inline">Activity</span>
+            </button>
+
             {/* Share Button */}
             <button
               type="button"
@@ -2880,6 +2893,18 @@ export const RecordDetailView = ({
                   transition={{ duration: 0.15 }}
                   className="absolute right-0 mt-1.5 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl z-50 overflow-hidden p-1 space-y-0.5"
                 >
+                  {/* Activity & Audit Trail Option */}
+                  <button
+                    onClick={() => {
+                      setShowActivityDrawer(true);
+                      setShowMoreMenu(false);
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-2 transition-all cursor-pointer"
+                  >
+                    <History size={13} className="text-indigo-500 shrink-0" />
+                    <span>Activity & Audit Trail</span>
+                  </button>
+
                   {/* Share Record Option */}
                   <button
                     onClick={() => {
@@ -3126,7 +3151,7 @@ export const RecordDetailView = ({
                   isEmbedded ? "px-6 py-0 h-full items-center" : "px-6 py-3"
                 )}
               >
-                {[...sortedVisibleTabs.filter((t: any) => !t.parentId), { id: 'activity', name: 'activity', label: 'Activity Feed', iconName: 'MessageSquare' }].map((tab: any) => {
+                {sortedVisibleTabs.filter((t: any) => !t.parentId).map((tab: any) => {
                   const subtabs = sortedVisibleTabs.filter((sub: any) => sub.parentId === tab.id);
                   const isParent = subtabs.length > 0;
                   const isParentActive = isParent && subtabs.some((sub: any) => sub.id === activeTabId);
@@ -3253,9 +3278,7 @@ export const RecordDetailView = ({
           )}
 
           <div className="p-6 flex-1 min-h-0 overflow-y-auto custom-scrollbar bg-zinc-50 dark:bg-[#101010]">
-            {activeTabId === 'activity' ? (
-              <RecordActivityFeed recordId={record.id} />
-            ) : activeTabId ? (
+            {activeTabId ? (
               renderFieldsGrid(activeTabId)
             ) : (
               <div className="text-zinc-500 text-sm">
@@ -3338,6 +3361,19 @@ export const RecordDetailView = ({
           record={record}
           moduleId={moduleId}
           moduleName={moduleData?.name}
+        />
+      )}
+
+      {/* Enterprise Record Activity & Audit Drawer */}
+      {record && showActivityDrawer && (
+        <RecordActivityDrawer
+          isOpen={showActivityDrawer}
+          onClose={() => setShowActivityDrawer(false)}
+          recordId={record.id}
+          recordKey={record._record_key}
+          recordTitle={record.premises_name || record.name || record.title}
+          moduleName={moduleData?.name}
+          moduleId={moduleId}
         />
       )}
 
@@ -3802,97 +3838,5 @@ export const RecordDetailView = ({
     document.body
   )}
     </>
-  );
-};
-
-const RecordActivityFeed = ({ recordId }: { recordId: string }) => {
-  const [comments, setComments] = useState<any[]>([]);
-  const [newComment, setNewComment] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const loadComments = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/data/${recordId}/comments`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setComments(data);
-      }
-    } catch (err) {
-      console.error('Failed to load comments:', err);
-    }
-  };
-
-  useEffect(() => {
-    loadComments();
-  }, [recordId]);
-
-  const handlePostComment = async () => {
-    if (!newComment.trim()) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/data/${recordId}/comments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ body: newComment })
-      });
-      if (res.ok) {
-        setNewComment('');
-        await loadComments();
-        toast.success('Comment posted');
-      }
-    } catch (err) {
-      toast.error('Failed to post comment');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="space-y-6 text-left">
-      <div className="flex gap-2">
-        <input 
-          type="text"
-          value={newComment}
-          onChange={(e) => setNewComment(e.target.value)}
-          className="flex-1 bg-zinc-950 border border-zinc-900 rounded-xl px-4 py-2.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500/50"
-          placeholder="Write comment & @mention team..."
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') handlePostComment();
-          }}
-        />
-        <button 
-          onClick={handlePostComment}
-          disabled={loading}
-          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-indigo-600/10 shrink-0 cursor-pointer disabled:opacity-50"
-        >
-          Post
-        </button>
-      </div>
-
-      <div className="space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar">
-        {comments.map((comm) => (
-          <div key={comm.id} className="p-4 bg-zinc-905/30 border border-zinc-900 rounded-2xl space-y-1.5 transition-all hover:bg-zinc-900/10">
-            <div className="flex items-center justify-between text-[9px] font-bold text-zinc-500">
-              <span className="text-zinc-400 font-semibold">{comm.author}</span>
-              <span>{new Date(comm.timestamp).toLocaleString()}</span>
-            </div>
-            <p className="text-xs text-zinc-200 leading-normal">{comm.body}</p>
-          </div>
-        ))}
-        {comments.length === 0 && (
-          <div className="py-12 text-center text-zinc-600 border border-dashed border-zinc-900 rounded-2xl">
-            <p className="text-xs font-bold text-zinc-500">No activity logged yet.</p>
-            <p className="text-[10px] text-zinc-650 mt-0.5">Start collaborating by posting comments above.</p>
-          </div>
-        )}
-      </div>
-    </div>
   );
 };

@@ -6,6 +6,7 @@ import { validateRecordRules } from '../../src/lib/validationEngine';
 import { WorkflowEngine } from '../services/workflowEngine';
 import { AutomationEngine } from '../services/automationEngine';
 import { triggerWebhooks } from '../services/webhookService';
+import { logRecordActivity, computeFieldDiff } from '../lib/audit';
 
 const router = express.Router();
 
@@ -656,6 +657,34 @@ router.post('/records', async (req: TenantRequest, res) => {
 
     // Trigger Webhooks
     triggerWebhooks(tenantId, 'record.created', formatted);
+
+    // Enterprise Audit Activity Logging
+    const recordTitle = finalData.premises_name || finalData.name || finalData.title || finalData._record_key || record.id;
+    const submissionSource = finalData._submissionSource || (finalData._formId ? 'FORM' : 'DIRECT_UI');
+    const formTitle = finalData._formName || ((module.config as any)?.forms || []).find((f: any) => f.id === finalData._formId)?.title;
+
+    logRecordActivity({
+      tenantId,
+      actorId: (req as any).user?.memberId || (req as any).user?.id || (req as any).user?.uid || 'system',
+      action: 'RECORD_CREATED',
+      category: 'CREATION',
+      resourceId: record.id,
+      moduleId,
+      moduleName: module.name,
+      resourceKey: finalData._record_key,
+      resourceTitle: String(recordTitle),
+      newValue: {
+        status: record.status,
+        snapshot: finalData
+      },
+      metadata: {
+        source: submissionSource,
+        formId: finalData._formId,
+        formTitle: formTitle || finalData._formId,
+        ip: req.ip || (req.headers['x-forwarded-for'] as string),
+        userAgent: req.headers['user-agent']
+      }
+    }).catch(e => console.error('[Audit Log Record Created Error]:', e));
 
     res.json(formatted);
   } catch (err: any) {
@@ -1370,6 +1399,78 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
     // Trigger Webhooks
     triggerWebhooks(tenantId, 'record.updated', formatted);
 
+    // Enterprise Audit Activity Logging (PUT)
+    const recKey = (record.data as any)?._record_key || formatted.premises_name || formatted.name || record.id;
+    const recTitle = (record.data as any)?.premises_name || (record.data as any)?.name || (record.data as any)?.title || recKey;
+    const actorId = (req as any).user?.memberId || (req as any).user?.id || (req as any).user?.uid || 'system';
+
+    if (existing.status !== record.status) {
+      logRecordActivity({
+        tenantId,
+        actorId,
+        action: 'STATUS_CHANGED',
+        category: 'STATUS',
+        resourceId: record.id,
+        moduleId: record.moduleId,
+        moduleName: module?.name,
+        resourceKey: (record.data as any)?._record_key,
+        resourceTitle: String(recTitle),
+        oldValue: { status: existing.status },
+        newValue: { status: record.status },
+        description: `Status changed from "${existing.status}" to "${record.status}"`,
+        metadata: {
+          fromStatus: existing.status,
+          toStatus: record.status,
+          transitionReason: transitionTo ? `Transitioned to node ${transitionTo}` : 'Workflow update'
+        }
+      }).catch(e => console.error(e));
+    }
+
+    if (oldData.assigneeId !== newData.assigneeId) {
+      logRecordActivity({
+        tenantId,
+        actorId,
+        action: 'ASSIGNMENT_CHANGED',
+        category: 'ASSIGNMENT',
+        resourceId: record.id,
+        moduleId: record.moduleId,
+        moduleName: module?.name,
+        resourceKey: (record.data as any)?._record_key,
+        resourceTitle: String(recTitle),
+        oldValue: { assigneeId: oldData.assigneeId },
+        newValue: { assigneeId: newData.assigneeId },
+        description: newData.assigneeId ? `Assigned to team member` : `Unassigned`,
+        metadata: {
+          fromAssigneeId: oldData.assigneeId,
+          toAssigneeId: newData.assigneeId
+        }
+      }).catch(e => console.error(e));
+    }
+
+    const layout = (module?.config as any)?.layout || [];
+    const diffs = computeFieldDiff(oldData, newData, layout);
+    if (diffs.length > 0) {
+      logRecordActivity({
+        tenantId,
+        actorId,
+        action: 'FIELD_UPDATED',
+        category: 'FIELD',
+        resourceId: record.id,
+        moduleId: record.moduleId,
+        moduleName: module?.name,
+        resourceKey: (record.data as any)?._record_key,
+        resourceTitle: String(recTitle),
+        changes: diffs,
+        oldValue: oldData,
+        newValue: newData,
+        metadata: {
+          fieldsChanged: diffs.map(f => f.fieldId),
+          ip: req.ip || (req.headers['x-forwarded-for'] as string),
+          userAgent: req.headers['user-agent']
+        }
+      }).catch(e => console.error(e));
+    }
+
     res.json(formatted);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1610,6 +1711,78 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
     // Trigger Webhooks
     triggerWebhooks(tenantId, 'record.updated', formatted);
 
+    // Enterprise Audit Activity Logging (PATCH)
+    const recKey = (record.data as any)?._record_key || formatted.premises_name || formatted.name || record.id;
+    const recTitle = (record.data as any)?.premises_name || (record.data as any)?.name || (record.data as any)?.title || recKey;
+    const actorId = (req as any).user?.memberId || (req as any).user?.id || (req as any).user?.uid || 'system';
+
+    if (existing.status !== record.status) {
+      logRecordActivity({
+        tenantId,
+        actorId,
+        action: 'STATUS_CHANGED',
+        category: 'STATUS',
+        resourceId: record.id,
+        moduleId: record.moduleId,
+        moduleName: module?.name,
+        resourceKey: (record.data as any)?._record_key,
+        resourceTitle: String(recTitle),
+        oldValue: { status: existing.status },
+        newValue: { status: record.status },
+        description: `Status changed from "${existing.status}" to "${record.status}"`,
+        metadata: {
+          fromStatus: existing.status,
+          toStatus: record.status,
+          transitionReason: transitionTo ? `Transitioned to node ${transitionTo}` : 'Inline update'
+        }
+      }).catch(e => console.error(e));
+    }
+
+    if (oldData.assigneeId !== newData.assigneeId) {
+      logRecordActivity({
+        tenantId,
+        actorId,
+        action: 'ASSIGNMENT_CHANGED',
+        category: 'ASSIGNMENT',
+        resourceId: record.id,
+        moduleId: record.moduleId,
+        moduleName: module?.name,
+        resourceKey: (record.data as any)?._record_key,
+        resourceTitle: String(recTitle),
+        oldValue: { assigneeId: oldData.assigneeId },
+        newValue: { assigneeId: newData.assigneeId },
+        description: newData.assigneeId ? `Assigned to team member` : `Unassigned`,
+        metadata: {
+          fromAssigneeId: oldData.assigneeId,
+          toAssigneeId: newData.assigneeId
+        }
+      }).catch(e => console.error(e));
+    }
+
+    const layout = (module?.config as any)?.layout || [];
+    const diffs = computeFieldDiff(oldData, newData, layout);
+    if (diffs.length > 0) {
+      logRecordActivity({
+        tenantId,
+        actorId,
+        action: 'FIELD_UPDATED',
+        category: 'FIELD',
+        resourceId: record.id,
+        moduleId: record.moduleId,
+        moduleName: module?.name,
+        resourceKey: (record.data as any)?._record_key,
+        resourceTitle: String(recTitle),
+        changes: diffs,
+        oldValue: oldData,
+        newValue: newData,
+        metadata: {
+          fieldsChanged: diffs.map(f => f.fieldId),
+          ip: req.ip || (req.headers['x-forwarded-for'] as string),
+          userAgent: req.headers['user-agent']
+        }
+      }).catch(e => console.error(e));
+    }
+
     res.json(formatted);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1676,6 +1849,27 @@ router.delete('/records/:id', async (req: TenantRequest, res) => {
 
     // Trigger Webhooks
     triggerWebhooks(tenantId, 'record.deleted', { id });
+
+    // Enterprise Audit Activity Logging (DELETE)
+    if (existing) {
+      logRecordActivity({
+        tenantId,
+        actorId: (req as any).user?.memberId || (req as any).user?.id || (req as any).user?.uid || 'system',
+        action: 'RECORD_DELETED',
+        category: 'SECURITY',
+        resourceId: id,
+        moduleId: existing.moduleId,
+        moduleName: (existing as any).module?.name || existing.moduleId,
+        resourceKey: (existing.data as any)?._record_key,
+        resourceTitle: (existing.data as any)?.name || (existing.data as any)?.premises_name || (existing.data as any)?._record_key || id,
+        oldValue: existing.data,
+        description: `Record deleted (moved to Recycling Bin)`,
+        metadata: {
+          ip: req.ip || (req.headers['x-forwarded-for'] as string),
+          userAgent: req.headers['user-agent']
+        }
+      }).catch(e => console.error(e));
+    }
 
     res.json({ success: true, count: result.count });
   } catch (err: any) {

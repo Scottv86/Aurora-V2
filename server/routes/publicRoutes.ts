@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { globalPrisma } from '../lib/prisma';
 import { SecurityScreeningService } from '../services/securityScreening';
+import { logRecordActivity } from '../lib/audit';
 
 const router = Router();
 
@@ -342,6 +343,42 @@ router.post('/modules/:moduleId/submissions', async (req, res) => {
     }, globalPrisma).catch(err => {
       console.error('[PublicAPI] Error triggering FORM_SUBMITTED event:', err);
     });
+
+    // Enterprise Audit Activity Logging (Public Form Submission)
+    const recTitle = submissionData.name || submissionData.premises_name || submissionData.title || customerRef || record.id;
+    const submitterName = submissionData.fullName || submissionData.applicantName || submissionData.contactName || submissionData.name || 'External Applicant';
+    const submitterEmail = submissionData.email || submissionData.workEmail || '';
+
+    logRecordActivity({
+      tenantId: moduleData.tenantId,
+      actorId: 'public_guest',
+      actor: {
+        id: 'public_guest',
+        name: submitterName,
+        email: submitterEmail,
+        type: 'PUBLIC_FORM'
+      },
+      action: 'RECORD_CREATED',
+      category: 'CREATION',
+      resourceId: record.id,
+      moduleId: targetModuleId,
+      moduleName: moduleData.name,
+      resourceKey: customerRef,
+      resourceTitle: String(recTitle),
+      newValue: {
+        status: 'New',
+        snapshot: submissionData
+      },
+      description: `Submitted via Public Form "${moduleData.name}"`,
+      metadata: {
+        source: 'FORM',
+        formId: submittedFormId,
+        formTitle: moduleData.name,
+        customerRef,
+        ip: req.ip || (req.headers['x-forwarded-for'] as string),
+        userAgent: req.headers['user-agent']
+      }
+    }).catch(e => console.error('[Public Submission Audit Error]:', e));
 
     res.status(201).json({ 
       success: true, 

@@ -205,7 +205,7 @@ export const AURORA_APPS: AppItem[] = [
     color: 'text-red-500',
     to: '/workspace/apps/feed',
     category: 'Communication',
-    status: 'coming_soon'
+    status: 'active'
   },
   {
     id: 'campaigns',
