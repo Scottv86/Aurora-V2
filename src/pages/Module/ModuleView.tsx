@@ -6158,17 +6158,15 @@ export const ModuleView = () => {
       )}
 
       {/* Record Activity & Audit Drawer */}
-      {activityRecord && (
-        <RecordActivityDrawer
-          isOpen={!!activityRecord}
-          onClose={() => setActivityRecord(null)}
-          recordId={activityRecord.id}
-          recordKey={activityRecord._record_key}
-          recordTitle={activityRecord.premises_name || activityRecord.name || activityRecord.title}
-          moduleName={moduleData?.name}
-          moduleId={moduleData?.id || (typeof moduleId === 'string' ? moduleId : '')}
-        />
-      )}
+      <RecordActivityDrawer
+        isOpen={!!activityRecord}
+        onClose={() => setActivityRecord(null)}
+        recordId={activityRecord?.id || ''}
+        recordKey={activityRecord?._record_key}
+        recordTitle={activityRecord?.premises_name || activityRecord?.name || activityRecord?.title}
+        moduleName={moduleData?.name}
+        moduleId={moduleData?.id || (typeof moduleId === 'string' ? moduleId : '')}
+      />
 
       {/* Move Record(s) Modal */}
       {recordsToMove && recordsToMove.length > 0 && (

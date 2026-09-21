@@ -3365,17 +3365,15 @@ export const RecordDetailView = ({
       )}
 
       {/* Enterprise Record Activity & Audit Drawer */}
-      {record && showActivityDrawer && (
-        <RecordActivityDrawer
-          isOpen={showActivityDrawer}
-          onClose={() => setShowActivityDrawer(false)}
-          recordId={record.id}
-          recordKey={record._record_key}
-          recordTitle={record.premises_name || record.name || record.title}
-          moduleName={moduleData?.name}
-          moduleId={moduleId}
-        />
-      )}
+      <RecordActivityDrawer
+        isOpen={showActivityDrawer && !!record}
+        onClose={() => setShowActivityDrawer(false)}
+        recordId={record?.id || ''}
+        recordKey={record?._record_key}
+        recordTitle={record?.premises_name || record?.name || record?.title}
+        moduleName={moduleData?.name}
+        moduleId={moduleId}
+      />
 
       {/* Workflow Visualizer Modal */}
       {createPortal(

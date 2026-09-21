@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   History, 
   X, 
@@ -50,12 +50,60 @@ export const RecordActivityDrawer: React.FC<RecordActivityDrawerProps> = ({
   const [submittingComment, setSubmittingComment] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
 
+  // Cache last active record metadata so exit animation displays smoothly without flash of blank text
+  const recordInfoRef = useRef({
+    recordId,
+    recordKey,
+    recordTitle,
+    moduleName,
+    moduleId
+  });
+
+  if (recordId) {
+    recordInfoRef.current = {
+      recordId,
+      recordKey,
+      recordTitle,
+      moduleName,
+      moduleId
+    };
+  }
+
+  const activeRecordId = recordId || recordInfoRef.current.recordId;
+  const activeRecordKey = recordKey || recordInfoRef.current.recordKey;
+  const activeRecordTitle = recordTitle || recordInfoRef.current.recordTitle;
+  const activeModuleName = moduleName || recordInfoRef.current.moduleName;
+
+  // Escape key listener to close drawer smoothly
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  // Lock body scroll while drawer is open
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isOpen]);
+
   const fetchEvents = async () => {
-    if (!recordId || !tenant?.id) return;
+    const targetId = activeRecordId;
+    if (!targetId || !tenant?.id) return;
     setLoading(true);
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';
-      const res = await fetch(`${API_BASE_URL}/api/audit/${recordId}?order=${sortOrder}`, {
+      const res = await fetch(`${API_BASE_URL}/api/audit/${targetId}?order=${sortOrder}`, {
         headers: {
           'x-tenant-id': tenant.id,
           'Authorization': `Bearer ${token}`
@@ -195,49 +243,50 @@ export const RecordActivityDrawer: React.FC<RecordActivityDrawerProps> = ({
     toast.success('Audit trail exported to CSV');
   };
 
-  if (!isOpen) return null;
-
   return createPortal(
-    <div className="fixed inset-0 z-[99999] flex justify-end">
-      {/* Backdrop */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        onClick={onClose}
-        className="absolute inset-0 bg-zinc-950/60 backdrop-blur-xs transition-opacity"
-      />
-
-      {/* Drawer */}
-      <motion.div
-        ref={drawerRef}
-        initial={{ x: '100%' }}
-        animate={{ x: 0 }}
-        exit={{ x: '100%' }}
-        transition={{ type: 'spring', damping: 28, stiffness: 280 }}
-        className="relative w-full max-w-xl h-full bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 shadow-2xl flex flex-col z-10 overflow-hidden"
-      >
-        {/* Header */}
-        <div className="p-5 border-b border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/50 flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-9 h-9 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center border border-indigo-500/20 shrink-0">
-                <History size={18} />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-bold text-zinc-900 dark:text-white truncate">
-                    Activity & Audit Trail
-                  </h2>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shrink-0">
-                    {events.length} {events.length === 1 ? 'event' : 'events'}
-                  </span>
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          key="activity-drawer-backdrop"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.25, ease: 'easeInOut' }}
+          onClick={onClose}
+          className="fixed inset-0 z-[99998] bg-zinc-950/60 backdrop-blur-xs cursor-pointer"
+        />
+      )}
+      {isOpen && (
+        <motion.div
+          key="activity-drawer-panel"
+          ref={drawerRef}
+          initial={{ x: '100%' }}
+          animate={{ x: 0 }}
+          exit={{ x: '100%', transition: { type: 'spring', damping: 30, stiffness: 300 } }}
+          transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+          className="fixed inset-y-0 right-0 z-[99999] w-full max-w-xl bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 shadow-2xl flex flex-col overflow-hidden"
+        >
+          {/* Header */}
+            <div className="p-5 border-b border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/50 flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center border border-indigo-500/20 shrink-0">
+                    <History size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-sm font-bold text-zinc-900 dark:text-white truncate">
+                        Activity & Audit Trail
+                      </h2>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shrink-0">
+                        {events.length} {events.length === 1 ? 'event' : 'events'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
+                      {activeModuleName ? `${activeModuleName} • ` : ''}{activeRecordKey || activeRecordTitle || activeRecordId}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
-                  {moduleName ? `${moduleName} • ` : ''}{recordKey || recordTitle || recordId}
-                </p>
-              </div>
-            </div>
 
             <div className="flex items-center gap-1 shrink-0">
               {/* Chronological Sort Toggle */}
@@ -376,7 +425,8 @@ export const RecordActivityDrawer: React.FC<RecordActivityDrawerProps> = ({
           </form>
         </div>
       </motion.div>
-    </div>,
+      )}
+    </AnimatePresence>,
     document.body
   );
 };
