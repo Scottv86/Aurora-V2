@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { TenantRequest } from '../middleware/tenantMiddleware';
 import { globalPrisma } from '../lib/prisma';
 import { GoogleGenAI } from '@google/genai';
+import { checkAIFeatureOrThrow } from '../lib/aiPermissions';
 
 const router = Router();
 
@@ -422,6 +423,8 @@ router.delete('/:id', async (req: TenantRequest, res: Response) => {
 router.post('/generate-palette', async (req: TenantRequest, res: Response) => {
   try {
     const { prompt, industry, brandName } = req.body;
+    const { db, tenantId } = await getDbContext(req);
+    await checkAIFeatureOrThrow(tenantId, (req as any).user?.uid, 'ai:brand_kit_generator', db);
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (apiKey) {
@@ -560,6 +563,8 @@ Return ONLY valid JSON with no markdown backticks, matching this exact JSON sche
 router.post('/generate-logo', async (req: TenantRequest, res: Response) => {
   try {
     const { prompt, brandName, industry } = req.body;
+    const { db, tenantId } = await getDbContext(req);
+    await checkAIFeatureOrThrow(tenantId, (req as any).user?.uid, 'ai:brand_kit_generator', db);
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (apiKey) {

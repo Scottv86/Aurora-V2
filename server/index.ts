@@ -40,6 +40,7 @@ import chatRoutes from './routes/chatRoutes';
 import searchRoutes from './routes/searchRoutes';
 import brandKitRoutes from './routes/brandKitRoutes';
 import templateRoutes from './routes/templateRoutes';
+import documentRoutes from './routes/documentRoutes';
 
 
 
@@ -154,6 +155,7 @@ app.use('/api/inbox', authenticate, requireTenantAccess, inboxRoutes);
 app.use('/api/chat', authenticate, requireTenantAccess, chatRoutes);
 app.use('/api/brand-kits', authenticate, requireTenantAccess, brandKitRoutes);
 app.use('/api/templates', authenticate, requireTenantAccess, templateRoutes);
+app.use('/api/documents', documentRoutes);
 
 
 

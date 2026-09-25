@@ -64,6 +64,8 @@ model Tenant {
   chatPresences          ChatUserPresence[]
   brandKits              BrandKit[]
   templateCatalogs       TemplateCatalog[]
+  universalDocuments     UniversalDocument[]
+  universalDisposalSchedules UniversalDisposalSchedule[]
 
   @@map("tenants")
 }
@@ -1507,4 +1509,122 @@ model TemplateCatalog {
   @@index([tenantId], map: "TemplateCatalog_tenantId_idx")
   @@map("template_catalogs")
 }
+
+model UniversalDocument {
+  id                   String                       @id @default(cuid())
+  tenantId             String                       @map("tenant_id")
+  name                 String
+  originalFilename     String                       @map("original_filename")
+  mimeType             String                       @map("mime_type")
+  sizeBytes            Int                          @default(0) @map("size_bytes")
+  sha256               String?
+  storageProvider      String                       @default("local") @map("storage_provider") // "local" | "supabase" | "s3"
+  storagePath          String                       @map("storage_path")
+  url                  String?
+  classification       String                       @default("INTERNAL") // "PUBLIC" | "INTERNAL" | "CONFIDENTIAL" | "RESTRICTED"
+  documentType         String                       @default("GENERAL") @map("document_type")
+  retentionScheduleId  String?                      @map("retention_schedule_id")
+  retentionExpiryDate  DateTime?                    @map("retention_expiry_date")
+  disposalAction       String?                      @default("ARCHIVE") @map("disposal_action") // "ARCHIVE" | "SOFT_DELETE" | "PERMANENT_PURGE" | "REVIEW"
+  isLegalHold          Boolean                      @default(false) @map("is_legal_hold")
+  legalHoldReason      String?                      @map("legal_hold_reason")
+  legalHoldAppliedBy   String?                      @map("legal_hold_applied_by")
+  legalHoldAppliedAt   DateTime?                    @map("legal_hold_applied_at")
+  isWormLocked         Boolean                      @default(false) @map("is_worm_locked")
+  ocrText              String?                      @db.Text @map("ocr_text")
+  aiSummary            String?                      @db.Text @map("ai_summary")
+  aiMetadata           Json?                        @map("ai_metadata")
+  status               String                       @default("ACTIVE") // "ACTIVE" | "PENDING_DISPOSAL" | "ARCHIVED" | "PURGED" | "TRASHED"
+  uploadedBy           String?                      @map("uploaded_by")
+  createdAt            DateTime                     @default(now()) @map("created_at")
+  updatedAt            DateTime                     @updatedAt @map("updated_at")
+
+  tenant               Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  retentionSchedule    UniversalDisposalSchedule?   @relation(fields: [retentionScheduleId], references: [id])
+  versions             UniversalDocumentVersion[]
+  links                UniversalDocumentLink[]
+  auditLogs            UniversalDocumentAuditLog[]
+
+  @@index([tenantId])
+  @@index([classification])
+  @@index([documentType])
+  @@index([retentionExpiryDate])
+  @@index([isLegalHold])
+  @@map("universal_documents")
+}
+
+model UniversalDocumentVersion {
+  id            String            @id @default(cuid())
+  documentId    String            @map("document_id")
+  versionNumber Int               @default(1) @map("version_number")
+  storagePath   String            @map("storage_path")
+  sizeBytes     Int               @default(0) @map("size_bytes")
+  sha256        String?
+  note          String?
+  createdBy     String?           @map("created_by")
+  createdAt     DateTime          @default(now()) @map("created_at")
+
+  document      UniversalDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@map("universal_document_versions")
+}
+
+model UniversalDocumentLink {
+  id         String            @id @default(cuid())
+  documentId String            @map("document_id")
+  tenantId   String            @map("tenant_id")
+  sourceType String            @map("source_type") // "RECORD" | "FORM" | "DRIVE" | "DOC_APP" | "INBOX" | "CHAT"
+  moduleId   String?           @map("module_id")
+  recordId   String?           @map("record_id")
+  fieldId    String?           @map("field_id")
+  folderId   String?           @map("folder_id")
+  createdAt  DateTime          @default(now()) @map("created_at")
+
+  document   UniversalDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, sourceType, recordId])
+  @@index([documentId])
+  @@map("universal_document_links")
+}
+
+model UniversalDisposalSchedule {
+  id                    String              @id @default(cuid())
+  tenantId              String              @map("tenant_id")
+  name                  String
+  moduleScope           String?             @map("module_scope")
+  documentType          String?             @map("document_type")
+  retentionPeriodMonths Int                 @default(84) @map("retention_period_months")
+  durationLabel         String              @map("duration_label")
+  action                String              @default("ARCHIVE") // "ARCHIVE" | "SOFT_DELETE" | "PERMANENT_PURGE" | "REVIEW"
+  requiresApproval      Boolean             @default(true) @map("requires_approval")
+  description           String?
+  createdAt             DateTime            @default(now()) @map("created_at")
+  updatedAt             DateTime            @updatedAt @map("updated_at")
+
+  tenant                Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  documents             UniversalDocument[]
+
+  @@index([tenantId])
+  @@map("universal_disposal_schedules")
+}
+
+model UniversalDocumentAuditLog {
+  id         String            @id @default(cuid())
+  documentId String            @map("document_id")
+  tenantId   String            @map("tenant_id")
+  action     String            // "UPLOAD" | "VIEW" | "DOWNLOAD" | "RENAME" | "RECLASSIFY" | "LEGAL_HOLD_APPLIED" | "LEGAL_HOLD_REMOVED" | "DISPOSAL_PURGED" | "VERSION_UPLOAD"
+  actor      String
+  actorId    String?           @map("actor_id")
+  details    String
+  metadata   Json?
+  createdAt  DateTime          @default(now()) @map("created_at")
+
+  document   UniversalDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([tenantId, action])
+  @@map("universal_document_audit_logs")
+}
+
 

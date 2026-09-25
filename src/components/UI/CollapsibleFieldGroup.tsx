@@ -59,12 +59,15 @@ export const CollapsibleFieldGroup: React.FC<CollapsibleFieldGroupProps> = ({
     }
   };
 
+  const [isAnimating, setIsAnimating] = useState(false);
+
   // Default to true if not specified to preserve existing behavior
   const showIcon = field.showIcon !== false;
 
   return (
     <div className={cn(
-      "overflow-hidden transition-all duration-300 rounded-2xl bg-white dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-zinc-800/80",
+      "transition-all duration-300 rounded-2xl bg-white dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-zinc-800/80 relative focus-within:z-30 hover:z-20",
+      (isCollapsed || isAnimating) ? "overflow-hidden" : "overflow-visible",
       isCollapsed ? "shadow-xs" : "shadow-sm",
       className
     )}>
@@ -72,7 +75,8 @@ export const CollapsibleFieldGroup: React.FC<CollapsibleFieldGroupProps> = ({
       <div 
         className={cn(
           "px-4.5 py-3.5 flex items-center justify-between select-none",
-          isCollapsible ? "cursor-pointer hover:bg-zinc-100/60 dark:hover:bg-zinc-800/40 transition-colors" : ""
+          isCollapsible ? "cursor-pointer hover:bg-zinc-100/60 dark:hover:bg-zinc-800/40 transition-colors" : "",
+          isCollapsed ? "rounded-2xl" : "rounded-t-2xl"
         )}
         onClick={toggleCollapse}
       >
@@ -123,24 +127,36 @@ export const CollapsibleFieldGroup: React.FC<CollapsibleFieldGroupProps> = ({
       </div>
 
       {/* Content */}
-      <AnimatePresence initial={false}>
-        {!isCollapsed && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ 
-              height: { duration: 0.3, ease: [0.04, 0.62, 0.23, 0.98] },
-              opacity: { duration: 0.15 }
-            }}
-          >
-            <div className="h-px bg-zinc-200/60 dark:bg-zinc-800/60" />
-            <div className="p-4.5">
-              {children}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {isCollapsible ? (
+        <AnimatePresence initial={false}>
+          {!isCollapsed && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              onAnimationStart={() => setIsAnimating(true)}
+              onAnimationComplete={() => setIsAnimating(false)}
+              transition={{ 
+                height: { duration: 0.3, ease: [0.04, 0.62, 0.23, 0.98] },
+                opacity: { duration: 0.15 }
+              }}
+              className={cn(isAnimating ? "overflow-hidden" : "overflow-visible")}
+            >
+              <div className="h-px bg-zinc-200/60 dark:bg-zinc-800/60" />
+              <div className="p-4.5">
+                {children}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      ) : (
+        <div className="overflow-visible">
+          <div className="h-px bg-zinc-200/60 dark:bg-zinc-800/60" />
+          <div className="p-4.5">
+            {children}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

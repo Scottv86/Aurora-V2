@@ -20,9 +20,11 @@ const AccordionSection: React.FC<AccordionSectionProps> = ({
   children,
   isLast
 }) => {
+  const [isAnimating, setIsAnimating] = useState(false);
   return (
     <div className={cn(
-      "overflow-hidden transition-all duration-300",
+      "transition-all duration-300 relative focus-within:z-30 hover:z-20",
+      (isOpen && !isAnimating) ? "overflow-visible" : "overflow-hidden",
       !isLast && "border-b border-zinc-100/80 dark:border-zinc-800/50"
     )}>
       {/* Header */}
@@ -69,10 +71,13 @@ const AccordionSection: React.FC<AccordionSectionProps> = ({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
+            onAnimationStart={() => setIsAnimating(true)}
+            onAnimationComplete={() => setIsAnimating(false)}
             transition={{ 
               height: { duration: 0.3, ease: [0.04, 0.62, 0.23, 0.98] },
               opacity: { duration: 0.15 }
             }}
+            className={cn(isAnimating ? "overflow-hidden" : "overflow-visible")}
           >
             <div className="p-5 border-t border-zinc-200/60 dark:border-zinc-800/60">
               {children}
@@ -106,11 +111,11 @@ export const AccordionContainer: React.FC<AccordionContainerProps> = ({
 
   return (
     <div className={cn(
-      "w-full bg-white dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl overflow-hidden shadow-xs",
+      "w-full bg-white dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl shadow-xs overflow-visible relative focus-within:z-30 hover:z-20",
       className
     )}>
       {/* Main Accordion Header */}
-      <div className="px-4.5 py-3.5 border-b border-zinc-200/60 dark:border-zinc-800/60 flex items-center gap-3">
+      <div className="px-4.5 py-3.5 border-b border-zinc-200/60 dark:border-zinc-800/60 flex items-center gap-3 rounded-t-2xl">
         <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20 dark:text-indigo-400 border border-indigo-500/20 flex items-center justify-center">
           <DynamicIcon name={field.iconName || 'ListOrdered'} size={16} />
         </div>

@@ -189,6 +189,12 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
   const toggleBuilderFullscreen = useCallback(() => {
     setIsBuilderFullscreen(prev => !prev);
   }, []);
+
+  useEffect(() => {
+    if (tenant?.id) {
+      localStorage.setItem('aurora_tenant_id', tenant.id);
+    }
+  }, [tenant?.id]);
   
   const [members, setMembers] = useState<TenantMember[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);

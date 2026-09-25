@@ -36,6 +36,16 @@ export const TimePicker: React.FC<TimePickerProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const [openUp, setOpenUp] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setOpenUp(spaceBelow < 300 && rect.top > 300);
+    }
+  }, [isOpen]);
+
   // Parse current value
   const [hours, minutes] = useMemo(() => {
     if (!value) return [12, 0];
@@ -88,9 +98,16 @@ export const TimePicker: React.FC<TimePickerProps> = ({
   };
 
   return (
-    <div className={cn("relative w-full", className)} ref={containerRef}>
+    <div className={cn("relative w-full", isOpen && "z-50", className)} ref={containerRef}>
       <div 
         onClick={() => !readonly && setIsOpen(!isOpen)}
+        tabIndex={readonly ? -1 : 0}
+        onKeyDown={(e) => {
+          if (!readonly && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            setIsOpen(!isOpen);
+          }
+        }}
         className={cn(
           "w-full bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white flex items-center justify-between cursor-pointer transition-all group",
           isOpen && "border-indigo-500 ring-4 ring-indigo-500/5 bg-white dark:bg-zinc-950",
@@ -116,10 +133,13 @@ export const TimePicker: React.FC<TimePickerProps> = ({
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            initial={{ opacity: 0, y: openUp ? -10 : 10, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.95 }}
-            className="absolute z-[100] mt-2 left-0 w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl p-4 overflow-hidden"
+            exit={{ opacity: 0, y: openUp ? -10 : 10, scale: 0.95 }}
+            className={cn(
+              "absolute z-[100] left-0 w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl p-4 overflow-hidden",
+              openUp ? "bottom-full mb-2" : "top-full mt-2"
+            )}
           >
             {/* Header / Selector */}
             <div className="flex flex-col items-center gap-6 py-2">

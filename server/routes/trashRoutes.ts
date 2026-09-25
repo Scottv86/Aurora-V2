@@ -22,12 +22,25 @@ router.get('/', async (req: TenantRequest, res) => {
 
     // Auto-clean expired items (older than 30 days)
     const now = new Date();
-    await model.deleteMany({
-      where: {
-        tenantId,
-        expiresAt: { lt: now }
+    try {
+      const expiredTrash = await model.findMany({
+        where: { tenantId, expiresAt: { lt: now } }
+      });
+      for (const item of expiredTrash) {
+        if (item.itemType === 'DOCUMENT') {
+          try {
+            const { DocumentService } = await import('../services/documentService');
+            await DocumentService.deleteDocument(item.itemId, 'System Auto-Purge (Expired Trash)', true);
+          } catch {}
+        }
       }
-    }).catch(() => {});
+      await model.deleteMany({
+        where: {
+          tenantId,
+          expiresAt: { lt: now }
+        }
+      });
+    } catch {}
 
     const items = await model.findMany({
       where: { tenantId },
@@ -232,6 +245,21 @@ router.post('/:id/restore', async (req: TenantRequest, res) => {
             createdAt: payload.createdAt ? new Date(payload.createdAt) : new Date()
           }
         });
+      } else if (item.itemType === 'DOCUMENT') {
+        await globalPrisma.universalDocument.update({
+          where: { id: item.itemId },
+          data: { status: 'ACTIVE' }
+        });
+        await globalPrisma.universalDocumentAuditLog.create({
+          data: {
+            documentId: item.itemId,
+            tenantId,
+            action: 'RESTORED',
+            actor: (req as any).user?.email || 'User',
+            details: 'Restored document from Recycling Bin back to Active Vault'
+          }
+        });
+        emitTenantUpdate(tenantId, 'document_updated', { id: item.itemId, status: 'ACTIVE' });
       }
     } catch (restoreErr: any) {
       console.warn('[TrashRoutes] Direct table restore notice:', restoreErr.message);
@@ -258,6 +286,19 @@ router.delete('/:id', async (req: TenantRequest, res) => {
     const model = getTrashModel(db);
     const { id } = req.params;
 
+    const item = await model.findFirst({
+      where: { id, tenantId }
+    });
+
+    if (item && item.itemType === 'DOCUMENT') {
+      try {
+        const { DocumentService } = await import('../services/documentService');
+        await DocumentService.deleteDocument(item.itemId, (req as any).user?.email || 'Recycling Bin Shredder', true);
+      } catch (docErr: any) {
+        console.warn('[TrashRoutes] Document physical purge error:', docErr?.message || docErr);
+      }
+    }
+
     await model.deleteMany({
       where: { id, tenantId }
     });
@@ -276,6 +317,21 @@ router.delete('/', async (req: TenantRequest, res) => {
     const db = req.db || globalPrisma;
     const tenantId = req.tenantId!;
     const model = getTrashModel(db);
+
+    const items = await model.findMany({
+      where: { tenantId }
+    });
+
+    for (const item of items) {
+      if (item.itemType === 'DOCUMENT') {
+        try {
+          const { DocumentService } = await import('../services/documentService');
+          await DocumentService.deleteDocument(item.itemId, (req as any).user?.email || 'Recycling Bin Shredder', true);
+        } catch (docErr: any) {
+          console.warn('[TrashRoutes] Document physical purge error:', docErr?.message || docErr);
+        }
+      }
+    }
 
     await model.deleteMany({
       where: { tenantId }

@@ -252,7 +252,11 @@ export const AISettingsPage = () => {
           f.key === 'ai:ask_aurora_filter' ||
           f.key === 'ai:record_summary' ||
           f.key === 'ai:report_generator' ||
-          f.key === 'ai:document_template'
+          f.key === 'ai:document_template' ||
+          f.key === 'ai:document_ocr' ||
+          f.key === 'ai:document_copilot' ||
+          f.key === 'ai:document_magic_populate' ||
+          f.key === 'ai:document_classification_pii'
         ) {
           updated[f.key] = true;
         } else {
@@ -384,7 +388,7 @@ export const AISettingsPage = () => {
   };
 
   const subNavItems: SettingsSubNavItem[] = [
-    { id: 'governance', label: 'Feature Governance', icon: ShieldCheck, description: '19-Feature Policy Matrix' },
+    { id: 'governance', label: 'Feature Governance', icon: ShieldCheck, description: `${AI_FEATURES_CATALOG.length}-Feature Policy Matrix` },
     { id: 'keys', label: 'API Keys & Providers', icon: Key, description: 'BYOK Provider Keys' },
     { id: 'routing', label: 'Model Tiers & Routing', icon: Sliders, description: 'Cost & performance' },
     { id: 'telemetry', label: 'Usage & Quotas', icon: BarChart3, description: 'Token consumption' },
@@ -493,7 +497,7 @@ export const AISettingsPage = () => {
                       Governance Quick Presets
                     </h3>
                     <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                      Apply pre-configured compliance templates across all 19 platform AI tools with one click.
+                      Apply pre-configured compliance templates across all {AI_FEATURES_CATALOG.length} platform AI capabilities with one click.
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">

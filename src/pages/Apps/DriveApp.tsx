@@ -100,6 +100,13 @@ export const DriveApp = () => {
     }
   }, [searchParams]);
 
+  // Synchronize real Universal Documents from backend into Drive view
+  useEffect(() => {
+    DriveService.syncWithUniversalDocuments().then(() => {
+      refresh();
+    });
+  }, []);
+
   // Modals state
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');

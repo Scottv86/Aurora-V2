@@ -20,7 +20,16 @@ export type AIFeatureKey =
   | 'ai:workflow_actions'
   | 'ai:smart_inbox'
   | 'ai:vector_embeddings'
-  | 'ai:public_portal_chat';
+  | 'ai:public_portal_chat'
+  | 'ai:document_ocr'
+  | 'ai:document_copilot'
+  | 'ai:document_magic_populate'
+  | 'ai:document_classification_pii'
+  | 'ai:brand_kit_generator'
+  | 'ai:document_record_converter'
+  | 'ai:document_redaction'
+  | 'ai:document_version_diff'
+  | 'ai:document_obligation_extractor';
 
 export type AIPolicyState = 'ALLOW' | 'DENY' | 'INHERIT';
 
@@ -40,10 +49,19 @@ const ALL_AI_FEATURES: AIFeatureKey[] = [
   'ai:form_builder',
   'ai:page_builder',
   'ai:connector_architect',
+  'ai:brand_kit_generator',
   'ai:report_generator',
   'ai:formula_assistant',
   'ai:record_summary',
   'ai:document_template',
+  'ai:document_ocr',
+  'ai:document_copilot',
+  'ai:document_magic_populate',
+  'ai:document_classification_pii',
+  'ai:document_record_converter',
+  'ai:document_redaction',
+  'ai:document_version_diff',
+  'ai:document_obligation_extractor',
   'ai:ask_aurora_filter',
   'ai:workforce_onboarding',
   'ai:digital_twin',

@@ -33,6 +33,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { UserAvatarWithPresence } from '../../components/Common/UserPresenceBadge';
 import { ShareRecordModal } from '../../components/Platform/ShareRecordModal';
 import { RecordActivityDrawer } from '../../components/Platform/RecordActivityDrawer';
+import { RecordDocumentsDrawer } from '../../components/Platform/RecordDocumentsDrawer';
 import { MODULES } from '../../constants/modules';
 import { DATA_API_URL, API_BASE_URL } from '../../config';
 import { FieldInput } from '../../components/FieldInput';
@@ -197,6 +198,8 @@ export const RecordDetailView = ({
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showActivityDrawer, setShowActivityDrawer] = useState(false);
+  const [showDocumentsDrawer, setShowDocumentsDrawer] = useState(false);
+  const [docCount, setDocCount] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showVisualizer, setShowVisualizer] = useState(false);
   const [lookupData, setLookupData] = useState<Record<string, any[]>>({});
@@ -1759,7 +1762,8 @@ export const RecordDetailView = ({
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
                   className={cn(
-                    "group/field transition-all relative min-w-0",
+                    "group/field transition-all relative min-w-0 focus-within:z-30 hover:z-20",
+                    activeFieldId === fObj.id && "z-30",
                     fObj.width === 'half' ? "col-span-6" : "col-span-12",
                     !activeFieldId && !isVisual && !isReadOnly && !['calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field!.type) && "cursor-pointer"
                   )}
@@ -1931,6 +1935,9 @@ export const RecordDetailView = ({
           {visibleFields.map((field: ModuleField) => {
             const isErrorField = validationErrorField?.fieldId === field.id;
             const isContainerOrStructural = ['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field.type);
+            const isParentOfActive = isContainerOrStructural && (
+              (field.fields || []).some((f: any) => f.id === activeFieldId)
+            );
 
             return (
               <motion.div 
@@ -1948,7 +1955,8 @@ export const RecordDetailView = ({
                 data-field-id={field.id}
                 data-active-field={activeFieldId === field.id ? field.id : undefined}
                 className={cn(
-                  "group/field transition-all relative min-w-0",
+                  "group/field transition-all relative min-w-0 focus-within:z-30 hover:z-20",
+                  (activeFieldId === field.id || isParentOfActive) && "z-30",
                   !activeFieldId && !isContainerOrStructural && "cursor-pointer"
                 )}
                 style={{
@@ -2846,6 +2854,22 @@ export const RecordDetailView = ({
               </AnimatePresence>
             </div>
 
+            {/* Files & Compliance Vault Button */}
+            <button
+              type="button"
+              onClick={() => setShowDocumentsDrawer(true)}
+              className="h-8 px-2.5 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-200 shadow-xs cursor-pointer hover:border-indigo-500/30"
+              title="View Attached Files & Vault"
+            >
+              <LucideIcons.Files size={12} className="text-indigo-500" />
+              <span className="hidden sm:inline">Files</span>
+              {docCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                  {docCount}
+                </span>
+              )}
+            </button>
+
             {/* Activity Feed Button */}
             <button
               type="button"
@@ -2893,6 +2917,18 @@ export const RecordDetailView = ({
                   transition={{ duration: 0.15 }}
                   className="absolute right-0 mt-1.5 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl z-50 overflow-hidden p-1 space-y-0.5"
                 >
+                  {/* Documents & Vault Option */}
+                  <button
+                    onClick={() => {
+                      setShowDocumentsDrawer(true);
+                      setShowMoreMenu(false);
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-2 transition-all cursor-pointer"
+                  >
+                    <LucideIcons.FolderLock size={13} className="text-indigo-500 shrink-0" />
+                    <span>Documents & Vault</span>
+                  </button>
+
                   {/* Activity & Audit Trail Option */}
                   <button
                     onClick={() => {
@@ -2916,6 +2952,7 @@ export const RecordDetailView = ({
                     <Share2 size={13} className="text-indigo-500 shrink-0" />
                     <span>Share Record</span>
                   </button>
+
 
                   {/* Export PDF & Custom Module Actions */}
                   {interfaceSettings.actions && interfaceSettings.actions.length > 0 ? (
@@ -3374,6 +3411,18 @@ export const RecordDetailView = ({
         moduleName={moduleData?.name}
         moduleId={moduleId}
       />
+
+      {/* Enterprise Record Documents & Compliance Drawer */}
+      <RecordDocumentsDrawer
+        isOpen={showDocumentsDrawer && !!record}
+        onClose={() => setShowDocumentsDrawer(false)}
+        recordId={record?.id || ''}
+        recordTitle={record?.premises_name || record?.name || record?.title}
+        moduleName={moduleData?.name}
+        moduleId={moduleId}
+        onDocumentCountChange={setDocCount}
+      />
+
 
       {/* Workflow Visualizer Modal */}
       {createPortal(

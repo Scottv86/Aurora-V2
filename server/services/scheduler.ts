@@ -51,6 +51,9 @@ export class AutomationScheduler {
     // Check KPI metric threshold alerts & workflow triggers
     await this.checkKpiThresholds();
 
+    // Check statutory Record Disposal Schedules (RDS) and purge expired records
+    await this.checkRecordDisposalSchedules();
+
     // Fetch and execute active Antigravity scheduled tasks
     try {
       const chatScheduledTasks = await (globalPrisma as any).antigravityScheduledTask.findMany({
@@ -648,5 +651,46 @@ export class AutomationScheduler {
       console.warn('[Scheduler] KPI threshold check notice:', err);
     }
   }
+
+  /**
+   * Scans and enforces statutory Record Disposal Schedules (RDS)
+   */
+  private static async checkRecordDisposalSchedules() {
+    try {
+      const now = new Date();
+      // Find active documents whose retentionExpiryDate has arrived and is NOT under legal hold
+      const expiredDocs = await (globalPrisma as any).universalDocument.findMany({
+        where: {
+          retentionExpiryDate: { lte: now },
+          isLegalHold: false,
+          status: 'ACTIVE'
+        },
+        include: { retentionSchedule: true }
+      });
+
+      if (!expiredDocs || expiredDocs.length === 0) return;
+
+      for (const doc of expiredDocs) {
+        // If schedule does not require human approval, auto-dispose
+        if (doc.retentionSchedule?.requiresApproval === false) {
+          const { DocumentService } = await import('./documentService');
+          if (doc.disposalAction === 'PERMANENT_PURGE' || doc.disposalAction === 'SOFT_DELETE') {
+            // Stage into recycling bin first (30-day grace period before permanent shredding)
+            await DocumentService.deleteDocument(doc.id, 'System RDS Daemon', false);
+            console.log(`[Scheduler] Staged expired document "${doc.name}" (${doc.id}) into Recycling Bin for 30-day grace period`);
+          }
+        } else {
+          // Transition to PENDING_DISPOSAL review queue for admin dual-custody authorization
+          await (globalPrisma as any).universalDocument.update({
+            where: { id: doc.id },
+            data: { status: 'PENDING_DISPOSAL' }
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[Scheduler] Record disposal schedule notice:', err);
+    }
+  }
 }
+
 

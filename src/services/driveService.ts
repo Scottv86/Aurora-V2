@@ -299,6 +299,102 @@ export class DriveService {
     return this.getItems().find(item => item.id === id);
   }
 
+  static async syncWithUniversalDocuments(): Promise<void> {
+    try {
+      const { DocumentClientService } = await import('./documentClientService');
+      const backendDocs = await DocumentClientService.searchDocuments();
+      if (!backendDocs || backendDocs.length === 0) return;
+
+      const items = this.getItems();
+      
+      // Ensure "Module & App Records" folder exists in TENANT_SHARED root
+      let moduleFolder = items.find(i => i.id === 'folder-module-attachments');
+      if (!moduleFolder) {
+        moduleFolder = {
+          id: 'folder-module-attachments',
+          name: 'Module & App Attachments',
+          type: 'FOLDER',
+          driveType: 'TENANT_SHARED',
+          parentId: null,
+          ownerId: 'system',
+          ownerName: 'System Vault',
+          sizeBytes: 0,
+          isFavorite: false,
+          status: 'ACTIVE',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          recordsMetadata: {
+            recordNumber: 'REC-SYS-VAULT',
+            classification: 'INTERNAL',
+            isLegalHold: false
+          },
+          versions: [],
+          auditLogs: []
+        };
+        items.unshift(moduleFolder);
+      }
+
+      // Merge backend documents into items
+      let changed = false;
+      for (const doc of backendDocs) {
+        const existingIdx = items.findIndex(i => i.id === doc.id);
+        const driveItem: DriveItem = {
+          id: doc.id,
+          name: doc.originalFilename || doc.name,
+          type: doc.mimeType?.includes('html') || doc.mimeType?.includes('text') ? 'DOCUMENT' : 'FILE',
+          driveType: 'TENANT_SHARED',
+          parentId: 'folder-module-attachments',
+          ownerId: doc.uploadedBy || 'user',
+          ownerName: doc.uploadedBy || 'User',
+          sizeBytes: doc.sizeBytes || 0,
+          mimeType: doc.mimeType,
+          isFavorite: false,
+          status: doc.status === 'TRASHED' ? 'TRASHED' : 'ACTIVE',
+          createdAt: doc.createdAt,
+          updatedAt: doc.updatedAt,
+          recordsMetadata: {
+            recordNumber: `REC-${doc.id.slice(-6).toUpperCase()}`,
+            classification: doc.classification || 'INTERNAL',
+            retentionScheduleId: doc.retentionScheduleId,
+            retentionExpiryDate: doc.retentionExpiryDate ? doc.retentionExpiryDate.split('T')[0] : undefined,
+            disposalAction: doc.disposalAction as any,
+            isLegalHold: doc.isLegalHold,
+            legalHoldReason: doc.legalHoldReason || undefined,
+            legalHoldAppliedBy: doc.legalHoldAppliedBy || undefined,
+            legalHoldAppliedAt: doc.legalHoldAppliedAt || undefined
+          },
+          versions: (doc.versions || []).map(v => ({
+            id: v.id,
+            versionNumber: v.versionNumber,
+            updatedBy: v.createdBy || 'User',
+            updatedAt: v.createdAt,
+            sizeBytes: v.sizeBytes,
+            note: v.note || undefined
+          })),
+          auditLogs: (doc.auditLogs || []).map(a => ({
+            id: a.id,
+            itemId: doc.id,
+            timestamp: a.createdAt,
+            actor: a.actor,
+            action: a.action as any,
+            details: a.details
+          }))
+        };
+
+        if (existingIdx !== -1) {
+          items[existingIdx] = { ...items[existingIdx], ...driveItem };
+        } else {
+          items.push(driveItem);
+          changed = true;
+        }
+      }
+
+      this.saveItems(items);
+    } catch (err) {
+      console.warn('[DriveService] Failed to sync with universal documents:', err);
+    }
+  }
+
   static getChildren(parentId: string | null, driveType: DriveType): DriveItem[] {
     return this.getItems().filter(item => {
       const isMatchingDrive = item.driveType === driveType || (driveType === 'PERSONAL' && (item.driveType as string) === 'MY_DRIVE');

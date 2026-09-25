@@ -19,6 +19,7 @@ import { usePlatform } from '../hooks/usePlatform';
 import { useAuth } from '../hooks/useAuth';
 import { API_BASE_URL } from '../config';
 import { useParams } from 'react-router-dom';
+import { DocumentField } from './Platform/DocumentField';
 
 const SearchableLookup = ({ 
   value, 
@@ -376,6 +377,7 @@ interface FieldInputProps {
   density?: 'compact' | 'standard' | 'spacious';
   isMouseDownRef?: React.RefObject<boolean>;
   disabled?: boolean;
+  onAutoFillRecord?: (extracted: Record<string, any>) => void;
 }
 
 const FieldInputInner: React.FC<FieldInputProps> = ({ 
@@ -391,7 +393,8 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
   autoFocus = false,
   density = 'standard',
   isMouseDownRef,
-  disabled = false
+  disabled = false,
+  onAutoFillRecord
 }) => {
   const { type, label, placeholder, options, min, max, variant, optionsSource, lookupSource, optionLayout } = field;
   const effectiveSource = lookupSource || optionsSource;
@@ -941,6 +944,23 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
 
   if (type === 'richtext') {
     return <RichTextEditor value={localValue || ''} onChange={(val) => { updateLocalValue(val); setIsFocused(true); }} placeholder={placeholder} readonly={readonly} onBlur={handleBlur} />;
+  }
+
+  if (type === 'file') {
+    return (
+      <DocumentField
+        field={field}
+        value={localValue}
+        onChange={(val) => {
+          updateLocalValue(val);
+          triggerImmediateChange(val);
+        }}
+        readonly={readonly}
+        recordData={recordData}
+        allFields={allFields}
+        onAutoFillRecord={onAutoFillRecord}
+      />
+    );
   }
 
   if (type === 'signature_pad') {

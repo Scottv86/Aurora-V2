@@ -17,7 +17,16 @@ export type AIFeatureKey =
   | 'ai:workflow_actions'
   | 'ai:smart_inbox'
   | 'ai:vector_embeddings'
-  | 'ai:public_portal_chat';
+  | 'ai:public_portal_chat'
+  | 'ai:document_ocr'
+  | 'ai:document_copilot'
+  | 'ai:document_magic_populate'
+  | 'ai:document_classification_pii'
+  | 'ai:brand_kit_generator'
+  | 'ai:document_record_converter'
+  | 'ai:document_redaction'
+  | 'ai:document_version_diff'
+  | 'ai:document_obligation_extractor';
 
 export type AIPolicyState = 'ALLOW' | 'DENY' | 'INHERIT';
 
@@ -141,6 +150,14 @@ export const AI_FEATURES_CATALOG: AIFeatureDefinition[] = [
     defaultEnabled: true
   },
   {
+    key: 'ai:brand_kit_generator',
+    name: 'AI Brand Kit & Style Architect',
+    category: 'builders',
+    description: 'Generates company design systems, accessible UI color palettes, brand copy guidelines, boilerplate, and logo styling.',
+    icon: 'Palette',
+    defaultEnabled: true
+  },
+  {
     key: 'ai:report_generator',
     name: 'AI Report & Analytics Generator',
     category: 'analytics',
@@ -170,6 +187,38 @@ export const AI_FEATURES_CATALOG: AIFeatureDefinition[] = [
     category: 'documents_data',
     description: 'Generates formatted HTML contracts, SOPs, proposals, and dynamic template tags.',
     icon: 'FileCode',
+    defaultEnabled: true
+  },
+  {
+    key: 'ai:document_ocr',
+    name: 'Document & Image Multimodal OCR',
+    category: 'documents_data',
+    description: 'Extracts machine-readable text and structural layout from uploaded images, receipts, site photos, and PDF files using vision models.',
+    icon: 'ScanText',
+    defaultEnabled: true
+  },
+  {
+    key: 'ai:document_copilot',
+    name: 'File Copilot ("Ask this File")',
+    category: 'documents_data',
+    description: 'Conversational in-drawer AI assistant answering natural language questions directly against document text and raw binary file contents.',
+    icon: 'MessageSquare',
+    defaultEnabled: true
+  },
+  {
+    key: 'ai:document_magic_populate',
+    name: 'Document Magic Populate & Field Extraction',
+    category: 'documents_data',
+    description: 'Automatically extracts key business entities (invoices, vendors, dates, totals) from attached files with 1-click form auto-fill.',
+    icon: 'Wand2',
+    defaultEnabled: true
+  },
+  {
+    key: 'ai:document_classification_pii',
+    name: 'Document PII & Security Auto-Classification',
+    category: 'documents_data',
+    description: 'Scans uploaded documents for sensitive PII (tax identifiers, payment cards, banking info) and auto-escalates statutory security tiers.',
+    icon: 'ShieldAlert',
     defaultEnabled: true
   },
   {
@@ -226,6 +275,38 @@ export const AI_FEATURES_CATALOG: AIFeatureDefinition[] = [
     category: 'communications',
     description: 'Automated AI response generator for public customer support tickets and portal chat.',
     icon: 'MessageSquare',
+    defaultEnabled: true
+  },
+  {
+    key: 'ai:document_record_converter',
+    name: 'Document-to-Record AI Converter',
+    category: 'documents_data',
+    description: 'Converts unstructured documents directly into People & Organisation directory records or custom module records with field confidence verification and deduplication check.',
+    icon: 'FileOutput',
+    defaultEnabled: true
+  },
+  {
+    key: 'ai:document_redaction',
+    name: 'AI PII Redaction & Document Sanitiser',
+    category: 'documents_data',
+    description: 'Detects sensitive PII patterns in documents and generates cryptographically masked, sanitized versions with irreversible black-box redactions.',
+    icon: 'EyeOff',
+    defaultEnabled: true
+  },
+  {
+    key: 'ai:document_version_diff',
+    name: 'AI Version Comparison & Clause Diff',
+    category: 'documents_data',
+    description: 'Compares any two document versions, producing colored clause diffs and an automated executive summary of legal or commercial changes.',
+    icon: 'GitCompare',
+    defaultEnabled: true
+  },
+  {
+    key: 'ai:document_obligation_extractor',
+    name: 'Contract Obligation & Milestone Extractor',
+    category: 'documents_data',
+    description: 'Scans agreements and contracts for operative milestones, compliance clauses, and renewal deadlines, auto-generating scheduled tasks.',
+    icon: 'CalendarCheck',
     defaultEnabled: true
   }
 ];
