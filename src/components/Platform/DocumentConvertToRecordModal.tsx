@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   FileOutput, 
   X, 
@@ -18,6 +18,7 @@ import {
 import { UniversalDocument, DocumentConversionDraft, LineItemRow } from '../../types/document';
 import { DocumentClientService } from '../../services/documentClientService';
 import { usePlatform } from '../../hooks/usePlatform';
+import { PLATFORM_MODULES } from '../../config/platformModules';
 import { toast } from 'sonner';
 
 interface DocumentConvertToRecordModalProps {
@@ -46,11 +47,29 @@ export const DocumentConvertToRecordModal: React.FC<DocumentConvertToRecordModal
   const [isExecuting, setIsExecuting] = useState(false);
   const [createdResult, setCreatedResult] = useState<{ recordId: string; recordName: string } | null>(null);
 
-  useEffect(() => {
-    if (modules && modules.length > 0 && !selectedModuleId) {
-      setSelectedModuleId(modules[0].id);
-    }
+  // Filter to only true custom record modules (exclude system services, page views, dashboards, and queues)
+  const customModules = useMemo(() => {
+    if (!modules || !Array.isArray(modules)) return [];
+    const systemNames = ['Dashboard', 'My Work', 'Automations', 'Work Distribution', 'My Reports'];
+    return modules.filter((mod: any) => {
+      if (!mod || !mod.id) return false;
+      if (['PAGE', 'QUEUE', 'SYSTEM', 'EXTERNAL'].includes(mod.type)) return false;
+      if (['Queue', 'System', 'Page', 'Dashboard'].includes(mod.category)) return false;
+      if (mod.isGlobal || mod.isIntakeTriage || mod.config?.isIntakeTriage) return false;
+      if (systemNames.includes(mod.name)) return false;
+      const isPlatform = PLATFORM_MODULES.some(
+        pm => pm.id === mod.id || pm.id === mod.templateId || pm.name === mod.name || pm.slug === mod.templateId
+      );
+      if (isPlatform) return false;
+      return true;
+    });
   }, [modules]);
+
+  useEffect(() => {
+    if (customModules.length > 0 && (!selectedModuleId || !customModules.some(m => m.id === selectedModuleId))) {
+      setSelectedModuleId(customModules[0].id);
+    }
+  }, [customModules, selectedModuleId]);
 
   useEffect(() => {
     if (isOpen && document) {
@@ -81,7 +100,7 @@ export const DocumentConvertToRecordModal: React.FC<DocumentConvertToRecordModal
       setLoading(true);
       setCreatedResult(null);
 
-      const targetMod = modules.find(m => m.id === selectedModuleId);
+      const targetMod = customModules.find(m => m.id === selectedModuleId) || modules?.find(m => m.id === selectedModuleId);
       const modFields = resolveModuleFields(targetMod);
       const targetSchema = targetType === 'PEOPLE_ORG' 
         ? { entityType } 
@@ -215,9 +234,13 @@ export const DocumentConvertToRecordModal: React.FC<DocumentConvertToRecordModal
                 onChange={(e) => setSelectedModuleId(e.target.value)}
                 className="px-2.5 py-1 text-xs font-medium rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white"
               >
-                {modules.map(m => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
-                ))}
+                {customModules.length === 0 ? (
+                  <option value="" disabled>No custom modules found</option>
+                ) : (
+                  customModules.map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))
+                )}
               </select>
             </div>
           )}
@@ -292,7 +315,7 @@ export const DocumentConvertToRecordModal: React.FC<DocumentConvertToRecordModal
                         const isHigh = confidence >= 0.85;
                         const citation = draft?.sourceCitations?.[key];
 
-                        const targetMod = modules.find(m => m.id === selectedModuleId);
+                        const targetMod = customModules.find(m => m.id === selectedModuleId) || modules?.find(m => m.id === selectedModuleId);
                         const modFields = resolveModuleFields(targetMod);
                         const matchedField = modFields.find(f => f.id === key);
                         const fieldLabel = matchedField?.label || key.replace(/([A-Z])/g, ' $1');
