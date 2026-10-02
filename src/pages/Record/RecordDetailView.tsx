@@ -25,6 +25,7 @@ import {
   HelpCircle,
   MoreHorizontal,
   Share2,
+  Calendar,
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -47,6 +48,9 @@ import { Module, ModuleField } from '../../types/platform';
 import { calculateDefaultValue } from '../../services/fieldService';
 import { CollapsibleFieldGroup } from '../../components/UI/CollapsibleFieldGroup';
 import { WorkflowPreview } from '../../components/Builder/Workflow/WorkflowPreview';
+import { WorkflowStatusBar } from '../../components/Platform/WorkflowStatusBar';
+import { ScheduleActivityModal } from '../../components/Platform/ScheduleActivityModal';
+import { ScheduledActivity } from '../../lib/workflowProcessUtils';
 import { RepeatableGroupBlock } from '../../components/Platform/RepeatableGroupBlock';
 import { RecursiveCollectionBlock } from '../../components/Platform/RecursiveCollectionBlock';
 import { AccordionContainer } from '../../components/UI/AccordionContainer';
@@ -198,6 +202,7 @@ export const RecordDetailView = ({
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showActivityDrawer, setShowActivityDrawer] = useState(false);
+  const [showScheduleActivityModal, setShowScheduleActivityModal] = useState(false);
   const [showDocumentsDrawer, setShowDocumentsDrawer] = useState(false);
   const [docCount, setDocCount] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -250,7 +255,6 @@ export const RecordDetailView = ({
   // Dropdown menus states and refs for toolbar
   const [showAssigneeMenu, setShowAssigneeMenu] = useState(false);
   const [showParticipantMenu, setShowParticipantMenu] = useState(false);
-  const [showTransitionsMenu, setShowTransitionsMenu] = useState(false);
   const [showHistoryMenu, setShowHistoryMenu] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [assigneeSearch, setAssigneeSearch] = useState('');
@@ -258,7 +262,6 @@ export const RecordDetailView = ({
 
   const assigneeMenuRef = useRef<HTMLDivElement>(null);
   const participantMenuRef = useRef<HTMLDivElement>(null);
-  const transitionsMenuRef = useRef<HTMLDivElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
 
   // Click outside hook for toolbar dropdowns
@@ -270,9 +273,6 @@ export const RecordDetailView = ({
       }
       if (participantMenuRef.current && !participantMenuRef.current.contains(target)) {
         setShowParticipantMenu(false);
-      }
-      if (transitionsMenuRef.current && !transitionsMenuRef.current.contains(target)) {
-        setShowTransitionsMenu(false);
       }
       if (moreMenuRef.current && !moreMenuRef.current.contains(target)) {
         setShowMoreMenu(false);
@@ -1435,7 +1435,7 @@ export const RecordDetailView = ({
 
 
 
-  const handleStatusTransition = async (newStatus: string, transitionTo?: string) => {
+  const handleStatusTransition = async (newStatus: string, transitionTo?: string, additionalData?: Record<string, any>) => {
     if (!tenant?.id || !moduleId || !recordId || !record || isTransitioning) return;
     
     setIsTransitioning(true);
@@ -1451,7 +1451,8 @@ export const RecordDetailView = ({
         body: JSON.stringify({
           moduleId,
           status: newStatus,
-          transitionTo
+          transitionTo,
+          ...(additionalData || {})
         })
       });
 
@@ -1462,12 +1463,81 @@ export const RecordDetailView = ({
 
       const updatedRecord = await res.json();
       setRecord(updatedRecord);
+      if (additionalData) {
+        setEditData(prev => ({ ...prev, ...additionalData }));
+      }
       toast.success(`Status updated to ${newStatus}`);
     } catch (error: any) {
       console.error("Status Update Error:", error);
       toast.error(error.message || "Failed to update status");
     } finally {
       setIsTransitioning(false);
+    }
+  };
+
+  const handleScheduleActivity = async (activity: ScheduledActivity) => {
+    if (!tenant?.id || !moduleId || !recordId || !record) return;
+    try {
+      const existingActivities: ScheduledActivity[] = record._activities || record.data?._activities || [];
+      const updatedActivities = [...existingActivities, activity];
+
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+      const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        },
+        body: JSON.stringify({
+          moduleId,
+          _activities: updatedActivities
+        })
+      });
+
+      if (res.ok) {
+        const updatedRecord = await res.json();
+        setRecord(updatedRecord);
+        toast.success(`Scheduled: ${activity.summary}`);
+      } else {
+        toast.error('Failed to schedule activity');
+      }
+    } catch (err) {
+      console.error('Error scheduling activity:', err);
+      toast.error('Error scheduling activity');
+    }
+  };
+
+  const handleCompleteActivity = async (activityId: string) => {
+    if (!tenant?.id || !moduleId || !recordId || !record) return;
+    try {
+      const existingActivities: ScheduledActivity[] = record._activities || record.data?._activities || [];
+      const updatedActivities = existingActivities.map(act => act.id === activityId ? { ...act, done: true } : act);
+
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+      const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        },
+        body: JSON.stringify({
+          moduleId,
+          _activities: updatedActivities
+        })
+      });
+
+      if (res.ok) {
+        const updatedRecord = await res.json();
+        setRecord(updatedRecord);
+        toast.success('Activity marked as done');
+      } else {
+        toast.error('Failed to update activity');
+      }
+    } catch (err) {
+      console.error('Error completing activity:', err);
+      toast.error('Error completing activity');
     }
   };
 
@@ -2532,114 +2602,7 @@ export const RecordDetailView = ({
             </button>
           ))}
 
-          {/* Workflow Status Pill */}
-          {activeWorkflow ? (
-            <div className="relative" ref={transitionsMenuRef}>
-              {(() => {
-                const wState = record.workflowState as any;
-                const activeNodeIds = wState?.activeNodeIds || (wState?.currentNodeId ? [wState.currentNodeId] : []);
 
-                if (activeNodeIds.length === 0) {
-                  return (
-                    <button
-                      onClick={handleStartWorkflow}
-                      disabled={isTransitioning}
-                      className="h-8 px-2.5 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-200 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shadow-xs disabled:opacity-50"
-                    >
-                      {isTransitioning ? (
-                        <Loader2 size={12} className="animate-spin text-indigo-500" />
-                      ) : (
-                        <LucideIcons.Zap size={12} className="text-amber-500" />
-                      )}
-                      <span>Start Workflow</span>
-                    </button>
-                  );
-                }
-
-                const displayNodeNames: string[] = [];
-                for (const nodeId of activeNodeIds) {
-                  const node = activeWorkflow?.nodes.find((n: any) => n.id === nodeId);
-                  if (!node) continue;
-                  
-                  let displayNode = node;
-                  if (node.type === 'ACTION' || node.type === 'DECISION') {
-                    const history = wState?.history || [];
-                    for (let i = history.length - 1; i >= 0; i--) {
-                      const histNode = activeWorkflow?.nodes.find((n: any) => n.id === history[i].nodeId);
-                      if (histNode && (histNode.type === 'STATUS' || histNode.type === 'START' || histNode.type === 'END')) {
-                        displayNode = histNode;
-                        break;
-                      }
-                    }
-                  }
-                  if (displayNode && !displayNodeNames.includes(displayNode.name)) {
-                    displayNodeNames.push(displayNode.name);
-                  }
-                }
-
-                const displayStatusText = displayNodeNames.length > 0 ? displayNodeNames.join(' / ') : 'Active';
-
-                const transitions: any[] = [];
-                for (const nodeId of activeNodeIds) {
-                  const nodeTransitions = wState?.transitions || activeWorkflow?.edges?.filter((e: any) => e.source === nodeId) || [];
-                  for (const edge of nodeTransitions) {
-                    if (!transitions.some((t: any) => t.id === edge.id)) {
-                      transitions.push(edge);
-                    }
-                  }
-                }
-
-                return (
-                  <>
-                    <button
-                      onClick={() => setShowTransitionsMenu(!showTransitionsMenu)}
-                      className="h-8 px-2.5 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-200 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold shadow-xs group"
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)] shrink-0" />
-                      <span className="truncate max-w-[120px]">{displayStatusText}</span>
-                      <LucideIcons.ChevronDown size={11} className="text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors shrink-0" />
-                    </button>
-
-                    <AnimatePresence>
-                      {showTransitionsMenu && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 6, scale: 0.95 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: 6, scale: 0.95 }}
-                          transition={{ duration: 0.15 }}
-                          className="absolute right-0 mt-1.5 w-52 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl z-50 overflow-hidden p-1.5 space-y-0.5"
-                        >
-                          <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-2.5 py-1">Transitions</p>
-                          {transitions.map((edge: any) => {
-                            const targetNode = activeWorkflow?.nodes.find((n: any) => n.id === edge.target);
-                            if (!targetNode) return null;
-
-                            return (
-                              <button
-                                key={edge.id}
-                                onClick={() => {
-                                  handleStatusTransition(targetNode.name, targetNode.id);
-                                  setShowTransitionsMenu(false);
-                                }}
-                                disabled={isTransitioning}
-                                className="w-full text-left px-3 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all flex items-center justify-between group/item disabled:opacity-50"
-                              >
-                                <span>{targetNode.name}</span>
-                                <LucideIcons.ArrowRight size={12} className="text-zinc-400 group-hover/item:translate-x-0.5 transition-transform" />
-                              </button>
-                            );
-                          })}
-                          {transitions.length === 0 && (
-                            <p className="text-[10px] text-zinc-400 italic px-2.5 py-1.5">No available transitions</p>
-                          )}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </>
-                );
-              })()}
-            </div>
-          ) : null}
 
           {/* People & Collaboration Group */}
           <div className="flex items-center gap-1.5">
@@ -2881,6 +2844,17 @@ export const RecordDetailView = ({
               <span className="hidden sm:inline">Activity</span>
             </button>
 
+            {/* Schedule Task Button */}
+            <button
+              type="button"
+              onClick={() => setShowScheduleActivityModal(true)}
+              className="h-8 px-2.5 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-200 shadow-xs cursor-pointer hover:border-indigo-500/30"
+              title="Schedule Activity (Call, Email, Meeting, Task)"
+            >
+              <Calendar size={12} className="text-indigo-500" />
+              <span className="hidden sm:inline">Schedule</span>
+            </button>
+
             {/* Share Button */}
             <button
               type="button"
@@ -3064,6 +3038,27 @@ export const RecordDetailView = ({
           )}
         </div>
       </div>
+
+      {/* Workflow Process Status Bar (Odoo-Style Next Step & Stage Ribbon) */}
+      {activeWorkflow && (
+        <WorkflowStatusBar
+          workflow={activeWorkflow}
+          record={record}
+          allFields={allFields}
+          isTransitioning={isTransitioning}
+          onTransition={handleStatusTransition}
+          onStartWorkflow={handleStartWorkflow}
+          onScheduleActivity={handleScheduleActivity}
+          onCompleteActivity={handleCompleteActivity}
+          currentUserName={platformUser?.name || session?.user?.email}
+          currentUserId={session?.user?.id}
+          onOpenVisualizer={() => setShowVisualizer(true)}
+          className={cn(
+            "w-full px-6 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 shrink-0 box-border",
+            isEmbedded ? "h-[52px]" : "h-13"
+          )}
+        />
+      )}
 
       {/* Main Content Area Supporting all 5 Layout Options */}
       {editForm && !editForm.isMultistep ? (
@@ -3411,6 +3406,21 @@ export const RecordDetailView = ({
         moduleName={moduleData?.name}
         moduleId={moduleId}
       />
+
+      {/* Schedule Activity & Task Modal */}
+      {showScheduleActivityModal && !!record && (
+        <ScheduleActivityModal
+          isOpen={showScheduleActivityModal}
+          onClose={() => setShowScheduleActivityModal(false)}
+          recordTitle={record?.premises_name || record?.name || record?.title || record?._record_key || record?.id}
+          currentUserName={platformUser?.name || session?.user?.email}
+          currentUserId={session?.user?.id}
+          onSchedule={async (act) => {
+            await handleScheduleActivity(act);
+            setShowScheduleActivityModal(false);
+          }}
+        />
+      )}
 
       {/* Enterprise Record Documents & Compliance Drawer */}
       <RecordDocumentsDrawer

@@ -53,6 +53,8 @@ import { ShareRecordModal } from '../../components/Platform/ShareRecordModal';
 import { MoveRecordModal } from '../../components/Platform/MoveRecordModal';
 import { BulkPasteRecordModal } from '../../components/Platform/BulkPasteRecordModal';
 import { RecordActivityDrawer } from '../../components/Platform/RecordActivityDrawer';
+import { TransitionRequirementsModal } from '../../components/Platform/TransitionRequirementsModal';
+import { resolveRecordNextStep, checkMissingRequiredFields, resolveRecordSlaStatus } from '../../lib/workflowProcessUtils';
 
 const InlineAssigneeCell = ({
   record,
@@ -1789,6 +1791,66 @@ export const ModuleView = () => {
     toast.success('Copied record link to clipboard');
   };
 
+  const [advancingRecordId, setAdvancingRecordId] = useState<string | null>(null);
+  const [quickCompleteRecord, setQuickCompleteRecord] = useState<any | null>(null);
+  const [quickCompleteAction, setQuickCompleteAction] = useState<any | null>(null);
+  const [quickCompleteMissingFields, setQuickCompleteMissingFields] = useState<ModuleField[]>([]);
+
+  const handleQuickAdvanceWorkflow = async (record: any, action: any, additionalData?: Record<string, any>) => {
+    if (!tenant?.id || !moduleId || !action || advancingRecordId) return;
+
+    // If there are required fields missing and no additionalData was supplied, prompt with modal
+    if (!additionalData && action.requiredFieldIds && action.requiredFieldIds.length > 0) {
+      const missing = checkMissingRequiredFields(action.requiredFieldIds, record, allFields);
+      if (missing.length > 0) {
+        setQuickCompleteRecord(record);
+        setQuickCompleteAction(action);
+        setQuickCompleteMissingFields(missing);
+        return;
+      }
+    }
+
+    setAdvancingRecordId(record.id);
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const body: any = { 
+        moduleId,
+        ...(additionalData || {})
+      };
+      if (action.isStart) {
+        body.transitionTo = action.targetNodeId;
+      } else {
+        body.status = action.targetNodeName;
+        body.transitionTo = action.targetNodeId;
+      }
+
+      const res = await fetch(`${DATA_API_URL}/records/${record.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        },
+        body: JSON.stringify(body)
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to advance workflow');
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['records', tenant.id, moduleId] });
+      toast.success(action.isStart ? 'Workflow started' : `Advanced to "${action.targetNodeName}"`);
+      setQuickCompleteRecord(null);
+      setQuickCompleteAction(null);
+      setQuickCompleteMissingFields([]);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to advance workflow');
+    } finally {
+      setAdvancingRecordId(null);
+    }
+  };
+
   const handleQuickUpdateStatus = async (record: any, newStatus: string) => {
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
@@ -2901,6 +2963,51 @@ export const ModuleView = () => {
                           );
                         })}
                       </div>
+
+                      {/* Next Step & SLA Pill on Kanban Card */}
+                      {(() => {
+                        const activeWorkflow = moduleData?.workflow || (moduleData?.workflows && moduleData.workflows[0]) || null;
+                        const slaStatus = resolveRecordSlaStatus(record);
+                        const res = activeWorkflow ? resolveRecordNextStep(record, activeWorkflow, allFields) : null;
+                        if (!res?.primaryAction && !res?.isCompleted && slaStatus.level === 'NONE') return null;
+
+                        return (
+                          <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/50 flex items-center justify-between gap-1 text-[10px]">
+                            {res?.isCompleted ? (
+                              <span className="inline-flex items-center gap-1 font-semibold text-emerald-600 dark:text-emerald-400">
+                                <LucideIcons.Check size={11} className="stroke-[2.5]" />
+                                <span>Completed</span>
+                              </span>
+                            ) : res?.primaryAction ? (
+                              <span className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400 max-w-full truncate" title={res.primaryAction.label}>
+                                <LucideIcons.ArrowRight size={10} className="shrink-0" />
+                                <span className="text-zinc-400 dark:text-zinc-500 font-semibold">Next:</span>
+                                <span className="font-bold truncate">{res.primaryAction.label}</span>
+                              </span>
+                            ) : null}
+
+                            {slaStatus.level !== 'NONE' && (
+                              <span
+                                className={cn(
+                                  "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold shrink-0 ml-auto border",
+                                  slaStatus.level === 'OVERDUE'
+                                    ? "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400"
+                                    : slaStatus.level === 'TODAY'
+                                    ? "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400"
+                                    : "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+                                )}
+                                title={slaStatus.label}
+                              >
+                                <span className={cn(
+                                  "w-1.5 h-1.5 rounded-full shrink-0",
+                                  slaStatus.level === 'OVERDUE' ? "bg-rose-500 animate-ping" : slaStatus.level === 'TODAY' ? "bg-amber-500 animate-pulse" : "bg-emerald-500"
+                                )} />
+                                <span className="truncate max-w-[85px]">{slaStatus.label}</span>
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       <div className="flex justify-end gap-1.5 pt-2 border-t border-zinc-100 dark:border-zinc-800/50">
                         {stages.indexOf(stage) > 0 && (
@@ -4848,6 +4955,153 @@ export const ModuleView = () => {
           </span>
         )
       },
+      nextStep: {
+        header: 'Next Step',
+        sortable: false,
+        className: densityClass,
+        style: interfaceSettings.master.columns?.find((c: any) => c.fieldId === 'nextStep')?.width 
+          ? { width: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === 'nextStep').width}px`, minWidth: `${interfaceSettings.master.columns.find((c: any) => c.fieldId === 'nextStep').width}px` } 
+          : { width: '190px', minWidth: '170px' },
+        accessor: (record: any) => {
+          const activeWorkflow = moduleData?.workflow || (moduleData?.workflows && moduleData.workflows[0]) || null;
+          const slaStatus = resolveRecordSlaStatus(record);
+
+          if (!activeWorkflow) {
+            if (slaStatus.level !== 'NONE') {
+              return (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full border shadow-2xs",
+                    slaStatus.level === 'OVERDUE'
+                      ? "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400"
+                      : slaStatus.level === 'TODAY'
+                      ? "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400"
+                      : "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+                  )}
+                  title={slaStatus.label}
+                >
+                  <span className={cn(
+                    "w-1.5 h-1.5 rounded-full shrink-0",
+                    slaStatus.level === 'OVERDUE' ? "bg-rose-500 animate-ping" : slaStatus.level === 'TODAY' ? "bg-amber-500 animate-pulse" : "bg-emerald-500"
+                  )} />
+                  <span className="truncate max-w-[130px]">{slaStatus.label}</span>
+                </span>
+              );
+            }
+            return <span className="text-xs text-zinc-400 dark:text-zinc-600">-</span>;
+          }
+          const res = resolveRecordNextStep(record, activeWorkflow, allFields);
+          const isRowAdvancing = advancingRecordId === record.id;
+
+          if (res.isCompleted) {
+            return (
+              <div className="flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                  <LucideIcons.Check size={11} className="stroke-[2.5]" />
+                  <span>Done</span>
+                </span>
+                {slaStatus.level !== 'NONE' && (
+                  <span
+                    className={cn(
+                      "w-2 h-2 rounded-full shrink-0",
+                      slaStatus.level === 'OVERDUE' ? "bg-rose-500 animate-ping" : slaStatus.level === 'TODAY' ? "bg-amber-500 animate-pulse" : "bg-emerald-500"
+                    )}
+                    title={slaStatus.label}
+                  />
+                )}
+              </div>
+            );
+          }
+          if (!res.isStarted) {
+            return (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={isRowAdvancing}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (res.primaryAction) {
+                      handleQuickAdvanceWorkflow(record, res.primaryAction);
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400 hover:text-white dark:hover:text-white bg-amber-500/10 hover:bg-amber-600 dark:hover:bg-amber-500 px-2.5 py-0.5 rounded-full border border-amber-500/20 transition-all cursor-pointer disabled:opacity-50"
+                  title="Click to start workflow"
+                >
+                  {isRowAdvancing ? (
+                    <LucideIcons.Loader2 size={11} className="animate-spin text-amber-500" />
+                  ) : (
+                    <LucideIcons.Zap size={11} className="text-amber-500" />
+                  )}
+                  <span>Start Workflow</span>
+                </button>
+                {slaStatus.level !== 'NONE' && (
+                  <span
+                    className={cn(
+                      "w-2 h-2 rounded-full shrink-0",
+                      slaStatus.level === 'OVERDUE' ? "bg-rose-500 animate-ping" : slaStatus.level === 'TODAY' ? "bg-amber-500 animate-pulse" : "bg-emerald-500"
+                    )}
+                    title={slaStatus.label}
+                  />
+                )}
+              </div>
+            );
+          }
+          if (res.primaryAction) {
+            return (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={isRowAdvancing}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleQuickAdvanceWorkflow(record, res.primaryAction);
+                  }}
+                  className="inline-flex items-center gap-1.5 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:text-white dark:hover:text-white bg-indigo-500/10 hover:bg-indigo-600 dark:hover:bg-indigo-500 px-2.5 py-0.5 rounded-full border border-indigo-500/20 transition-all max-w-[180px] truncate group cursor-pointer disabled:opacity-50"
+                  title={`Click to advance: ${res.primaryAction.label}`}
+                >
+                  {isRowAdvancing ? (
+                    <LucideIcons.Loader2 size={11} className="animate-spin text-indigo-500 shrink-0" />
+                  ) : (
+                    <LucideIcons.ArrowRight size={11} className="shrink-0 transition-transform group-hover:translate-x-0.5" />
+                  )}
+                  <span className="truncate">{res.primaryAction.label}</span>
+                </button>
+                {slaStatus.level !== 'NONE' && (
+                  <span
+                    className={cn(
+                      "w-2 h-2 rounded-full shrink-0",
+                      slaStatus.level === 'OVERDUE' ? "bg-rose-500 animate-ping" : slaStatus.level === 'TODAY' ? "bg-amber-500 animate-pulse" : "bg-emerald-500"
+                    )}
+                    title={slaStatus.label}
+                  />
+                )}
+              </div>
+            );
+          }
+          if (slaStatus.level !== 'NONE') {
+            return (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full border shadow-2xs",
+                  slaStatus.level === 'OVERDUE'
+                    ? "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400"
+                    : slaStatus.level === 'TODAY'
+                    ? "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400"
+                    : "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+                )}
+                title={slaStatus.label}
+              >
+                <span className={cn(
+                  "w-1.5 h-1.5 rounded-full shrink-0",
+                  slaStatus.level === 'OVERDUE' ? "bg-rose-500 animate-ping" : slaStatus.level === 'TODAY' ? "bg-amber-500 animate-pulse" : "bg-emerald-500"
+                )} />
+                <span className="truncate max-w-[130px]">{slaStatus.label}</span>
+              </span>
+            );
+          }
+          return <span className="text-xs text-zinc-400">-</span>;
+        }
+      },
       assigneeId: {
         header: 'Assignee',
         sortable: true,
@@ -4920,6 +5174,9 @@ export const ModuleView = () => {
       });
       if (!fallbackCustom.some((f: any) => f.id === 'status' || f.name?.toLowerCase() === 'status')) {
         builtColumns.push(systemColumnsMap.status);
+      }
+      if (moduleData?.workflow || (moduleData?.workflows && moduleData.workflows.length > 0)) {
+        builtColumns.push(systemColumnsMap.nextStep);
       }
       builtColumns.push(systemColumnsMap.createdAt);
     }
@@ -4994,6 +5251,7 @@ export const ModuleView = () => {
         { id: '_starred', label: 'Starred', type: 'boolean' as const },
         { id: 'assigneeId', label: 'Assignee', type: 'user' as const, userOptions: members },
         { id: 'status', label: 'Status', type: 'status' as const, options: allFields.find(f => f.type === 'select' || f.id === 'status' || f.name === 'status')?.options || ['Todo', 'In Progress', 'Done', 'Archived'] },
+        { id: 'nextStep', label: 'Next Step', type: 'text' as const },
         { id: 'createdAt', label: 'Created At', type: 'date' as const },
         { id: 'updatedAt', label: 'Updated At', type: 'date' as const }
       ];
@@ -6167,6 +6425,24 @@ export const ModuleView = () => {
         moduleName={moduleData?.name}
         moduleId={moduleData?.id || (typeof moduleId === 'string' ? moduleId : '')}
       />
+
+      {/* Quick Complete Requirements Modal for Table Advancements */}
+      {quickCompleteRecord && quickCompleteAction && (
+        <TransitionRequirementsModal
+          isOpen={!!quickCompleteRecord}
+          onClose={() => {
+            setQuickCompleteRecord(null);
+            setQuickCompleteAction(null);
+            setQuickCompleteMissingFields([]);
+          }}
+          targetNodeName={quickCompleteAction.targetNodeName}
+          missingFields={quickCompleteMissingFields}
+          onConfirm={async (values) => {
+            await handleQuickAdvanceWorkflow(quickCompleteRecord, quickCompleteAction, values);
+          }}
+          isSubmitting={advancingRecordId === quickCompleteRecord.id}
+        />
+      )}
 
       {/* Move Record(s) Modal */}
       {recordsToMove && recordsToMove.length > 0 && (

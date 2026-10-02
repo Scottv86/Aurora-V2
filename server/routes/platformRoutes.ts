@@ -45,7 +45,12 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
     // Determine primary tenant
     // We prioritize actual database memberships over the token's snapshot
     const primaryMembership = user.memberships[0];
-    const tenant: any = primaryMembership?.tenant || null;
+    let tenant: any = primaryMembership?.tenant || null;
+    if (!tenant) {
+      tenant = await globalPrisma.tenant.findFirst({
+        where: { status: 'active' }
+      }) || await globalPrisma.tenant.findFirst();
+    }
 
     // Calculate flattened capabilities for the primary membership
     const groupIds = primaryMembership?.permissionGroups?.map((pg: any) => pg.permissionGroupId) || [];

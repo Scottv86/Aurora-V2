@@ -310,6 +310,9 @@ export interface WorkflowNode {
   name: string;
   config?: Record<string, any>;
   position?: { x: number; y: number }; // Visual positioning
+  stageOrder?: number;
+  isStage?: boolean;
+  stageDescription?: string;
 }
 
 export interface WorkflowEdge {
@@ -318,6 +321,10 @@ export interface WorkflowEdge {
   target: string;
   condition?: string; // Aurora expression syntax
   label?: string;
+  isPrimary?: boolean;
+  actionButtonLabel?: string;
+  buttonVariant?: 'primary' | 'success' | 'destructive' | 'outline';
+  requiredFieldIds?: string[];
 }
 
 export interface Workflow {

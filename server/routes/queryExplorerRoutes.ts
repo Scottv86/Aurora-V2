@@ -213,6 +213,159 @@ const TABLE_SCHEMAS: Record<string, Array<{ name: string; type: string; nullable
   ]
 };
 
+interface IntrospectedSchema {
+  physicalTables: Array<{
+    name: string;
+    displayName?: string;
+    columns: Array<{
+      name: string;
+      type: string;
+      nullable: boolean;
+      isPrimary?: boolean;
+      foreignKey?: { targetTable: string; targetColumn: string };
+    }>;
+    foreignKeys: Record<string, { targetTable: string; targetColumn: string }>;
+  }>;
+  tableWhitelist: string[];
+  foreignKeyMap: Record<string, { targetTable: string; targetColumn: string }>;
+  columnToFkMap: Record<string, { targetTable: string; targetColumn: string }>;
+  timestamp: number;
+}
+
+let cachedSchema: IntrospectedSchema | null = null;
+const SCHEMA_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function getIntrospectedSchema(db: any): Promise<IntrospectedSchema> {
+  const now = Date.now();
+  if (cachedSchema && (now - cachedSchema.timestamp) < SCHEMA_CACHE_TTL) {
+    return cachedSchema;
+  }
+
+  try {
+    const [tables, cols, pks, fks]: [any[], any[], any[], any[]] = await Promise.all([
+      db.$queryRawUnsafe(`
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+          AND table_type = 'BASE TABLE'
+          AND table_name NOT IN ('_prisma_migrations', 'users', 'tenants')
+        ORDER BY table_name;
+      `),
+      db.$queryRawUnsafe(`
+        SELECT table_name, column_name, data_type, is_nullable
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+        ORDER BY table_name, ordinal_position;
+      `),
+      db.$queryRawUnsafe(`
+        SELECT tc.table_name, kcu.column_name
+        FROM information_schema.table_constraints AS tc
+        JOIN information_schema.key_column_usage AS kcu
+          ON tc.constraint_name = kcu.constraint_name
+          AND tc.table_schema = kcu.table_schema
+        WHERE tc.constraint_type = 'PRIMARY KEY'
+          AND tc.table_schema = 'public';
+      `),
+      db.$queryRawUnsafe(`
+        SELECT
+          tc.table_name AS source_table,
+          kcu.column_name AS source_column,
+          ccu.table_name AS target_table,
+          ccu.column_name AS target_column
+        FROM information_schema.table_constraints AS tc
+        JOIN information_schema.key_column_usage AS kcu
+          ON tc.constraint_name = kcu.constraint_name
+          AND tc.table_schema = kcu.table_schema
+        JOIN information_schema.constraint_column_usage AS ccu
+          ON ccu.constraint_name = tc.constraint_name
+          AND ccu.table_schema = tc.table_schema
+        WHERE tc.constraint_type = 'FOREIGN KEY'
+          AND tc.table_schema = 'public';
+      `)
+    ]);
+
+    const pkSet = new Set(pks.map(p => `${p.table_name}.${p.column_name}`));
+    const fkMap: Record<string, { targetTable: string; targetColumn: string }> = {};
+    const columnToFkMap: Record<string, { targetTable: string; targetColumn: string }> = {};
+
+    fks.forEach(f => {
+      const key = `${f.source_table}.${f.source_column}`;
+      const val = { targetTable: f.target_table, targetColumn: f.target_column };
+      fkMap[key] = val;
+      if (!columnToFkMap[f.source_column]) {
+        columnToFkMap[f.source_column] = val;
+      }
+    });
+
+    const tableColsMap: Record<string, any[]> = {};
+    cols.forEach(c => {
+      if (!tableColsMap[c.table_name]) {
+        tableColsMap[c.table_name] = [];
+      }
+      const isPrimary = pkSet.has(`${c.table_name}.${c.column_name}`);
+      const fk = fkMap[`${c.table_name}.${c.column_name}`];
+
+      let cleanType = c.data_type.toLowerCase();
+      if (cleanType.includes('character') || cleanType.includes('text')) cleanType = 'text';
+      else if (cleanType.includes('timestamp')) cleanType = 'timestamp';
+      else if (cleanType.includes('integer') || cleanType.includes('bigint') || cleanType.includes('smallint')) cleanType = 'int';
+      else if (cleanType.includes('boolean')) cleanType = 'bool';
+      else if (cleanType.includes('json')) cleanType = 'json';
+
+      tableColsMap[c.table_name].push({
+        name: c.column_name,
+        type: cleanType,
+        nullable: c.is_nullable === 'YES',
+        isPrimary,
+        foreignKey: fk || undefined
+      });
+    });
+
+    const physicalTables = tables.map(t => {
+      const tName = t.table_name;
+      const tCols = tableColsMap[tName] || [];
+      const tFks: Record<string, { targetTable: string; targetColumn: string }> = {};
+      tCols.forEach(col => {
+        if (col.foreignKey) {
+          tFks[col.name] = col.foreignKey;
+        }
+      });
+      return {
+        name: tName,
+        displayName: tName,
+        columns: tCols,
+        foreignKeys: tFks
+      };
+    });
+
+    const tableWhitelist = tables.map(t => t.table_name);
+
+    cachedSchema = {
+      physicalTables,
+      tableWhitelist,
+      foreignKeyMap: fkMap,
+      columnToFkMap,
+      timestamp: now
+    };
+
+    return cachedSchema;
+  } catch (err) {
+    console.error('[QueryExplorer API] Error introspecting database schema, falling back to static list:', err);
+    return {
+      physicalTables: Object.entries(TABLE_SCHEMAS).map(([name, columns]) => ({
+        name,
+        displayName: name,
+        columns,
+        foreignKeys: {}
+      })),
+      tableWhitelist: PHYSICAL_TABLES_WHITELIST,
+      foreignKeyMap: {},
+      columnToFkMap: {},
+      timestamp: now
+    };
+  }
+}
+
 function cleanQuery(query: string): string {
   // Strip single-line comments
   let cleaned = query.replace(/--.*$/gm, '');
@@ -221,7 +374,11 @@ function cleanQuery(query: string): string {
   return cleaned.trim();
 }
 
-function validateQuerySecurity(query: string, allowedTables: string[]): { isValid: boolean; error?: string } {
+function validateQuerySecurity(
+  query: string, 
+  allowedModules: string[], 
+  allowedPhysical: string[] = PHYSICAL_TABLES_WHITELIST
+): { isValid: boolean; error?: string } {
   const cleaned = cleanQuery(query);
   
   if (!cleaned) {
@@ -229,14 +386,12 @@ function validateQuerySecurity(query: string, allowedTables: string[]): { isVali
   }
 
   // 1. Check stacked queries (semicolons)
-  // Strip string literals to avoid blocking semicolons inside strings
   const strippedStrings = cleaned
     .replace(/'[^']*'/g, '')
     .replace(/"[^"]*"/g, '')
     .replace(/\$\$[\s\S]*?\$\$/g, '');
   
   if (strippedStrings.includes(';')) {
-    // Semicolon is only allowed if it is the very last non-whitespace character
     const lastCharIndex = cleaned.lastIndexOf(';');
     const isOnlyTrailing = cleaned.substring(lastCharIndex + 1).trim() === '';
     if (!isOnlyTrailing) {
@@ -270,7 +425,6 @@ function validateQuerySecurity(query: string, allowedTables: string[]): { isVali
   }
 
   // 4. Validate Table References in FROM/JOIN clauses
-  // Must be standalone word 'from' or 'join', not preceded by ':' (e.g. :datePresetFrom)
   const fromJoinRegex = /(?<!:)\b(?:from|join)\b\s+(?:"([^"]+)"|([a-zA-Z_][a-zA-Z0-9_]*))/gi;
   const matches = [...cleaned.matchAll(fromJoinRegex)];
   
@@ -280,15 +434,14 @@ function validateQuerySecurity(query: string, allowedTables: string[]): { isVali
     const rawTableName = match[1] || match[2];
     const tableName = rawTableName.toLowerCase();
     
-    // Ignore false positives on SQL keywords or parameter fragments
     if (SQL_SYNTAX_KEYWORDS.includes(tableName)) {
       continue;
     }
 
     const cleanName = tableName.replace(/_/g, ' ');
     
-    const isAllowedPhysical = PHYSICAL_TABLES_WHITELIST.includes(tableName);
-    const isAllowedModule = allowedTables.includes(tableName) || allowedTables.includes(cleanName);
+    const isAllowedPhysical = allowedPhysical.includes(tableName) || PHYSICAL_TABLES_WHITELIST.includes(tableName);
+    const isAllowedModule = allowedModules.includes(tableName) || allowedModules.includes(cleanName);
     
     if (!isAllowedPhysical && !isAllowedModule) {
       return { isValid: false, error: `Access to table '${rawTableName}' is restricted or table does not exist.` };
@@ -300,38 +453,52 @@ function validateQuerySecurity(query: string, allowedTables: string[]): { isVali
 
 /**
  * GET /api/query-explorer/schema
- * Returns the whitelisted schema and dynamic module configurations for Object Explorer.
+ * Returns the whitelisted schema, foreign keys, and dynamic module configurations for Object Explorer.
  */
 router.get('/schema', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
+    const introspected = await getIntrospectedSchema(db);
     
     // Fetch custom modules for the tenant
     const modules = await db.module.findMany({
       where: { enabled: true }
     });
     
-    const physicalTables = Object.entries(TABLE_SCHEMAS).map(([name, columns]) => ({
-      name,
-      columns
-    }));
-
     const customModules = modules.map(m => {
       const config = m.config as any;
-      const columns = [
-        { name: 'id', type: 'TEXT', label: 'ID' },
-        { name: 'created_at', type: 'TIMESTAMP', label: 'Created At' },
-        { name: 'updated_at', type: 'TIMESTAMP', label: 'Updated At' },
-        { name: 'status', type: 'TEXT', label: 'Status' }
+      const columns: any[] = [
+        { name: 'id', type: 'text', label: 'ID', isPrimary: true },
+        { name: 'created_at', type: 'timestamp', label: 'Created At' },
+        { name: 'updated_at', type: 'timestamp', label: 'Updated At' },
+        { name: 'status', type: 'text', label: 'Status' }
       ];
+
+      const moduleFks: Record<string, { targetTable: string; targetColumn: string }> = {};
 
       if (config && Array.isArray(config.layout)) {
         config.layout.forEach((f: any) => {
           if (f.name) {
+            let colType = 'text';
+            if (f.type === 'number') colType = 'int';
+            else if (f.type === 'date') colType = 'date';
+            else if (f.type === 'boolean') colType = 'bool';
+            else if (f.type === 'json' || f.type === 'group') colType = 'json';
+
+            const fk = (f.type === 'relation' || f.type === 'lookup') && f.targetModule ? {
+              targetTable: f.targetModule,
+              targetColumn: 'id'
+            } : undefined;
+
+            if (fk) {
+              moduleFks[f.name] = fk;
+            }
+
             columns.push({
               name: f.name,
-              type: f.type ? f.type.toUpperCase() : 'TEXT',
-              label: f.label || f.name
+              type: colType,
+              label: f.label || f.name,
+              foreignKey: fk
             });
           }
         });
@@ -340,17 +507,78 @@ router.get('/schema', async (req: TenantRequest, res) => {
       return {
         name: m.name,
         displayName: m.name,
-        columns
+        columns,
+        foreignKeys: moduleFks
       };
     });
 
     res.json({
-      physicalTables,
-      customModules
+      physicalTables: introspected.physicalTables,
+      customModules,
+      foreignKeyMap: introspected.foreignKeyMap,
+      columnToFkMap: introspected.columnToFkMap
     });
   } catch (error: any) {
     console.error('[QueryExplorer API] Failed to fetch schema:', error);
     res.status(500).json({ error: 'Failed to retrieve schema definitions.' });
+  }
+});
+
+/**
+ * GET /api/query-explorer/referenced-record
+ * Fetches a single record referenced by a foreign key for inline preview.
+ */
+router.get('/referenced-record', async (req: TenantRequest, res) => {
+  try {
+    const { table, column, value } = req.query;
+    const tenantId = req.tenantId!;
+    const user = req.user!;
+    const db = req.db!;
+
+    if (!table || !column || !value) {
+      return res.status(400).json({ error: 'Missing table, column, or value parameter.' });
+    }
+
+    const tableName = String(table).toLowerCase().trim();
+    const columnName = String(column).toLowerCase().trim();
+    const val = String(value).trim();
+
+    // Security check
+    const FORBIDDEN_TABLES = ['users', 'tenants', '_prisma_migrations', 'information_schema'];
+    if (FORBIDDEN_TABLES.includes(tableName)) {
+      return res.status(403).json({ error: 'Access to this table is restricted.' });
+    }
+
+    if (!/^[a-zA-Z0-9_]+$/.test(tableName) || !/^[a-zA-Z0-9_]+$/.test(columnName)) {
+      return res.status(400).json({ error: 'Invalid table or column identifier.' });
+    }
+
+    // Get introspected schema to send column metadata for target table
+    const introspected = await getIntrospectedSchema(db);
+    const tableDef = introspected.physicalTables.find(t => t.name === tableName);
+
+    // Execute query inside tenant-scoped transaction
+    const results = await db.$transaction(async (tx: any) => {
+      await tx.$executeRawUnsafe(`SET LOCAL app.current_tenant_id = '${tenantId.replace(/'/g, "''")}'`);
+      await tx.$executeRawUnsafe(`SET LOCAL app.current_user_id = '${user.uid.replace(/'/g, "''")}'`);
+      await tx.$executeRawUnsafe(`SET LOCAL app.is_superadmin = '${user.isSuperAdmin ? 'true' : 'false'}'`);
+
+      return await tx.$queryRawUnsafe(`SELECT * FROM "${tableName}" WHERE "${columnName}" = $1 LIMIT 1`, val);
+    });
+
+    const record = Array.isArray(results) && results.length > 0 ? results[0] : null;
+
+    res.json({
+      success: true,
+      table: tableName,
+      schema: 'public',
+      targetColumn: columnName,
+      record,
+      columns: tableDef?.columns || []
+    });
+  } catch (err: any) {
+    console.error('[QueryExplorer API] Failed to fetch referenced record:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch referenced record.' });
   }
 });
 
@@ -380,7 +608,8 @@ router.post('/query', async (req: TenantRequest, res) => {
     const allowedTables = [...moduleNames, ...snakeModuleNames];
 
     // 2. Security Validation
-    const securityCheck = validateQuerySecurity(query, allowedTables);
+    const introspected = await getIntrospectedSchema(db);
+    const securityCheck = validateQuerySecurity(query, allowedTables, introspected.tableWhitelist);
     if (!securityCheck.isValid) {
       return res.status(400).json({ error: securityCheck.error });
     }

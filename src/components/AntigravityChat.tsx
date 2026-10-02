@@ -1230,6 +1230,7 @@ export const AntigravityChat = () => {
   const [sqlResults, setSqlResults] = useState<any[]>([]);
   const [sqlLoading, setSqlLoading] = useState(false);
   const [sqlError, setSqlError] = useState<string | null>(null);
+  const [hasExecutedSql, setHasExecutedSql] = useState(false);
 
   // Scratchpad state
   const [scratchCode, setScratchCode] = useState(`// Write script here to test endpoints\nfetch('http://localhost:3001/health')\n  .then(res => res.json())\n  .then(data => console.log(data));`);
@@ -1848,13 +1849,14 @@ export const AntigravityChat = () => {
     setSqlError(null);
     setSqlResults([]);
     try {
-      const token = authSession?.access_token;
-      const res = await fetch(`http://localhost:3001/api/query-explorer/query`, {
+      const token = authSession?.access_token || (import.meta as any).env.VITE_DEV_TOKEN || 'dev-token';
+      const activeTenantId = tenant?.id || 'cmnx01q3s0000mon3pbr44ju4';
+      const res = await fetch(`${API_BASE_URL}/api/query-explorer/query`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'x-tenant-id': tenant!.id
+          'x-tenant-id': activeTenantId
         },
         body: JSON.stringify({ query: sqlQuery })
       });
@@ -1863,6 +1865,7 @@ export const AntigravityChat = () => {
         throw new Error(data.error || "Query failed");
       }
       setSqlResults(data.rows || []);
+      setHasExecutedSql(true);
       toast.success(`Query succeeded: ${data.rows?.length || 0} rows returned.`);
     } catch (error: any) {
       setSqlError(error.message);
@@ -3788,7 +3791,9 @@ export const AntigravityChat = () => {
               {/* SQL Output table */}
               <div className="flex-1 min-h-[200px] overflow-auto border border-zinc-200 dark:border-zinc-800 rounded-xl bg-white dark:bg-zinc-950/40">
                 {sqlResults.length === 0 ? (
-                  <div className="p-8 text-center text-xs text-zinc-500">Run query to view results.</div>
+                  <div className="p-8 text-center text-xs text-zinc-500">
+                    {hasExecutedSql ? 'Query completed with 0 rows returned for the active tenant.' : 'Run query to view results.'}
+                  </div>
                 ) : (
                   <table className="w-full text-left border-collapse text-[10.5px]">
                     <thead>

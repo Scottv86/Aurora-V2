@@ -589,6 +589,9 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
         actionType: (n as any).actionType || n.config?.actionType,
         color: (n as any).color || n.config?.color,
         config: n.config || {},
+        isStage: n.isStage,
+        stageDescription: n.stageDescription,
+        stageOrder: n.stageOrder,
         onDelete: (id: string) => setNodes((nds) => nds.filter(node => node.id !== id))
       },
       position: n.position || { x: 0, y: 0 },
@@ -603,7 +606,13 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
       label: e.label || e.condition,
       type: 'workflowEdge',
       animated: true,
-      className: "stroke-zinc-400 dark:stroke-zinc-600"
+      className: "stroke-zinc-400 dark:stroke-zinc-600",
+      data: {
+        isPrimary: e.isPrimary,
+        actionButtonLabel: e.actionButtonLabel,
+        buttonVariant: e.buttonVariant,
+        requiredFieldIds: e.requiredFieldIds
+      }
     })) || [], [workflow]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -807,6 +816,9 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
         name: n.data.label as string,
         type: n.data.type as WorkflowNodeType,
         position: n.position,
+        isStage: n.data.isStage,
+        stageDescription: n.data.stageDescription,
+        stageOrder: n.data.stageOrder,
         config: {
           ...(n.data.config || {}),
           actionType: n.data.actionType,
@@ -815,12 +827,17 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
       })),
       edges: edges.map(e => {
         const edgeLabel = typeof e.label === 'string' ? e.label : (e.label as any)?.props?.children || '';
+        const edgeData = (e as any).data || {};
         return {
           id: e.id,
           source: e.source,
           target: e.target,
           label: edgeLabel,
-          condition: edgeLabel
+          condition: edgeLabel,
+          isPrimary: edgeData.isPrimary,
+          actionButtonLabel: edgeData.actionButtonLabel,
+          buttonVariant: edgeData.buttonVariant,
+          requiredFieldIds: edgeData.requiredFieldIds
         };
       })
     };
@@ -846,6 +863,9 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
           actionType: (n as any).actionType || n.config?.actionType,
           color: (n as any).color || n.config?.color,
           config: n.config || {},
+          isStage: n.isStage,
+          stageDescription: n.stageDescription,
+          stageOrder: n.stageOrder,
           onDelete: (id: string) => setNodes((nds) => nds.filter(node => node.id !== id))
         },
         position: n.position || { x: 0, y: 0 },
@@ -859,7 +879,13 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
         label: e.label || e.condition,
         type: 'workflowEdge',
         animated: true,
-        className: "stroke-zinc-400 dark:stroke-zinc-600"
+        className: "stroke-zinc-400 dark:stroke-zinc-600",
+        data: {
+          isPrimary: e.isPrimary,
+          actionButtonLabel: e.actionButtonLabel,
+          buttonVariant: e.buttonVariant,
+          requiredFieldIds: e.requiredFieldIds
+        }
       }));
 
       // Only update if the workflow ID has changed, signifying a new module load
@@ -1231,6 +1257,49 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
                             />
                           </div>
 
+                          {/* Stage Progression Ribbon Settings */}
+                          {(nodes.find(n => n.id === selectedNodeId)?.data.type === 'STATUS' || nodes.find(n => n.id === selectedNodeId)?.data.type === 'START') && (
+                            <div className="p-3.5 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-3">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-xs font-bold text-zinc-900 dark:text-white">Show in Stage Ribbon</p>
+                                  <p className="text-[10px] text-zinc-500">Display this status as an official stage in the process ribbon.</p>
+                                </div>
+                                <input 
+                                  type="checkbox"
+                                  checked={nodes.find(n => n.id === selectedNodeId)?.data.isStage !== false}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    setNodes(nds => nds.map(node => 
+                                      node.id === selectedNodeId 
+                                        ? { ...node, data: { ...node.data, isStage: checked } }
+                                        : node
+                                    ));
+                                  }}
+                                  className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-zinc-300 dark:border-zinc-700 cursor-pointer"
+                                />
+                              </div>
+
+                              <div className="space-y-1 pt-2 border-t border-zinc-200/50 dark:border-zinc-800/50">
+                                <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">Stage Guidance Tooltip</label>
+                                <input 
+                                  type="text"
+                                  value={nodes.find(n => n.id === selectedNodeId)?.data.stageDescription || ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setNodes(nds => nds.map(node => 
+                                      node.id === selectedNodeId 
+                                        ? { ...node, data: { ...node.data, stageDescription: val } }
+                                        : node
+                                    ));
+                                  }}
+                                  placeholder="e.g. Awaiting client review and signature"
+                                  className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                                />
+                              </div>
+                            </div>
+                          )}
+
                           <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl">
                              <div className="flex items-center gap-2 mb-2 text-indigo-400">
                                <Info size={12} />
@@ -1325,6 +1394,174 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
                               <p className="text-xs font-bold text-zinc-900 dark:text-white truncate">
                                 {nodes.find(n => n.id === edges.find(e => e.id === selectedEdgeId)?.target)?.data.label as string || 'Unknown'}
                               </p>
+                            </div>
+                          </div>
+
+                          <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800 space-y-4">
+                            <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Action Button & Next Step</h4>
+
+                            {/* Button Label */}
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Action Button Label</label>
+                              <input 
+                                type="text"
+                                value={((edges.find(e => e.id === selectedEdgeId) as any)?.data?.actionButtonLabel) || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setEdges(eds => eds.map(edge => 
+                                    edge.id === selectedEdgeId 
+                                      ? { ...edge, data: { ...((edge as any).data || {}), actionButtonLabel: val } }
+                                      : edge
+                                  ));
+                                }}
+                                placeholder="e.g. Submit for Approval, Mark Delivered"
+                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+                              />
+                              <p className="text-[10px] text-zinc-500 italic px-1">
+                                Text displayed on the primary action button for this step.
+                              </p>
+                            </div>
+
+                            {/* Mark as Primary Action */}
+                            <div className="p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-between">
+                              <div>
+                                <p className="text-xs font-bold text-zinc-900 dark:text-white">Primary Action</p>
+                                <p className="text-[10px] text-zinc-500">Highlight this path as the default next step.</p>
+                              </div>
+                              <input 
+                                type="checkbox"
+                                checked={Boolean(((edges.find(e => e.id === selectedEdgeId) as any)?.data?.isPrimary))}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  setEdges(eds => eds.map(edge => 
+                                    edge.id === selectedEdgeId 
+                                      ? { ...edge, data: { ...((edge as any).data || {}), isPrimary: checked } }
+                                      : edge
+                                  ));
+                                }}
+                                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-zinc-300 dark:border-zinc-700 cursor-pointer"
+                              />
+                            </div>
+
+                            {/* Button Style / Variant */}
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Button Color</label>
+                              <div className="grid grid-cols-4 gap-1.5">
+                                {[
+                                  { id: 'primary', label: 'Indigo', bg: 'bg-indigo-600' },
+                                  { id: 'success', label: 'Emerald', bg: 'bg-emerald-600' },
+                                  { id: 'destructive', label: 'Rose', bg: 'bg-rose-600' },
+                                  { id: 'outline', label: 'Outline', bg: 'bg-zinc-400' }
+                                ].map(variant => {
+                                  const currentVariant = ((edges.find(e => e.id === selectedEdgeId) as any)?.data?.buttonVariant) || 'primary';
+                                  const isSelected = currentVariant === variant.id;
+                                  return (
+                                    <button
+                                      key={variant.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setEdges(eds => eds.map(edge => 
+                                          edge.id === selectedEdgeId 
+                                            ? { ...edge, data: { ...((edge as any).data || {}), buttonVariant: variant.id as any } }
+                                            : edge
+                                        ));
+                                      }}
+                                      className={cn(
+                                        "py-1.5 px-2 rounded-lg text-[10px] font-bold transition-all border flex items-center justify-center gap-1",
+                                        isSelected 
+                                          ? "border-indigo-500 ring-2 ring-indigo-500/20 text-zinc-900 dark:text-white" 
+                                          : "border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                                      )}
+                                    >
+                                      <span className={cn("w-2 h-2 rounded-full", variant.bg)} />
+                                      <span>{variant.label}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Required Transition Fields Guardrail */}
+                            <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+                              <div className="flex items-center justify-between">
+                                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Required Transition Fields</label>
+                                <span className="text-[10px] text-zinc-400">
+                                  {(((edges.find(e => e.id === selectedEdgeId) as any)?.data?.requiredFieldIds) || []).length} required
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-zinc-500 leading-relaxed px-1">
+                                Records must have values in these fields before this transition can be executed.
+                              </p>
+
+                              {/* Selected Fields Badges */}
+                              {(((edges.find(e => e.id === selectedEdgeId) as any)?.data?.requiredFieldIds) || []).length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 p-2 bg-zinc-50 dark:bg-zinc-950/60 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                                  {(((edges.find(e => e.id === selectedEdgeId) as any)?.data?.requiredFieldIds) || []).map((fId: string) => {
+                                    const fieldObj = flatFields.find(f => f.id === fId || f.name === fId);
+                                    const fLabel = fieldObj?.label || fieldObj?.name || fId;
+                                    return (
+                                      <span
+                                        key={fId}
+                                        className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 text-indigo-700 dark:text-indigo-300 rounded-md text-[10px] font-medium"
+                                      >
+                                        <span className="truncate max-w-[120px]">{fLabel}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setEdges(eds => eds.map(edge => {
+                                              if (edge.id !== selectedEdgeId) return edge;
+                                              const existingIds: string[] = (edge as any).data?.requiredFieldIds || [];
+                                              return {
+                                                ...edge,
+                                                data: {
+                                                  ...((edge as any).data || {}),
+                                                  requiredFieldIds: existingIds.filter(id => id !== fId)
+                                                }
+                                              };
+                                            }));
+                                          }}
+                                          className="text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-200 cursor-pointer"
+                                        >
+                                          ×
+                                        </button>
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              )}
+
+                              {/* Add Field Dropdown */}
+                              {flatFields.length > 0 && (
+                                <select
+                                  value=""
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (!val) return;
+                                    setEdges(eds => eds.map(edge => {
+                                      if (edge.id !== selectedEdgeId) return edge;
+                                      const existingIds: string[] = (edge as any).data?.requiredFieldIds || [];
+                                      if (existingIds.includes(val)) return edge;
+                                      return {
+                                        ...edge,
+                                        data: {
+                                          ...((edge as any).data || {}),
+                                          requiredFieldIds: [...existingIds, val]
+                                        }
+                                      };
+                                    }));
+                                  }}
+                                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                                >
+                                  <option value="">+ Add required field...</option>
+                                  {flatFields
+                                    .filter(f => !(((edges.find(e => e.id === selectedEdgeId) as any)?.data?.requiredFieldIds) || []).includes(f.id))
+                                    .map(f => (
+                                      <option key={f.id} value={f.id}>
+                                        {f.label || f.name} ({f.type || 'text'})
+                                      </option>
+                                    ))}
+                                </select>
+                              )}
                             </div>
                           </div>
 

@@ -9,7 +9,9 @@ import {
   ChevronDown, 
   Table as TableIcon, 
   Columns as ColumnsIcon, 
-  Key as KeyIcon, 
+  Key as KeyIcon,
+  Link2,
+  ArrowRight,
   Search, 
   Loader2, 
   Sliders, 
@@ -44,6 +46,7 @@ import {
 import { SqlEditor } from './SqlEditor';
 import { JsonViewerModal, FieldMetaInfo } from './JsonViewerModal';
 import { JsonCellRenderer } from './JsonCellRenderer';
+import { ReferencingRecordPopover } from '../../UI/ReferencingRecordPopover';
 
 interface QueryBuilderProps {
   initialQuery?: SavedQueryEntity | null;
@@ -57,17 +60,21 @@ interface ColumnSchema {
   nullable?: boolean;
   isPrimary?: boolean;
   label?: string;
+  foreignKey?: { targetTable: string; targetColumn: string };
 }
 
 interface TableSchema {
   name: string;
   displayName?: string;
   columns: ColumnSchema[];
+  foreignKeys?: Record<string, { targetTable: string; targetColumn: string }>;
 }
 
 interface SchemaData {
   physicalTables: TableSchema[];
   customModules: TableSchema[];
+  foreignKeyMap?: Record<string, { targetTable: string; targetColumn: string }>;
+  columnToFkMap?: Record<string, { targetTable: string; targetColumn: string }>;
 }
 
 interface DisplayColumn {
@@ -179,6 +186,7 @@ LIMIT 50;`
   const [leftTab, setLeftTab] = useState<'schema' | 'params' | 'settings'>('schema');
   const [bottomTab, setBottomTab] = useState<'results' | 'columns' | 'explain'>('results');
   const [bottomPaneHeight, setBottomPaneHeight] = useState<number>(300);
+  const [hasExecuted, setHasExecuted] = useState<boolean>(false);
 
   // Draggable Resizer for Bottom Results Pane
   const handleStartBottomResize = (e: React.MouseEvent) => {
@@ -212,6 +220,93 @@ LIMIT 50;`
   const [durationMs, setDurationMs] = useState(0);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Referencing Record Popover State
+  const [popoverState, setPopoverState] = useState<{
+    isOpen: boolean;
+    targetTable: string;
+    targetColumn: string;
+    value: string | number;
+    anchorRect: DOMRect | null;
+  }>({
+    isOpen: false,
+    targetTable: '',
+    targetColumn: 'id',
+    value: '',
+    anchorRect: null
+  });
+
+  // Identify active table from SQL query
+  const activeTable = useMemo(() => {
+    const match = sqlQuery.match(/(?:from|into|update)\s+["']?([a-zA-Z0-9_]+)["']?/i);
+    if (!match) return null;
+    const tblName = match[1].toLowerCase();
+    return schema.physicalTables.find(t => t.name.toLowerCase() === tblName) ||
+           schema.customModules.find(m => m.name.toLowerCase() === tblName || m.name.toLowerCase().replace(/\s+/g, '_') === tblName) || null;
+  }, [sqlQuery, schema]);
+
+  // Helper to resolve column metadata, primary key, and foreign key relations
+  const getColumnMeta = (columnName: string): ColumnSchema => {
+    const colLower = columnName.toLowerCase();
+    
+    // 1. Check active table definitions
+    if (activeTable) {
+      const found = activeTable.columns.find(c => c.name.toLowerCase() === colLower);
+      if (found) return found;
+      if (activeTable.foreignKeys && activeTable.foreignKeys[columnName]) {
+        return {
+          name: columnName,
+          type: 'text',
+          foreignKey: activeTable.foreignKeys[columnName]
+        };
+      }
+    }
+
+    // 2. Check global foreignKeyMap by table.column
+    if (activeTable && schema.foreignKeyMap) {
+      const directFk = schema.foreignKeyMap[`${activeTable.name}.${columnName}`];
+      if (directFk) {
+        return {
+          name: columnName,
+          type: 'text',
+          foreignKey: directFk
+        };
+      }
+    }
+
+    // 3. Check global columnToFkMap fallback (e.g. session_id -> antigravity_sessions)
+    if (schema.columnToFkMap && schema.columnToFkMap[columnName]) {
+      return {
+        name: columnName,
+        type: 'text',
+        foreignKey: schema.columnToFkMap[columnName]
+      };
+    }
+
+    // 4. Heuristic inference for columns ending in _id
+    if (colLower.endsWith('_id') && colLower !== 'id') {
+      const baseName = colLower.slice(0, -3);
+      const candidateTable = schema.physicalTables.find(t => 
+        t.name.toLowerCase() === baseName || 
+        t.name.toLowerCase() === `${baseName}s` ||
+        t.name.toLowerCase() === `antigravity_${baseName}s` ||
+        t.name.toLowerCase().includes(baseName)
+      );
+      if (candidateTable) {
+        return {
+          name: columnName,
+          type: 'text',
+          foreignKey: { targetTable: candidateTable.name, targetColumn: 'id' }
+        };
+      }
+    }
+
+    return {
+      name: columnName,
+      type: 'text',
+      isPrimary: colLower === 'id'
+    };
+  };
 
   // JSON Blobs & Column Unpacker State
   const [inspectingJson, setInspectingJson] = useState<{
@@ -462,7 +557,9 @@ LIMIT 50;`
           const data = await res.json();
           setSchema({
             physicalTables: data.physicalTables || [],
-            customModules: data.customModules || []
+            customModules: data.customModules || [],
+            foreignKeyMap: data.foreignKeyMap || {},
+            columnToFkMap: data.columnToFkMap || {}
           });
         }
       } catch (err) {
@@ -474,6 +571,19 @@ LIMIT 50;`
 
     fetchSchema();
   }, [token, tenant?.id]);
+
+  // Open table from referenced record popover
+  const handleOpenTableFromReference = (targetTable: string, targetColumn: string, value: string | number) => {
+    const isCustom = schema.customModules.some(m => m.name === targetTable);
+    const safeTableName = targetTable.includes(' ') || isCustom ? `"${targetTable}"` : targetTable;
+    const newQuery = `SELECT * FROM ${safeTableName} WHERE "${targetColumn}" = '${value}' LIMIT 50;`;
+    
+    setSqlQuery(newQuery);
+    setBottomTab('results');
+    toast.success(`Loaded referencing record from public.${targetTable}`);
+
+    handleRunQuery(newQuery);
+  };
 
   // Insert column/table name at cursor
   const insertTextAtCursor = (text: string) => {
@@ -531,9 +641,11 @@ LIMIT 50;`
     return executableSql;
   };
 
-  // Run Test Query
-  const handleRunQuery = async () => {
-    if (!sqlQuery.trim()) {
+  // Run Test Query (supports optional query override)
+  const handleRunQuery = async (overrideSql?: string | any) => {
+    const explicitSql = typeof overrideSql === 'string' ? overrideSql : undefined;
+    const queryToCheck = explicitSql || sqlQuery;
+    if (!queryToCheck.trim()) {
       toast.error('SQL query cannot be empty');
       return;
     }
@@ -543,7 +655,7 @@ LIMIT 50;`
     const startTime = Date.now();
 
     try {
-      const sqlToRun = buildExecutableQuery();
+      const sqlToRun = explicitSql || buildExecutableQuery();
       const { data: sessData } = await supabase.auth.getSession();
       const activeToken = sessData?.session?.access_token || token;
       const res = await fetch(`${API_BASE_URL}/api/query-explorer/query`, {
@@ -567,7 +679,12 @@ LIMIT 50;`
       const rows = Array.isArray(data.rows) ? data.rows : (Array.isArray(data.results) ? data.results : []);
       setResults(rows);
       setRowCount(rows.length);
-      toast.success(`Executed in ${duration}ms (${rows.length} rows)`);
+      setHasExecuted(true);
+      if (rows.length === 0) {
+        toast.info(`Executed in ${duration}ms (0 rows returned)`);
+      } else {
+        toast.success(`Executed in ${duration}ms (${rows.length} rows)`);
+      }
 
       // Auto-populate columnsConfig if empty
       if (rows.length > 0) {
@@ -798,7 +915,7 @@ LIMIT 50;`
         <div className="flex items-center gap-3">
           {/* Test Run Button */}
           <Button
-            onClick={handleRunQuery}
+            onClick={() => handleRunQuery()}
             disabled={executing}
             className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white text-xs px-4 py-2 rounded-xl font-bold shadow-lg shadow-indigo-500/20 border border-indigo-400/30 transition-all active:scale-95"
           >
@@ -1397,9 +1514,9 @@ LIMIT 50;`
             </div>
 
             {/* Bottom Content Views */}
-            <div className="flex-1 overflow-auto p-3">
+            <div className="flex-1 min-h-0 overflow-hidden p-3 flex flex-col">
               {queryError ? (
-                <div className="flex items-start gap-3 p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
+                <div className="flex-1 overflow-auto flex items-start gap-3 p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs">
                   <AlertTriangle size={18} className="shrink-0 text-rose-400" />
                   <div>
                     <h4 className="font-bold mb-1">SQL Execution Error</h4>
@@ -1408,14 +1525,43 @@ LIMIT 50;`
                 </div>
               ) : bottomTab === 'results' ? (
                 results.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-zinc-500 text-xs gap-2">
-                    <Database size={24} className="opacity-40" />
-                    <span>Run the query to preview live records</span>
+                  <div className="h-full flex flex-col items-center justify-center text-zinc-400 text-xs gap-3 p-6 text-center max-w-md mx-auto">
+                    <div className="p-3 rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-400 shadow-sm">
+                      <Database size={24} className="opacity-50" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-zinc-200 text-sm">
+                        {hasExecuted ? '0 Records Returned' : 'No Records Loaded'}
+                      </p>
+                      <p className="text-zinc-500 text-xs mt-1 leading-relaxed">
+                        {hasExecuted
+                          ? `Query executed in ⚡${durationMs}ms, but returned 0 rows for the active tenant (${tenant?.name || 'Current Tenant'}).`
+                          : 'Run the query to preview live records from your PostgreSQL database.'}
+                      </p>
+                      {hasExecuted && (
+                        <div className="text-[11px] text-zinc-400 mt-3 bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-3 text-left space-y-1">
+                          <p className="font-semibold text-zinc-300">💡 Why are no rows returned?</p>
+                          <p className="text-zinc-500 leading-normal">
+                            Multi-tenant Row Level Security (RLS) is active. Tables like <code className="text-indigo-300 font-mono">records</code> isolate rows by tenant (<span className="text-zinc-300 font-mono">{tenant?.id || 'active'}</span>). If this tenant has no records, this query will return an empty set.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    {!hasExecuted && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handleRunQuery()}
+                        className="text-xs mt-1"
+                      >
+                        Run Query
+                      </Button>
+                    )}
                   </div>
                 ) : (
-                  <div className="overflow-x-auto rounded-xl border border-zinc-800/80 bg-zinc-950/60">
-                    <table className="w-full text-left text-xs border-collapse font-sans">
-                      <thead>
+                  <div className="flex-1 min-h-0 overflow-auto rounded-xl border border-zinc-800/80 bg-zinc-950/60 custom-scrollbar">
+                    <table className="min-w-full w-max text-left text-xs border-collapse font-sans">
+                      <thead className="sticky top-0 bg-zinc-950 text-zinc-400 font-semibold border-b border-zinc-800 z-10 select-none">
                         <tr className="border-b border-zinc-800 bg-zinc-900/60 text-zinc-400 font-semibold">
                           {displayColumns.map((col: DisplayColumn) => {
                             const isJson = jsonColumnMeta[col.baseCol]?.isJson;
@@ -1470,12 +1616,23 @@ LIMIT 50;`
                               );
                             }
 
+                            const meta = getColumnMeta(col.baseCol);
                             return (
                               <th key={col.id} className="px-3.5 py-2 whitespace-nowrap font-mono text-[11px] relative">
                                 <div className="flex items-center justify-between gap-3">
-                                  <span className={cn(isJson && "text-indigo-300 font-semibold")}>
-                                    {col.label}
-                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    {meta.isPrimary ? (
+                                      <KeyIcon size={10} className="text-yellow-500 shrink-0" title="Primary Key" />
+                                    ) : meta.foreignKey ? (
+                                      <Link2 size={10} className="text-emerald-400 shrink-0" title={`Foreign Key -> ${meta.foreignKey.targetTable}.${meta.foreignKey.targetColumn}`} />
+                                    ) : null}
+                                    <span className={cn(isJson && "text-indigo-300 font-semibold")}>
+                                      {col.label}
+                                    </span>
+                                    {meta.type && !isJson && (
+                                      <span className="text-[10px] text-zinc-500 font-normal lowercase">{meta.type}</span>
+                                    )}
+                                  </div>
 
                                   {isJson && availableKeys.length > 0 && (
                                     <div className="flex items-center gap-1 font-sans">
@@ -1627,8 +1784,12 @@ LIMIT 50;`
                               const val = row[col.baseCol];
                               const isColJson = jsonColumnMeta[col.baseCol]?.isJson;
 
+                              const meta = getColumnMeta(col.baseCol);
+                              const cellString = val === null || val === undefined ? '' : String(val);
+                              const isFk = !isColJson && typeof val !== 'object' && val !== null && val !== undefined && cellString !== '' && Boolean(meta.foreignKey);
+
                               return (
-                                <td key={col.id} className="px-3.5 py-2 whitespace-nowrap text-zinc-300 font-mono text-[11px]">
+                                <td key={col.id} className="px-3.5 py-2 whitespace-nowrap text-zinc-300 font-mono text-[11px] group/cell relative">
                                   {val === null || val === undefined ? (
                                     <span className="text-zinc-600 italic">null</span>
                                   ) : isColJson || typeof val === 'object' || (typeof val === 'string' && (val.trim().startsWith('{') || val.trim().startsWith('['))) ? (
@@ -1640,7 +1801,33 @@ LIMIT 50;`
                                       onInspect={(c, v, idx) => setInspectingJson({ isOpen: true, columnName: c, data: v, rowIndex: idx })}
                                     />
                                   ) : (
-                                    String(val)
+                                    <div className="flex items-center justify-between gap-1.5">
+                                      <span className="truncate" title={cellString}>{cellString}</span>
+                                      {isFk && meta.foreignKey && (
+                                        <div className="relative group/fk inline-flex items-center shrink-0">
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setPopoverState({
+                                                isOpen: true,
+                                                targetTable: meta.foreignKey!.targetTable,
+                                                targetColumn: meta.foreignKey!.targetColumn || 'id',
+                                                value: val,
+                                                anchorRect: e.currentTarget.getBoundingClientRect()
+                                              });
+                                            }}
+                                            className="p-1 rounded bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all cursor-pointer border border-zinc-700/60 shadow-sm ml-1.5"
+                                            title="View referencing record"
+                                          >
+                                            <ArrowRight size={10} />
+                                          </button>
+                                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover/fk:flex items-center px-2 py-0.5 rounded bg-zinc-950 text-zinc-200 text-[10px] whitespace-nowrap border border-zinc-800 shadow-xl pointer-events-none z-30 font-sans">
+                                            View referencing record
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
                                   )}
                                 </td>
                               );
@@ -1659,49 +1846,51 @@ LIMIT 50;`
                     <span>Run the query first to auto-discover output column schemas</span>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                    {columnsConfig.map((col, idx) => (
-                      <div key={col.name} className="p-2.5 rounded-xl border border-zinc-800 bg-zinc-950/60 flex items-center justify-between gap-2">
-                        <div className="space-y-1 min-w-0">
-                          <span className="font-mono text-xs text-indigo-300 font-bold block truncate">{col.name}</span>
-                          <input
-                            type="text"
-                            value={col.label}
-                            onChange={e => {
-                              const val = e.target.value;
-                              setColumnsConfig(prev => prev.map((c, i) => i === idx ? { ...c, label: val } : c));
-                            }}
-                            className="bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5 text-xs text-white focus:outline-none w-32"
-                            placeholder="Display Label"
-                          />
-                        </div>
+                  <div className="flex-1 min-h-0 overflow-auto custom-scrollbar">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                      {columnsConfig.map((col, idx) => (
+                        <div key={col.name} className="p-2.5 rounded-xl border border-zinc-800 bg-zinc-950/60 flex items-center justify-between gap-2">
+                          <div className="space-y-1 min-w-0">
+                            <span className="font-mono text-xs text-indigo-300 font-bold block truncate">{col.name}</span>
+                            <input
+                              type="text"
+                              value={col.label}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setColumnsConfig(prev => prev.map((c, i) => i === idx ? { ...c, label: val } : c));
+                              }}
+                              className="bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5 text-xs text-white focus:outline-none w-32"
+                              placeholder="Display Label"
+                            />
+                          </div>
 
-                        <div className="flex items-center gap-2">
-                          <select
-                            value={col.type}
-                            onChange={e => {
-                              const val = e.target.value as ColumnDisplayType;
-                              setColumnsConfig(prev => prev.map((c, i) => i === idx ? { ...c, type: val } : c));
-                            }}
-                            className="bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-300 focus:outline-none"
-                          >
-                            <option value="text">Text</option>
-                            <option value="number">Number</option>
-                            <option value="currency">Currency ($)</option>
-                            <option value="date">Date</option>
-                            <option value="badge">Status Badge</option>
-                            <option value="avatar">User Avatar</option>
-                            <option value="link">Record Link</option>
-                            <option value="json">JSON Blob</option>
-                          </select>
+                          <div className="flex items-center gap-2">
+                            <select
+                              value={col.type}
+                              onChange={e => {
+                                const val = e.target.value as ColumnDisplayType;
+                                setColumnsConfig(prev => prev.map((c, i) => i === idx ? { ...c, type: val } : c));
+                              }}
+                              className="bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-300 focus:outline-none"
+                            >
+                              <option value="text">Text</option>
+                              <option value="number">Number</option>
+                              <option value="currency">Currency ($)</option>
+                              <option value="date">Date</option>
+                              <option value="badge">Status Badge</option>
+                              <option value="avatar">User Avatar</option>
+                              <option value="link">Record Link</option>
+                              <option value="json">JSON Blob</option>
+                            </select>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 )
               ) : (
                 /* Governance & Isolation */
-                <div className="space-y-3 p-2 text-xs">
+                <div className="flex-1 min-h-0 overflow-auto custom-scrollbar space-y-3 p-2 text-xs">
                   <div className="flex items-center gap-2 text-emerald-400 font-semibold">
                     <CheckCircle2 size={16} />
                     <span>Multi-Tenant RLS & Security Boundary Active</span>
@@ -1757,6 +1946,17 @@ LIMIT 50;`
           onPromoteToSql={(col, path, alias) => handlePromoteToSql(col, path, alias)}
         />
       )}
+
+      {/* Referencing Record Inline Preview Popover */}
+      <ReferencingRecordPopover
+        isOpen={popoverState.isOpen}
+        onClose={() => setPopoverState(prev => ({ ...prev, isOpen: false }))}
+        targetTable={popoverState.targetTable}
+        targetColumn={popoverState.targetColumn}
+        value={popoverState.value}
+        anchorRect={popoverState.anchorRect}
+        onOpenTable={handleOpenTableFromReference}
+      />
     </div>
   );
 };

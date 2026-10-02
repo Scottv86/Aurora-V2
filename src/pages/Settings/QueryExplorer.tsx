@@ -11,6 +11,8 @@ import {
   Table as TableIcon,
   Columns as ColumnsIcon,
   Key as KeyIcon,
+  Link2,
+  ArrowRight,
   Search, 
   Loader2,
   Terminal,
@@ -21,12 +23,14 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
+import { toast } from 'sonner';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../config';
 import { supabase } from '../../lib/supabase';
 import { cn } from '../../lib/utils';
 import { SqlEditor } from '../../components/Builders/QueryBuilder/SqlEditor';
+import { ReferencingRecordPopover } from '../../components/UI/ReferencingRecordPopover';
 
 interface ColumnSchema {
   name: string;
@@ -34,17 +38,21 @@ interface ColumnSchema {
   nullable?: boolean;
   isPrimary?: boolean;
   label?: string;
+  foreignKey?: { targetTable: string; targetColumn: string };
 }
 
 interface TableSchema {
   name: string;
   displayName?: string;
   columns: ColumnSchema[];
+  foreignKeys?: Record<string, { targetTable: string; targetColumn: string }>;
 }
 
 interface SchemaData {
   physicalTables: TableSchema[];
   customModules: TableSchema[];
+  foreignKeyMap?: Record<string, { targetTable: string; targetColumn: string }>;
+  columnToFkMap?: Record<string, { targetTable: string; targetColumn: string }>;
 }
 
 export const QueryExplorer = () => {
@@ -74,6 +82,7 @@ export const QueryExplorer = () => {
 
   // Query Execution State
   const [executing, setExecuting] = useState(false);
+  const [hasExecuted, setHasExecuted] = useState(false);
   const [results, setResults] = useState<any[]>([]);
   const [rowCount, setRowCount] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
@@ -81,12 +90,113 @@ export const QueryExplorer = () => {
   const [consoleMessage, setConsoleMessage] = useState<string>('Ready.');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Referencing Record Popover State
+  const [popoverState, setPopoverState] = useState<{
+    isOpen: boolean;
+    targetTable: string;
+    targetColumn: string;
+    value: string | number;
+    anchorRect: DOMRect | null;
+  }>({
+    isOpen: false,
+    targetTable: '',
+    targetColumn: 'id',
+    value: '',
+    anchorRect: null
+  });
+
   // Sorting State
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 50;
+
+  // Identify active table from SQL query
+  const activeTable = useMemo(() => {
+    const match = sqlQuery.match(/(?:from|into|update)\s+["']?([a-zA-Z0-9_]+)["']?/i);
+    if (!match) return null;
+    const tblName = match[1].toLowerCase();
+    return schema.physicalTables.find(t => t.name.toLowerCase() === tblName) ||
+           schema.customModules.find(m => m.name.toLowerCase() === tblName || m.name.toLowerCase().replace(/\s+/g, '_') === tblName) || null;
+  }, [sqlQuery, schema]);
+
+  // Helper to resolve column metadata, primary key, and foreign key relations
+  const getColumnMeta = (columnName: string): ColumnSchema => {
+    const colLower = columnName.toLowerCase();
+    
+    // 1. Check active table definitions
+    if (activeTable) {
+      const found = activeTable.columns.find(c => c.name.toLowerCase() === colLower);
+      if (found) return found;
+      if (activeTable.foreignKeys && activeTable.foreignKeys[columnName]) {
+        return {
+          name: columnName,
+          type: 'text',
+          foreignKey: activeTable.foreignKeys[columnName]
+        };
+      }
+    }
+
+    // 2. Check global foreignKeyMap by table.column
+    if (activeTable && schema.foreignKeyMap) {
+      const directFk = schema.foreignKeyMap[`${activeTable.name}.${columnName}`];
+      if (directFk) {
+        return {
+          name: columnName,
+          type: 'text',
+          foreignKey: directFk
+        };
+      }
+    }
+
+    // 3. Check global columnToFkMap fallback (e.g. session_id -> antigravity_sessions)
+    if (schema.columnToFkMap && schema.columnToFkMap[columnName]) {
+      return {
+        name: columnName,
+        type: 'text',
+        foreignKey: schema.columnToFkMap[columnName]
+      };
+    }
+
+    // 4. Heuristic inference for columns ending in _id
+    if (colLower.endsWith('_id') && colLower !== 'id') {
+      const baseName = colLower.slice(0, -3); // e.g. "session" -> "antigravity_sessions" or "sessions"
+      const candidateTable = schema.physicalTables.find(t => 
+        t.name.toLowerCase() === baseName || 
+        t.name.toLowerCase() === `${baseName}s` ||
+        t.name.toLowerCase() === `antigravity_${baseName}s` ||
+        t.name.toLowerCase().includes(baseName)
+      );
+      if (candidateTable) {
+        return {
+          name: columnName,
+          type: 'text',
+          foreignKey: { targetTable: candidateTable.name, targetColumn: 'id' }
+        };
+      }
+    }
+
+    return {
+      name: columnName,
+      type: 'text',
+      isPrimary: colLower === 'id'
+    };
+  };
+
+  // Open table from referenced record popover
+  const handleOpenTableFromReference = (targetTable: string, targetColumn: string, value: string | number) => {
+    const isCustom = schema.customModules.some(m => m.name === targetTable);
+    const safeTableName = targetTable.includes(' ') || isCustom ? `"${targetTable}"` : targetTable;
+    const newQuery = `SELECT * FROM ${safeTableName} WHERE "${targetColumn}" = '${value}' LIMIT 50;`;
+    
+    setSqlQuery(newQuery);
+    setActiveTab('results');
+    toast.success(`Opening referencing record in public.${targetTable}`);
+
+    // Trigger execution immediately
+    handleExecuteQuery(newQuery);
+  };
 
   // Load Schema
   const fetchSchema = async () => {
@@ -119,9 +229,10 @@ export const QueryExplorer = () => {
     }
   }, [tenant?.id, token]);
 
-  // Execute Query
-  const handleExecuteQuery = async () => {
-    if (!sqlQuery.trim() || executing) return;
+  // Execute Query (with optional query override)
+  const handleExecuteQuery = async (overrideQuery?: string) => {
+    const queryToRun = overrideQuery || sqlQuery;
+    if (!queryToRun.trim() || executing) return;
 
     setExecuting(true);
     setQueryError(null);
@@ -139,7 +250,7 @@ export const QueryExplorer = () => {
           'Authorization': `Bearer ${activeToken}`,
           'x-tenant-id': tenant?.id || 't1'
         },
-        body: JSON.stringify({ query: sqlQuery })
+        body: JSON.stringify({ query: queryToRun })
       });
       
       const data = await res.json();
@@ -148,6 +259,7 @@ export const QueryExplorer = () => {
         setResults(data.rows);
         setRowCount(data.rowCount);
         setDurationMs(data.durationMs);
+        setHasExecuted(true);
         setConsoleMessage(`( ${data.rowCount} row(s) affected )\n\nCompletion time: ${new Date().toLocaleTimeString()}\nExecution time: ${data.durationMs} ms`);
       } else {
         const errMsg = data.error || 'Unknown query execution error.';
@@ -648,27 +760,38 @@ export const QueryExplorer = () => {
                   ) : results.length > 0 ? (
                     <div className="flex-1 flex flex-col overflow-hidden">
                       {/* Grid Data Container */}
-                      <div className="flex-1 overflow-auto">
-                        <table className="w-full border-collapse text-left font-mono text-xs text-zinc-350 select-text">
+                      <div className="flex-1 min-h-0 overflow-auto custom-scrollbar">
+                        <table className="min-w-full w-max border-collapse text-left font-mono text-xs text-zinc-350 select-text">
                           <thead className="sticky top-0 bg-zinc-950 text-zinc-400 font-semibold border-b border-zinc-800 z-10 select-none">
                             <tr>
                               <th className="px-2 py-2 border-r border-zinc-800 w-12 text-center text-zinc-600 bg-zinc-950 font-sans">#</th>
-                              {Object.keys(results[0]).map(header => (
-                                <th 
-                                  key={`header-${header}`}
-                                  onClick={() => requestSort(header)}
-                                  className="px-3 py-2 border-r border-zinc-800 hover:bg-zinc-850 cursor-pointer group whitespace-nowrap"
-                                >
-                                  <div className="flex items-center gap-1.5">
-                                    <span>{header}</span>
-                                    <span className="text-zinc-600 group-hover:text-zinc-400 transition-colors">
-                                      {sortConfig?.key === header 
-                                        ? (sortConfig.direction === 'asc' ? '▲' : '▼')
-                                        : '↕'}
-                                    </span>
-                                  </div>
-                                </th>
-                              ))}
+                              {Object.keys(results[0]).map(header => {
+                                const meta = getColumnMeta(header);
+                                return (
+                                  <th 
+                                    key={`header-${header}`}
+                                    onClick={() => requestSort(header)}
+                                    className="px-3 py-2 border-r border-zinc-800 hover:bg-zinc-850 cursor-pointer group whitespace-nowrap min-w-[120px]"
+                                  >
+                                    <div className="flex items-center gap-1.5">
+                                      {meta.isPrimary ? (
+                                        <KeyIcon size={11} className="text-yellow-500 shrink-0" title="Primary Key" />
+                                      ) : meta.foreignKey ? (
+                                        <Link2 size={11} className="text-emerald-400 shrink-0" title={`Foreign Key -> ${meta.foreignKey.targetTable}.${meta.foreignKey.targetColumn}`} />
+                                      ) : null}
+                                      <span className="text-zinc-200">{header}</span>
+                                      {meta.type && (
+                                        <span className="text-[10px] text-zinc-500 font-normal lowercase">{meta.type}</span>
+                                      )}
+                                      <span className="text-zinc-600 group-hover:text-zinc-400 transition-colors ml-auto">
+                                        {sortConfig?.key === header 
+                                          ? (sortConfig.direction === 'asc' ? '▲' : '▼')
+                                          : '↕'}
+                                      </span>
+                                    </div>
+                                  </th>
+                                );
+                              })}
                             </tr>
                           </thead>
                           <tbody>
@@ -695,16 +818,45 @@ export const QueryExplorer = () => {
                                       cellString = String(cellVal);
                                     }
 
+                                    const meta = getColumnMeta(key);
+                                    const isForeignKey = !isNull && cellString !== '' && Boolean(meta.foreignKey);
+
                                     return (
                                       <td 
                                         key={`cell-${idx}-${key}`}
                                         className={cn(
-                                          "px-3 py-1.5 border-r border-zinc-850 truncate max-w-xs whitespace-nowrap",
+                                          "px-3 py-1.5 border-r border-zinc-850 min-w-[120px] max-w-md whitespace-nowrap group/cell relative",
                                           isNull && "text-zinc-600 italic font-sans"
                                         )}
-                                        title={cellString}
                                       >
-                                        {cellString}
+                                        <div className="flex items-center justify-between gap-1.5">
+                                          <span className="truncate" title={cellString}>{cellString}</span>
+
+                                          {isForeignKey && meta.foreignKey && (
+                                            <div className="relative group/fk inline-flex items-center shrink-0">
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setPopoverState({
+                                                    isOpen: true,
+                                                    targetTable: meta.foreignKey!.targetTable,
+                                                    targetColumn: meta.foreignKey!.targetColumn || 'id',
+                                                    value: cellVal,
+                                                    anchorRect: e.currentTarget.getBoundingClientRect()
+                                                  });
+                                                }}
+                                                className="p-1 rounded bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all cursor-pointer border border-zinc-700/60 shadow-sm ml-1.5"
+                                                title="View referencing record"
+                                              >
+                                                <ArrowRight size={10} />
+                                              </button>
+                                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover/fk:flex items-center px-2 py-0.5 rounded bg-zinc-950 text-zinc-200 text-[10px] whitespace-nowrap border border-zinc-800 shadow-xl pointer-events-none z-30 font-sans">
+                                                View referencing record
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
                                       </td>
                                     );
                                   })}
@@ -771,6 +923,22 @@ export const QueryExplorer = () => {
                         View console messages
                       </button>
                     </div>
+                  ) : hasExecuted ? (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center p-6 gap-3 text-center max-w-md mx-auto bg-zinc-900/50">
+                      <div className="p-3 rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-400 shadow-sm">
+                        <Database size={28} className="opacity-50" />
+                      </div>
+                      <span className="font-bold text-sm text-zinc-200">0 Rows Returned</span>
+                      <p className="text-xs text-zinc-400 leading-relaxed">
+                        Query completed in <span className="font-mono text-emerald-400">⚡{durationMs}ms</span> with 0 affected rows.
+                      </p>
+                      <div className="text-[11px] text-zinc-400 bg-zinc-950/80 border border-zinc-800 rounded-xl p-3 text-left space-y-1">
+                        <p className="font-semibold text-zinc-300">💡 Why are no rows returned?</p>
+                        <p className="text-zinc-500 leading-normal">
+                          Multi-tenant Row Level Security (RLS) is active for tenant <strong className="text-zinc-300">{tenant?.name || 'Current Tenant'}</strong> (<span className="text-zinc-400 font-mono">{tenant?.id || 't1'}</span>). Tables containing tenant data (e.g. <code className="text-indigo-300 font-mono">records</code>) only expose rows matching the current tenant context.
+                        </p>
+                      </div>
+                    </div>
                   ) : (
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-zinc-650 bg-zinc-900/50">
                       <Terminal size={36} className="text-zinc-800" />
@@ -797,6 +965,17 @@ export const QueryExplorer = () => {
         </div>
 
       </div>
+
+      {/* Referencing Record Inline Preview Popover */}
+      <ReferencingRecordPopover
+        isOpen={popoverState.isOpen}
+        onClose={() => setPopoverState(prev => ({ ...prev, isOpen: false }))}
+        targetTable={popoverState.targetTable}
+        targetColumn={popoverState.targetColumn}
+        value={popoverState.value}
+        anchorRect={popoverState.anchorRect}
+        onOpenTable={handleOpenTableFromReference}
+      />
 
     </div>
   );
