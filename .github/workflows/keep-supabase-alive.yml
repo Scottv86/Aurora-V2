@@ -1,0 +1,38 @@
+name: Keep Supabase Alive
+
+on:
+  schedule:
+    # Run once a day at 03:00 UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch: # Allows manual trigger from Actions tab or CLI
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase Database via REST API
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "Error: SUPABASE_URL or SUPABASE_ANON_KEY secret is not set."
+            exit 1
+          fi
+
+          echo "Pinging Supabase at $SUPABASE_URL..."
+          HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            "$SUPABASE_URL/rest/v1/tenants?select=id&limit=1")
+
+          echo "Response HTTP Status: $HTTP_STATUS"
+          cat response.json
+          echo ""
+
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+            echo "Success: Supabase responded successfully. Database activity registered."
+          else
+            echo "Warning: Received unexpected HTTP status $HTTP_STATUS"
+            exit 1
+          fi
