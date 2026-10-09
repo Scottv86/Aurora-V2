@@ -612,7 +612,7 @@ export const QueryExplorer = () => {
             <div className="w-[1px] h-5 bg-zinc-800 mr-1.5" />
 
             <button
-              onClick={handleExecuteQuery}
+              onClick={() => handleExecuteQuery()}
               disabled={executing || !sqlQuery.trim()}
               className="flex items-center gap-1.5 px-3 py-1 bg-emerald-700 hover:bg-emerald-600 disabled:bg-zinc-800 disabled:text-zinc-500 rounded text-xs text-white font-semibold shadow-sm transition-colors cursor-pointer"
               title="Execute SQL Query (Ctrl+Enter)"
@@ -775,9 +775,9 @@ export const QueryExplorer = () => {
                                   >
                                     <div className="flex items-center gap-1.5">
                                       {meta.isPrimary ? (
-                                        <KeyIcon size={11} className="text-yellow-500 shrink-0" title="Primary Key" />
+                                        <span title="Primary Key"><KeyIcon size={11} className="text-yellow-500 shrink-0" /></span>
                                       ) : meta.foreignKey ? (
-                                        <Link2 size={11} className="text-emerald-400 shrink-0" title={`Foreign Key -> ${meta.foreignKey.targetTable}.${meta.foreignKey.targetColumn}`} />
+                                        <span title={`Foreign Key -> ${meta.foreignKey.targetTable}.${meta.foreignKey.targetColumn}`}><Link2 size={11} className="text-emerald-400 shrink-0" /></span>
                                       ) : null}
                                       <span className="text-zinc-200">{header}</span>
                                       {meta.type && (

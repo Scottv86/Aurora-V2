@@ -575,7 +575,7 @@ export const InboxService = {
       });
       if (res.ok) {
         const data = await res.json();
-        const parties = data.parties || data || [];
+        const parties = Array.isArray(data) ? data : (data.parties || []);
         const match = parties.find((p: any) => {
           const personEmail = p.person?.contactDetails?.email || p.person?.email;
           const orgEmail = p.organization?.contactDetails?.email || p.organization?.email;

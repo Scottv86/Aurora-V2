@@ -228,8 +228,7 @@ export function buildLogoSvg(
     colors,
     fontFamily = 'Plus Jakarta Sans',
     letterSpacing = 0.5,
-    monogramLetters = extractInitials(config.brandName || 'Aurora'),
-    gradientAngle = 135
+    monogramLetters = extractInitials(config.brandName || 'Aurora')
   } = config;
 
   const gradientId = `brand-logo-grad-${Math.random().toString(36).substring(2, 8)}`;

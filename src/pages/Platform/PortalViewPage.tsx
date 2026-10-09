@@ -36,12 +36,16 @@ import {
   History as HistoryIcon,
   ChevronLeft,
   Database,
-  Images
+  Images,
+  ShoppingCart,
+  CreditCard,
+  Receipt
 } from 'lucide-react';
 
 import { Site, SiteService, SitePage, ENTERPRISE_FONTS } from '../../services/siteService';
 import { toast } from 'sonner';
 import { SearchRenderer } from '../../components/Search/SearchRenderer';
+import { API_BASE_URL } from '../../config';
 
 export const PortalViewPage = () => {
   const { siteId } = useParams<{ siteId: string }>();
@@ -94,6 +98,25 @@ export const PortalViewPage = () => {
   const [gridRecords, setGridRecords] = useState<any[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
 
+  // Public Catalog Checkout State
+  const [catalogItems, setCatalogItems] = useState<any[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [cartQuantities, setCartQuantities] = useState<Record<string, number>>({});
+  const [checkoutName, setCheckoutName] = useState('');
+  const [checkoutEmail, setCheckoutEmail] = useState('');
+  const [checkoutPhone, setCheckoutPhone] = useState('');
+  const [voucherCodeInput, setVoucherCodeInput] = useState('');
+  const [appliedVoucher, setAppliedVoucher] = useState<any>(null);
+  const [checkoutSubmitting, setCheckoutSubmitting] = useState(false);
+  const [checkoutReceipt, setCheckoutReceipt] = useState<any>(null);
+
+  // Customer Invoice Billing State
+  const [invoiceLookupQuery, setInvoiceLookupQuery] = useState('');
+  const [invoiceLookupLoading, setInvoiceLookupLoading] = useState(false);
+  const [lookedUpInvoice, setLookedUpInvoice] = useState<any>(null);
+  const [invoicePaying, setInvoicePaying] = useState(false);
+  const [invoicePaymentReceipt, setInvoicePaymentReceipt] = useState<any>(null);
+
   useEffect(() => {
     const fetchSiteDetails = async () => {
       if (!siteId) return;
@@ -125,7 +148,23 @@ export const PortalViewPage = () => {
     };
 
     fetchSiteDetails();
+    fetchPortalCatalog();
   }, [siteId]);
+
+  const fetchPortalCatalog = async () => {
+    try {
+      setCatalogLoading(true);
+      const res = await fetch(`${API_BASE_URL}/api/pricing-catalog?status=active`);
+      if (res.ok) {
+        const data = await res.json();
+        setCatalogItems(data);
+      }
+    } catch (e) {
+      console.error('Failed to load portal catalog:', e);
+    } finally {
+      setCatalogLoading(false);
+    }
+  };
 
   const pages: SitePage[] = useMemo(() => {
     if (!site) return [];
@@ -242,6 +281,122 @@ export const PortalViewPage = () => {
       role: 'Bond Holder / Resident'
     });
     toast.success(`Signed in as ${authEmail}`);
+  };
+
+  const handleApplyVoucher = async () => {
+    if (!voucherCodeInput) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/vouchers/lookup/${encodeURIComponent(voucherCodeInput.trim().toUpperCase())}`);
+      const data = await res.json();
+      if (res.ok && data.status === 'ACTIVE') {
+        setAppliedVoucher(data);
+        toast.success(`Voucher ${data.code} applied successfully!`);
+      } else {
+        toast.error(data.error || 'Voucher invalid or expired');
+      }
+    } catch {
+      toast.error('Failed to verify voucher code');
+    }
+  };
+
+  const handlePortalCheckout = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!site?.tenantId) return;
+
+    const selectedItems = Object.entries(cartQuantities)
+      .filter(([_, qty]) => qty > 0)
+      .map(([id, qty]) => {
+        const item = catalogItems.find(c => c.id === id);
+        return {
+          catalogItemId: id,
+          quantity: qty,
+          unitPrice: item?.basePrice || 0
+        };
+      });
+
+    if (selectedItems.length === 0) {
+      toast.error('Please select at least one item or service to purchase.');
+      return;
+    }
+
+    setCheckoutSubmitting(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/public/checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantId: site.tenantId,
+          siteId: site.id,
+          customerName: checkoutName,
+          customerEmail: checkoutEmail,
+          customerPhone: checkoutPhone,
+          items: selectedItems,
+          voucherCode: appliedVoucher?.code || undefined,
+          paymentMethod: 'CARD_ONLINE'
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setCheckoutReceipt(data);
+        setCartQuantities({});
+        toast.success(`Payment verified! Receipt: ${data.receiptNumber}`);
+      } else {
+        throw new Error(data.error || 'Checkout transaction failed');
+      }
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setCheckoutSubmitting(false);
+    }
+  };
+
+  const handleLookupInvoice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!invoiceLookupQuery) return;
+    setInvoiceLookupLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/public/invoices/${encodeURIComponent(invoiceLookupQuery.trim())}`);
+      const data = await res.json();
+      if (res.ok) {
+        setLookedUpInvoice(data);
+      } else {
+        setLookedUpInvoice(null);
+        toast.error(data.error || 'Invoice not found. Please check invoice number.');
+      }
+    } catch {
+      toast.error('Failed to lookup invoice');
+    } finally {
+      setInvoiceLookupLoading(false);
+    }
+  };
+
+  const handlePayInvoice = async () => {
+    if (!lookedUpInvoice) return;
+    setInvoicePaying(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/public/invoices/${lookedUpInvoice.id}/pay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: lookedUpInvoice.total,
+          paymentMethod: 'CARD_ONLINE',
+          reference: `Online Payment for ${lookedUpInvoice.invoiceNumber}`
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setInvoicePaymentReceipt(data);
+        setLookedUpInvoice({ ...lookedUpInvoice, status: 'PAID' });
+        toast.success(`Invoice ${lookedUpInvoice.invoiceNumber} paid successfully!`);
+      } else {
+        throw new Error(data.error || 'Payment transaction failed');
+      }
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setInvoicePaying(false);
+    }
   };
 
   if (loading) {
@@ -1599,6 +1754,278 @@ export const PortalViewPage = () => {
                       <Search className="w-8 h-8 mx-auto mb-2 text-indigo-400 opacity-60" />
                       <p className="text-sm font-semibold text-zinc-200">No Saved Search Configured</p>
                       <p className="text-xs text-zinc-500 mt-1">Configure a search in Site Builder to display real-time query results.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* COMMERCE CHECKOUT WIDGET */}
+              {w.type === 'checkout_widget' && (
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-6 text-left">
+                  <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center">
+                        <ShoppingCart size={20} />
+                      </div>
+                      <div>
+                        <h4 className="text-base font-bold text-white">{w.title || 'Online Portal Checkout'}</h4>
+                        <p className="text-xs text-zinc-400">{w.subtitle || 'Direct catalog checkout with automated inventory relief and instant payment receipt.'}</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold px-2.5 py-1 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-full flex items-center gap-1">
+                      <ShieldCheck size={12} /> Aurora Commerce Verified
+                    </span>
+                  </div>
+
+                  {checkoutReceipt ? (
+                    <div className="p-6 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-center space-y-3">
+                      <CheckCircle2 size={40} className="text-emerald-400 mx-auto" />
+                      <h4 className="text-lg font-bold text-white">Payment & Order Confirmed</h4>
+                      <p className="text-xs text-zinc-300 max-w-md mx-auto">
+                        Your transaction reference is <span className="font-mono font-bold text-emerald-400">{checkoutReceipt.receiptNumber}</span>. Total paid: <strong className="text-white">${checkoutReceipt.totalPaid?.toFixed(2)}</strong>.
+                      </p>
+                      <button
+                        onClick={() => setCheckoutReceipt(null)}
+                        className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer mt-2"
+                      >
+                        Place Another Order
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                      {/* Products / Services list */}
+                      <div className="lg:col-span-7 space-y-3">
+                        <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Available Items & Services</p>
+                        {catalogLoading ? (
+                          <div className="py-12 text-center text-zinc-500 text-xs">Loading catalog items...</div>
+                        ) : catalogItems.length === 0 ? (
+                          <div className="py-8 text-center text-zinc-500 text-xs border border-dashed border-zinc-800 rounded-xl">
+                            No catalog items available.
+                          </div>
+                        ) : (
+                          <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+                            {catalogItems.map(item => {
+                              const qty = cartQuantities[item.id] || 0;
+                              return (
+                                <div key={item.id} className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl flex items-center justify-between">
+                                  <div className="space-y-0.5">
+                                    <p className="text-xs font-bold text-white">{item.name}</p>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px] font-mono text-zinc-500">{item.code}</span>
+                                      <span className="text-[10px] font-bold text-emerald-400">${Number(item.basePrice).toFixed(2)}</span>
+                                      <span className="text-[9px] uppercase px-1.5 py-0.2 bg-zinc-800 text-zinc-400 rounded">{item.type}</span>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => setCartQuantities(prev => ({ ...prev, [item.id]: Math.max(0, (prev[item.id] || 0) - 1) }))}
+                                      className="w-7 h-7 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white font-bold flex items-center justify-center text-xs cursor-pointer"
+                                    >
+                                      -
+                                    </button>
+                                    <span className="font-mono text-xs font-bold text-white w-4 text-center">{qty}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setCartQuantities(prev => ({ ...prev, [item.id]: (prev[item.id] || 0) + 1 }))}
+                                      className="w-7 h-7 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold flex items-center justify-center text-xs cursor-pointer"
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Checkout Details & Payment form */}
+                      <div className="lg:col-span-5 bg-zinc-950 border border-zinc-800 rounded-xl p-4 space-y-4">
+                        <p className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                          <Receipt size={14} className="text-indigo-400" /> Order Summary
+                        </p>
+
+                        <div className="space-y-2 border-b border-zinc-800 pb-3">
+                          {Object.entries(cartQuantities).filter(([_, q]) => q > 0).map(([id, q]) => {
+                            const itm = catalogItems.find(c => c.id === id);
+                            return (
+                              <div key={id} className="flex justify-between text-xs text-zinc-300">
+                                <span>{itm?.name} × {q}</span>
+                                <span className="font-mono font-bold">${((itm?.basePrice || 0) * q).toFixed(2)}</span>
+                              </div>
+                            );
+                          })}
+                          {Object.values(cartQuantities).every(q => q === 0) && (
+                            <p className="text-xs text-zinc-500 italic">Cart is currently empty.</p>
+                          )}
+                        </div>
+
+                        {/* Voucher / Promo code */}
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-zinc-400 uppercase">Gift Card / Promo Code</label>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              placeholder="e.g. SAVE20"
+                              value={voucherCodeInput}
+                              onChange={e => setVoucherCodeInput(e.target.value.toUpperCase())}
+                              className="flex-1 px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-white uppercase font-mono"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleApplyVoucher}
+                              className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-xs font-bold cursor-pointer"
+                            >
+                              Apply
+                            </button>
+                          </div>
+                          {appliedVoucher && (
+                            <p className="text-[10px] text-emerald-400 font-bold mt-1">
+                              Applied: {appliedVoucher.code} ({appliedVoucher.discountPercent ? `${appliedVoucher.discountPercent}% Off` : `$${appliedVoucher.currentBalance} credit`})
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Customer Info */}
+                        <form onSubmit={handlePortalCheckout} className="space-y-3 pt-2">
+                          <div>
+                            <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Your Full Name *</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="Jane Doe"
+                              value={checkoutName}
+                              onChange={e => setCheckoutName(e.target.value)}
+                              className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Your Email Address *</label>
+                            <input
+                              type="email"
+                              required
+                              placeholder="jane@example.com"
+                              value={checkoutEmail}
+                              onChange={e => setCheckoutEmail(e.target.value)}
+                              className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-zinc-400 uppercase mb-1">Phone Number (Optional)</label>
+                            <input
+                              type="tel"
+                              placeholder="+61 400 000 000"
+                              value={checkoutPhone}
+                              onChange={e => setCheckoutPhone(e.target.value)}
+                              className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-white"
+                            />
+                          </div>
+
+                          <div className="pt-2">
+                            <button
+                              type="submit"
+                              disabled={checkoutSubmitting}
+                              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-600/20 flex items-center justify-center gap-2 cursor-pointer"
+                            >
+                              <CreditCard size={14} />
+                              {checkoutSubmitting ? 'Processing Payment...' : 'Pay & Complete Order'}
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* CUSTOMER BILLING & INVOICE PAYMENT WIDGET */}
+              {w.type === 'customer_billing_widget' && (
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-6 text-left">
+                  <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+                        <CreditCard size={20} />
+                      </div>
+                      <div>
+                        <h4 className="text-base font-bold text-white">{w.title || 'Customer Invoice Billing Portal'}</h4>
+                        <p className="text-xs text-zinc-400">{w.subtitle || 'Look up your official tax invoice and settle outstanding balance securely.'}</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold px-2.5 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full flex items-center gap-1">
+                      <ShieldCheck size={12} /> Aurora Billing Clearing
+                    </span>
+                  </div>
+
+                  {/* Lookup Bar */}
+                  <form onSubmit={handleLookupInvoice} className="flex gap-2 max-w-lg">
+                    <input
+                      type="text"
+                      required
+                      placeholder="Enter Invoice Number (e.g. INV-1001)..."
+                      value={invoiceLookupQuery}
+                      onChange={e => setInvoiceLookupQuery(e.target.value)}
+                      className="flex-1 px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white uppercase font-mono"
+                    />
+                    <button
+                      type="submit"
+                      disabled={invoiceLookupLoading}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Search size={14} />
+                      {invoiceLookupLoading ? 'Finding...' : 'Find Invoice'}
+                    </button>
+                  </form>
+
+                  {/* Looked Up Invoice Card */}
+                  {lookedUpInvoice && (
+                    <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 space-y-4 max-w-2xl">
+                      <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                        <div>
+                          <p className="text-sm font-bold text-white font-mono">{lookedUpInvoice.invoiceNumber}</p>
+                          <p className="text-xs text-zinc-400">{lookedUpInvoice.party?.name || 'Customer'}</p>
+                        </div>
+                        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${
+                          lookedUpInvoice.status === 'PAID' 
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                            : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                        }`}>
+                          {lookedUpInvoice.status}
+                        </span>
+                      </div>
+
+                      {/* Line Items */}
+                      <div className="space-y-2 border-b border-zinc-800 pb-3">
+                        {lookedUpInvoice.lines?.map((line: any, idx: number) => (
+                          <div key={idx} className="flex justify-between text-xs text-zinc-300">
+                            <span>{line.description} (×{line.quantity})</span>
+                            <span className="font-mono font-bold">${Number(line.lineTotal).toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex justify-between items-center text-sm font-bold text-white pt-1">
+                        <span>Total Balance Due:</span>
+                        <span className="text-base text-emerald-400 font-mono">${Number(lookedUpInvoice.total).toFixed(2)}</span>
+                      </div>
+
+                      {lookedUpInvoice.status !== 'PAID' ? (
+                        <button
+                          onClick={handlePayInvoice}
+                          disabled={invoicePaying}
+                          className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <CreditCard size={14} />
+                          {invoicePaying ? 'Authorizing Payment...' : `Pay $${Number(lookedUpInvoice.total).toFixed(2)} Online Now`}
+                        </button>
+                      ) : (
+                        <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center text-xs text-emerald-400 font-bold space-y-1">
+                          <p>✓ This invoice has been paid in full. Thank you!</p>
+                          {invoicePaymentReceipt && (
+                            <p className="text-[10px] text-zinc-400 font-mono">Reference: {invoicePaymentReceipt.message || invoicePaymentReceipt.paymentId || 'Cleared'}</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

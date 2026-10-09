@@ -30,8 +30,7 @@ export const releaseNotesGenerator = {
       validationRules = [],
       connectorMappings = {},
       dataPopulationRules = [],
-      fieldSecurity = {},
-      tabs = []
+      fieldSecurity = {}
     } = options;
 
     const added = changes.filter(c => c.type === 'added');

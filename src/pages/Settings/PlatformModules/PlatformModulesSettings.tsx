@@ -41,6 +41,8 @@ export const PlatformModulesSettings = () => {
   const isIndex = location.pathname === '/workspace/settings/platform-modules' || location.pathname === '/workspace/settings/platform-modules/';
   const isBuilderActive = (location.pathname.includes('report-management') && location.search.includes('mode=builder')) ||
                           (location.pathname.includes('solutions') && (location.search.includes('mode=studio') || location.search.includes('mode=builder') || location.search.includes('id=')));
+  const isPos = location.pathname.includes('/pos');
+  const isFullHeight = isBuilderActive || isPos;
 
   const [activeTab, setActiveTab] = useState<'all' | 'custom' | 'system'>('all');
 
@@ -108,7 +110,7 @@ export const PlatformModulesSettings = () => {
   return (
     <div className={cn(
       "flex flex-col w-full relative min-h-0 transition-all duration-200",
-      isBuilderActive ? "h-[calc(100vh-4rem)] p-0 overflow-hidden" : "min-h-[calc(100vh-4rem)] bg-zinc-50/50 dark:bg-zinc-950/50"
+      isIndex ? "min-h-[calc(100vh-4rem)] bg-zinc-50/50 dark:bg-zinc-950/50" : "h-full flex-1 min-h-0 flex flex-col"
     )}>
       {isIndex ? (
         <>
@@ -262,7 +264,7 @@ export const PlatformModulesSettings = () => {
           />
         </>
       ) : (
-        <div className="flex-1 min-h-0 w-full">
+        <div className="flex-1 min-h-0 w-full h-full flex flex-col">
           <Outlet />
         </div>
       )}

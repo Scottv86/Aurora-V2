@@ -702,4 +702,295 @@ router.post('/sites/:id/bonds', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/public/checkout
+ * Omni-channel portal checkout for online orders and payable public forms
+ */
+router.post('/checkout', async (req, res) => {
+  try {
+    const { 
+      tenantSlug, 
+      siteId, 
+      moduleId,
+      formData = {}, 
+      items = [], 
+      paymentMethod = 'CARD',
+      voucherCode,
+      customerDetails = {} 
+    } = req.body;
+
+    let tenant = null;
+    if (tenantSlug) {
+      tenant = await globalPrisma.tenant.findUnique({ where: { subdomain: tenantSlug } });
+    } else if (siteId) {
+      const site = await globalPrisma.site.findUnique({ where: { id: siteId } });
+      if (site) {
+        tenant = await globalPrisma.tenant.findUnique({ where: { id: site.tenantId } });
+      }
+    }
+
+    if (!tenant) {
+      return res.status(404).json({ error: 'Tenant or Site not found' });
+    }
+
+    const { AccountingService } = await import('../services/accountingService');
+    const { InventoryService } = await import('../services/inventoryService');
+    const { VoucherService } = await import('../services/voucherService');
+    await AccountingService.ensureStandardChartOfAccounts(tenant.id, globalPrisma);
+
+    let subtotal = 0;
+    let taxTotal = 0;
+    const formattedItems = [];
+
+    for (const item of items) {
+      const qty = Number(item.quantity || 1);
+      const price = Number(item.unitPrice || item.basePrice || 0);
+      const taxRate = Number(item.taxRate !== undefined ? item.taxRate : 0.10);
+      const lineSubtotal = qty * price;
+      const lineTax = Math.round((lineSubtotal * taxRate) * 100) / 100;
+
+      subtotal += lineSubtotal;
+      taxTotal += lineTax;
+
+      formattedItems.push({
+        catalogItemId: item.catalogItemId || item.id || null,
+        title: item.title || item.name || 'Portal Item',
+        quantity: qty,
+        unitPrice: price,
+        taxRate,
+        lineTotal: lineSubtotal + lineTax
+      });
+    }
+
+    let discountTotal = 0;
+    if (voucherCode) {
+      try {
+        const vResult = await VoucherService.redeemVoucher(
+          tenant.id,
+          voucherCode,
+          subtotal + taxTotal,
+          'SITE_ORDER',
+          'PORTAL-CHECKOUT',
+          globalPrisma
+        );
+        discountTotal = vResult.amountRedeemed;
+      } catch (err: any) {
+        return res.status(400).json({ error: `Voucher error: ${err.message}` });
+      }
+    }
+
+    const totalDue = Math.max(0, Math.round((subtotal + taxTotal - discountTotal) * 100) / 100);
+    const receiptRef = 'RCP-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substr(2, 4).toUpperCase();
+
+    // 1. Decrement inventory for physical catalog items
+    for (const item of formattedItems) {
+      if (item.catalogItemId) {
+        try {
+          await InventoryService.recordMovement(tenant.id, {
+            catalogItemId: item.catalogItemId,
+            quantityDelta: -item.quantity,
+            movementType: 'ONLINE_ORDER',
+            notes: `Portal Checkout: ${receiptRef}`
+          }, undefined, globalPrisma);
+        } catch (err) {
+          console.warn('[PublicCheckout] Stock relief skipped/failed:', err);
+        }
+      }
+    }
+
+    // 2. Post to General Ledger:
+    // Debit: 1055 Online Gateway Clearing ($totalDue)
+    // Debit: 2200 Voucher Liability ($discountTotal)
+    // Credit: 4200 Lodgment / Portal Revenue ($subtotal)
+    // Credit: 2100 GST/Tax Payable ($taxTotal)
+    const gatewayClearing = await globalPrisma.chartOfAccount.findFirst({
+      where: { tenantId: tenant.id, systemAccount: 'GATEWAY_CLEARING' }
+    });
+    const feeRevenue = await globalPrisma.chartOfAccount.findFirst({
+      where: { tenantId: tenant.id, accountCode: '4200' }
+    });
+    const taxPayable = await globalPrisma.chartOfAccount.findFirst({
+      where: { tenantId: tenant.id, systemAccount: 'GST_PAYABLE' }
+    });
+    const voucherLiability = await globalPrisma.chartOfAccount.findFirst({
+      where: { tenantId: tenant.id, systemAccount: 'VOUCHER_LIABILITY' }
+    });
+
+    const journalLines: any[] = [];
+    if (gatewayClearing && totalDue > 0) {
+      journalLines.push({
+        accountId: gatewayClearing.id,
+        debit: totalDue,
+        credit: 0,
+        description: `Stripe online portal payment for ${receiptRef}`
+      });
+    }
+
+    if (voucherLiability && discountTotal > 0) {
+      journalLines.push({
+        accountId: voucherLiability.id,
+        debit: discountTotal,
+        credit: 0,
+        description: `Voucher redeemed on portal order ${receiptRef}`
+      });
+    }
+
+    if (feeRevenue && subtotal > 0) {
+      journalLines.push({
+        accountId: feeRevenue.id,
+        debit: 0,
+        credit: Math.round(subtotal * 100) / 100,
+        description: `Portal revenue: ${receiptRef}`
+      });
+    }
+
+    if (taxPayable && taxTotal > 0) {
+      journalLines.push({
+        accountId: taxPayable.id,
+        debit: 0,
+        credit: Math.round(taxTotal * 100) / 100,
+        description: `GST collected on ${receiptRef}`
+      });
+    }
+
+    let journalId = null;
+    if (journalLines.length >= 2) {
+      try {
+        const journal = await AccountingService.postJournalEntry(tenant.id, {
+          date: new Date(),
+          sourceModule: 'PORTAL_PAYMENT',
+          sourceReferenceId: receiptRef,
+          narration: `Portal Order / Payable Form: ${receiptRef}`,
+          lines: journalLines
+        }, globalPrisma);
+        journalId = journal.id;
+      } catch (err) {
+        console.error('[PublicCheckout] GL journal error:', err);
+      }
+    }
+
+    // 3. Create Record in Target Module or Intake Triage
+    let targetModule = null;
+    if (moduleId) {
+      targetModule = await globalPrisma.module.findUnique({ where: { id: moduleId } });
+    }
+    if (!targetModule) {
+      targetModule = await globalPrisma.module.findFirst({
+        where: { tenantId: tenant.id, config: { path: ['isIntakeTriage'], equals: true } }
+      });
+    }
+
+    let recordId = null;
+    if (targetModule) {
+      const record = await globalPrisma.record.create({
+        data: {
+          tenantId: tenant.id,
+          moduleId: targetModule.id,
+          status: 'Paid / Lodged',
+          data: {
+            ...formData,
+            _customerRef: receiptRef,
+            _paymentStatus: 'PAID',
+            _paymentMethod: paymentMethod,
+            _receiptNumber: receiptRef,
+            _amountPaid: totalDue,
+            _voucherDiscount: discountTotal,
+            _journalId: journalId,
+            _paidAt: new Date().toISOString(),
+            submittedBy: customerDetails.name || formData.fullName || 'Portal User',
+            email: customerDetails.email || formData.email || ''
+          }
+        }
+      });
+      recordId = record.id;
+    }
+
+    res.status(201).json({
+      success: true,
+      receiptNumber: receiptRef,
+      recordId,
+      subtotal: Math.round(subtotal * 100) / 100,
+      discountTotal: Math.round(discountTotal * 100) / 100,
+      taxTotal: Math.round(taxTotal * 100) / 100,
+      totalPaid: totalDue,
+      paymentStatus: 'CLEARED',
+      message: 'Payment and order successfully completed.'
+    });
+
+  } catch (err: any) {
+    console.error('[PublicCheckout] Checkout error:', err);
+    res.status(500).json({ error: err.message || 'Failed to complete portal checkout' });
+  }
+});
+
+/**
+ * GET /api/public/invoices/:identifier
+ * Public portal invoice lookup by ID or Invoice Number
+ */
+router.get('/invoices/:identifier', async (req, res) => {
+  try {
+    const { identifier } = req.params;
+    const invoice = await globalPrisma.invoice.findFirst({
+      where: {
+        OR: [
+          { id: identifier },
+          { invoiceNumber: { equals: identifier, mode: 'insensitive' } }
+        ]
+      },
+      include: {
+        lines: true,
+        party: true,
+        payments: true,
+      }
+    });
+
+    if (!invoice) {
+      return res.status(404).json({ error: 'Invoice not found. Please verify the invoice number.' });
+    }
+
+    res.json(invoice);
+  } catch (err: any) {
+    console.error('[PublicInvoiceLookup] Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to lookup invoice' });
+  }
+});
+
+/**
+ * POST /api/public/invoices/:id/pay
+ * Public portal invoice payment endpoint
+ */
+router.post('/invoices/:id/pay', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { amount, paymentMethod = 'CARD_ONLINE', reference } = req.body;
+
+    const invoice = await globalPrisma.invoice.findUnique({ where: { id } });
+    if (!invoice) {
+      return res.status(404).json({ error: 'Invoice not found' });
+    }
+
+    const { InvoiceService } = await import('../services/invoiceService');
+    const result = await InvoiceService.recordInvoicePayment(
+      invoice.tenantId,
+      invoice.id,
+      Number(amount || invoice.total),
+      paymentMethod,
+      undefined,
+      reference || `Online Portal Payment`,
+      undefined,
+      globalPrisma
+    );
+
+    res.json({
+      success: true,
+      message: `Invoice ${invoice.invoiceNumber} paid successfully`,
+      ...result
+    });
+  } catch (err: any) {
+    console.error('[PublicInvoicePay] Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to pay invoice' });
+  }
+});
+
 export default router;
+

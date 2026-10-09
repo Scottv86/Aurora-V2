@@ -54,6 +54,8 @@ const PlatformModulesSettings = lazy(() => import('./pages/Settings/PlatformModu
 const KnowledgeBaseSettings = lazy(() => import('./pages/Settings/PlatformModules/KnowledgeBaseSettings').then(m => ({ default: m.KnowledgeBaseSettings })));
 const PricingCatalogSettings = lazy(() => import('./pages/Settings/PlatformModules/PricingCatalogSettings').then(m => ({ default: m.PricingCatalogSettings })));
 const InventoryManagerSettings = lazy(() => import('./pages/Settings/PlatformModules/InventoryManagerSettings').then(m => ({ default: m.InventoryManagerSettings })));
+const PointOfSalePage = lazy(() => import('./pages/Platform/PointOfSalePage').then(m => ({ default: m.PointOfSalePage })));
+const FinancialManagementPage = lazy(() => import('./pages/Platform/FinancialManagementPage').then(m => ({ default: m.FinancialManagementPage })));
 const HealthMonitor = lazy(() => import('./components/HealthMonitor').then(m => ({ default: m.HealthMonitor })));
 const FleetManager = lazy(() => import('./components/FleetManager').then(m => ({ default: m.FleetManager })));
 const ComputeMatrix = lazy(() => import('./components/ComputeMatrix').then(m => ({ default: m.ComputeMatrix })));
@@ -324,6 +326,7 @@ const App = () => {
                 <Route path="platform/knowledge-base" element={<KnowledgeBaseSettings />} />
                 <Route path="platform/pricing-catalog" element={<PricingCatalogSettings />} />
                 <Route path="platform/inventory-manager" element={<InventoryManagerSettings />} />
+                <Route path="platform/pos" element={<PointOfSalePage />} />
                 <Route path="platform/global-lists" element={<GlobalListsSettings />} />
                 <Route path="platform/workforce" element={<WorkforcePage />} />
                 <Route path="platform/workforce/member/:id" element={<MemberDetailView />} />
@@ -338,7 +341,8 @@ const App = () => {
                 <Route path="platform/templates" element={<Navigate to="/workspace/platform/content" replace />} />
                 <Route path="platform/reports" element={<ReportManagementSettings />} />
                 <Route path="platform/api" element={<APISettings />} />
-                <Route path="platform/finance" element={<ComingSoon title="Financial Management" description="Financial settings, tax configurations, and payment processing rules." />} />
+                <Route path="platform/finance" element={<FinancialManagementPage />} />
+                <Route path="platform/accounting" element={<FinancialManagementPage />} />
                 <Route path="platform/records-management" element={<RecordsManagement />} />
                 
                 {/* Dynamic Module Routes */}
@@ -439,7 +443,9 @@ const App = () => {
 
                    <Route path="report-management" element={<ReportManagementSettings />} />
                    <Route path="api-management" element={<APISettings />} />
-                   <Route path="financial-management" element={<ComingSoon title="Financial Management" description="Financial settings, tax configurations, and payment processing rules." />} />
+                   <Route path="financial-management" element={<FinancialManagementPage />} />
+                   <Route path="accounting" element={<FinancialManagementPage />} />
+                   <Route path="pos" element={<PointOfSalePage />} />
                    <Route path="queues-management" element={<QueuesLibraryPage />} />
                    <Route path="queries-library" element={<QueriesLibraryPage />} />
                    <Route path="searches-library" element={<SearchesLibraryPage />} />

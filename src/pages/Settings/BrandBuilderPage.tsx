@@ -8,8 +8,7 @@ import {
   Trash2, 
   RefreshCw, 
   ArrowRight, 
-  Star, 
-  Globe
+  Star
 } from 'lucide-react';
 import { PageHeader } from '../../components/UI/PageHeader';
 import { Button } from '../../components/UI/Primitives';

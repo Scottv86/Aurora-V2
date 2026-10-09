@@ -169,7 +169,7 @@ export interface SiteWidget {
     | 'testimonials' | 'cta_strip' | 'embed_iframe' | 'bottom_nav_bar' | 'floating_action_btn' 
     | 'push_prompt' | 'infinite_stream' | 'slider_carousel' | 'cms_collection_list'
     | 'heading_block' | 'text_paragraph' | 'horizontal_rule' | 'content_panel' | 'vertical_spacer'
-    | 'search_embed';
+    | 'search_embed' | 'checkout_widget' | 'customer_billing_widget';
   enabled: boolean;
   title: string;
   subtitle?: string;
@@ -327,8 +327,8 @@ const getApiBaseUrl = () => {
     : '/api';
 };
 
-const getHeaders = () => {
-  const tenantId = localStorage.getItem('aurora_tenant_id') || 'tenant-aurora-core';
+const getHeaders = (tenantIdOverride?: string) => {
+  const tenantId = tenantIdOverride || localStorage.getItem('aurora_tenant_id') || 'tenant-aurora-core';
   return {
     'Content-Type': 'application/json',
     'x-tenant-id': tenantId
@@ -336,13 +336,13 @@ const getHeaders = () => {
 };
 
 export const SiteService = {
-  async getSites(category: string = 'all', status: string = 'all'): Promise<Site[]> {
+  async getSites(category: string = 'all', status: string = 'all', tenantId?: string): Promise<Site[]> {
     const url = new URL(`${getApiBaseUrl()}/sites`);
     if (category && category !== 'all') url.searchParams.append('category', category);
     if (status && status !== 'all') url.searchParams.append('status', status);
 
     const res = await fetch(url.toString(), {
-      headers: getHeaders()
+      headers: getHeaders(tenantId)
     });
 
     if (!res.ok) {

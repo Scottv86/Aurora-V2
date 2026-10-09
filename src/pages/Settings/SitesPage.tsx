@@ -40,7 +40,7 @@ export const SitesPage = () => {
       setLoading(true);
     }
     try {
-      const data = await SiteService.getSites();
+      const data = await SiteService.getSites('all', 'all', tenant?.id);
       setSites(data);
       builderCache.set(cacheKey, data);
     } catch (err: any) {
@@ -51,8 +51,12 @@ export const SitesPage = () => {
   };
 
   useEffect(() => {
+    const cached = builderCache.get<Site[]>(cacheKey);
+    if (cached) {
+      setSites(cached);
+    }
     fetchSites();
-  }, []);
+  }, [tenant?.id, cacheKey]);
 
   const [siteToDelete, setSiteToDelete] = useState<Site | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);

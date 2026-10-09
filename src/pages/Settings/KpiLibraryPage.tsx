@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Target, Plus, Search, Trash2, Edit2, Copy, RefreshCw 
+  Target, Plus, Search, Trash2, Edit2, Copy 
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';

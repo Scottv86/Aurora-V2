@@ -238,7 +238,8 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     (pathnames[0] === 'workspace' && pathnames[1] === 'pages' && pathnames[3] === 'modules' && pathnames[4] && pathnames[5] !== 'records');
   const isQueueMainView = (pathnames[0] === 'workspace' && pathnames[1] === 'queues' && pathnames[2] && pathnames[3] !== 'records');
   const isPageMainView = (pathnames[0] === 'workspace' && pathnames[1] === 'pages' && pathnames[2] && pathnames[3] !== 'modules');
-  const shouldHideShellBreadcrumbs = isModuleMainView || isQueueMainView || isPageMainView;
+  const isPosPage = location.pathname.includes('/pos');
+  const shouldHideShellBreadcrumbs = isModuleMainView || isQueueMainView || isPageMainView || isPosPage;
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     if (location.pathname === '/workspace/settings/builder/new') return false;
     const rawStyle = tenant?.branding?.layout_style || 'sidebar';
@@ -494,6 +495,12 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       if (feature === 'inventory-manager') {
         return renderConfigureButton('Configure Inventory', () => navigateWithReturn('/workspace/settings/platform-modules/inventory-manager'), 'Boxes');
       }
+      if (feature === 'pos') {
+        return renderConfigureButton('Configure Point of Sale', () => navigateWithReturn('/workspace/settings/platform-modules/pos'), 'Store');
+      }
+      if (feature === 'finance') {
+        return renderConfigureButton('Configure Accounting', () => navigateWithReturn('/workspace/settings/platform-modules/financial-management'), 'Banknote');
+      }
       if (feature === 'global-lists') {
         return renderConfigureButton('Configure Lists', () => navigateWithReturn('/workspace/settings/platform-modules/global-lists'), 'ListTodo');
       }
@@ -602,7 +609,8 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       icon: LucideIcons.Sliders,
       items: [
         { label: 'Work Distribution', icon: LucideIcons.Inbox, to: '/workspace/settings/platform-modules/work-distribution' },
-        { label: 'Financial Management', icon: LucideIcons.Banknote, to: '/workspace/settings/platform-modules/financial-management' },
+        { label: 'Accounting', icon: LucideIcons.Banknote, to: '/workspace/settings/platform-modules/financial-management' },
+        { label: 'Point of Sale', icon: LucideIcons.Store, to: '/workspace/settings/platform-modules/pos' },
         { label: 'Pricing Catalog', icon: LucideIcons.Tag, to: '/workspace/settings/platform-modules/pricing-catalog' },
         { label: 'Inventory Manager', icon: LucideIcons.Boxes, to: '/workspace/settings/platform-modules/inventory-manager' },
         { label: 'People & Organisations', icon: LucideIcons.Users, to: '/workspace/settings/platform-modules/people-organisations' },
@@ -1131,7 +1139,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
           style={{ marginLeft: `${currentMainMargin}px` }}
           className={cn(
             "flex-1 flex flex-col min-h-0",
-            (fullBleed || isAdminPath || isBuilderFullscreen || isModuleBuilder) ? "overflow-hidden" : "overflow-y-auto",
+            (fullBleed || isAdminPath || isBuilderFullscreen || isModuleBuilder || isPosPage) ? "overflow-hidden" : "overflow-y-auto",
             !isResizing && !isModuleBuilder && !isBuilderFullscreen && "transition-all duration-300",
             (isBuilderFullscreen || isModuleBuilder)
               ? "h-screen" 
@@ -1142,7 +1150,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         >
           <div className={cn(
             "mx-auto flex flex-col min-h-0 flex-1 h-full",
-            (fullBleed || isAdminPath || isBuilderFullscreen || isModuleBuilder) ? "w-full flex-1 h-full" : "max-w-7xl w-full"
+            (fullBleed || isAdminPath || isBuilderFullscreen || isModuleBuilder || isPosPage) ? "w-full flex-1 h-full" : "max-w-7xl w-full"
           )}>
             {pathnames.length > 0 && !isModuleBuilder && !isBuilderFullscreen && !shouldHideShellBreadcrumbs && (isSettingsMode || tenant?.branding?.show_breadcrumbs !== false || isTenantAdmin) && (
               <div className="sticky top-0 z-30 h-10 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between px-6 shrink-0">

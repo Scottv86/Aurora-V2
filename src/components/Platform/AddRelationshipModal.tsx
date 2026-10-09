@@ -85,7 +85,8 @@ export const AddRelationshipModal = ({ isOpen, onClose, onSuccess, sourcePartyId
       });
       const data = await res.json();
       if (res.ok) {
-        setParties(data.filter((p: any) => p.id !== sourcePartyId));
+        const list = Array.isArray(data) ? data : (data.parties || []);
+        setParties(list.filter((p: any) => p.id !== sourcePartyId));
       }
     } catch (err) {
       console.error('Failed to fetch parties:', err);

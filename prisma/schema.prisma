@@ -66,6 +66,18 @@ model Tenant {
   templateCatalogs       TemplateCatalog[]
   universalDocuments     UniversalDocument[]
   universalDisposalSchedules UniversalDisposalSchedule[]
+  chartOfAccounts        ChartOfAccount[]
+  taxRates               TaxRate[]
+  journalEntries         JournalEntry[]
+  invoices               Invoice[]
+  bills                  Bill[]
+  vouchers               Voucher[]
+  inventoryLocations     InventoryLocation[]
+  inventoryMovements     InventoryMovement[]
+  posRegisters           PosRegister[]
+  posSessions            PosSession[]
+  posOrders              PosOrder[]
+  bankStatementLines     BankStatementLine[]
 
   @@map("tenants")
 }
@@ -412,6 +424,11 @@ model Party {
   sourceRelationships PartyRelationship[]    @relation("SourceParty")
   targetRelationships PartyRelationship[]    @relation("TargetParty")
   person              Person?
+  invoices            Invoice[]
+  bills               Bill[]
+  posOrders           PosOrder[]
+  vouchers            Voucher[]
+  journalLines        JournalLine[]
 
   @@index([tenantId])
   @@map("parties")
@@ -820,11 +837,18 @@ model CatalogItem {
   trackInventory      Boolean  @default(false) @map("track_inventory")
   stockLevel          Int      @default(0) @map("stock_level")
   reorderPoint        Int      @default(0) @map("reorder_point")
+  defaultTaxRateId    String?  @map("default_tax_rate_id")
+  revenueAccountId    String?  @map("revenue_account_id")
+  cogsAccountId       String?  @map("cogs_account_id")
+  inventoryAssetAccountId String? @map("inventory_asset_account_id")
   metadata            Json?
   status              String   @default("active") // active, draft, archived
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
   tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  variants            CatalogItemVariant[]
+  stockAllocations    StockAllocation[]
+  movements           InventoryMovement[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -1626,5 +1650,533 @@ model UniversalDocumentAuditLog {
   @@index([tenantId, action])
   @@map("universal_document_audit_logs")
 }
+
+// =============================================================
+// COMMERCE & FINANCIAL MANAGEMENT SUITE MODELS
+// =============================================================
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum SystemAccount {
+  BANK
+  AR
+  AP
+  GST_PAYABLE
+  GST_PAID
+  COGS
+  INVENTORY_ASSET
+  POS_CLEARING
+  GATEWAY_CLEARING
+  VOUCHER_LIABILITY
+  TRUST_LIABILITY
+}
+
+model ChartOfAccount {
+  id                 String             @id @default(cuid())
+  tenantId           String             @map("tenant_id")
+  accountCode        String             @map("account_code")
+  accountName        String             @map("account_name")
+  accountType        AccountType        @map("account_type")
+  systemAccount      SystemAccount?     @map("system_account")
+  taxRateId          String?            @map("tax_rate_id")
+  currency           String             @default("AUD")
+  description        String?
+  isActive           Boolean            @default(true) @map("is_active")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  taxRate            TaxRate?           @relation(fields: [taxRateId], references: [id])
+  journalLines       JournalLine[]
+  bankStatementLines BankStatementLine[]
+
+  @@unique([tenantId, accountCode])
+  @@index([tenantId, accountType])
+  @@map("chart_of_accounts")
+}
+
+model TaxRate {
+  id             String           @id @default(cuid())
+  tenantId       String           @map("tenant_id")
+  code           String
+  name           String
+  rate           Decimal          @db.Decimal(6, 4)
+  isRecoverable  Boolean          @default(true) @map("is_recoverable")
+  reportCategory String?          @map("report_category")
+  createdAt      DateTime         @default(now()) @map("created_at")
+
+  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  accounts       ChartOfAccount[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@map("tax_rates")
+}
+
+enum SourceModule {
+  POS
+  INVOICE
+  BILL
+  PORTAL_PAYMENT
+  BANK_RECONCILIATION
+  INVENTORY_ADJUSTMENT
+  MANUAL
+}
+
+model JournalEntry {
+  id                String       @id @default(cuid())
+  tenantId          String       @map("tenant_id")
+  entryNumber       String       @map("entry_number")
+  date              DateTime
+  sourceModule      SourceModule @map("source_module")
+  sourceReferenceId String?      @map("source_reference_id")
+  narration         String
+  isLocked          Boolean      @default(false) @map("is_locked")
+  reversedByEntryId String?      @unique @map("reversed_by_entry_id")
+  reversalOfEntryId String?      @unique @map("reversal_of_entry_id")
+  createdByUserId   String?      @map("created_by_user_id")
+  createdAt         DateTime     @default(now()) @map("created_at")
+
+  tenant            Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lines             JournalLine[]
+
+  @@unique([tenantId, entryNumber])
+  @@index([tenantId, date])
+  @@index([tenantId, sourceModule, sourceReferenceId])
+  @@map("journal_entries")
+}
+
+model JournalLine {
+  id             String         @id @default(cuid())
+  journalEntryId String         @map("journal_entry_id")
+  accountId      String         @map("account_id")
+  contactPartyId String?        @map("contact_party_id")
+  description    String?
+  debit          Decimal        @default(0.00) @db.Decimal(14, 2)
+  credit         Decimal        @default(0.00) @db.Decimal(14, 2)
+  taxAmount      Decimal        @default(0.00) @map("tax_amount") @db.Decimal(14, 2)
+  taxRateId      String?        @map("tax_rate_id")
+
+  journalEntry   JournalEntry   @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  account        ChartOfAccount @relation(fields: [accountId], references: [id])
+  contactParty   Party?         @relation(fields: [contactPartyId], references: [id])
+
+  @@index([journalEntryId])
+  @@index([accountId])
+  @@map("journal_lines")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  AWAITING_APPROVAL
+  AUTHORIZED
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  VOID
+}
+
+model Invoice {
+  id              String           @id @default(cuid())
+  tenantId        String           @map("tenant_id")
+  invoiceNumber   String           @map("invoice_number")
+  customerPartyId String?          @map("customer_party_id")
+  issueDate       DateTime         @map("issue_date")
+  dueDate         DateTime         @map("due_date")
+  currency        String           @default("AUD")
+  subtotal        Decimal          @db.Decimal(14, 2)
+  discountTotal   Decimal          @default(0.00) @map("discount_total") @db.Decimal(14, 2)
+  taxTotal        Decimal          @db.Decimal(14, 2)
+  total           Decimal          @db.Decimal(14, 2)
+  amountPaid      Decimal          @default(0.00) @map("amount_paid") @db.Decimal(14, 2)
+  status          InvoiceStatus    @default(DRAFT)
+  notes           String?
+  journalEntryId  String?          @map("journal_entry_id")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer        Party?           @relation(fields: [customerPartyId], references: [id])
+  lines           InvoiceLine[]
+  payments        InvoicePayment[]
+
+  @@unique([tenantId, invoiceNumber])
+  @@index([tenantId, customerPartyId, status])
+  @@map("invoices")
+}
+
+model InvoiceLine {
+  id             String   @id @default(cuid())
+  invoiceId      String   @map("invoice_id")
+  catalogItemId  String?  @map("catalog_item_id")
+  variantId      String?  @map("variant_id")
+  description    String
+  quantity       Decimal  @db.Decimal(12, 3)
+  unitPrice      Decimal  @db.Decimal(14, 2)
+  discountAmount Decimal  @default(0.00) @map("discount_amount") @db.Decimal(14, 2)
+  taxRateId      String?  @map("tax_rate_id")
+  taxAmount      Decimal  @default(0.00) @map("tax_amount") @db.Decimal(14, 2)
+  accountId      String   @map("account_id")
+  lineTotal      Decimal  @db.Decimal(14, 2)
+
+  invoice        Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_lines")
+}
+
+model InvoicePayment {
+  id             String   @id @default(cuid())
+  tenantId       String   @map("tenant_id")
+  invoiceId      String   @map("invoice_id")
+  amount         Decimal  @db.Decimal(14, 2)
+  paymentDate    DateTime @map("payment_date")
+  paymentMethod  String
+  reference      String?
+  journalEntryId String?  @map("journal_entry_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  invoice        Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, invoiceId])
+  @@map("invoice_payments")
+}
+
+enum BillStatus {
+  DRAFT
+  AWAITING_APPROVAL
+  AWAITING_PAYMENT
+  PARTIALLY_PAID
+  PAID
+  VOID
+}
+
+model Bill {
+  id              String      @id @default(cuid())
+  tenantId        String      @map("tenant_id")
+  billNumber      String      @map("bill_number")
+  supplierPartyId String?     @map("supplier_party_id")
+  issueDate       DateTime    @map("issue_date")
+  dueDate         DateTime    @map("due_date")
+  currency        String      @default("AUD")
+  subtotal        Decimal     @db.Decimal(14, 2)
+  taxTotal        Decimal     @db.Decimal(14, 2)
+  total           Decimal     @db.Decimal(14, 2)
+  amountPaid      Decimal     @default(0.00) @map("amount_paid") @db.Decimal(14, 2)
+  status          BillStatus  @default(AWAITING_PAYMENT)
+  notes           String?
+  journalEntryId  String?     @map("journal_entry_id")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  tenant          Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supplier        Party?      @relation(fields: [supplierPartyId], references: [id])
+  lines           BillLine[]
+
+  @@unique([tenantId, billNumber])
+  @@index([tenantId, supplierPartyId, status])
+  @@map("bills")
+}
+
+model BillLine {
+  id            String   @id @default(cuid())
+  billId        String   @map("bill_id")
+  catalogItemId String?  @map("catalog_item_id")
+  description   String
+  quantity      Decimal  @db.Decimal(12, 3)
+  unitCost      Decimal  @db.Decimal(14, 2)
+  taxRateId     String?  @map("tax_rate_id")
+  taxAmount     Decimal  @default(0.00) @map("tax_amount") @db.Decimal(14, 2)
+  accountId     String   @map("account_id")
+  lineTotal     Decimal  @db.Decimal(14, 2)
+
+  bill          Bill     @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  @@map("bill_lines")
+}
+
+model CatalogItemVariant {
+  id               String            @id @default(cuid())
+  catalogItemId    String            @map("catalog_item_id")
+  sku              String
+  barcode          String?
+  title            String
+  priceOverride    Decimal?          @map("price_override") @db.Decimal(12, 2)
+  unitCost         Decimal           @default(0.00) @map("unit_cost") @db.Decimal(12, 2)
+  attributes       Json?
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  catalogItem      CatalogItem       @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  stockAllocations StockAllocation[]
+
+  @@unique([catalogItemId, sku])
+  @@index([sku, barcode])
+  @@map("catalog_item_variants")
+}
+
+enum VoucherType {
+  GIFT_CARD
+  DISCOUNT_PROMO
+  STORE_CREDIT
+}
+
+enum VoucherStatus {
+  ACTIVE
+  DEPLETED
+  EXPIRED
+  REVOKED
+}
+
+model Voucher {
+  id               String              @id @default(cuid())
+  tenantId         String              @map("tenant_id")
+  code             String
+  type             VoucherType
+  initialBalance   Decimal             @map("initial_balance") @db.Decimal(12, 2)
+  currentBalance   Decimal             @map("current_balance") @db.Decimal(12, 2)
+  currency         String              @default("AUD")
+  discountPercent  Decimal?            @map("discount_percent") @db.Decimal(5, 2)
+  expiresAt        DateTime?           @map("expires_at")
+  status           VoucherStatus       @default(ACTIVE)
+  recipientPartyId String?             @map("recipient_party_id")
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+
+  tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  recipientParty   Party?              @relation(fields: [recipientPartyId], references: [id])
+  redemptions      VoucherRedemption[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, status])
+  @@map("vouchers")
+}
+
+model VoucherRedemption {
+  id             String   @id @default(cuid())
+  voucherId      String   @map("voucher_id")
+  sourceType     String
+  sourceId       String
+  amountRedeemed Decimal  @map("amount_redeemed") @db.Decimal(12, 2)
+  redeemedAt     DateTime @default(now()) @map("redeemed_at")
+
+  voucher        Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+
+  @@map("voucher_redemptions")
+}
+
+model InventoryLocation {
+  id               String              @id @default(cuid())
+  tenantId         String              @map("tenant_id")
+  code             String
+  name             String
+  isDefault        Boolean             @default(false) @map("is_default")
+  createdAt        DateTime            @default(now()) @map("created_at")
+
+  tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  stockAllocations StockAllocation[]
+  movements        InventoryMovement[]
+  registers        PosRegister[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@map("inventory_locations")
+}
+
+model StockAllocation {
+  id                String              @id @default(cuid())
+  locationId        String              @map("location_id")
+  catalogItemId     String              @map("catalog_item_id")
+  variantId         String?             @map("variant_id")
+  onHandQuantity    Decimal             @default(0.00) @map("on_hand_quantity") @db.Decimal(12, 3)
+  allocatedQuantity Decimal             @default(0.00) @map("allocated_quantity") @db.Decimal(12, 3)
+  reorderPoint      Decimal             @default(0.00) @map("reorder_point") @db.Decimal(12, 3)
+
+  location          InventoryLocation   @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  catalogItem       CatalogItem         @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  variant           CatalogItemVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([locationId, catalogItemId, variantId])
+  @@map("stock_allocations")
+}
+
+enum InventoryMovementType {
+  POS_SALE
+  POS_RETURN
+  ONLINE_ORDER
+  PURCHASE_RECEIPT
+  TRANSFER_IN
+  TRANSFER_OUT
+  ADJUSTMENT_WRITE_OFF
+  SHRINKAGE
+}
+
+model InventoryMovement {
+  id            String                @id @default(cuid())
+  tenantId      String                @map("tenant_id")
+  locationId    String                @map("location_id")
+  catalogItemId String                @map("catalog_item_id")
+  variantId     String?               @map("variant_id")
+  quantityDelta Decimal               @map("quantity_delta") @db.Decimal(12, 3)
+  unitCost      Decimal               @default(0.00) @map("unit_cost") @db.Decimal(12, 2)
+  movementType  InventoryMovementType @map("movement_type")
+  referenceId   String?               @map("reference_id")
+  notes         String?
+  createdAt     DateTime              @default(now()) @map("created_at")
+
+  tenant        Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location      InventoryLocation     @relation(fields: [locationId], references: [id])
+  catalogItem   CatalogItem           @relation(fields: [catalogItemId], references: [id])
+
+  @@index([tenantId, catalogItemId, locationId])
+  @@index([tenantId, referenceId])
+  @@map("inventory_movements")
+}
+
+model PosRegister {
+  id         String            @id @default(cuid())
+  tenantId   String            @map("tenant_id")
+  name       String
+  code       String
+  locationId String            @map("location_id")
+  isActive   Boolean           @default(true) @map("is_active")
+  createdAt  DateTime          @default(now()) @map("created_at")
+
+  tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location   InventoryLocation @relation(fields: [locationId], references: [id])
+  sessions   PosSession[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@map("pos_registers")
+}
+
+enum SessionStatus {
+  OPEN
+  CLOSED
+}
+
+model PosSession {
+  id                  String        @id @default(cuid())
+  tenantId            String        @map("tenant_id")
+  registerId          String        @map("register_id")
+  openedByUserId      String        @map("opened_by_user_id")
+  closedByUserId      String?       @map("closed_by_user_id")
+  openedAt            DateTime      @default(now()) @map("opened_at")
+  closedAt            DateTime?     @map("closed_at")
+  openingFloat        Decimal       @default(0.00) @map("opening_float") @db.Decimal(12, 2)
+  closingCashActual   Decimal?      @map("closing_cash_actual") @db.Decimal(12, 2)
+  closingCashExpected Decimal?      @map("closing_cash_expected") @db.Decimal(12, 2)
+  cashVariance        Decimal?      @map("cash_variance") @db.Decimal(12, 2)
+  status              SessionStatus @default(OPEN)
+  notes               String?
+
+  tenant              Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  register            PosRegister   @relation(fields: [registerId], references: [id])
+  orders              PosOrder[]
+
+  @@index([tenantId, registerId, status])
+  @@map("pos_sessions")
+}
+
+enum OrderStatus {
+  COMPLETED
+  VOIDED
+  REFUNDED
+}
+
+model PosOrder {
+  id              String         @id @default(cuid())
+  tenantId        String         @map("tenant_id")
+  sessionId       String         @map("session_id")
+  orderNumber     String         @map("order_number")
+  customerPartyId String?        @map("customer_party_id")
+  subtotal        Decimal        @db.Decimal(12, 2)
+  discountTotal   Decimal        @default(0.00) @map("discount_total") @db.Decimal(12, 2)
+  taxTotal        Decimal        @db.Decimal(12, 2)
+  total           Decimal        @db.Decimal(12, 2)
+  status          OrderStatus    @default(COMPLETED)
+  journalEntryId  String?        @map("journal_entry_id")
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  session         PosSession     @relation(fields: [sessionId], references: [id])
+  customer        Party?         @relation(fields: [customerPartyId], references: [id])
+  items           PosOrderItem[]
+  payments        PosPayment[]
+
+  @@unique([tenantId, orderNumber])
+  @@index([tenantId, sessionId])
+  @@index([tenantId, customerPartyId])
+  @@map("pos_orders")
+}
+
+model PosOrderItem {
+  id             String      @id @default(cuid())
+  orderId        String      @map("order_id")
+  catalogItemId  String?     @map("catalog_item_id")
+  variantId      String?     @map("variant_id")
+  title          String
+  sku            String?
+  quantity       Decimal     @db.Decimal(10, 3)
+  unitPrice      Decimal     @db.Decimal(12, 2)
+  unitCost       Decimal     @default(0.00) @map("unit_cost") @db.Decimal(12, 2)
+  discountAmount Decimal     @default(0.00) @map("discount_amount") @db.Decimal(12, 2)
+  taxRate        Decimal     @default(0.00) @map("tax_rate") @db.Decimal(6, 4)
+  lineTotal      Decimal     @db.Decimal(12, 2)
+
+  order          PosOrder    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("pos_order_items")
+}
+
+enum TenderType {
+  CASH
+  CARD
+  VOUCHER
+  ON_ACCOUNT
+}
+
+model PosPayment {
+  id          String     @id @default(cuid())
+  orderId     String     @map("order_id")
+  tenderType  TenderType @map("tender_type")
+  amount      Decimal    @db.Decimal(12, 2)
+  changeGiven Decimal    @default(0.00) @map("change_given") @db.Decimal(12, 2)
+  voucherCode String?    @map("voucher_code")
+  terminalRef String?    @map("terminal_ref")
+  createdAt   DateTime   @default(now()) @map("created_at")
+
+  order       PosOrder   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("pos_payments")
+}
+
+model BankStatementLine {
+  id               String         @id @default(cuid())
+  tenantId         String         @map("tenant_id")
+  bankAccountId    String         @map("bank_account_id")
+  transactionDate  DateTime       @map("transaction_date")
+  amount           Decimal        @db.Decimal(14, 2)
+  payee            String?
+  description      String?
+  reference        String?
+  isReconciled     Boolean        @default(false) @map("is_reconciled")
+  matchedJournalId String?        @map("matched_journal_id")
+  createdAt        DateTime       @default(now()) @map("created_at")
+
+  tenant           Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bankAccount      ChartOfAccount @relation(fields: [bankAccountId], references: [id])
+
+  @@index([tenantId, bankAccountId, isReconciled])
+  @@index([tenantId, transactionDate])
+  @@map("bank_statement_lines")
+}
+
 
 

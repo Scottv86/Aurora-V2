@@ -55,6 +55,15 @@ export const PLATFORM_MODULES: PlatformModule[] = [
     path: '/workspace/platform/inventory-manager'
   },
   {
+    id: 'pos',
+    name: 'Point of Sale',
+    slug: 'pos',
+    iconName: 'Store',
+    isCore: true,
+    description: 'Workspace retail counter checkout, touch cart, cash shifts, split tenders, and barcode scanning.',
+    path: '/workspace/platform/pos'
+  },
+  {
     id: 'global-lists',
     name: 'Global Lists',
     slug: 'global-lists',
@@ -128,11 +137,11 @@ export const PLATFORM_MODULES: PlatformModule[] = [
   },
   {
     id: 'financial-management',
-    name: 'Financial Management',
-    slug: 'financial-management',
+    name: 'Accounting',
+    slug: 'accounting',
     iconName: 'Banknote',
     isCore: true,
-    description: 'Financial settings, tax configurations, and payment processing rules.',
+    description: 'Double-entry general ledger, invoicing (AR), supplier bills (AP), bank reconciliation, and real-time financial reporting.',
     path: '/workspace/platform/finance'
   },
   {

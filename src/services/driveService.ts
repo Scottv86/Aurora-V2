@@ -389,7 +389,9 @@ export class DriveService {
         }
       }
 
-      this.saveItems(items);
+      if (changed) {
+        this.saveItems(items);
+      }
     } catch (err) {
       console.warn('[DriveService] Failed to sync with universal documents:', err);
     }

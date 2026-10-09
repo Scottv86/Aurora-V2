@@ -1015,9 +1015,9 @@ const ConnectorTest = ({ connector }: { connector: Connector }) => {
     setTesting(true);
     setResponse(null);
     try {
-      const url = connector.edgeFunctionUrl.startsWith('/')
+      const url = (connector.edgeFunctionUrl || '').startsWith('/')
         ? `${API_BASE_URL}${connector.edgeFunctionUrl}`
-        : connector.edgeFunctionUrl;
+        : (connector.edgeFunctionUrl || '');
 
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
 

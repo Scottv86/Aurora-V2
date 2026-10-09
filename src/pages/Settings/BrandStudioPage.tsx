@@ -1150,7 +1150,7 @@ export const BrandStudioPage: React.FC = () => {
           isOpen={isLogoStudioOpen}
           onClose={() => setIsLogoStudioOpen(false)}
           brandName={brand.name}
-          colors={brand.colors || { primary: '#4f46e5', secondary: '#0ea5e9', accent: '#6366f1' }}
+          colors={brand.colors || { primary: '#4f46e5', secondary: '#0ea5e9', accent: '#6366f1', background: '#ffffff', surface: '#f8fafc', text: '#0f172a', muted: '#64748b', border: '#e2e8f0', chartPalette: [] }}
           currentAssets={brand.assets}
           onApplyAssets={(newAssets) => {
             setBrand({

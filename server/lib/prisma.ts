@@ -3,6 +3,8 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
 /**
  * Global shared connection pool and adapter for the Registry.
  * Prisma 7 requires explicit adapters for database connectivity.
@@ -12,6 +14,7 @@ const pool = new Pool({
   max: 50, // Increase pool size from default 10 to 50
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
+  ssl: { rejectUnauthorized: false },
 });
 const adapter = new PrismaPg(pool);
 
@@ -68,7 +71,6 @@ export const getScopedPrisma = (
             'AutomationRun',
             'CatalogItem',
             'AntigravitySession',
-            'AntigravityMessage',
             'TenantAIKey',
             'TenantAIMapping',
             'SavedQuery',
@@ -76,10 +78,23 @@ export const getScopedPrisma = (
             'SolutionBlueprint',
             'Form',
             'Workflow',
-            'ValidationRuleset'
+            'ValidationRuleset',
+            'ChartOfAccount',
+            'TaxRate',
+            'JournalEntry',
+            'Invoice',
+            'InvoicePayment',
+            'Bill',
+            'Voucher',
+            'InventoryLocation',
+            'InventoryMovement',
+            'PosRegister',
+            'PosSession',
+            'PosOrder',
+            'BankStatementLine'
           ];
 
-          const isScopedModel = TENANT_SCOPED_MODELS.includes(model);
+          const isScopedModel = (TENANT_SCOPED_MODELS as readonly string[]).includes(model as string);
           const a = (args || {}) as any;
 
           // If we are already inside our RLS transaction, just execute the query

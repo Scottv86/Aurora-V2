@@ -7,6 +7,16 @@ import { recordAudit } from '../lib/audit';
 const router = express.Router();
 
 // Validation Schema
+const VariantSchema = z.object({
+  id: z.string().optional(),
+  sku: z.string().min(1, 'Variant SKU is required'),
+  barcode: z.string().optional().nullable(),
+  title: z.string().min(1, 'Variant title is required'),
+  priceOverride: z.number().optional().nullable(),
+  unitCost: z.number().nonnegative().optional().default(0),
+  attributes: z.any().optional().nullable(),
+});
+
 const CatalogItemSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   code: z.string().min(1, 'SKU/Code is required'),
@@ -21,6 +31,11 @@ const CatalogItemSchema = z.object({
   trackInventory: z.boolean().default(false),
   stockLevel: z.number().int().nonnegative().default(0),
   reorderPoint: z.number().int().nonnegative().default(0),
+  defaultTaxRateId: z.string().optional().nullable(),
+  revenueAccountId: z.string().optional().nullable(),
+  cogsAccountId: z.string().optional().nullable(),
+  inventoryAssetAccountId: z.string().optional().nullable(),
+  variants: z.array(VariantSchema).optional(),
   metadata: z.any().optional().nullable(),
   status: z.enum(['active', 'draft', 'archived']).default('active'),
 });
@@ -110,6 +125,7 @@ router.get('/', async (req: TenantRequest, res) => {
 
     let items = await db.catalogItem.findMany({
       where,
+      include: { variants: true },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -125,6 +141,7 @@ router.get('/', async (req: TenantRequest, res) => {
 
       items = await db.catalogItem.findMany({
         where,
+        include: { variants: true },
         orderBy: { createdAt: 'desc' },
       });
     }
@@ -132,6 +149,115 @@ router.get('/', async (req: TenantRequest, res) => {
     res.json(items);
   } catch (err: any) {
     console.error('[PricingCatalog GET List Error]:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// BATCH MANAGE CATEGORY (RENAME or DELETE)
+router.post('/manage-category', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db || globalPrisma;
+    const { action, oldCategory, newCategory, category } = req.body;
+
+    if (!req.tenantId) {
+      return res.status(401).json({ error: 'Tenant context required' });
+    }
+
+    const items = await db.catalogItem.findMany({
+      where: { tenantId: req.tenantId }
+    });
+
+    if (action === 'rename') {
+      const targetOld = (oldCategory || '').trim().toLowerCase();
+      const targetNew = (newCategory || '').trim();
+      if (!targetOld || !targetNew) {
+        return res.status(400).json({ error: 'oldCategory and newCategory are required' });
+      }
+
+      let updatedCount = 0;
+      for (const item of items) {
+        const itemCat = ((item.metadata as any)?.category || '').trim();
+        if (itemCat.toLowerCase() === targetOld) {
+          const newMeta = { ...(item.metadata as any || {}), category: targetNew };
+          await db.catalogItem.update({
+            where: { id: item.id },
+            data: { metadata: newMeta }
+          });
+          updatedCount++;
+        }
+      }
+      return res.json({ success: true, updatedCount });
+    }
+
+    if (action === 'delete') {
+      const targetCat = (category || oldCategory || '').trim().toLowerCase();
+      if (!targetCat) {
+        return res.status(400).json({ error: 'category is required' });
+      }
+
+      let updatedCount = 0;
+      for (const item of items) {
+        const itemCat = ((item.metadata as any)?.category || '').trim();
+        if (itemCat.toLowerCase() === targetCat) {
+          const newMeta = { ...(item.metadata as any || {}) };
+          delete newMeta.category;
+          await db.catalogItem.update({
+            where: { id: item.id },
+            data: { metadata: newMeta }
+          });
+          updatedCount++;
+        }
+      }
+      return res.json({ success: true, updatedCount });
+    }
+
+    if (action === 'assign-items') {
+      const { category, itemIds } = req.body;
+      const targetCat = (category || '').trim();
+      if (!targetCat || !Array.isArray(itemIds) || itemIds.length === 0) {
+        return res.status(400).json({ error: 'category and itemIds array are required' });
+      }
+
+      let updatedCount = 0;
+      for (const id of itemIds) {
+        const item = items.find(i => i.id === id);
+        if (item) {
+          const newMeta = { ...(item.metadata as any || {}), category: targetCat };
+          await db.catalogItem.update({
+            where: { id: item.id },
+            data: { metadata: newMeta }
+          });
+          updatedCount++;
+        }
+      }
+      return res.json({ success: true, updatedCount });
+    }
+
+    if (action === 'remove-items') {
+      const { itemIds } = req.body;
+      if (!Array.isArray(itemIds) || itemIds.length === 0) {
+        return res.status(400).json({ error: 'itemIds array is required' });
+      }
+
+      let updatedCount = 0;
+      for (const id of itemIds) {
+        const item = items.find(i => i.id === id);
+        if (item) {
+          const newMeta = { ...(item.metadata as any || {}) };
+          delete newMeta.category;
+          await db.catalogItem.update({
+            where: { id: item.id },
+            data: { metadata: newMeta }
+          });
+          updatedCount++;
+        }
+      }
+      return res.json({ success: true, updatedCount });
+    }
+
+    return res.status(400).json({ error: 'Invalid action. Must be "rename", "delete", "assign-items", or "remove-items"' });
+  } catch (err: any) {
+    console.error('[PricingCatalog manage-category Error]:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -146,7 +272,8 @@ router.get('/:id', async (req: TenantRequest, res) => {
       where: {
         id,
         tenantId: req.tenantId,
-      }
+      },
+      include: { variants: true }
     });
 
     if (!item) {
@@ -163,7 +290,7 @@ router.get('/:id', async (req: TenantRequest, res) => {
 router.post('/', async (req: TenantRequest, res) => {
   try {
     const db = req.db || globalPrisma;
-    const body = CatalogItemSchema.parse(req.body);
+    const { variants, ...body } = CatalogItemSchema.parse(req.body);
 
     // Guardrail: Check SKU/Code uniqueness for tenant
     const existing = await db.catalogItem.findFirst({
@@ -181,7 +308,20 @@ router.post('/', async (req: TenantRequest, res) => {
       data: {
         ...body,
         tenantId: req.tenantId!,
-      }
+        ...(variants && variants.length > 0 ? {
+          variants: {
+            create: variants.map(v => ({
+              sku: v.sku,
+              barcode: v.barcode || null,
+              title: v.title,
+              priceOverride: v.priceOverride !== undefined && v.priceOverride !== null ? v.priceOverride : null,
+              unitCost: v.unitCost || 0,
+              attributes: v.attributes || null,
+            }))
+          }
+        } : {})
+      },
+      include: { variants: true }
     });
 
     await recordAudit({
@@ -207,13 +347,14 @@ router.put('/:id', async (req: TenantRequest, res) => {
   try {
     const db = req.db || globalPrisma;
     const { id } = req.params;
-    const body = CatalogItemSchema.parse(req.body);
+    const { variants, ...body } = CatalogItemSchema.parse(req.body);
 
     const existing = await db.catalogItem.findFirst({
       where: {
         id,
         tenantId: req.tenantId,
-      }
+      },
+      include: { variants: true }
     });
 
     if (!existing) {
@@ -233,9 +374,51 @@ router.put('/:id', async (req: TenantRequest, res) => {
       }
     }
 
+    // Update item and reconcile variants if specified
+    if (variants !== undefined) {
+      // Delete existing variants not in the new list
+      const retainedIds = variants.filter(v => !!v.id).map(v => v.id!);
+      await db.catalogItemVariant.deleteMany({
+        where: {
+          catalogItemId: id,
+          id: { notIn: retainedIds }
+        }
+      });
+
+      // Upsert new / updated variants
+      for (const v of variants) {
+        if (v.id) {
+          await db.catalogItemVariant.update({
+            where: { id: v.id },
+            data: {
+              sku: v.sku,
+              barcode: v.barcode || null,
+              title: v.title,
+              priceOverride: v.priceOverride !== undefined && v.priceOverride !== null ? v.priceOverride : null,
+              unitCost: v.unitCost || 0,
+              attributes: v.attributes || null,
+            }
+          });
+        } else {
+          await db.catalogItemVariant.create({
+            data: {
+              catalogItemId: id,
+              sku: v.sku,
+              barcode: v.barcode || null,
+              title: v.title,
+              priceOverride: v.priceOverride !== undefined && v.priceOverride !== null ? v.priceOverride : null,
+              unitCost: v.unitCost || 0,
+              attributes: v.attributes || null,
+            }
+          });
+        }
+      }
+    }
+
     const updatedItem = await db.catalogItem.update({
       where: { id },
       data: body,
+      include: { variants: true }
     });
 
     await recordAudit({

@@ -41,6 +41,12 @@ import searchRoutes from './routes/searchRoutes';
 import brandKitRoutes from './routes/brandKitRoutes';
 import templateRoutes from './routes/templateRoutes';
 import documentRoutes from './routes/documentRoutes';
+import financeRoutes from './routes/financeRoutes';
+import invoiceRoutes from './routes/invoiceRoutes';
+import inventoryRoutes from './routes/inventoryRoutes';
+import voucherRoutes from './routes/voucherRoutes';
+import posRoutes from './routes/posRoutes';
+import reconciliationRoutes from './routes/reconciliationRoutes';
 
 
 
@@ -156,6 +162,14 @@ app.use('/api/chat', authenticate, requireTenantAccess, chatRoutes);
 app.use('/api/brand-kits', authenticate, requireTenantAccess, brandKitRoutes);
 app.use('/api/templates', authenticate, requireTenantAccess, templateRoutes);
 app.use('/api/documents', documentRoutes);
+
+// Commerce & Financial Suite Routes
+app.use('/api/finance', authenticate, requireTenantAccess, financeRoutes);
+app.use('/api/invoices', authenticate, requireTenantAccess, invoiceRoutes);
+app.use('/api/inventory', authenticate, requireTenantAccess, inventoryRoutes);
+app.use('/api/vouchers', authenticate, requireTenantAccess, voucherRoutes);
+app.use('/api/pos', authenticate, requireTenantAccess, posRoutes);
+app.use('/api/reconciliation', authenticate, requireTenantAccess, reconciliationRoutes);
 
 
 
