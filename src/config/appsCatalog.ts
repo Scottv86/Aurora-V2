@@ -5,13 +5,24 @@ export interface AppItem {
   description: string;
   color: string;
   to: string;
-  category?: 'Productivity' | 'Data & Search' | 'Communication' | 'Creation & Tools';
+  category?: 'Productivity' | 'Data & Search' | 'Communication' | 'Creation & Tools' | 'Commerce & Operations';
   isCore?: boolean;
   status?: 'active' | 'beta' | 'coming_soon';
 }
 
 export const AURORA_APPS: AppItem[] = [
   // Core Platform & Active Workspace Suite
+  {
+    id: 'pos',
+    label: 'Point of Sale',
+    iconName: 'Store',
+    description: 'Retail counter checkout, barcode scanning, split tenders, and fast returns',
+    color: 'text-emerald-500',
+    to: '/workspace/apps/pos',
+    category: 'Commerce & Operations',
+    isCore: true,
+    status: 'active'
+  },
   {
     id: 'inbox',
     label: 'Inbox',

@@ -21,7 +21,8 @@ import {
   AlertCircle,
   Archive,
   Info,
-  Store
+  Store,
+  RotateCcw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { usePlatform } from '../../hooks/usePlatform';
@@ -30,7 +31,10 @@ import { API_BASE_URL } from '../../config';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
 import { Button } from '../../components/UI/Primitives';
-import { PageHeader } from '../../components/UI/PageHeader';
+import { SettingsSubNavLayout, SettingsSubNavItem } from '../../components/Settings/SettingsSubNavLayout';
+import { TransactionClientService } from '../../services/transactionService';
+import { CreditNoteDocumentModal, CreditNoteData } from '../../components/Platform/Invoices/CreditNoteDocument';
+import { AuroraModal } from '../../components/UI/AuroraModal';
 
 export const FinancialManagementPage = () => {
   const { tenant } = usePlatform();
@@ -91,6 +95,17 @@ export const FinancialManagementPage = () => {
   const [selectedInvoiceForPayment, setSelectedInvoiceForPayment] = useState<any>(null);
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<string>('BANK_TRANSFER');
+
+  // Invoice Refund / Credit Modal State
+  const [showInvoiceRefundModal, setShowInvoiceRefundModal] = useState(false);
+  const [selectedInvoiceForRefund, setSelectedInvoiceForRefund] = useState<any>(null);
+  const [invoiceRefundAmount, setInvoiceRefundAmount] = useState<number>(0);
+  const [invoiceRefundReason, setInvoiceRefundReason] = useState<string>('ORDER_CANCELLED');
+  const [invoiceRefundNotes, setInvoiceRefundNotes] = useState<string>('');
+  const [invoiceRefundMethod, setInvoiceRefundMethod] = useState<string>('BANK_TRANSFER');
+  const [isSubmittingInvoiceRefund, setIsSubmittingInvoiceRefund] = useState(false);
+  const [activeCreditNote, setActiveCreditNote] = useState<CreditNoteData | null>(null);
+  const [showCreditNoteModal, setShowCreditNoteModal] = useState<boolean>(false);
 
   // Reconciliation State
   const [bankLines, setBankLines] = useState<any[]>([]);
@@ -363,6 +378,56 @@ export const FinancialManagementPage = () => {
     }
   };
 
+  const handleExecuteInvoiceRefund = async () => {
+    if (!selectedInvoiceForRefund || !tenant?.id) return;
+    if (invoiceRefundAmount <= 0) {
+      toast.error('Refund amount must be greater than zero');
+      return;
+    }
+    try {
+      setIsSubmittingInvoiceRefund(true);
+      const refundResult = await TransactionClientService.processInvoiceRefund({
+        invoiceId: selectedInvoiceForRefund.id,
+        amount: invoiceRefundAmount,
+        refundMethod: invoiceRefundMethod,
+        reason: invoiceRefundReason,
+        reasonNotes: invoiceRefundNotes
+      }, tenant.id);
+
+      toast.success(`Invoice credit / refund of $${invoiceRefundAmount.toFixed(2)} processed!`);
+      setShowInvoiceRefundModal(false);
+
+      const cust = selectedInvoiceForRefund.customer;
+      const custName = cust?.organization?.legalName ||
+        `${cust?.person?.firstName || ''} ${cust?.person?.lastName || ''}`.trim() || 'Valued Client';
+
+      setActiveCreditNote({
+        id: refundResult?.id || 'CN-ID',
+        refundNumber: refundResult?.refundNumber || `CN-${selectedInvoiceForRefund.invoiceNumber}`,
+        invoiceNumber: selectedInvoiceForRefund.invoiceNumber,
+        invoiceDate: selectedInvoiceForRefund.issueDate,
+        createdAt: refundResult?.createdAt || new Date(),
+        amount: invoiceRefundAmount,
+        taxAmount: Math.round((invoiceRefundAmount - (invoiceRefundAmount / 1.10)) * 100) / 100,
+        refundMethod: invoiceRefundMethod,
+        reason: invoiceRefundReason,
+        reasonNotes: invoiceRefundNotes,
+        customerName: custName,
+        customerAddress: cust?.organization?.address || '',
+        customerAbn: cust?.organization?.abn || '',
+        businessName: tenant?.name || 'AURORA ENTERPRISE COMMERCE PTY LTD'
+      });
+      setShowCreditNoteModal(true);
+
+      setSelectedInvoiceForRefund(null);
+      await fetchFinancialData();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to refund invoice');
+    } finally {
+      setIsSubmittingInvoiceRefund(false);
+    }
+  };
+
   const handleOpenAddAccount = () => {
     setAccountForm({
       accountCode: '',
@@ -498,179 +563,174 @@ export const FinancialManagementPage = () => {
     EXPENSE: accounts.filter(a => a.accountType === 'EXPENSE')
   };
 
+  const subNavItems: SettingsSubNavItem[] = [
+    { id: 'overview', label: 'Financial Overview', icon: BarChart2, description: 'Bank balance & cash flow KPIs' },
+    { id: 'invoices', label: 'Invoices (AR)', icon: Receipt, description: 'Sales invoices & receivables' },
+    { id: 'bills', label: 'Bills & Debits (AP)', icon: FileText, description: 'Supplier bills & payables' },
+    { 
+      id: 'reconciliation', 
+      label: 'Bank Reconciliation', 
+      icon: RefreshCw, 
+      description: 'Automated statement matching',
+      badge: metrics.unreconciledCount > 0 ? metrics.unreconciledCount : undefined 
+    },
+    { id: 'ledger', label: 'Chart of Accounts & GL', icon: Layers, description: 'General ledger account codes' },
+    { id: 'reports', label: 'Financial Reports', icon: DollarSign, description: 'P&L, Balance Sheet & Trial Balance' },
+  ];
+
   return (
-    <div 
-      className="flex-1 min-h-0 w-full h-full bg-zinc-950 text-zinc-100 font-sans overflow-y-scroll custom-scrollbar"
-      style={{ scrollbarWidth: 'thin', scrollbarColor: '#52525b #18181b' }}
-    >
-      <div className="sticky top-0 z-20 bg-zinc-950/95 backdrop-blur-md border-b border-zinc-800">
-        <PageHeader
-          title="Accounting"
-          description="General Ledger, Invoicing, Supplier Bills, Bank Reconciliation, and Financial Reports."
-          actions={
-            <div className="flex items-center gap-2">
-              <Button
-                onClick={() => {
-                  setNewLockDateInput(lockDate || '');
-                  setShowLockModal(true);
-                }}
-                className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs px-3 py-2 rounded-xl border border-zinc-700 flex items-center gap-1.5 cursor-pointer"
-              >
-                <Lock size={14} className={lockDate ? 'text-amber-400' : 'text-zinc-500'} />
-                <span>{lockDate ? `Locked: ${lockDate}` : 'Lock Period'}</span>
-              </Button>
-              {activeTab === 'ledger' ? (
-                <Button
-                  onClick={handleOpenAddAccount}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3.5 py-2 rounded-xl shadow-lg shadow-indigo-600/20 flex items-center gap-1.5 font-bold cursor-pointer"
-                >
-                  <Plus size={14} />
-                  <span>Add Account</span>
-                </Button>
-              ) : (
-                <Button
-                  onClick={() => setShowNewInvoiceModal(true)}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3.5 py-2 rounded-xl shadow-lg shadow-indigo-600/20 flex items-center gap-1.5 font-bold cursor-pointer"
-                >
-                  <Plus size={14} />
-                  <span>New Invoice</span>
-                </Button>
-              )}
-            </div>
-          }
-        />
-
-        {/* Primary Sub-Navigation Tabs */}
-        <div className="px-6 lg:px-12 bg-zinc-900/40">
-          <div className="flex items-center gap-2 overflow-x-auto text-xs font-semibold py-2">
-            {[
-              { id: 'overview', label: 'Overview', icon: BarChart2 },
-              { id: 'invoices', label: 'Invoices (AR)', icon: Receipt },
-              { id: 'bills', label: 'Bills & Debits (AP)', icon: FileText },
-              { id: 'reconciliation', label: 'Bank Reconciliation', icon: RefreshCw, badge: metrics.unreconciledCount },
-              { id: 'ledger', label: 'Chart of Accounts & GL', icon: Layers },
-              { id: 'reports', label: 'Financial Reports', icon: DollarSign },
-            ].map(tab => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    setActiveTab(tab.id as any);
-                    if (tab.id === 'reports') fetchReport('pnl');
-                  }}
-                  className={cn(
-                    "flex items-center gap-2 px-3.5 py-2 rounded-xl transition-all cursor-pointer",
-                    isActive
-                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
-                      : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60"
-                  )}
-                >
-                  <Icon size={14} />
-                  <span>{tab.label}</span>
-                  {tab.badge !== undefined && tab.badge > 0 && (
-                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500/20 text-amber-300 font-mono">
-                      {tab.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+    <SettingsSubNavLayout
+      title="Accounting & General Ledger"
+      description="Double-entry General Ledger, Accounts Receivable Invoicing, Accounts Payable Bills, Bank Reconciliation, and Financial Reports."
+      icon={BarChart2}
+      items={subNavItems}
+      activeId={activeTab}
+      onTabChange={(id) => {
+        setActiveTab(id as any);
+        if (id === 'reports') fetchReport('pnl');
+      }}
+      actions={
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => {
+              setNewLockDateInput(lockDate || '');
+              setShowLockModal(true);
+            }}
+            className="bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-xs px-3 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700 flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+          >
+            <Lock size={14} className={lockDate ? 'text-amber-500' : 'text-zinc-400'} />
+            <span>{lockDate ? `Locked: ${lockDate}` : 'Lock Period'}</span>
+          </Button>
+          {activeTab === 'ledger' ? (
+            <Button
+              onClick={handleOpenAddAccount}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3.5 py-2 rounded-xl shadow-lg shadow-indigo-600/20 flex items-center gap-1.5 font-bold cursor-pointer"
+            >
+              <Plus size={14} />
+              <span>Add Account</span>
+            </Button>
+          ) : (
+            <Button
+              onClick={() => setShowNewInvoiceModal(true)}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3.5 py-2 rounded-xl shadow-lg shadow-indigo-600/20 flex items-center gap-1.5 font-bold cursor-pointer"
+            >
+              <Plus size={14} />
+              <span>New Invoice</span>
+            </Button>
+          )}
         </div>
-      </div>
-
-      <div className="px-6 lg:px-12 py-6 space-y-6 pb-32">
+      }
+    >
+      <div className="space-y-6">
         {/* TAB 1: OVERVIEW */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
             {/* KPI Metric Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-              <div className="p-4 bg-zinc-900/80 border border-zinc-800 rounded-2xl shadow-sm space-y-2">
-                <div className="flex items-center justify-between text-zinc-400 text-xs font-medium">
-                  <span>Operating Bank Balance</span>
-                  <Banknote size={16} className="text-emerald-400" />
+              <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl flex items-center gap-4">
+                <div className="w-12 h-12 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-2xl flex items-center justify-center shrink-0">
+                  <Banknote size={24} />
                 </div>
-                <p className="text-2xl font-extrabold text-white font-mono">
-                  ${metrics.bankBalance.toLocaleString('en-AU', { minimumFractionDigits: 2 })}
-                </p>
-                <p className="text-[11px] text-zinc-500">GL Account: 1010 Operating</p>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider truncate">
+                    Operating Bank
+                  </p>
+                  <p className="text-xl font-bold font-mono text-zinc-900 dark:text-white mt-1 truncate">
+                    ${metrics.bankBalance.toLocaleString('en-AU', { minimumFractionDigits: 2 })}
+                  </p>
+                  <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">GL: 1010 Operating</p>
+                </div>
               </div>
 
-              <div className="p-4 bg-zinc-900/80 border border-zinc-800 rounded-2xl shadow-sm space-y-2">
-                <div className="flex items-center justify-between text-zinc-400 text-xs font-medium">
-                  <span>POS Counter Sales (Today)</span>
-                  <Store size={16} className="text-emerald-400" />
+              <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl flex items-center gap-4">
+                <div className="w-12 h-12 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-2xl flex items-center justify-center shrink-0">
+                  <Store size={24} />
                 </div>
-                <p className="text-2xl font-extrabold text-emerald-400 font-mono">
-                  ${metrics.posSalesToday.toLocaleString('en-AU', { minimumFractionDigits: 2 })}
-                </p>
-                <p className="text-[11px] text-zinc-500 font-mono">
-                  {metrics.posOrdersCount} {metrics.posOrdersCount === 1 ? 'sale' : 'sales'} processed today
-                </p>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider truncate">
+                    POS Sales (Today)
+                  </p>
+                  <p className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1 truncate">
+                    ${metrics.posSalesToday.toLocaleString('en-AU', { minimumFractionDigits: 2 })}
+                  </p>
+                  <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5 font-mono">
+                    {metrics.posOrdersCount} {metrics.posOrdersCount === 1 ? 'sale' : 'sales'} processed
+                  </p>
+                </div>
               </div>
 
-              <div className="p-4 bg-zinc-900/80 border border-zinc-800 rounded-2xl shadow-sm space-y-2">
-                <div className="flex items-center justify-between text-zinc-400 text-xs font-medium">
-                  <span>Invoices Owed to You (AR)</span>
-                  <ArrowUpRight size={16} className="text-indigo-400" />
+              <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl flex items-center gap-4">
+                <div className="w-12 h-12 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-2xl flex items-center justify-center shrink-0">
+                  <ArrowUpRight size={24} />
                 </div>
-                <p className="text-2xl font-extrabold text-indigo-400 font-mono">
-                  ${metrics.arTotal.toLocaleString('en-AU', { minimumFractionDigits: 2 })}
-                </p>
-                <p className="text-[11px] text-amber-400 font-mono">
-                  ${metrics.arOverdue.toFixed(2)} Overdue
-                </p>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider truncate">
+                    Invoices Due (AR)
+                  </p>
+                  <p className="text-xl font-bold font-mono text-indigo-600 dark:text-indigo-400 mt-1 truncate">
+                    ${metrics.arTotal.toLocaleString('en-AU', { minimumFractionDigits: 2 })}
+                  </p>
+                  <p className="text-[11px] text-amber-500 font-mono mt-0.5">
+                    ${metrics.arOverdue.toFixed(2)} Overdue
+                  </p>
+                </div>
               </div>
 
-              <div className="p-4 bg-zinc-900/80 border border-zinc-800 rounded-2xl shadow-sm space-y-2">
-                <div className="flex items-center justify-between text-zinc-400 text-xs font-medium">
-                  <span>Supplier Bills to Pay (AP)</span>
-                  <ArrowDownLeft size={16} className="text-rose-400" />
+              <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl flex items-center gap-4">
+                <div className="w-12 h-12 bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-2xl flex items-center justify-center shrink-0">
+                  <ArrowDownLeft size={24} />
                 </div>
-                <p className="text-2xl font-extrabold text-rose-400 font-mono">
-                  ${metrics.apTotal.toLocaleString('en-AU', { minimumFractionDigits: 2 })}
-                </p>
-                <p className="text-[11px] text-zinc-500">Unpaid payables</p>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider truncate">
+                    Bills to Pay (AP)
+                  </p>
+                  <p className="text-xl font-bold font-mono text-rose-600 dark:text-rose-400 mt-1 truncate">
+                    ${metrics.apTotal.toLocaleString('en-AU', { minimumFractionDigits: 2 })}
+                  </p>
+                  <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">Unpaid payables</p>
+                </div>
               </div>
 
-              <div className="p-4 bg-zinc-900/80 border border-zinc-800 rounded-2xl shadow-sm space-y-2">
-                <div className="flex items-center justify-between text-zinc-400 text-xs font-medium">
-                  <span>Reconciliation Status</span>
-                  <RefreshCw size={16} className="text-amber-400" />
+              <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl flex items-center gap-4">
+                <div className="w-12 h-12 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-2xl flex items-center justify-center shrink-0">
+                  <RefreshCw size={24} />
                 </div>
-                <p className="text-2xl font-extrabold text-amber-400 font-mono">
-                  {metrics.unreconciledCount}
-                </p>
-                <p className="text-[11px] text-zinc-500">Statement lines to match</p>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider truncate">
+                    Reconciliation
+                  </p>
+                  <p className="text-xl font-bold font-mono text-amber-600 dark:text-amber-400 mt-1 truncate">
+                    {metrics.unreconciledCount}
+                  </p>
+                  <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">Statement lines</p>
+                </div>
               </div>
             </div>
 
             {/* Quick Action Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-5 bg-zinc-900 border border-zinc-800 rounded-2xl space-y-3">
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <Receipt size={16} className="text-indigo-400" />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="p-6 bg-white dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm space-y-4">
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                  <Receipt size={16} className="text-indigo-600 dark:text-indigo-400" />
                   <span>Recent Sales Invoices</span>
                 </h3>
-                <div className="divide-y divide-zinc-800/60 text-xs">
+                <div className="divide-y divide-zinc-100 dark:divide-zinc-800/60 text-xs">
                   {invoices.length === 0 ? (
-                    <p className="py-4 text-center text-zinc-500">No sales invoices yet.</p>
+                    <p className="py-4 text-center text-zinc-500 dark:text-zinc-400">No sales invoices yet.</p>
                   ) : (
                     invoices.slice(0, 5).map(inv => (
-                      <div key={inv.id} className="py-2.5 flex items-center justify-between">
+                      <div key={inv.id} className="py-3 flex items-center justify-between">
                         <div>
-                          <span className="font-mono font-bold text-white">{inv.invoiceNumber}</span>
-                          <p className="text-[11px] text-zinc-400">
+                          <span className="font-mono font-bold text-zinc-900 dark:text-white">{inv.invoiceNumber}</span>
+                          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                             {inv.customer?.organization?.legalName || inv.customer?.person?.firstName || 'Customer'}
                           </p>
                         </div>
                         <div className="text-right">
-                          <span className="font-mono font-bold text-white">${Number(inv.total).toFixed(2)}</span>
+                          <span className="font-mono font-bold text-zinc-900 dark:text-white">${Number(inv.total).toFixed(2)}</span>
                           <p className={cn(
                             "text-[10px] font-bold uppercase",
-                            inv.status === 'PAID' ? 'text-emerald-400' : 'text-amber-400'
+                            inv.status === 'PAID' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'
                           )}>
                             {inv.status}
                           </p>
@@ -681,22 +741,22 @@ export const FinancialManagementPage = () => {
                 </div>
               </div>
 
-              <div className="p-5 bg-zinc-900 border border-zinc-800 rounded-2xl space-y-3">
-                <h3 className="text-sm font-bold text-white flex items-center justify-between">
+              <div className="p-6 bg-white dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm space-y-4">
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center justify-between">
                   <span className="flex items-center gap-2">
-                    <Store size={16} className="text-emerald-400" />
+                    <Store size={16} className="text-emerald-600 dark:text-emerald-400" />
                     <span>Recent POS Counter Sales</span>
                   </span>
                   <a
                     href="/workspace/settings/platform-modules/pos"
-                    className="text-[11px] text-indigo-400 hover:text-indigo-300 font-medium"
+                    className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 font-medium"
                   >
                     Open POS Terminal →
                   </a>
                 </h3>
-                <div className="divide-y divide-zinc-800/60 text-xs">
+                <div className="divide-y divide-zinc-100 dark:divide-zinc-800/60 text-xs">
                   {posOrders.length === 0 ? (
-                    <p className="py-4 text-center text-zinc-500">No POS orders processed yet.</p>
+                    <p className="py-4 text-center text-zinc-500 dark:text-zinc-400">No POS orders processed yet.</p>
                   ) : (
                     posOrders.slice(0, 5).map(order => {
                       const custName = order.customer?.organization?.legalName || 
@@ -704,13 +764,13 @@ export const FinancialManagementPage = () => {
                         'Walk-in Customer';
                       const tender = order.payments?.[0]?.tenderType || 'CARD';
                       return (
-                        <div key={order.id} className="py-2.5 flex items-center justify-between">
+                        <div key={order.id} className="py-3 flex items-center justify-between">
                           <div>
-                            <span className="font-mono font-bold text-white">{order.orderNumber}</span>
-                            <p className="text-[11px] text-zinc-400">{custName}</p>
+                            <span className="font-mono font-bold text-zinc-900 dark:text-white">{order.orderNumber}</span>
+                            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">{custName}</p>
                           </div>
                           <div className="text-right">
-                            <span className="font-mono font-bold text-emerald-400">${Number(order.total).toFixed(2)}</span>
+                            <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">${Number(order.total).toFixed(2)}</span>
                             <p className="text-[10px] font-mono text-zinc-500 uppercase">{tender}</p>
                           </div>
                         </div>
@@ -720,21 +780,21 @@ export const FinancialManagementPage = () => {
                 </div>
               </div>
 
-              <div className="p-5 bg-zinc-900 border border-zinc-800 rounded-2xl space-y-3">
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <RefreshCw size={16} className="text-emerald-400" />
+              <div className="p-6 bg-white dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm space-y-4">
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                  <RefreshCw size={16} className="text-emerald-600 dark:text-emerald-400" />
                   <span>Unreconciled Bank Feed</span>
                 </h3>
-                <div className="divide-y divide-zinc-800/60 text-xs">
+                <div className="divide-y divide-zinc-100 dark:divide-zinc-800/60 text-xs">
                   {bankLines.slice(0, 5).map(line => (
-                    <div key={line.id} className="py-2.5 flex items-center justify-between">
+                    <div key={line.id} className="py-3 flex items-center justify-between">
                       <div>
-                        <span className="font-semibold text-white">{line.description || line.payee || 'Bank Line'}</span>
+                        <span className="font-semibold text-zinc-900 dark:text-white">{line.description || line.payee || 'Bank Line'}</span>
                         <p className="text-[11px] text-zinc-500">{new Date(line.transactionDate).toLocaleDateString()}</p>
                       </div>
                       <span className={cn(
                         "font-mono font-bold",
-                        Number(line.amount) > 0 ? "text-emerald-400" : "text-zinc-200"
+                        Number(line.amount) > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-700 dark:text-zinc-200"
                       )}>
                         {Number(line.amount) > 0 ? '+' : ''}${Number(line.amount).toFixed(2)}
                       </span>
@@ -750,14 +810,16 @@ export const FinancialManagementPage = () => {
         {activeTab === 'invoices' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 bg-zinc-900 p-1 rounded-xl border border-zinc-800 text-xs">
+              <div className="flex items-center gap-1.5 bg-white dark:bg-zinc-900/60 p-1.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 text-xs shadow-sm">
                 {['ALL', 'AUTHORIZED', 'PAID', 'OVERDUE'].map(f => (
                   <button
                     key={f}
                     onClick={() => setInvoiceFilter(f)}
                     className={cn(
-                      "px-3 py-1 rounded-lg font-medium transition-all cursor-pointer",
-                      invoiceFilter === f ? "bg-indigo-600 text-white font-bold" : "text-zinc-400 hover:text-white"
+                      "px-3.5 py-1.5 rounded-xl font-medium transition-all cursor-pointer text-xs",
+                      invoiceFilter === f 
+                        ? "bg-indigo-600 text-white font-bold shadow-md shadow-indigo-600/20" 
+                        : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
                     )}
                   >
                     {f}
@@ -766,9 +828,9 @@ export const FinancialManagementPage = () => {
               </div>
             </div>
 
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
+            <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl overflow-hidden shadow-xl min-h-[300px]">
               <table className="w-full text-left text-xs">
-                <thead className="bg-zinc-850/80 border-b border-zinc-800 text-zinc-400 uppercase font-mono text-[10px]">
+                <thead className="bg-zinc-50/50 dark:bg-zinc-900/20 border-b border-zinc-200 dark:border-zinc-800/80 text-zinc-400 uppercase font-mono text-[10px] font-bold">
                   <tr>
                     <th className="py-3 px-4">Number</th>
                     <th className="py-3 px-4">Customer</th>
@@ -780,42 +842,103 @@ export const FinancialManagementPage = () => {
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-800/60">
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
                   {invoices
                     .filter(inv => invoiceFilter === 'ALL' || inv.status === invoiceFilter)
                     .map(inv => (
-                      <tr key={inv.id} className="hover:bg-zinc-800/30 transition-colors">
-                        <td className="py-3 px-4 font-mono font-bold text-white">{inv.invoiceNumber}</td>
-                        <td className="py-3 px-4 text-zinc-200">
+                      <tr key={inv.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
+                        <td className="py-3 px-4 font-mono font-bold text-zinc-900 dark:text-white">{inv.invoiceNumber}</td>
+                        <td className="py-3 px-4 text-zinc-700 dark:text-zinc-200">
                           {inv.customer?.organization?.legalName || `${inv.customer?.person?.firstName || ''} ${inv.customer?.person?.lastName || ''}`.trim()}
                         </td>
-                        <td className="py-3 px-4 text-zinc-400">{new Date(inv.issueDate).toLocaleDateString()}</td>
-                        <td className="py-3 px-4 text-zinc-400">{new Date(inv.dueDate).toLocaleDateString()}</td>
-                        <td className="py-3 px-4 text-right font-mono font-bold text-white">${Number(inv.total).toFixed(2)}</td>
-                        <td className="py-3 px-4 text-right font-mono text-emerald-400">${Number(inv.amountPaid).toFixed(2)}</td>
+                        <td className="py-3 px-4 text-zinc-500 dark:text-zinc-400">{new Date(inv.issueDate).toLocaleDateString()}</td>
+                        <td className="py-3 px-4 text-zinc-500 dark:text-zinc-400">{new Date(inv.dueDate).toLocaleDateString()}</td>
+                        <td className="py-3 px-4 text-right font-mono font-bold text-zinc-900 dark:text-white">${Number(inv.total).toFixed(2)}</td>
+                        <td className="py-3 px-4 text-right font-mono text-emerald-600 dark:text-emerald-400">${Number(inv.amountPaid).toFixed(2)}</td>
                         <td className="py-3 px-4">
                           <span className={cn(
                             "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase",
-                            inv.status === 'PAID' ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
-                            inv.status === 'AUTHORIZED' ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20" :
-                            "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                            inv.status === 'PAID' ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20" :
+                            inv.status === 'AUTHORIZED' ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20" :
+                            "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
                           )}>
                             {inv.status}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-right">
-                          {inv.status !== 'PAID' && (
-                            <button
-                              onClick={() => {
-                                setSelectedInvoiceForPayment(inv);
-                                setPaymentAmount(Number(inv.total) - Number(inv.amountPaid));
-                                setShowPaymentModal(true);
-                              }}
-                              className="text-xs font-bold text-emerald-400 hover:text-emerald-300 cursor-pointer"
-                            >
-                              Record Pay
-                            </button>
-                          )}
+                          <div className="flex items-center justify-end gap-2">
+                            {inv.status !== 'PAID' && (
+                              <button
+                                onClick={() => {
+                                  setSelectedInvoiceForPayment(inv);
+                                  setPaymentAmount(Number(inv.total) - Number(inv.amountPaid));
+                                  setShowPaymentModal(true);
+                                }}
+                                className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 cursor-pointer"
+                              >
+                                Record Pay
+                              </button>
+                            )}
+                            {Number(inv.amountPaid) > 0 && (
+                              <button
+                                onClick={() => {
+                                  setSelectedInvoiceForRefund(inv);
+                                  setInvoiceRefundAmount(Number(inv.amountPaid));
+                                  setInvoiceRefundReason('ORDER_CANCELLED');
+                                  setInvoiceRefundNotes('');
+                                  setInvoiceRefundMethod('BANK_TRANSFER');
+                                  setShowInvoiceRefundModal(true);
+                                }}
+                                className="text-xs font-bold text-rose-600 dark:text-rose-400 hover:text-rose-500 cursor-pointer flex items-center gap-1"
+                              >
+                                <RotateCcw size={12} />
+                                Refund / Credit
+                              </button>
+                            )}
+                            {(inv.status === 'REFUNDED' || inv.status === 'PARTIALLY_REFUNDED' || (inv.refunds && inv.refunds.length > 0)) && (
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const ref = inv.refunds?.[0];
+                                    const cust = inv.customer;
+                                    const custName = cust?.organization?.legalName ||
+                                      `${cust?.person?.firstName || ''} ${cust?.person?.lastName || ''}`.trim() || 'Valued Client';
+                                    if (ref?.id) {
+                                      const full = await TransactionClientService.getRefundById(ref.id, tenant?.id);
+                                      setActiveCreditNote({
+                                        ...full,
+                                        invoiceNumber: inv.invoiceNumber,
+                                        invoiceDate: inv.issueDate,
+                                        customerName: custName,
+                                        businessName: tenant?.name || 'AURORA ENTERPRISE COMMERCE PTY LTD'
+                                      });
+                                    } else {
+                                      setActiveCreditNote({
+                                        id: 'ad-hoc',
+                                        refundNumber: `CN-${inv.invoiceNumber}`,
+                                        invoiceNumber: inv.invoiceNumber,
+                                        invoiceDate: inv.issueDate,
+                                        createdAt: inv.updatedAt || new Date(),
+                                        amount: Number(inv.total),
+                                        taxAmount: Number(inv.taxAmount || 0),
+                                        refundMethod: 'BANK_TRANSFER',
+                                        reason: 'ORDER_CANCELLED',
+                                        customerName: custName,
+                                        businessName: tenant?.name || 'AURORA ENTERPRISE COMMERCE PTY LTD'
+                                      });
+                                    }
+                                    setShowCreditNoteModal(true);
+                                  } catch (err) {
+                                    toast.error('Failed to load credit note');
+                                  }
+                                }}
+                                className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 cursor-pointer flex items-center gap-1"
+                              >
+                                <FileText size={12} />
+                                Credit Note
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -830,14 +953,14 @@ export const FinancialManagementPage = () => {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <FileText size={16} className="text-rose-400" />
-                <h3 className="text-sm font-bold text-white">Accounts Payable (Vendor Bills)</h3>
+                <FileText size={16} className="text-rose-500 dark:text-rose-400" />
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-white">Accounts Payable (Vendor Bills)</h3>
               </div>
             </div>
 
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
+            <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl overflow-hidden shadow-xl min-h-[300px]">
               <table className="w-full text-left text-xs">
-                <thead className="bg-zinc-850/80 border-b border-zinc-800 text-zinc-400 uppercase font-mono text-[10px]">
+                <thead className="bg-zinc-50/50 dark:bg-zinc-900/20 border-b border-zinc-200 dark:border-zinc-800/80 text-zinc-400 uppercase font-mono text-[10px] font-bold">
                   <tr>
                     <th className="py-3 px-4">Bill Number</th>
                     <th className="py-3 px-4">Vendor / Supplier</th>
@@ -848,30 +971,30 @@ export const FinancialManagementPage = () => {
                     <th className="py-3 px-4">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-800/60">
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
                   {bills.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-zinc-500">
+                      <td colSpan={7} className="py-8 text-center text-zinc-400 dark:text-zinc-500">
                         No vendor bills recorded.
                       </td>
                     </tr>
                   ) : (
                     bills.map((bill: any) => (
-                      <tr key={bill.id} className="hover:bg-zinc-800/30 transition-colors">
-                        <td className="py-3 px-4 font-mono font-bold text-white">{bill.billNumber}</td>
-                        <td className="py-3 px-4 text-zinc-200">
+                      <tr key={bill.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
+                        <td className="py-3 px-4 font-mono font-bold text-zinc-900 dark:text-white">{bill.billNumber}</td>
+                        <td className="py-3 px-4 text-zinc-700 dark:text-zinc-200">
                           {bill.supplier?.organization?.legalName || `${bill.supplier?.person?.firstName || ''} ${bill.supplier?.person?.lastName || ''}`.trim() || 'Supplier'}
                         </td>
-                        <td className="py-3 px-4 text-zinc-400">{new Date(bill.billDate).toLocaleDateString()}</td>
-                        <td className="py-3 px-4 text-zinc-400">{new Date(bill.dueDate).toLocaleDateString()}</td>
-                        <td className="py-3 px-4 text-right font-mono font-bold text-white">${Number(bill.total).toFixed(2)}</td>
-                        <td className="py-3 px-4 text-right font-mono text-emerald-400">${Number(bill.amountPaid).toFixed(2)}</td>
+                        <td className="py-3 px-4 text-zinc-500 dark:text-zinc-400">{new Date(bill.billDate).toLocaleDateString()}</td>
+                        <td className="py-3 px-4 text-zinc-500 dark:text-zinc-400">{new Date(bill.dueDate).toLocaleDateString()}</td>
+                        <td className="py-3 px-4 text-right font-mono font-bold text-zinc-900 dark:text-white">${Number(bill.total).toFixed(2)}</td>
+                        <td className="py-3 px-4 text-right font-mono text-emerald-600 dark:text-emerald-400">${Number(bill.amountPaid).toFixed(2)}</td>
                         <td className="py-3 px-4">
                           <span className={cn(
                             "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase",
-                            bill.status === 'PAID' ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
-                            bill.status === 'AUTHORISED' ? "bg-rose-500/10 text-rose-400 border border-rose-500/20" :
-                            "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                            bill.status === 'PAID' ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20" :
+                            bill.status === 'AUTHORISED' ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20" :
+                            "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
                           )}>
                             {bill.status}
                           </span>
@@ -889,21 +1012,21 @@ export const FinancialManagementPage = () => {
         {activeTab === 'reconciliation' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[calc(100vh-14rem)]">
             {/* Left Column: Bank Statement Lines */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl flex flex-col overflow-hidden">
-              <div className="p-4 border-b border-zinc-800 bg-zinc-850/60 flex items-center justify-between">
+            <div className="bg-white dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-2xl flex flex-col overflow-hidden shadow-sm">
+              <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/60 flex items-center justify-between">
                 <div>
-                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">Bank Statement Lines</h3>
-                  <p className="text-[11px] text-zinc-400">{bankLines.length} unreconciled transactions</p>
+                  <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">Bank Statement Lines</h3>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400">{bankLines.length} unreconciled transactions</p>
                 </div>
                 <Button
                   onClick={() => setShowImportBankModal(true)}
-                  className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs px-2.5 py-1.5 rounded-xl border border-zinc-700"
+                  className="bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 text-xs px-2.5 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm transition-colors"
                 >
                   Import Lines
                 </Button>
               </div>
 
-              <div className="flex-1 overflow-y-auto divide-y divide-zinc-800/60 p-2 space-y-1">
+              <div className="flex-1 overflow-y-auto divide-y divide-zinc-100 dark:divide-zinc-800/60 p-2 space-y-1">
                 {bankLines.map(line => (
                   <div
                     key={line.id}
@@ -911,17 +1034,17 @@ export const FinancialManagementPage = () => {
                     className={cn(
                       "p-3 rounded-xl border cursor-pointer transition-all flex items-center justify-between",
                       selectedBankLine?.id === line.id
-                        ? "bg-indigo-600/15 border-indigo-500 text-white shadow-sm"
-                        : "bg-zinc-950/60 border-zinc-800/60 hover:bg-zinc-800/40 text-zinc-300"
+                        ? "bg-indigo-50 dark:bg-indigo-600/15 border-indigo-300 dark:border-indigo-500 text-zinc-900 dark:text-white shadow-sm"
+                        : "bg-white dark:bg-zinc-950/60 border-zinc-200 dark:border-zinc-800/60 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 text-zinc-700 dark:text-zinc-300"
                     )}
                   >
                     <div>
-                      <p className="text-xs font-semibold text-white">{line.description || line.payee || 'Transaction'}</p>
-                      <p className="text-[10px] text-zinc-500">{new Date(line.transactionDate).toLocaleDateString()}</p>
+                      <p className="text-xs font-semibold text-zinc-900 dark:text-white">{line.description || line.payee || 'Transaction'}</p>
+                      <p className="text-[10px] text-zinc-500 dark:text-zinc-400">{new Date(line.transactionDate).toLocaleDateString()}</p>
                     </div>
                     <span className={cn(
                       "font-mono font-bold text-xs",
-                      Number(line.amount) > 0 ? "text-emerald-400" : "text-zinc-200"
+                      Number(line.amount) > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-700 dark:text-zinc-200"
                     )}>
                       {Number(line.amount) > 0 ? '+' : ''}${Number(line.amount).toFixed(2)}
                     </span>
@@ -931,10 +1054,10 @@ export const FinancialManagementPage = () => {
             </div>
 
             {/* Right Column: Suggested Match & 1-Click Reconcile */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl flex flex-col overflow-hidden">
-              <div className="p-4 border-b border-zinc-800 bg-zinc-850/60">
-                <h3 className="text-xs font-bold text-white uppercase tracking-wider">Suggested Match</h3>
-                <p className="text-[11px] text-zinc-400">
+            <div className="bg-white dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-2xl flex flex-col overflow-hidden shadow-sm">
+              <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/60">
+                <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">Suggested Match</h3>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                   {selectedBankLine 
                     ? `Matching ${selectedBankLine.description} ($${Number(selectedBankLine.amount).toFixed(2)})` 
                     : 'Select a transaction on the left to review matches'}
@@ -943,17 +1066,17 @@ export const FinancialManagementPage = () => {
 
               <div className="flex-1 p-4 overflow-y-auto">
                 {loadingSuggestions ? (
-                  <div className="h-full flex items-center justify-center text-xs text-zinc-500">
+                  <div className="h-full flex items-center justify-center text-xs text-zinc-500 dark:text-zinc-400">
                     Computing rule matches...
                   </div>
                 ) : !selectedBankLine ? (
-                  <div className="h-full flex flex-col items-center justify-center text-xs text-zinc-600 gap-2">
-                    <RefreshCw size={24} className="text-zinc-700" />
+                  <div className="h-full flex flex-col items-center justify-center text-xs text-zinc-400 dark:text-zinc-500 gap-2">
+                    <RefreshCw size={24} className="text-zinc-300 dark:text-zinc-600" />
                     <p>Select a bank line to view automated match candidates.</p>
                   </div>
                 ) : suggestions.length === 0 ? (
                   <div className="space-y-4">
-                    <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-400">
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-600 dark:text-amber-400">
                       No automated match found. Reconcile directly against an operating expense account:
                     </div>
                     <div className="space-y-2">
@@ -961,10 +1084,10 @@ export const FinancialManagementPage = () => {
                         <div
                           key={acc.id}
                           onClick={() => handleReconcile('MANUAL_EXPENSE', undefined, 0)}
-                          className="p-2.5 bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700/50 rounded-xl cursor-pointer flex justify-between items-center text-xs"
+                          className="p-2.5 bg-zinc-50 dark:bg-zinc-800/60 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-700/50 rounded-xl cursor-pointer flex justify-between items-center text-xs"
                         >
-                          <span>{acc.accountCode} - {acc.accountName}</span>
-                          <span className="text-indigo-400 font-bold">Apply & Reconcile</span>
+                          <span className="text-zinc-800 dark:text-zinc-200 font-medium">{acc.accountCode} - {acc.accountName}</span>
+                          <span className="text-indigo-600 dark:text-indigo-400 font-bold">Apply & Reconcile</span>
                         </div>
                       ))}
                     </div>
@@ -974,13 +1097,13 @@ export const FinancialManagementPage = () => {
                     {suggestions.map((sug, idx) => (
                       <div
                         key={idx}
-                        className="p-4 bg-zinc-950 border border-zinc-800 rounded-xl space-y-3"
+                        className="p-4 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-3"
                       >
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-indigo-400 uppercase font-mono">{sug.type} MATCH</span>
-                          <span className="text-xs font-mono font-bold text-white">${Number(sug.amount).toFixed(2)}</span>
+                          <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase font-mono">{sug.type} MATCH</span>
+                          <span className="text-xs font-mono font-bold text-zinc-900 dark:text-white">${Number(sug.amount).toFixed(2)}</span>
                         </div>
-                        <p className="text-xs text-zinc-300">{sug.description}</p>
+                        <p className="text-xs text-zinc-600 dark:text-zinc-300">{sug.description}</p>
                         <Button
                           onClick={() => handleReconcile(sug.type, sug.id, 0)}
                           className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-emerald-600/20"
@@ -1001,44 +1124,44 @@ export const FinancialManagementPage = () => {
         {activeTab === 'ledger' && (
           <div className="space-y-6">
             {/* KPI Summary Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-              <div className="p-4 bg-zinc-900/80 border border-zinc-800 rounded-2xl shadow-sm">
-                <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Total Accounts</div>
-                <div className="text-xl font-bold font-mono text-white mt-1">{accounts.length}</div>
-                <div className="text-[10px] text-zinc-500 mt-0.5">{accounts.filter(a => a.isActive !== false).length} Active in GL</div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+              <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-5 shadow-xl">
+                <div className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Total Accounts</div>
+                <div className="text-xl font-bold font-mono text-zinc-900 dark:text-white mt-1">{accounts.length}</div>
+                <div className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">{accounts.filter(a => a.isActive !== false).length} Active in GL</div>
               </div>
-              <div className="p-4 bg-zinc-900/80 border border-zinc-800 rounded-2xl shadow-sm">
-                <div className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Assets (1000s)</div>
-                <div className="text-xl font-bold font-mono text-emerald-400 mt-1">
+              <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-5 shadow-xl">
+                <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Assets (1000s)</div>
+                <div className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1">
                   ${accountsByType.ASSET.reduce((s, a) => s + (Number(a.currentBalance) || 0), 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}
                 </div>
-                <div className="text-[10px] text-zinc-500 mt-0.5">{accountsByType.ASSET.length} Asset Accounts</div>
+                <div className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">{accountsByType.ASSET.length} Asset Accounts</div>
               </div>
-              <div className="p-4 bg-zinc-900/80 border border-zinc-800 rounded-2xl shadow-sm">
-                <div className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Liabilities (2000s)</div>
-                <div className="text-xl font-bold font-mono text-amber-400 mt-1">
+              <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-5 shadow-xl">
+                <div className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Liabilities (2000s)</div>
+                <div className="text-xl font-bold font-mono text-amber-600 dark:text-amber-400 mt-1">
                   ${accountsByType.LIABILITY.reduce((s, a) => s + (Number(a.currentBalance) || 0), 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}
                 </div>
-                <div className="text-[10px] text-zinc-500 mt-0.5">{accountsByType.LIABILITY.length} Liability Accounts</div>
+                <div className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">{accountsByType.LIABILITY.length} Liability Accounts</div>
               </div>
-              <div className="p-4 bg-zinc-900/80 border border-zinc-800 rounded-2xl shadow-sm">
-                <div className="text-[10px] font-bold text-purple-400 uppercase tracking-wider">Equity (3000s)</div>
-                <div className="text-xl font-bold font-mono text-purple-400 mt-1">
+              <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-5 shadow-xl">
+                <div className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider">Equity (3000s)</div>
+                <div className="text-xl font-bold font-mono text-purple-600 dark:text-purple-400 mt-1">
                   ${accountsByType.EQUITY.reduce((s, a) => s + (Number(a.currentBalance) || 0), 0).toLocaleString('en-AU', { minimumFractionDigits: 2 })}
                 </div>
-                <div className="text-[10px] text-zinc-500 mt-0.5">{accountsByType.EQUITY.length} Equity Accounts</div>
+                <div className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">{accountsByType.EQUITY.length} Equity Accounts</div>
               </div>
-              <div className="p-4 bg-zinc-900/80 border border-zinc-800 rounded-2xl shadow-sm col-span-2 sm:col-span-1">
-                <div className="text-[10px] font-bold text-sky-400 uppercase tracking-wider">Revenue / Expenses</div>
-                <div className="text-xl font-bold font-mono text-sky-400 mt-1">
+              <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-5 shadow-xl col-span-2 sm:col-span-1">
+                <div className="text-[10px] font-bold text-sky-600 dark:text-sky-400 uppercase tracking-wider">Revenue / Expenses</div>
+                <div className="text-xl font-bold font-mono text-sky-600 dark:text-sky-400 mt-1">
                   {accountsByType.REVENUE.length} / {accountsByType.EXPENSE.length}
                 </div>
-                <div className="text-[10px] text-zinc-500 mt-0.5">Operating GL codes</div>
+                <div className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">Operating GL codes</div>
               </div>
             </div>
 
             {/* Filter and Action Toolbar */}
-            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-zinc-900/60 border border-zinc-800 p-3 rounded-2xl">
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 p-3 rounded-2xl shadow-sm">
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0 text-xs font-semibold custom-scrollbar">
                 {[
                   { id: 'ALL', label: 'All Accounts' },
@@ -1055,7 +1178,7 @@ export const FinancialManagementPage = () => {
                       "px-3 py-1.5 rounded-xl whitespace-nowrap transition-all cursor-pointer text-xs",
                       accountTypeFilter === tab.id
                         ? "bg-indigo-600 text-white font-bold shadow-md shadow-indigo-600/20"
-                        : "text-zinc-400 hover:text-white hover:bg-zinc-800/80"
+                        : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800/80"
                     )}
                   >
                     {tab.label}
@@ -1071,24 +1194,24 @@ export const FinancialManagementPage = () => {
                     value={accountSearchQuery}
                     onChange={e => setAccountSearchQuery(e.target.value)}
                     placeholder="Search code, name, description..."
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-indigo-500"
                   />
                   {accountSearchQuery && (
                     <button
                       onClick={() => setAccountSearchQuery('')}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
                     >
                       <X size={12} />
                     </button>
                   )}
                 </div>
 
-                <label className="flex items-center gap-1.5 text-xs text-zinc-400 cursor-pointer select-none whitespace-nowrap px-1">
+                <label className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 cursor-pointer select-none whitespace-nowrap px-1">
                   <input
                     type="checkbox"
                     checked={showArchivedAccounts}
                     onChange={e => setShowArchivedAccounts(e.target.checked)}
-                    className="rounded border-zinc-700 bg-zinc-900 text-indigo-600 focus:ring-0"
+                    className="rounded border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-indigo-600 focus:ring-0"
                   />
                   <span>Show Archived</span>
                 </label>
@@ -1104,9 +1227,9 @@ export const FinancialManagementPage = () => {
             </div>
 
             {/* Accounts Table */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-sm">
+            <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl overflow-hidden shadow-xl min-h-[300px]">
               <table className="w-full text-left text-xs">
-                <thead className="bg-zinc-850/80 border-b border-zinc-800 text-zinc-400 uppercase font-mono text-[10px]">
+                <thead className="bg-zinc-50/50 dark:bg-zinc-900/20 border-b border-zinc-200 dark:border-zinc-800/80 text-zinc-400 uppercase font-mono text-[10px] font-bold">
                   <tr>
                     <th className="py-3 px-4">Code</th>
                     <th className="py-3 px-4">Account Name</th>
@@ -1120,34 +1243,34 @@ export const FinancialManagementPage = () => {
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-800/60">
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
                   {filteredAccounts.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="py-12 text-center text-zinc-500">
+                      <td colSpan={10} className="py-12 text-center text-zinc-400 dark:text-zinc-500">
                         No accounts match your current filters.
                       </td>
                     </tr>
                   ) : (
                     filteredAccounts.map(acc => {
                       const typeBadge = {
-                        ASSET: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
-                        LIABILITY: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
-                        EQUITY: 'text-purple-400 bg-purple-500/10 border-purple-500/20',
-                        REVENUE: 'text-sky-400 bg-sky-500/10 border-sky-500/20',
-                        EXPENSE: 'text-rose-400 bg-rose-500/10 border-rose-500/20',
-                      }[acc.accountType as string] || 'text-zinc-400 bg-zinc-800 border-zinc-700';
+                        ASSET: 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+                        LIABILITY: 'text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20',
+                        EQUITY: 'text-purple-600 dark:text-purple-400 bg-purple-500/10 border-purple-500/20',
+                        REVENUE: 'text-sky-600 dark:text-sky-400 bg-sky-500/10 border-sky-500/20',
+                        EXPENSE: 'text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/20',
+                      }[acc.accountType as string] || 'text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700';
 
                       const hasTransactions = (Number(acc.debitTotal) > 0 || Number(acc.creditTotal) > 0);
 
                       return (
-                        <tr key={acc.id} className="hover:bg-zinc-800/30 transition-colors group">
-                          <td className="py-3 px-4 font-mono font-bold text-white whitespace-nowrap">
+                        <tr key={acc.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors group">
+                          <td className="py-3 px-4 font-mono font-bold text-zinc-900 dark:text-white whitespace-nowrap">
                             {acc.accountCode}
                           </td>
                           <td className="py-3 px-4">
-                            <div className="font-semibold text-zinc-100">{acc.accountName}</div>
+                            <div className="font-semibold text-zinc-900 dark:text-zinc-100">{acc.accountName}</div>
                             {acc.description && (
-                              <div className="text-[11px] text-zinc-400 truncate max-w-xs">{acc.description}</div>
+                              <div className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate max-w-xs">{acc.description}</div>
                             )}
                           </td>
                           <td className="py-3 px-4 whitespace-nowrap">
@@ -1155,40 +1278,40 @@ export const FinancialManagementPage = () => {
                               {acc.accountType}
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-zinc-300 font-mono text-[11px] whitespace-nowrap">
+                          <td className="py-3 px-4 text-zinc-600 dark:text-zinc-300 font-mono text-[11px] whitespace-nowrap">
                             {acc.taxRate?.name || '—'}
                           </td>
                           <td className="py-3 px-4 whitespace-nowrap">
                             {acc.systemAccount ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-mono font-semibold text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded" title="Core system account required for automated postings">
+                              <span className="inline-flex items-center gap-1 text-[10px] font-mono font-semibold text-indigo-600 dark:text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded" title="Core system account required for automated postings">
                                 <Lock size={10} />
                                 {acc.systemAccount}
                               </span>
                             ) : (
-                              <span className="text-[10px] font-mono text-zinc-400 bg-zinc-800/60 px-2 py-0.5 rounded">
+                              <span className="text-[10px] font-mono text-zinc-500 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800/60 px-2 py-0.5 rounded border border-zinc-200/50 dark:border-zinc-700/50">
                                 Custom
                               </span>
                             )}
                           </td>
                           <td className="py-3 px-4 whitespace-nowrap">
                             {acc.isActive !== false ? (
-                              <span className="text-[10px] font-bold text-emerald-400 uppercase bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">
+                              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">
                                 Active
                               </span>
                             ) : (
-                              <span className="text-[10px] font-bold text-zinc-500 uppercase bg-zinc-800 px-1.5 py-0.5 rounded">
+                              <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">
                                 Archived
                               </span>
                             )}
                           </td>
-                          <td className="py-3 px-4 text-right font-mono text-zinc-400 whitespace-nowrap">
+                          <td className="py-3 px-4 text-right font-mono text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
                             ${Number(acc.debitTotal || 0).toFixed(2)}
                           </td>
-                          <td className="py-3 px-4 text-right font-mono text-zinc-400 whitespace-nowrap">
+                          <td className="py-3 px-4 text-right font-mono text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
                             ${Number(acc.creditTotal || 0).toFixed(2)}
                           </td>
                           <td className="py-3 px-4 text-right font-mono font-bold whitespace-nowrap">
-                            <span className={Number(acc.currentBalance) >= 0 ? "text-emerald-400" : "text-rose-400"}>
+                            <span className={Number(acc.currentBalance) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}>
                               ${Number(acc.currentBalance || 0).toFixed(2)}
                             </span>
                           </td>
@@ -1197,7 +1320,7 @@ export const FinancialManagementPage = () => {
                               <button
                                 onClick={() => handleOpenEditAccount(acc)}
                                 title="Edit Account"
-                                className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
+                                className="p-1.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
                               >
                                 <Edit3 size={14} />
                               </button>
@@ -1209,8 +1332,8 @@ export const FinancialManagementPage = () => {
                                   className={cn(
                                     "p-1.5 rounded-lg transition-colors",
                                     hasTransactions
-                                      ? "text-zinc-600 cursor-not-allowed"
-                                      : "text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 cursor-pointer"
+                                      ? "text-zinc-300 dark:text-zinc-600 cursor-not-allowed"
+                                      : "text-rose-500 dark:text-rose-400 hover:text-rose-600 dark:hover:text-rose-300 hover:bg-rose-500/10 cursor-pointer"
                                   )}
                                 >
                                   <Trash2 size={14} />
@@ -1231,7 +1354,7 @@ export const FinancialManagementPage = () => {
         {/* TAB 5: FINANCIAL REPORTS */}
         {activeTab === 'reports' && (
           <div className="space-y-4">
-            <div className="flex items-center gap-2 border-b border-zinc-800 pb-3">
+            <div className="flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-3">
               {[
                 { id: 'pnl', label: 'Profit & Loss' },
                 { id: 'balanceSheet', label: 'Balance Sheet' },
@@ -1245,8 +1368,8 @@ export const FinancialManagementPage = () => {
                     fetchReport(r.id);
                   }}
                   className={cn(
-                    "px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer",
-                    reportType === r.id ? "bg-indigo-600 text-white" : "text-zinc-400 hover:text-white"
+                    "px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer",
+                    reportType === r.id ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20" : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
                   )}
                 >
                   {r.label}
@@ -1255,41 +1378,41 @@ export const FinancialManagementPage = () => {
             </div>
 
             {reportType === 'pnl' && pnlData && (
-              <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-2xl max-w-2xl space-y-4 text-xs font-mono">
-                <div className="border-b border-zinc-800 pb-2">
-                  <h3 className="text-base font-bold text-white">Profit and Loss Statement</h3>
-                  <p className="text-zinc-500 text-[11px]">Period ending {new Date().toLocaleDateString()}</p>
+              <div className="p-6 bg-white dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-2xl max-w-2xl space-y-4 text-xs font-mono shadow-sm">
+                <div className="border-b border-zinc-200 dark:border-zinc-800 pb-2">
+                  <h3 className="text-base font-bold text-zinc-900 dark:text-white">Profit and Loss Statement</h3>
+                  <p className="text-zinc-500 dark:text-zinc-400 text-[11px]">Period ending {new Date().toLocaleDateString()}</p>
                 </div>
 
                 <div className="space-y-2">
-                  <h4 className="font-bold text-indigo-400">REVENUE</h4>
+                  <h4 className="font-bold text-indigo-600 dark:text-indigo-400">REVENUE</h4>
                   {pnlData.revenue?.accounts?.map((a: any) => (
-                    <div key={a.id} className="flex justify-between pl-4 text-zinc-300">
+                    <div key={a.id} className="flex justify-between pl-4 text-zinc-700 dark:text-zinc-300">
                       <span>{a.accountCode} - {a.accountName}</span>
                       <span>${Number(a.balance).toFixed(2)}</span>
                     </div>
                   ))}
-                  <div className="flex justify-between border-t border-zinc-800 pt-1 font-bold text-white">
+                  <div className="flex justify-between border-t border-zinc-200 dark:border-zinc-800 pt-1 font-bold text-zinc-900 dark:text-white">
                     <span>Total Revenue</span>
                     <span>${Number(pnlData.revenue?.total).toFixed(2)}</span>
                   </div>
                 </div>
 
                 <div className="space-y-2 pt-2">
-                  <h4 className="font-bold text-rose-400">OPERATING EXPENSES</h4>
+                  <h4 className="font-bold text-rose-600 dark:text-rose-400">OPERATING EXPENSES</h4>
                   {pnlData.expenses?.accounts?.map((a: any) => (
-                    <div key={a.id} className="flex justify-between pl-4 text-zinc-300">
+                    <div key={a.id} className="flex justify-between pl-4 text-zinc-700 dark:text-zinc-300">
                       <span>{a.accountCode} - {a.accountName}</span>
                       <span>${Number(a.balance).toFixed(2)}</span>
                     </div>
                   ))}
-                  <div className="flex justify-between border-t border-zinc-800 pt-1 font-bold text-white">
+                  <div className="flex justify-between border-t border-zinc-200 dark:border-zinc-800 pt-1 font-bold text-zinc-900 dark:text-white">
                     <span>Total Expenses</span>
                     <span>${Number(pnlData.expenses?.total).toFixed(2)}</span>
                   </div>
                 </div>
 
-                <div className="flex justify-between border-t-2 border-zinc-700 pt-3 text-sm font-extrabold text-emerald-400">
+                <div className="flex justify-between border-t-2 border-zinc-300 dark:border-zinc-700 pt-3 text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
                   <span>NET PROFIT</span>
                   <span>${Number(pnlData.netProfit).toFixed(2)}</span>
                 </div>
@@ -1297,26 +1420,26 @@ export const FinancialManagementPage = () => {
             )}
 
             {reportType === 'balanceSheet' && balanceSheetData && (
-              <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-2xl max-w-2xl space-y-4 text-xs font-mono">
-                <div className="border-b border-zinc-800 pb-2">
-                  <h3 className="text-base font-bold text-white">Balance Sheet</h3>
-                  <p className="text-zinc-500 text-[11px]">As at {new Date().toLocaleDateString()}</p>
+              <div className="p-6 bg-white dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-2xl max-w-2xl space-y-4 text-xs font-mono shadow-sm">
+                <div className="border-b border-zinc-200 dark:border-zinc-800 pb-2">
+                  <h3 className="text-base font-bold text-zinc-900 dark:text-white">Balance Sheet</h3>
+                  <p className="text-zinc-500 dark:text-zinc-400 text-[11px]">As at {new Date().toLocaleDateString()}</p>
                 </div>
                 <div className="space-y-2">
-                  <h4 className="font-bold text-emerald-400">TOTAL ASSETS</h4>
-                  <div className="flex justify-between pl-4 text-white font-bold">
+                  <h4 className="font-bold text-emerald-600 dark:text-emerald-400">TOTAL ASSETS</h4>
+                  <div className="flex justify-between pl-4 text-zinc-900 dark:text-white font-bold">
                     <span>Current & Non-Current Assets</span>
                     <span>${Number(balanceSheetData.assets?.total || 0).toFixed(2)}</span>
                   </div>
                 </div>
                 <div className="space-y-2 pt-2">
-                  <h4 className="font-bold text-rose-400">TOTAL LIABILITIES</h4>
-                  <div className="flex justify-between pl-4 text-white font-bold">
+                  <h4 className="font-bold text-rose-600 dark:text-rose-400">TOTAL LIABILITIES</h4>
+                  <div className="flex justify-between pl-4 text-zinc-900 dark:text-white font-bold">
                     <span>Current & Long-Term Liabilities</span>
                     <span>${Number(balanceSheetData.liabilities?.total || 0).toFixed(2)}</span>
                   </div>
                 </div>
-                <div className="flex justify-between border-t-2 border-zinc-700 pt-3 text-sm font-extrabold text-indigo-400">
+                <div className="flex justify-between border-t-2 border-zinc-300 dark:border-zinc-700 pt-3 text-sm font-extrabold text-indigo-600 dark:text-indigo-400">
                   <span>NET ASSETS (EQUITY)</span>
                   <span>${Number(balanceSheetData.equity?.total || 0).toFixed(2)}</span>
                 </div>
@@ -1324,14 +1447,14 @@ export const FinancialManagementPage = () => {
             )}
 
             {reportType === 'trialBalance' && trialBalanceData && (
-              <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-2xl max-w-2xl space-y-4 text-xs font-mono">
-                <div className="border-b border-zinc-800 pb-2">
-                  <h3 className="text-base font-bold text-white">Trial Balance</h3>
-                  <p className="text-zinc-500 text-[11px]">General Ledger balances verified (Σ Debit = Σ Credit)</p>
+              <div className="p-6 bg-white dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-2xl max-w-2xl space-y-4 text-xs font-mono shadow-sm">
+                <div className="border-b border-zinc-200 dark:border-zinc-800 pb-2">
+                  <h3 className="text-base font-bold text-zinc-900 dark:text-white">Trial Balance</h3>
+                  <p className="text-zinc-500 dark:text-zinc-400 text-[11px]">General Ledger balances verified (Σ Debit = Σ Credit)</p>
                 </div>
-                <div className="space-y-1 max-h-96 overflow-y-auto">
+                <div className="space-y-1 max-h-96 overflow-y-auto divide-y divide-zinc-100 dark:divide-zinc-800/40">
                   {trialBalanceData.rows?.map((r: any, idx: number) => (
-                    <div key={idx} className="flex justify-between text-zinc-300 py-1 border-b border-zinc-800/40">
+                    <div key={idx} className="flex justify-between text-zinc-700 dark:text-zinc-300 py-1.5">
                       <span>{r.accountCode} - {r.accountName}</span>
                       <div className="space-x-4">
                         <span>Dr: ${Number(r.debit || 0).toFixed(2)}</span>
@@ -1340,7 +1463,7 @@ export const FinancialManagementPage = () => {
                     </div>
                   ))}
                 </div>
-                <div className="flex justify-between border-t-2 border-zinc-700 pt-3 text-sm font-extrabold text-emerald-400">
+                <div className="flex justify-between border-t-2 border-zinc-300 dark:border-zinc-700 pt-3 text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
                   <span>TOTALS BALANCED</span>
                   <div className="space-x-4">
                     <span>Dr: ${Number(trialBalanceData.totalDebit || 0).toFixed(2)}</span>
@@ -1351,27 +1474,27 @@ export const FinancialManagementPage = () => {
             )}
 
             {reportType === 'agedReceivables' && agedReceivablesData && (
-              <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-2xl max-w-2xl space-y-4 text-xs font-mono">
-                <div className="border-b border-zinc-800 pb-2">
-                  <h3 className="text-base font-bold text-white">Aged Receivables (Debtors Summary)</h3>
-                  <p className="text-zinc-500 text-[11px]">Aging schedule breakdown</p>
+              <div className="p-6 bg-white dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-2xl max-w-2xl space-y-4 text-xs font-mono shadow-sm">
+                <div className="border-b border-zinc-200 dark:border-zinc-800 pb-2">
+                  <h3 className="text-base font-bold text-zinc-900 dark:text-white">Aged Receivables (Debtors Summary)</h3>
+                  <p className="text-zinc-500 dark:text-zinc-400 text-[11px]">Aging schedule breakdown</p>
                 </div>
-                <div className="grid grid-cols-4 gap-2 text-center">
-                  <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl">
-                    <p className="text-[10px] text-zinc-500">CURRENT</p>
-                    <p className="text-sm font-bold text-emerald-400 mt-1">${Number(agedReceivablesData.current || 0).toFixed(2)}</p>
+                <div className="grid grid-cols-4 gap-3 text-center">
+                  <div className="p-3.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl">
+                    <p className="text-[10px] text-zinc-500 font-semibold">CURRENT</p>
+                    <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-1">${Number(agedReceivablesData.current || 0).toFixed(2)}</p>
                   </div>
-                  <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl">
-                    <p className="text-[10px] text-zinc-500">1-30 DAYS</p>
-                    <p className="text-sm font-bold text-indigo-400 mt-1">${Number(agedReceivablesData.days30 || 0).toFixed(2)}</p>
+                  <div className="p-3.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl">
+                    <p className="text-[10px] text-zinc-500 font-semibold">1-30 DAYS</p>
+                    <p className="text-sm font-bold text-indigo-600 dark:text-indigo-400 mt-1">${Number(agedReceivablesData.days30 || 0).toFixed(2)}</p>
                   </div>
-                  <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl">
-                    <p className="text-[10px] text-zinc-500">31-60 DAYS</p>
-                    <p className="text-sm font-bold text-amber-400 mt-1">${Number(agedReceivablesData.days60 || 0).toFixed(2)}</p>
+                  <div className="p-3.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl">
+                    <p className="text-[10px] text-zinc-500 font-semibold">31-60 DAYS</p>
+                    <p className="text-sm font-bold text-amber-600 dark:text-amber-400 mt-1">${Number(agedReceivablesData.days60 || 0).toFixed(2)}</p>
                   </div>
-                  <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl">
-                    <p className="text-[10px] text-zinc-500">60+ OVERDUE</p>
-                    <p className="text-sm font-bold text-rose-400 mt-1">${Number(agedReceivablesData.older || 0).toFixed(2)}</p>
+                  <div className="p-3.5 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl">
+                    <p className="text-[10px] text-zinc-500 font-semibold">60+ OVERDUE</p>
+                    <p className="text-sm font-bold text-rose-600 dark:text-rose-400 mt-1">${Number(agedReceivablesData.older || 0).toFixed(2)}</p>
                   </div>
                 </div>
               </div>
@@ -1381,343 +1504,446 @@ export const FinancialManagementPage = () => {
       </div>
 
       {/* MODAL: Record Payment on Invoice */}
-      <AnimatePresence>
-        {showPaymentModal && selectedInvoiceForPayment && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl space-y-4"
-            >
-              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-                <span className="text-white font-bold text-sm">Record Payment: {selectedInvoiceForPayment.invoiceNumber}</span>
-                <button onClick={() => setShowPaymentModal(false)} className="text-zinc-500 hover:text-white">
-                  <X size={16} />
-                </button>
-              </div>
+      <AuroraModal
+        isOpen={Boolean(showPaymentModal && selectedInvoiceForPayment)}
+        onClose={() => setShowPaymentModal(false)}
+        className="max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-2xl space-y-4 text-zinc-900 dark:text-zinc-100"
+      >
+        {selectedInvoiceForPayment && (
+          <>
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <span className="text-zinc-900 dark:text-white font-bold text-sm">Record Payment: {selectedInvoiceForPayment.invoiceNumber}</span>
+              <button onClick={() => setShowPaymentModal(false)} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-white cursor-pointer transition-colors">
+                <X size={16} />
+              </button>
+            </div>
 
-              <div className="space-y-3">
-                <label className="text-xs text-zinc-400 block">Payment Amount ($)</label>
+            <div className="space-y-3">
+              <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block">Payment Amount ($)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={paymentAmount}
+                onChange={e => setPaymentAmount(Number(e.target.value))}
+                className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-zinc-900 dark:text-white font-bold font-mono focus:outline-none focus:border-indigo-500"
+              />
+
+              <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block pt-1">Payment Method</label>
+              <select
+                value={paymentMethod}
+                onChange={e => setPaymentMethod(e.target.value)}
+                className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
+              >
+                <option value="BANK_TRANSFER">Bank Direct Deposit / EFT</option>
+                <option value="CARD_ONLINE">Credit / Debit Card</option>
+                <option value="STORE_CREDIT">Customer Store Credit / Voucher (GL 2200)</option>
+                <option value="CASH">Cash</option>
+              </select>
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2 border-t border-zinc-100 dark:border-zinc-800">
+              <Button
+                onClick={() => setShowPaymentModal(false)}
+                className="bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white text-xs px-4 py-2 rounded-xl"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleRecordInvoicePayment}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-4 py-2 rounded-xl font-bold cursor-pointer shadow-md shadow-emerald-600/20"
+              >
+                Record Payment & Clear AR
+              </Button>
+            </div>
+          </>
+        )}
+      </AuroraModal>
+
+      {/* MODAL: Process Invoice Refund / Credit Memo */}
+      <AuroraModal
+        isOpen={Boolean(showInvoiceRefundModal && selectedInvoiceForRefund)}
+        onClose={() => setShowInvoiceRefundModal(false)}
+        className="max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-2xl space-y-4 text-zinc-900 dark:text-zinc-100"
+      >
+        {selectedInvoiceForRefund && (
+          <>
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                  <RotateCcw size={16} />
+                </div>
+                <div>
+                  <h3 className="text-zinc-900 dark:text-white font-bold text-sm">Issue Refund / Credit</h3>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Invoice: {selectedInvoiceForRefund.invoiceNumber}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowInvoiceRefundModal(false)}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-white p-1 rounded-lg cursor-pointer transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-3 bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-1 text-xs">
+              <div className="flex justify-between text-zinc-500 dark:text-zinc-400">
+                <span>Customer:</span>
+                <span className="font-semibold text-zinc-900 dark:text-white">
+                  {selectedInvoiceForRefund.customer?.organization?.legalName ||
+                   `${selectedInvoiceForRefund.customer?.person?.firstName || ''} ${selectedInvoiceForRefund.customer?.person?.lastName || ''}`.trim() || 'Customer'}
+                </span>
+              </div>
+              <div className="flex justify-between text-zinc-500 dark:text-zinc-400">
+                <span>Total Invoiced:</span>
+                <span className="font-mono text-zinc-700 dark:text-zinc-300">${Number(selectedInvoiceForRefund.total).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-zinc-500 dark:text-zinc-400">
+                <span>Settled Amount Paid:</span>
+                <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">${Number(selectedInvoiceForRefund.amountPaid).toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="text-zinc-700 dark:text-zinc-300 font-semibold block mb-1">Refund Amount ($) *</label>
                 <input
                   type="number"
                   step="0.01"
-                  value={paymentAmount}
-                  onChange={e => setPaymentAmount(Number(e.target.value))}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-white font-bold font-mono focus:outline-none"
+                  min="0.01"
+                  max={Number(selectedInvoiceForRefund.amountPaid)}
+                  value={invoiceRefundAmount}
+                  onChange={e => setInvoiceRefundAmount(Number(e.target.value))}
+                  className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-zinc-900 dark:text-white font-bold font-mono focus:outline-none focus:border-rose-500"
                 />
+                <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1">
+                  Maximum refundable: ${Number(selectedInvoiceForRefund.amountPaid).toFixed(2)}
+                </p>
+              </div>
 
-                <label className="text-xs text-zinc-400 block pt-1">Payment Method</label>
+              <div>
+                <label className="text-zinc-700 dark:text-zinc-300 font-semibold block mb-1">Refund Tender / Method *</label>
                 <select
-                  value={paymentMethod}
-                  onChange={e => setPaymentMethod(e.target.value)}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
+                  value={invoiceRefundMethod}
+                  onChange={e => setInvoiceRefundMethod(e.target.value)}
+                  className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-zinc-900 dark:text-white focus:outline-none focus:border-rose-500"
                 >
-                  <option value="BANK_TRANSFER">Bank Direct Deposit / EFT</option>
-                  <option value="CARD_ONLINE">Credit / Debit Card</option>
-                  <option value="CASH">Cash</option>
+                  <option value="BANK_TRANSFER">Bank Direct Deposit / EFT (GL 1010)</option>
+                  <option value="CARD_ONLINE">Credit Card Reversal (GL 1050 / Gateway)</option>
+                  <option value="STORE_CREDIT">Customer Account Credit / Voucher (GL 2200)</option>
+                  <option value="CASH">Cash Drawer (GL 1020)</option>
                 </select>
               </div>
 
-              <div className="pt-2 flex justify-end gap-2">
-                <Button
-                  onClick={() => setShowPaymentModal(false)}
-                  className="bg-zinc-800 text-zinc-300 text-xs px-3 py-2 rounded-xl"
+              <div>
+                <label className="text-zinc-700 dark:text-zinc-300 font-semibold block mb-1">Reason Code *</label>
+                <select
+                  value={invoiceRefundReason}
+                  onChange={e => setInvoiceRefundReason(e.target.value)}
+                  className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-zinc-900 dark:text-white focus:outline-none focus:border-rose-500"
                 >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleRecordInvoicePayment}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-4 py-2 rounded-xl font-bold cursor-pointer"
-                >
-                  Record Payment & Clear AR
-                </Button>
+                  <option value="CUSTOMER_RETURN">Customer Request / Cancellation</option>
+                  <option value="OVERCHARGE_BILLING_ERROR">Billing / Overcharge Error</option>
+                  <option value="DEFECTIVE_DAMAGED">Defective or Damaged Service/Item</option>
+                  <option value="ORDER_CANCELLED">Contract Cancelled</option>
+                  <option value="OTHER">Other Adjustment</option>
+                </select>
               </div>
-            </motion.div>
-          </div>
+
+              <div>
+                <label className="text-zinc-700 dark:text-zinc-300 font-semibold block mb-1">Reason Notes / Reference</label>
+                <textarea
+                  rows={2}
+                  value={invoiceRefundNotes}
+                  onChange={e => setInvoiceRefundNotes(e.target.value)}
+                  placeholder="Provide details for customer credit memo..."
+                  className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-zinc-900 dark:text-white focus:outline-none focus:border-rose-500 resize-none"
+                />
+              </div>
+
+              <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-[11px] text-rose-600 dark:text-rose-300 flex items-start gap-2">
+                <AlertCircle size={14} className="shrink-0 mt-0.5 text-rose-500" />
+                <span>
+                  This will automatically create a general ledger reversal entry (Debiting 4100 Returns & 2020 GST Collected, Crediting {invoiceRefundMethod === 'STORE_CREDIT' ? '2200 Store Credit' : 'Payment Account'}) and update AR.
+                </span>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2 border-t border-zinc-100 dark:border-zinc-800">
+              <Button
+                type="button"
+                onClick={() => setShowInvoiceRefundModal(false)}
+                className="bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white text-xs px-4 py-2 rounded-xl"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={isSubmittingInvoiceRefund || invoiceRefundAmount <= 0}
+                onClick={handleExecuteInvoiceRefund}
+                className="bg-rose-600 hover:bg-rose-500 text-white text-xs px-4 py-2 rounded-xl font-bold cursor-pointer shadow-md shadow-rose-600/20 flex items-center gap-1.5"
+              >
+                {isSubmittingInvoiceRefund ? 'Processing...' : 'Authorize Refund & Post GL'}
+              </Button>
+            </div>
+          </>
         )}
-      </AnimatePresence>
+      </AuroraModal>
 
       {/* MODAL: Period Lock Date */}
-      <AnimatePresence>
-        {showLockModal && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl space-y-4"
-            >
-              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-                <div className="flex items-center gap-2 text-white font-bold text-sm">
-                  <Lock size={16} className="text-amber-400" />
-                  <span>Financial Period Lock Date</span>
-                </div>
-                <button onClick={() => setShowLockModal(false)} className="text-zinc-500 hover:text-white">
-                  <X size={16} />
-                </button>
-              </div>
-
-              <div className="space-y-3 text-xs">
-                <p className="text-zinc-400">
-                  Transactions on or before the lock date cannot be added, edited, or reversed. This prevents retroactive modification to closed financial years.
-                </p>
-                <input
-                  type="date"
-                  value={newLockDateInput}
-                  onChange={e => setNewLockDateInput(e.target.value)}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-white focus:outline-none"
-                />
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2">
-                <Button
-                  onClick={async () => {
-                    await fetch(`${API_BASE_URL}/api/finance/lock-date`, {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${token}`,
-                        'x-tenant-id': tenant?.id || ''
-                      },
-                      body: JSON.stringify({ lockDate: null })
-                    });
-                    setLockDate(null);
-                    setShowLockModal(false);
-                    toast.success('Lock date cleared');
-                  }}
-                  className="bg-zinc-800 text-zinc-300 text-xs px-3 py-2 rounded-xl"
-                >
-                  Clear Lock
-                </Button>
-                <Button
-                  onClick={async () => {
-                    await fetch(`${API_BASE_URL}/api/finance/lock-date`, {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${token}`,
-                        'x-tenant-id': tenant?.id || ''
-                      },
-                      body: JSON.stringify({ lockDate: newLockDateInput })
-                    });
-                    setLockDate(newLockDateInput);
-                    setShowLockModal(false);
-                    toast.success(`Period locked up to ${newLockDateInput}`);
-                  }}
-                  className="bg-amber-600 hover:bg-amber-700 text-white text-xs px-4 py-2 rounded-xl font-bold cursor-pointer"
-                >
-                  Save Lock Date
-                </Button>
-              </div>
-            </motion.div>
+      <AuroraModal
+        isOpen={showLockModal}
+        onClose={() => setShowLockModal(false)}
+        className="max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-2xl space-y-4 text-zinc-900 dark:text-zinc-100"
+      >
+        <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+          <div className="flex items-center gap-2 text-zinc-900 dark:text-white font-bold text-sm">
+            <Lock size={16} className="text-amber-500" />
+            <span>Financial Period Lock Date</span>
           </div>
-        )}
-      </AnimatePresence>
+          <button onClick={() => setShowLockModal(false)} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-white cursor-pointer transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="space-y-3 text-xs">
+          <p className="text-zinc-600 dark:text-zinc-400">
+            Transactions on or before the lock date cannot be added, edited, or reversed. This prevents retroactive modification to closed financial years.
+          </p>
+          <input
+            type="date"
+            value={newLockDateInput}
+            onChange={e => setNewLockDateInput(e.target.value)}
+            className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-zinc-900 dark:text-white focus:outline-none focus:border-amber-500"
+          />
+        </div>
+
+        <div className="pt-2 flex justify-end gap-2 border-t border-zinc-100 dark:border-zinc-800">
+          <Button
+            onClick={async () => {
+              await fetch(`${API_BASE_URL}/api/finance/lock-date`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${token}`,
+                  'x-tenant-id': tenant?.id || ''
+                },
+                body: JSON.stringify({ lockDate: null })
+              });
+              setLockDate(null);
+              setShowLockModal(false);
+              toast.success('Lock date cleared');
+            }}
+            className="bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white text-xs px-4 py-2 rounded-xl"
+          >
+            Clear Lock
+          </Button>
+          <Button
+            onClick={async () => {
+              await fetch(`${API_BASE_URL}/api/finance/lock-date`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${token}`,
+                  'x-tenant-id': tenant?.id || ''
+                },
+                body: JSON.stringify({ lockDate: newLockDateInput })
+              });
+              setLockDate(newLockDateInput);
+              setShowLockModal(false);
+              toast.success(`Period locked up to ${newLockDateInput}`);
+            }}
+            className="bg-amber-600 hover:bg-amber-500 text-white text-xs px-4 py-2 rounded-xl font-bold cursor-pointer shadow-md shadow-amber-600/20"
+          >
+            Save Lock Date
+          </Button>
+        </div>
+      </AuroraModal>
 
       {/* MODAL: New Invoice */}
-      <AnimatePresence>
-        {showNewInvoiceModal && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+      <AuroraModal
+        isOpen={showNewInvoiceModal}
+        onClose={() => setShowNewInvoiceModal(false)}
+        className="max-w-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-scrollbar text-zinc-900 dark:text-zinc-100"
+      >
+        <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+          <span className="text-zinc-900 dark:text-white font-bold text-sm">Create Sales Invoice (AR)</span>
+          <button onClick={() => setShowNewInvoiceModal(false)} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-white cursor-pointer transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="space-y-3 text-xs">
+          <div>
+            <label className="text-zinc-700 dark:text-zinc-300 font-semibold block mb-1">Customer</label>
+            <select
+              value={newInvoice.customerPartyId}
+              onChange={e => setNewInvoice({ ...newInvoice, customerPartyId: e.target.value })}
+              className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
             >
-              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-                <span className="text-white font-bold text-sm">Create Sales Invoice (AR)</span>
-                <button onClick={() => setShowNewInvoiceModal(false)} className="text-zinc-500 hover:text-white">
-                  <X size={16} />
-                </button>
-              </div>
-
-              <div className="space-y-3 text-xs">
-                <div>
-                  <label className="text-zinc-400 block mb-1">Customer</label>
-                  <select
-                    value={newInvoice.customerPartyId}
-                    onChange={e => setNewInvoice({ ...newInvoice, customerPartyId: e.target.value })}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-white focus:outline-none"
-                  >
-                    <option value="">Select customer...</option>
-                    {Array.isArray(partyList) && partyList.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.organization?.legalName || `${p.person?.firstName || ''} ${p.person?.lastName || ''}`.trim() || p.id}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-zinc-400 block mb-1">Issue Date</label>
-                    <input
-                      type="date"
-                      value={newInvoice.issueDate}
-                      onChange={e => setNewInvoice({ ...newInvoice, issueDate: e.target.value })}
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-white focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-zinc-400 block mb-1">Due Date</label>
-                    <input
-                      type="date"
-                      value={newInvoice.dueDate}
-                      onChange={e => setNewInvoice({ ...newInvoice, dueDate: e.target.value })}
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-white focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div className="border-t border-zinc-800 pt-3 space-y-2">
-                  <label className="text-zinc-400 block font-bold">Line Items</label>
-                  {newInvoice.lines.map((line, idx) => (
-                    <div key={idx} className="space-y-2 p-3 bg-zinc-950 rounded-xl border border-zinc-800">
-                      <input
-                        type="text"
-                        placeholder="Description"
-                        value={line.description}
-                        onChange={e => {
-                          const updated = [...newInvoice.lines];
-                          updated[idx].description = e.target.value;
-                          setNewInvoice({ ...newInvoice, lines: updated });
-                        }}
-                        className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-white focus:outline-none"
-                      />
-                      <div className="grid grid-cols-3 gap-2">
-                        <div>
-                          <label className="text-[10px] text-zinc-500">Qty</label>
-                          <input
-                            type="number"
-                            value={line.quantity}
-                            onChange={e => {
-                              const updated = [...newInvoice.lines];
-                              updated[idx].quantity = Number(e.target.value);
-                              setNewInvoice({ ...newInvoice, lines: updated });
-                            }}
-                            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-white"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-zinc-500">Price ($)</label>
-                          <input
-                            type="number"
-                            value={line.unitPrice}
-                            onChange={e => {
-                              const updated = [...newInvoice.lines];
-                              updated[idx].unitPrice = Number(e.target.value);
-                              updated[idx].taxAmount = Math.round((updated[idx].quantity * updated[idx].unitPrice * 0.10) * 100) / 100;
-                              setNewInvoice({ ...newInvoice, lines: updated });
-                            }}
-                            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-white"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-zinc-500">GST ($)</label>
-                          <input
-                            type="number"
-                            value={line.taxAmount}
-                            readOnly
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-zinc-400"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2">
-                <Button
-                  onClick={() => setShowNewInvoiceModal(false)}
-                  className="bg-zinc-800 text-zinc-300 text-xs px-3 py-2 rounded-xl"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleCreateInvoice}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-4 py-2 rounded-xl font-bold cursor-pointer"
-                >
-                  Create & Authorize Invoice
-                </Button>
-              </div>
-            </motion.div>
+              <option value="">Select customer...</option>
+              {Array.isArray(partyList) && partyList.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.organization?.legalName || `${p.person?.firstName || ''} ${p.person?.lastName || ''}`.trim() || p.id}
+                </option>
+              ))}
+            </select>
           </div>
-        )}
-      </AnimatePresence>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-zinc-700 dark:text-zinc-300 font-semibold block mb-1">Issue Date</label>
+              <input
+                type="date"
+                value={newInvoice.issueDate}
+                onChange={e => setNewInvoice({ ...newInvoice, issueDate: e.target.value })}
+                className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="text-zinc-700 dark:text-zinc-300 font-semibold block mb-1">Due Date</label>
+              <input
+                type="date"
+                value={newInvoice.dueDate}
+                onChange={e => setNewInvoice({ ...newInvoice, dueDate: e.target.value })}
+                className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+          </div>
+
+          <div className="border-t border-zinc-100 dark:border-zinc-800 pt-3 space-y-2">
+            <label className="text-zinc-700 dark:text-zinc-300 font-bold block">Line Items</label>
+            {newInvoice.lines.map((line, idx) => (
+              <div key={idx} className="space-y-2 p-3 bg-zinc-50 dark:bg-zinc-950/60 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                <input
+                  type="text"
+                  placeholder="Description"
+                  value={line.description}
+                  onChange={e => {
+                    const updated = [...newInvoice.lines];
+                    updated[idx].description = e.target.value;
+                    setNewInvoice({ ...newInvoice, lines: updated });
+                  }}
+                  className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                />
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="text-[10px] text-zinc-500">Qty</label>
+                    <input
+                      type="number"
+                      value={line.quantity}
+                      onChange={e => {
+                        const updated = [...newInvoice.lines];
+                        updated[idx].quantity = Number(e.target.value);
+                        setNewInvoice({ ...newInvoice, lines: updated });
+                      }}
+                      className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1 text-zinc-900 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-zinc-500">Price ($)</label>
+                    <input
+                      type="number"
+                      value={line.unitPrice}
+                      onChange={e => {
+                        const updated = [...newInvoice.lines];
+                        updated[idx].unitPrice = Number(e.target.value);
+                        updated[idx].taxAmount = Math.round((updated[idx].quantity * updated[idx].unitPrice * 0.10) * 100) / 100;
+                        setNewInvoice({ ...newInvoice, lines: updated });
+                      }}
+                      className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2 py-1 text-zinc-900 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-zinc-500">GST ($)</label>
+                    <input
+                      type="number"
+                      value={line.taxAmount}
+                      readOnly
+                      className="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-zinc-500 dark:text-zinc-400"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="pt-2 flex justify-end gap-2 border-t border-zinc-100 dark:border-zinc-800">
+          <Button
+            onClick={() => setShowNewInvoiceModal(false)}
+            className="bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white text-xs px-4 py-2 rounded-xl"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleCreateInvoice}
+            className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-4 py-2 rounded-xl font-bold cursor-pointer shadow-md shadow-indigo-600/20"
+          >
+            Create & Authorize Invoice
+          </Button>
+        </div>
+      </AuroraModal>
 
       {/* MODAL: Import Bank Statement Lines */}
-      <AnimatePresence>
-        {showImportBankModal && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl space-y-4"
-            >
-              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-                <span className="text-white font-bold text-sm">Import Bank Statement (CSV)</span>
-                <button onClick={() => setShowImportBankModal(false)} className="text-zinc-500 hover:text-white">
-                  <X size={16} />
-                </button>
-              </div>
+      <AuroraModal
+        isOpen={showImportBankModal}
+        onClose={() => setShowImportBankModal(false)}
+        className="max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-2xl space-y-4 text-zinc-900 dark:text-zinc-100"
+      >
+        <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+          <span className="text-zinc-900 dark:text-white font-bold text-sm">Import Bank Statement (CSV)</span>
+          <button onClick={() => setShowImportBankModal(false)} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-white cursor-pointer transition-colors">
+            <X size={16} />
+          </button>
+        </div>
 
-              <div className="space-y-3 text-xs">
-                <p className="text-zinc-400">Paste bank statement CSV data (Date, Description, Amount, Reference):</p>
-                <textarea
-                  rows={4}
-                  value={importCsvText}
-                  onChange={e => setImportCsvText(e.target.value)}
-                  placeholder="2026-10-01, Direct Credit Jane Doe, 500.00, INV-1001"
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl p-3 text-white font-mono text-xs focus:outline-none"
-                />
-              </div>
+        <div className="space-y-3 text-xs">
+          <p className="text-zinc-600 dark:text-zinc-400">Paste bank statement CSV data (Date, Description, Amount, Reference):</p>
+          <textarea
+            rows={4}
+            value={importCsvText}
+            onChange={e => setImportCsvText(e.target.value)}
+            placeholder="2026-10-01, Direct Credit Jane Doe, 500.00, INV-1001"
+            className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl p-3 text-zinc-900 dark:text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
+          />
+        </div>
 
-              <div className="pt-2 flex justify-end gap-2">
-                <Button onClick={() => setShowImportBankModal(false)} className="bg-zinc-800 text-zinc-300 text-xs px-3 py-2 rounded-xl">
-                  Cancel
-                </Button>
-                <Button
-                  onClick={async () => {
-                    toast.success('Bank statement feed synchronized successfully');
-                    setShowImportBankModal(false);
-                    setImportCsvText('');
-                  }}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-4 py-2 rounded-xl font-bold cursor-pointer"
-                >
-                  Import Feed
-                </Button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+        <div className="pt-2 flex justify-end gap-2 border-t border-zinc-100 dark:border-zinc-800">
+          <Button onClick={() => setShowImportBankModal(false)} className="bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white text-xs px-4 py-2 rounded-xl">
+            Cancel
+          </Button>
+          <Button
+            onClick={async () => {
+              toast.success('Bank statement feed synchronized successfully');
+              setShowImportBankModal(false);
+              setImportCsvText('');
+            }}
+            className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-4 py-2 rounded-xl font-bold cursor-pointer shadow-md shadow-indigo-600/20"
+          >
+            Import Feed
+          </Button>
+        </div>
+      </AuroraModal>
 
       {/* MODAL: Add New Account */}
-      <AnimatePresence>
-        {showAddAccountModal && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-scrollbar"
-            >
-              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+      <AuroraModal
+        isOpen={showAddAccountModal}
+        onClose={() => setShowAddAccountModal(false)}
+        className="max-w-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-scrollbar text-zinc-900 dark:text-zinc-100"
+      >
+        <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
                 <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400">
+                  <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
                     <Plus size={16} />
                   </div>
                   <div>
-                    <h3 className="text-white font-bold text-sm">Add General Ledger Account</h3>
-                    <p className="text-[11px] text-zinc-400">Create a new GL code in your Chart of Accounts</p>
+                    <h3 className="text-zinc-900 dark:text-white font-bold text-sm">Add General Ledger Account</h3>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Create a new GL code in your Chart of Accounts</p>
                   </div>
                 </div>
                 <button
                   onClick={() => setShowAddAccountModal(false)}
-                  className="text-zinc-500 hover:text-white p-1 rounded-lg"
+                  className="text-zinc-400 hover:text-zinc-600 dark:hover:text-white p-1 rounded-lg cursor-pointer transition-colors"
                 >
                   <X size={16} />
                 </button>
@@ -1726,11 +1952,11 @@ export const FinancialManagementPage = () => {
               <form onSubmit={handleSaveAccount} className="space-y-4 text-xs">
                 {/* Account Type */}
                 <div>
-                  <label className="text-zinc-300 font-semibold block mb-1.5">Account Type *</label>
+                  <label className="text-zinc-700 dark:text-zinc-300 font-semibold block mb-1.5">Account Type *</label>
                   <select
                     value={accountForm.accountType}
                     onChange={e => setAccountForm({ ...accountForm, accountType: e.target.value as any })}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-xs"
+                    className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 text-xs"
                   >
                     <option value="ASSET">Asset (Current & Fixed Assets, Bank, Receivables)</option>
                     <option value="LIABILITY">Liability (Payables, Credit Cards, GST, Loans)</option>
@@ -1743,7 +1969,7 @@ export const FinancialManagementPage = () => {
                 {/* Account Code & Name */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-zinc-300 font-semibold block mb-1.5">Account Code *</label>
+                    <label className="text-zinc-700 dark:text-zinc-300 font-semibold block mb-1.5">Account Code *</label>
                     <input
                       type="text"
                       required
@@ -1755,9 +1981,9 @@ export const FinancialManagementPage = () => {
                         accountForm.accountType === 'EQUITY' ? 'e.g. 3100' :
                         accountForm.accountType === 'REVENUE' ? 'e.g. 4200' : 'e.g. 6200'
                       }
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-indigo-500 text-xs"
+                      className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-zinc-900 dark:text-white font-mono focus:outline-none focus:border-indigo-500 text-xs"
                     />
-                    <p className="text-[10px] text-zinc-500 mt-1 font-mono">
+                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1 font-mono">
                       {accountForm.accountType === 'ASSET' && 'Assets range: 1000–1999'}
                       {accountForm.accountType === 'LIABILITY' && 'Liabilities range: 2000–2999'}
                       {accountForm.accountType === 'EQUITY' && 'Equity range: 3000–3999'}
@@ -1767,25 +1993,25 @@ export const FinancialManagementPage = () => {
                   </div>
 
                   <div>
-                    <label className="text-zinc-300 font-semibold block mb-1.5">Account Name *</label>
+                    <label className="text-zinc-700 dark:text-zinc-300 font-semibold block mb-1.5">Account Name *</label>
                     <input
                       type="text"
                       required
                       value={accountForm.accountName}
                       onChange={e => setAccountForm({ ...accountForm, accountName: e.target.value })}
                       placeholder="e.g. Software Subscriptions"
-                      className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-xs"
+                      className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 text-xs"
                     />
                   </div>
                 </div>
 
                 {/* Default Tax Rate */}
                 <div>
-                  <label className="text-zinc-300 font-semibold block mb-1.5">Default Tax Rate</label>
+                  <label className="text-zinc-700 dark:text-zinc-300 font-semibold block mb-1.5">Default Tax Rate</label>
                   <select
                     value={accountForm.taxRateId}
                     onChange={e => setAccountForm({ ...accountForm, taxRateId: e.target.value })}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-xs"
+                    className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 text-xs"
                   >
                     <option value="">No Tax / BAS Excluded (0%)</option>
                     {taxRates.map(tr => (
@@ -1794,78 +2020,73 @@ export const FinancialManagementPage = () => {
                       </option>
                     ))}
                   </select>
-                  <p className="text-[10px] text-zinc-500 mt-1">
+                  <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1">
                     Used to automatically populate GST/tax when this account is selected on invoices or bills.
                   </p>
                 </div>
 
                 {/* Description */}
                 <div>
-                  <label className="text-zinc-300 font-semibold block mb-1.5">Description (Optional)</label>
+                  <label className="text-zinc-700 dark:text-zinc-300 font-semibold block mb-1.5">Description (Optional)</label>
                   <textarea
                     rows={2}
                     value={accountForm.description}
                     onChange={e => setAccountForm({ ...accountForm, description: e.target.value })}
                     placeholder="Describe what transactions belong to this account..."
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-xs resize-none"
+                    className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 text-xs resize-none"
                   />
                 </div>
 
-                <div className="pt-2 flex justify-end gap-2 border-t border-zinc-800">
+                <div className="pt-2 flex justify-end gap-2 border-t border-zinc-100 dark:border-zinc-800">
                   <Button
                     type="button"
                     onClick={() => setShowAddAccountModal(false)}
-                    className="bg-zinc-800 text-zinc-300 hover:text-white text-xs px-3 py-2 rounded-xl"
+                    className="bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white text-xs px-4 py-2 rounded-xl"
                   >
                     Cancel
                   </Button>
                   <Button
                     type="submit"
                     disabled={isSubmittingAccount}
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-4 py-2 rounded-xl font-bold cursor-pointer shadow-md shadow-indigo-600/20"
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-5 py-2 rounded-xl font-bold cursor-pointer shadow-md shadow-indigo-600/20"
                   >
                     {isSubmittingAccount ? 'Creating...' : 'Create Account'}
                   </Button>
                 </div>
               </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+            </AuroraModal>
 
       {/* MODAL: Edit Account */}
-      <AnimatePresence>
+      <AuroraModal
+        isOpen={Boolean(editingAccount)}
+        onClose={() => setEditingAccount(null)}
+        className="max-w-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-scrollbar text-zinc-900 dark:text-zinc-100"
+      >
         {editingAccount && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-scrollbar"
-            >
-              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+          <>
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
                 <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400">
+                  <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
                     <Edit3 size={16} />
                   </div>
                   <div>
-                    <h3 className="text-white font-bold text-sm">
+                    <h3 className="text-zinc-900 dark:text-white font-bold text-sm">
                       Edit Account: {editingAccount.accountCode}
                     </h3>
-                    <p className="text-[11px] text-zinc-400">Modify GL account configuration</p>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Modify GL account configuration</p>
                   </div>
                 </div>
                 <button
                   onClick={() => setEditingAccount(null)}
-                  className="text-zinc-500 hover:text-white p-1 rounded-lg"
+                  className="text-zinc-400 hover:text-zinc-600 dark:hover:text-white p-1 rounded-lg cursor-pointer transition-colors"
                 >
                   <X size={16} />
                 </button>
               </div>
 
               {editingAccount.systemAccount && (
-                <div className="p-3 bg-indigo-950/40 border border-indigo-500/20 rounded-xl flex items-start gap-2.5 text-xs text-indigo-300">
-                  <Info size={16} className="shrink-0 mt-0.5 text-indigo-400" />
+                <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-500/20 rounded-xl flex items-start gap-2.5 text-xs text-indigo-700 dark:text-indigo-300">
+                  <Info size={16} className="shrink-0 mt-0.5 text-indigo-600 dark:text-indigo-400" />
                   <div>
                     <span className="font-bold">Core System Account ({editingAccount.systemAccount}): </span>
                     GL code and classification are locked to protect double-entry ledger integrity. You can customize the name, tax rate, and description.
@@ -1877,7 +2098,7 @@ export const FinancialManagementPage = () => {
                 {/* Account Code & Type */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-zinc-300 font-semibold block mb-1.5">Account Code *</label>
+                    <label className="text-zinc-700 dark:text-zinc-300 font-semibold block mb-1.5">Account Code *</label>
                     <input
                       type="text"
                       required
@@ -1887,26 +2108,26 @@ export const FinancialManagementPage = () => {
                       className={cn(
                         "w-full rounded-xl px-3 py-2 font-mono text-xs focus:outline-none",
                         editingAccount.systemAccount
-                          ? "bg-zinc-900/60 border border-zinc-800 text-zinc-400 cursor-not-allowed"
-                          : "bg-zinc-800 border border-zinc-700 text-white focus:border-indigo-500"
+                          ? "bg-zinc-100 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 cursor-not-allowed"
+                          : "bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-white focus:border-indigo-500"
                       )}
                     />
                   </div>
 
                   <div>
-                    <label className="text-zinc-300 font-semibold block mb-1.5">Account Type *</label>
+                    <label className="text-zinc-700 dark:text-zinc-300 font-semibold block mb-1.5">Account Type *</label>
                     {editingAccount.systemAccount ? (
                       <input
                         type="text"
                         readOnly
                         value={editingAccount.accountType}
-                        className="w-full bg-zinc-900/60 border border-zinc-800 rounded-xl px-3 py-2 text-zinc-400 font-mono text-xs cursor-not-allowed"
+                        className="w-full bg-zinc-100 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-zinc-500 dark:text-zinc-400 font-mono text-xs cursor-not-allowed"
                       />
                     ) : (
                       <select
                         value={accountForm.accountType}
                         onChange={e => setAccountForm({ ...accountForm, accountType: e.target.value as any })}
-                        className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-xs"
+                        className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 text-xs"
                       >
                         <option value="ASSET">Asset</option>
                         <option value="LIABILITY">Liability</option>
@@ -1920,23 +2141,23 @@ export const FinancialManagementPage = () => {
 
                 {/* Account Name */}
                 <div>
-                  <label className="text-zinc-300 font-semibold block mb-1.5">Account Name *</label>
+                  <label className="text-zinc-700 dark:text-zinc-300 font-semibold block mb-1.5">Account Name *</label>
                   <input
                     type="text"
                     required
                     value={accountForm.accountName}
                     onChange={e => setAccountForm({ ...accountForm, accountName: e.target.value })}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-xs"
+                    className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 text-xs"
                   />
                 </div>
 
                 {/* Default Tax Rate */}
                 <div>
-                  <label className="text-zinc-300 font-semibold block mb-1.5">Default Tax Rate</label>
+                  <label className="text-zinc-700 dark:text-zinc-300 font-semibold block mb-1.5">Default Tax Rate</label>
                   <select
                     value={accountForm.taxRateId}
                     onChange={e => setAccountForm({ ...accountForm, taxRateId: e.target.value })}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-xs"
+                    className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 text-xs"
                   >
                     <option value="">No Tax / BAS Excluded (0%)</option>
                     {taxRates.map(tr => (
@@ -1949,41 +2170,41 @@ export const FinancialManagementPage = () => {
 
                 {/* Description */}
                 <div>
-                  <label className="text-zinc-300 font-semibold block mb-1.5">Description (Optional)</label>
+                  <label className="text-zinc-700 dark:text-zinc-300 font-semibold block mb-1.5">Description (Optional)</label>
                   <textarea
                     rows={2}
                     value={accountForm.description}
                     onChange={e => setAccountForm({ ...accountForm, description: e.target.value })}
                     placeholder="Describe what transactions belong to this account..."
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-xs resize-none"
+                    className="w-full bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 text-xs resize-none"
                   />
                 </div>
 
                 {/* Active / Archive Toggle */}
-                <div className="pt-2 border-t border-zinc-800">
+                <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
                       disabled={Boolean(editingAccount.systemAccount)}
                       checked={accountForm.isActive}
                       onChange={e => setAccountForm({ ...accountForm, isActive: e.target.checked })}
-                      className="rounded border-zinc-700 bg-zinc-900 text-indigo-600 focus:ring-0 disabled:opacity-50"
+                      className="rounded border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-indigo-600 focus:ring-0 disabled:opacity-50"
                     />
-                    <span className="text-zinc-300 font-semibold">Account Active</span>
+                    <span className="text-zinc-700 dark:text-zinc-300 font-semibold">Account Active</span>
                   </label>
                   {editingAccount.systemAccount && (
-                    <p className="text-[10px] text-zinc-500 mt-1">
+                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1">
                       System accounts cannot be deactivated because automated journal entries depend on them.
                     </p>
                   )}
                   {!editingAccount.systemAccount && !accountForm.isActive && (
-                    <p className="text-[10px] text-amber-400 mt-1">
+                    <p className="text-[10px] text-amber-500 mt-1">
                       Archiving will hide this account from invoice/bill dropdowns while preserving historical ledger data.
                     </p>
                   )}
                 </div>
 
-                <div className="pt-2 flex items-center justify-between border-t border-zinc-800">
+                <div className="pt-2 flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800">
                   <div>
                     {!editingAccount.systemAccount && (
                       <Button
@@ -1992,7 +2213,7 @@ export const FinancialManagementPage = () => {
                           handleDeleteAccount(editingAccount);
                           setEditingAccount(null);
                         }}
-                        className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs px-3 py-2 rounded-xl flex items-center gap-1.5 cursor-pointer"
+                        className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 dark:text-rose-400 border border-rose-500/20 text-xs px-3 py-2 rounded-xl flex items-center gap-1.5 cursor-pointer"
                       >
                         <Trash2 size={13} />
                         <span>Delete</span>
@@ -2003,24 +2224,32 @@ export const FinancialManagementPage = () => {
                     <Button
                       type="button"
                       onClick={() => setEditingAccount(null)}
-                      className="bg-zinc-800 text-zinc-300 hover:text-white text-xs px-3 py-2 rounded-xl"
+                      className="bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white text-xs px-4 py-2 rounded-xl"
                     >
                       Cancel
                     </Button>
                     <Button
                       type="submit"
                       disabled={isSubmittingAccount}
-                      className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-4 py-2 rounded-xl font-bold cursor-pointer shadow-md shadow-indigo-600/20"
+                      className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-5 py-2 rounded-xl font-bold cursor-pointer shadow-md shadow-indigo-600/20"
                     >
                       {isSubmittingAccount ? 'Saving...' : 'Save Changes'}
                     </Button>
                   </div>
                 </div>
               </form>
-            </motion.div>
-          </div>
+          </>
         )}
-      </AnimatePresence>
-    </div>
+      </AuroraModal>
+
+      {/* MODAL: Formal Tax Credit Note Document */}
+      {showCreditNoteModal && activeCreditNote && (
+        <CreditNoteDocumentModal
+          isOpen={showCreditNoteModal}
+          onClose={() => setShowCreditNoteModal(false)}
+          creditNote={activeCreditNote}
+        />
+      )}
+    </SettingsSubNavLayout>
   );
 };

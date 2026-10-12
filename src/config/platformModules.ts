@@ -55,13 +55,31 @@ export const PLATFORM_MODULES: PlatformModule[] = [
     path: '/workspace/platform/inventory-manager'
   },
   {
+    id: 'transactions',
+    name: 'Transactions',
+    slug: 'transactions',
+    iconName: 'ArrowLeftRight',
+    isCore: true,
+    description: 'Omnichannel payment ledger, authorizations, settlements, and refund management.',
+    path: '/workspace/platform/transactions'
+  },
+  {
+    id: 'payment-gateways',
+    name: 'Payment Gateways & Hardware',
+    slug: 'payment-gateways',
+    iconName: 'CreditCard',
+    isCore: true,
+    description: 'Omnichannel payment channels (POS, online, invoices, forms) and merchant gateway connections.',
+    path: '/workspace/settings/platform-modules/payment-gateways'
+  },
+  {
     id: 'pos',
-    name: 'Point of Sale',
+    name: 'Point of Sale & Terminals',
     slug: 'pos',
     iconName: 'Store',
     isCore: true,
-    description: 'Workspace retail counter checkout, touch cart, cash shifts, split tenders, and barcode scanning.',
-    path: '/workspace/platform/pos'
+    description: 'Register terminals, EFTPOS hardware pairing, receipt printing, and cash drawer settings.',
+    path: '/workspace/settings/platform-modules/payment-gateways?tab=pos'
   },
   {
     id: 'global-lists',

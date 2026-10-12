@@ -47,6 +47,9 @@ import inventoryRoutes from './routes/inventoryRoutes';
 import voucherRoutes from './routes/voucherRoutes';
 import posRoutes from './routes/posRoutes';
 import reconciliationRoutes from './routes/reconciliationRoutes';
+import transactionRoutes from './routes/transactionRoutes';
+import rmaRoutes from './routes/rmaRoutes';
+import paymentGatewayRoutes from './routes/paymentGatewayRoutes';
 
 
 
@@ -170,6 +173,9 @@ app.use('/api/inventory', authenticate, requireTenantAccess, inventoryRoutes);
 app.use('/api/vouchers', authenticate, requireTenantAccess, voucherRoutes);
 app.use('/api/pos', authenticate, requireTenantAccess, posRoutes);
 app.use('/api/reconciliation', authenticate, requireTenantAccess, reconciliationRoutes);
+app.use('/api/transactions', authenticate, requireTenantAccess, transactionRoutes);
+app.use('/api/rma', authenticate, requireTenantAccess, rmaRoutes);
+app.use('/api/payment-gateways', authenticate, requireTenantAccess, paymentGatewayRoutes);
 
 
 

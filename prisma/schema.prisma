@@ -78,6 +78,10 @@ model Tenant {
   posSessions            PosSession[]
   posOrders              PosOrder[]
   bankStatementLines     BankStatementLine[]
+  paymentTransactions    PaymentTransaction[]
+  refunds                Refund[]
+  returnRequests         ReturnRequest[]
+  paymentGatewayConnections PaymentGatewayConnection[]
 
   @@map("tenants")
 }
@@ -429,6 +433,8 @@ model Party {
   posOrders           PosOrder[]
   vouchers            Voucher[]
   journalLines        JournalLine[]
+  paymentTransactions PaymentTransaction[]
+  returnRequests      ReturnRequest[]
 
   @@index([tenantId])
   @@map("parties")
@@ -1727,24 +1733,27 @@ enum SourceModule {
   BANK_RECONCILIATION
   INVENTORY_ADJUSTMENT
   MANUAL
+  REFUND
 }
 
 model JournalEntry {
-  id                String       @id @default(cuid())
-  tenantId          String       @map("tenant_id")
-  entryNumber       String       @map("entry_number")
-  date              DateTime
-  sourceModule      SourceModule @map("source_module")
-  sourceReferenceId String?      @map("source_reference_id")
-  narration         String
-  isLocked          Boolean      @default(false) @map("is_locked")
-  reversedByEntryId String?      @unique @map("reversed_by_entry_id")
-  reversalOfEntryId String?      @unique @map("reversal_of_entry_id")
-  createdByUserId   String?      @map("created_by_user_id")
-  createdAt         DateTime     @default(now()) @map("created_at")
+  id                  String               @id @default(cuid())
+  tenantId            String               @map("tenant_id")
+  entryNumber         String               @map("entry_number")
+  date                DateTime
+  sourceModule        SourceModule         @map("source_module")
+  sourceReferenceId   String?              @map("source_reference_id")
+  narration           String
+  isLocked            Boolean              @default(false) @map("is_locked")
+  reversedByEntryId   String?              @unique @map("reversed_by_entry_id")
+  reversalOfEntryId   String?              @unique @map("reversal_of_entry_id")
+  createdByUserId     String?              @map("created_by_user_id")
+  createdAt           DateTime             @default(now()) @map("created_at")
 
-  tenant            Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  lines             JournalLine[]
+  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lines               JournalLine[]
+  paymentTransactions PaymentTransaction[]
+  refunds             Refund[]
 
   @@unique([tenantId, entryNumber])
   @@index([tenantId, date])
@@ -1805,6 +1814,8 @@ model Invoice {
   customer        Party?           @relation(fields: [customerPartyId], references: [id])
   lines           InvoiceLine[]
   payments        InvoicePayment[]
+  transactions    PaymentTransaction[]
+  refunds         Refund[]
 
   @@unique([tenantId, invoiceNumber])
   @@index([tenantId, customerPartyId, status])
@@ -2088,27 +2099,30 @@ enum OrderStatus {
   COMPLETED
   VOIDED
   REFUNDED
+  PARTIALLY_REFUNDED
 }
 
 model PosOrder {
-  id              String         @id @default(cuid())
-  tenantId        String         @map("tenant_id")
-  sessionId       String         @map("session_id")
-  orderNumber     String         @map("order_number")
-  customerPartyId String?        @map("customer_party_id")
-  subtotal        Decimal        @db.Decimal(12, 2)
-  discountTotal   Decimal        @default(0.00) @map("discount_total") @db.Decimal(12, 2)
-  taxTotal        Decimal        @db.Decimal(12, 2)
-  total           Decimal        @db.Decimal(12, 2)
-  status          OrderStatus    @default(COMPLETED)
-  journalEntryId  String?        @map("journal_entry_id")
-  createdAt       DateTime       @default(now()) @map("created_at")
+  id              String               @id @default(cuid())
+  tenantId        String               @map("tenant_id")
+  sessionId       String               @map("session_id")
+  orderNumber     String               @map("order_number")
+  customerPartyId String?              @map("customer_party_id")
+  subtotal        Decimal              @db.Decimal(12, 2)
+  discountTotal   Decimal              @default(0.00) @map("discount_total") @db.Decimal(12, 2)
+  taxTotal        Decimal              @db.Decimal(12, 2)
+  total           Decimal              @db.Decimal(12, 2)
+  status          OrderStatus          @default(COMPLETED)
+  journalEntryId  String?              @map("journal_entry_id")
+  createdAt       DateTime             @default(now()) @map("created_at")
 
-  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  session         PosSession     @relation(fields: [sessionId], references: [id])
-  customer        Party?         @relation(fields: [customerPartyId], references: [id])
+  tenant          Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  session         PosSession           @relation(fields: [sessionId], references: [id])
+  customer        Party?               @relation(fields: [customerPartyId], references: [id])
   items           PosOrderItem[]
   payments        PosPayment[]
+  transactions    PaymentTransaction[]
+  refunds         Refund[]
 
   @@unique([tenantId, orderNumber])
   @@index([tenantId, sessionId])
@@ -2178,5 +2192,236 @@ model BankStatementLine {
   @@map("bank_statement_lines")
 }
 
+// ==========================================
+// OMNICHANNEL TRANSACTIONS & REFUNDS ENGINE
+// ==========================================
 
+enum TransactionType {
+  SALE
+  REFUND
+  VOID
+  AUTH_HOLD
+  CHARGEBACK
+  PAYOUT
+}
 
+enum TransactionChannel {
+  POS
+  INVOICE
+  PORTAL
+  SUBSCRIPTION
+  API_MANUAL
+}
+
+enum TransactionStatus {
+  SUCCEEDED
+  PENDING
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  DISPUTED
+}
+
+enum RefundReason {
+  CUSTOMER_RETURN
+  DEFECTIVE_GOODS
+  DUPLICATE_CHARGE
+  INCORRECT_PRICING
+  ORDER_CANCELLED
+  GOODWILL
+  OTHER
+}
+
+model PaymentTransaction {
+  id               String              @id @default(cuid())
+  tenantId         String              @map("tenant_id")
+  transactionRef   String              @map("transaction_ref")
+  channel          TransactionChannel
+  type             TransactionType     @default(SALE)
+  status           TransactionStatus   @default(SUCCEEDED)
+  
+  grossAmount      Decimal             @map("gross_amount") @db.Decimal(14, 2)
+  taxAmount        Decimal             @default(0.00) @map("tax_amount") @db.Decimal(14, 2)
+  feeAmount        Decimal             @default(0.00) @map("fee_amount") @db.Decimal(14, 2)
+  netAmount        Decimal             @map("net_amount") @db.Decimal(14, 2)
+  currency         String              @default("AUD")
+  
+  paymentMethod    String              @map("payment_method")
+  cardBrand        String?             @map("card_brand")
+  cardLast4        String?             @map("card_last4")
+  gatewayRef       String?             @map("gateway_ref")
+  gatewayResponse  Json?               @map("gateway_response")
+  
+  customerPartyId  String?             @map("customer_party_id")
+  posOrderId       String?             @map("pos_order_id")
+  invoiceId        String?             @map("invoice_id")
+  journalEntryId   String?             @map("journal_entry_id")
+  
+  metadata         Json?
+  failureReason    String?             @map("failure_reason")
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+
+  tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer         Party?              @relation(fields: [customerPartyId], references: [id])
+  posOrder         PosOrder?           @relation(fields: [posOrderId], references: [id])
+  invoice          Invoice?            @relation(fields: [invoiceId], references: [id])
+  journalEntry     JournalEntry?       @relation(fields: [journalEntryId], references: [id])
+  refunds          Refund[]
+
+  @@unique([tenantId, transactionRef])
+  @@index([tenantId, channel, status])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, customerPartyId])
+  @@map("payment_transactions")
+}
+
+model Refund {
+  id                   String              @id @default(cuid())
+  tenantId             String              @map("tenant_id")
+  refundNumber         String              @map("refund_number")
+  paymentTransactionId String?             @map("payment_transaction_id")
+  posOrderId           String?             @map("pos_order_id")
+  invoiceId            String?             @map("invoice_id")
+  
+  amount               Decimal             @db.Decimal(14, 2)
+  taxAmount            Decimal             @default(0.00) @map("tax_amount") @db.Decimal(14, 2)
+  refundMethod         String              @map("refund_method")
+  reason               RefundReason        @default(CUSTOMER_RETURN)
+  reasonNotes          String?             @map("reason_notes")
+  
+  restocked            Boolean             @default(false)
+  journalEntryId       String?             @map("journal_entry_id")
+  processedByUserId    String?             @map("processed_by_user_id")
+  createdAt            DateTime            @default(now()) @map("created_at")
+
+  tenant               Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  paymentTransaction   PaymentTransaction? @relation(fields: [paymentTransactionId], references: [id])
+  posOrder             PosOrder?           @relation(fields: [posOrderId], references: [id])
+  invoice              Invoice?            @relation(fields: [invoiceId], references: [id])
+  journalEntry         JournalEntry?       @relation(fields: [journalEntryId], references: [id])
+  returnRequest        ReturnRequest?
+  items                RefundItem[]
+
+  @@unique([tenantId, refundNumber])
+  @@index([tenantId, paymentTransactionId])
+  @@index([tenantId, posOrderId])
+  @@index([tenantId, invoiceId])
+  @@map("refunds")
+}
+
+model RefundItem {
+  id            String          @id @default(cuid())
+  refundId      String          @map("refund_id")
+  catalogItemId String?         @map("catalog_item_id")
+  variantId     String?         @map("variant_id")
+  title         String
+  quantity      Decimal         @db.Decimal(10, 3)
+  unitPrice     Decimal         @db.Decimal(12, 2)
+  unitCost      Decimal         @default(0.00) @map("unit_cost") @db.Decimal(12, 2)
+  taxRate       Decimal         @default(0.00) @map("tax_rate") @db.Decimal(6, 4)
+  lineTotal     Decimal         @db.Decimal(12, 2)
+  isRestocked   Boolean         @default(false) @map("is_restocked")
+
+  refund        Refund          @relation(fields: [refundId], references: [id], onDelete: Cascade)
+
+  @@map("refund_items")
+}
+
+enum RmaStatus {
+  PENDING_REVIEW
+  APPROVED_PENDING_RECEIPT
+  RECEIVED_INSPECTING
+  ACCEPTED_REFUNDED
+  REJECTED
+  CANCELLED
+}
+
+model ReturnRequest {
+  id                 String              @id @default(cuid())
+  tenantId           String              @map("tenant_id")
+  rmaNumber          String              @map("rma_number")
+  customerPartyId    String              @map("customer_party_id")
+  posOrderId         String?             @map("pos_order_id")
+  invoiceId          String?             @map("invoice_id")
+  status             RmaStatus           @default(PENDING_REVIEW)
+  requestedMethod    String              @default("ORIGINAL_TENDER") @map("requested_method")
+  reason             RefundReason        @map("reason")
+  customerComments   String?             @map("customer_comments")
+  photoUrls          Json?               @map("photo_urls")
+  
+  reviewedByMemberId String?             @map("reviewed_by_member_id")
+  reviewedAt         DateTime?           @map("reviewed_at")
+  rejectionReason    String?             @map("rejection_reason")
+  internalNotes      String?             @map("internal_notes")
+  
+  refundId           String?             @unique @map("refund_id")
+  
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  
+  items              ReturnRequestItem[]
+  refund             Refund?             @relation(fields: [refundId], references: [id])
+  customer           Party               @relation(fields: [customerPartyId], references: [id])
+  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, rmaNumber])
+  @@index([tenantId, status])
+  @@index([tenantId, customerPartyId])
+  @@map("return_requests")
+}
+
+model ReturnRequestItem {
+  id               String        @id @default(cuid())
+  returnRequestId  String        @map("return_request_id")
+  catalogItemId    String?       @map("catalog_item_id")
+  variantId        String?       @map("variant_id")
+  description      String
+  quantity         Int           @default(1)
+  condition        String?
+  requestedAction  String?
+  
+  returnRequest    ReturnRequest @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
+  
+  @@map("return_request_items")
+}
+
+enum PaymentProvider {
+  CYBERSOURCE
+  COMMBANK_COMMWEB
+  COMMBANK_BPOINT
+  STRIPE
+  TYRO_EFTPOS
+  SQUARE
+  ADYEN
+  CUSTOM_WEBHOOK
+  SANDBOX_SIMULATOR
+}
+
+model PaymentGatewayConnection {
+  id               String          @id @default(cuid())
+  tenantId         String          @map("tenant_id")
+  provider         PaymentProvider @map("provider")
+  displayName      String          @map("display_name")
+  isDefault        Boolean         @default(false) @map("is_default")
+  isEnabled        Boolean         @default(true) @map("is_enabled")
+  isTestMode       Boolean         @default(true) @map("is_test_mode")
+  
+  enableForPos     Boolean         @default(true) @map("enable_for_pos")
+  enableForInvoice Boolean         @default(true) @map("enable_for_invoice")
+  enableForPortal  Boolean         @default(true) @map("enable_for_portal")
+
+  credentials      Json            @map("credentials")
+  
+  lastHealthCheck  DateTime?       @map("last_health_check")
+  healthStatus     String          @default("HEALTHY") @map("health_status")
+  lastError        String?         @map("last_error")
+
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  tenant           Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, provider])
+  @@map("payment_gateway_connections")
+}

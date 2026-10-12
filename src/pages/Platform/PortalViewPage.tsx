@@ -39,8 +39,11 @@ import {
   Images,
   ShoppingCart,
   CreditCard,
-  Receipt
+  Receipt,
+  RotateCcw
 } from 'lucide-react';
+
+import { CustomerRmaModal } from '../../components/Platform/RMA/CustomerRmaModal';
 
 import { Site, SiteService, SitePage, ENTERPRISE_FONTS } from '../../services/siteService';
 import { toast } from 'sonner';
@@ -116,6 +119,10 @@ export const PortalViewPage = () => {
   const [lookedUpInvoice, setLookedUpInvoice] = useState<any>(null);
   const [invoicePaying, setInvoicePaying] = useState(false);
   const [invoicePaymentReceipt, setInvoicePaymentReceipt] = useState<any>(null);
+
+  // Self-Service RMA Returns State
+  const [showRmaModal, setShowRmaModal] = useState(false);
+  const [rmaOrderTarget, setRmaOrderTarget] = useState<any>(null);
 
   useEffect(() => {
     const fetchSiteDetails = async () => {
@@ -1784,12 +1791,28 @@ export const PortalViewPage = () => {
                       <p className="text-xs text-zinc-300 max-w-md mx-auto">
                         Your transaction reference is <span className="font-mono font-bold text-emerald-400">{checkoutReceipt.receiptNumber}</span>. Total paid: <strong className="text-white">${checkoutReceipt.totalPaid?.toFixed(2)}</strong>.
                       </p>
-                      <button
-                        onClick={() => setCheckoutReceipt(null)}
-                        className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer mt-2"
-                      >
-                        Place Another Order
-                      </button>
+                      <div className="flex items-center justify-center gap-2 mt-2">
+                        <button
+                          onClick={() => setCheckoutReceipt(null)}
+                          className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                        >
+                          Place Another Order
+                        </button>
+                        <button
+                          onClick={() => {
+                            setRmaOrderTarget({
+                              id: checkoutReceipt.orderId || checkoutReceipt.receiptNumber,
+                              orderNumber: checkoutReceipt.receiptNumber,
+                              items: checkoutReceipt.items || []
+                            });
+                            setShowRmaModal(true);
+                          }}
+                          className="px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+                        >
+                          <RotateCcw size={13} />
+                          <span>Request Return / RMA</span>
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -2019,11 +2042,30 @@ export const PortalViewPage = () => {
                           {invoicePaying ? 'Authorizing Payment...' : `Pay $${Number(lookedUpInvoice.total).toFixed(2)} Online Now`}
                         </button>
                       ) : (
-                        <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center text-xs text-emerald-400 font-bold space-y-1">
+                        <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center text-xs text-emerald-400 font-bold space-y-2">
                           <p>✓ This invoice has been paid in full. Thank you!</p>
                           {invoicePaymentReceipt && (
                             <p className="text-[10px] text-zinc-400 font-mono">Reference: {invoicePaymentReceipt.message || invoicePaymentReceipt.paymentId || 'Cleared'}</p>
                           )}
+                          <button
+                            onClick={() => {
+                              setRmaOrderTarget({
+                                id: lookedUpInvoice.id,
+                                orderNumber: lookedUpInvoice.invoiceNumber,
+                                items: lookedUpInvoice.lines?.map((l: any) => ({
+                                  id: l.id,
+                                  name: l.description,
+                                  quantity: l.quantity,
+                                  price: l.lineTotal
+                                })) || []
+                              });
+                              setShowRmaModal(true);
+                            }}
+                            className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-750 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5 transition-all cursor-pointer"
+                          >
+                            <RotateCcw size={12} />
+                            <span>Request Return (RMA)</span>
+                          </button>
                         </div>
                       )}
                     </div>
@@ -2071,6 +2113,25 @@ export const PortalViewPage = () => {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Customer Self-Service Return RMA Modal */}
+      {showRmaModal && (
+        <CustomerRmaModal
+          isOpen={showRmaModal}
+          onClose={() => {
+            setShowRmaModal(false);
+            setRmaOrderTarget(null);
+          }}
+          customerPartyId={authLoggedInUser?.partyId || lookedUpInvoice?.partyId || lookedUpInvoice?.party?.id || 'portal-guest'}
+          customerName={authLoggedInUser?.name || checkoutName || lookedUpInvoice?.party?.name || 'Customer'}
+          order={rmaOrderTarget}
+          tenantId={site?.tenantId || 'global-default'}
+          onSuccess={() => {
+            setShowRmaModal(false);
+            setRmaOrderTarget(null);
+          }}
+        />
       )}
 
       {/* Footer */}

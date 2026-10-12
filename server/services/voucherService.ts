@@ -183,4 +183,33 @@ export class VoucherService {
       remainingBalance: newBalance
     };
   }
+
+  /**
+   * Retrieves all active store credits and vouchers for a given customer
+   */
+  static async getCustomerVouchers(tenantId: string, partyId: string, db: any = globalPrisma) {
+    const vouchers = await db.voucher.findMany({
+      where: {
+        tenantId,
+        recipientPartyId: partyId,
+        status: 'ACTIVE',
+        OR: [
+          { expiresAt: null },
+          { expiresAt: { gt: new Date() } }
+        ]
+      },
+      include: {
+        redemptions: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const totalBalance = vouchers.reduce((sum: number, v: any) => sum + Number(v.currentBalance || 0), 0);
+
+    return {
+      partyId,
+      totalBalance: Math.round(totalBalance * 100) / 100,
+      vouchers
+    };
+  }
 }

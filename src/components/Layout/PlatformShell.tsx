@@ -496,7 +496,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         return renderConfigureButton('Configure Inventory', () => navigateWithReturn('/workspace/settings/platform-modules/inventory-manager'), 'Boxes');
       }
       if (feature === 'pos') {
-        return renderConfigureButton('Configure Point of Sale', () => navigateWithReturn('/workspace/settings/platform-modules/pos'), 'Store');
+        return renderConfigureButton('Configure Point of Sale & Terminals', () => navigateWithReturn('/workspace/settings/platform-modules/payment-gateways?tab=pos'), 'Store');
       }
       if (feature === 'finance') {
         return renderConfigureButton('Configure Accounting', () => navigateWithReturn('/workspace/settings/platform-modules/financial-management'), 'Banknote');
@@ -538,6 +538,9 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       }
       if (appName === 'drive') {
         return renderConfigureButton('Configure Storage', () => navigateWithReturn('/workspace/settings/platform-modules/records-management'), 'Folder');
+      }
+      if (appName === 'pos') {
+        return renderConfigureButton('Configure POS & Terminals', () => navigateWithReturn('/workspace/settings/platform-modules/payment-gateways?tab=pos'), 'Store');
       }
     }
 
@@ -609,8 +612,10 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       icon: LucideIcons.Sliders,
       items: [
         { label: 'Work Distribution', icon: LucideIcons.Inbox, to: '/workspace/settings/platform-modules/work-distribution' },
+        { label: 'Transactions', icon: LucideIcons.ArrowLeftRight, to: '/workspace/settings/platform-modules/transactions' },
+        { label: 'Payment Gateways & Hardware', icon: LucideIcons.CreditCard, to: '/workspace/settings/platform-modules/payment-gateways' },
         { label: 'Accounting', icon: LucideIcons.Banknote, to: '/workspace/settings/platform-modules/financial-management' },
-        { label: 'Point of Sale', icon: LucideIcons.Store, to: '/workspace/settings/platform-modules/pos' },
+        { label: 'Point of Sale & Terminals', icon: LucideIcons.Store, to: '/workspace/settings/platform-modules/payment-gateways?tab=pos' },
         { label: 'Pricing Catalog', icon: LucideIcons.Tag, to: '/workspace/settings/platform-modules/pricing-catalog' },
         { label: 'Inventory Manager', icon: LucideIcons.Boxes, to: '/workspace/settings/platform-modules/inventory-manager' },
         { label: 'People & Organisations', icon: LucideIcons.Users, to: '/workspace/settings/platform-modules/people-organisations' },

@@ -24,7 +24,9 @@ import {
   RefreshCw,
   FileText,
   Maximize2,
-  Minimize2
+  Minimize2,
+  RotateCcw,
+  SlidersHorizontal
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { usePlatform } from '../../hooks/usePlatform';
@@ -33,6 +35,9 @@ import { API_BASE_URL } from '../../config';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
 import { Button } from '../../components/UI/Primitives';
+import { PosRefundModal } from '../../components/Platform/POS/PosRefundModal';
+import { PosReturnSlipModal, PosReturnSlipData } from '../../components/Platform/POS/PosReturnSlipModal';
+import { TransactionClientService } from '../../services/transactionService';
 
 interface CatalogItem {
   id: string;
@@ -90,6 +95,7 @@ export const PointOfSalePage = () => {
   const [customerSearch, setCustomerSearch] = useState('');
   const [customerList, setCustomerList] = useState<any[]>([]);
   const [showCustomerPicker, setShowCustomerPicker] = useState(false);
+  const [customerStoreCredit, setCustomerStoreCredit] = useState<{ totalBalance: number; vouchers: any[] }>({ totalBalance: 0, vouchers: [] });
 
   // Cart Numpad Modal State
   const [selectedCartLineId, setSelectedCartLineId] = useState<string | null>(null);
@@ -116,6 +122,9 @@ export const PointOfSalePage = () => {
   const [historyScope, setHistoryScope] = useState<'SHIFT' | 'ALL'>('SHIFT');
   const [historySearch, setHistorySearch] = useState('');
   const [selectedHistoryOrder, setSelectedHistoryOrder] = useState<any | null>(null);
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [activeReturnSlip, setActiveReturnSlip] = useState<PosReturnSlipData | null>(null);
+  const [showReturnSlipModal, setShowReturnSlipModal] = useState(false);
 
   // Fullscreen Kiosk Mode State & Ref
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -191,6 +200,24 @@ export const PointOfSalePage = () => {
     fetchCustomers();
     fetchOrders('SHIFT');
   }, [tenant?.id, activeSession?.id]);
+
+  // Fetch linked customer store credits & vouchers
+  useEffect(() => {
+    if (selectedCustomer?.id && tenant?.id) {
+      TransactionClientService.getCustomerVouchers(selectedCustomer.id, tenant.id)
+        .then(data => {
+          setCustomerStoreCredit({
+            totalBalance: Number(data.totalBalance || 0),
+            vouchers: data.vouchers || []
+          });
+        })
+        .catch(() => {
+          setCustomerStoreCredit({ totalBalance: 0, vouchers: [] });
+        });
+    } else {
+      setCustomerStoreCredit({ totalBalance: 0, vouchers: [] });
+    }
+  }, [selectedCustomer?.id, tenant?.id]);
 
   // Global Barcode Scanner Listener
   useEffect(() => {
@@ -919,9 +946,9 @@ export const PointOfSalePage = () => {
 
   if (sessionLoading) {
     return (
-      <div className="flex flex-col items-center justify-center h-full flex-1 min-h-0 bg-zinc-950 text-zinc-100">
+      <div className="flex flex-col items-center justify-center h-full flex-1 min-h-0 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100">
         <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3" />
-        <p className="text-xs text-zinc-400 font-mono">Initializing Point of Sale Terminal...</p>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400 font-mono">Initializing Point of Sale Terminal...</p>
       </div>
     );
   }
@@ -930,26 +957,26 @@ export const PointOfSalePage = () => {
     <div
       ref={terminalRef}
       className={cn(
-        "flex flex-col bg-zinc-950 text-zinc-100 font-sans select-none overflow-hidden",
+        "flex flex-col bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans select-none overflow-hidden",
         isFullscreen 
           ? "fixed inset-0 z-[99999] w-screen h-screen" 
           : "h-full flex-1 min-h-0"
       )}
     >
       {/* POS Top Bar */}
-      <header className="h-14 border-b border-zinc-800 bg-zinc-900/80 backdrop-blur px-6 flex items-center justify-between shrink-0">
+      <header className="h-14 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur px-6 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30">
+          <div className="w-8 h-8 rounded-xl bg-indigo-500/10 dark:bg-indigo-600/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center border border-indigo-500/20 dark:border-indigo-500/30">
             <Store size={18} />
           </div>
           <div>
-            <h1 className="text-sm font-bold text-white flex items-center gap-2">
+            <h1 className="text-sm font-bold text-zinc-900 dark:text-white flex items-center gap-2">
               <span>Point of Sale</span>
               <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                 {activeSession ? 'Shift Active' : 'Shift Closed'}
               </span>
             </h1>
-            <p className="text-[11px] text-zinc-400">
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
               {activeSession 
                 ? `${activeSession.register?.name} • Float: $${Number(activeSession.openingFloat).toFixed(2)} • Sales: ${salesOrders.length} ($${shiftSalesTotal.toFixed(2)})` 
                 : 'Open a shift to start ringing sales'}
@@ -958,13 +985,25 @@ export const PointOfSalePage = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Hardware & Gateway Settings */}
+          <a
+            href="/workspace/settings/platform-modules/payment-gateways?tab=pos"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Configure EFTPOS terminal pairing, cash drawer, and gateway routing"
+            className="h-8 px-3 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm shrink-0"
+          >
+            <SlidersHorizontal size={14} className="text-zinc-400" />
+            <span>Hardware & Gateway</span>
+          </a>
+
           {/* Manage Catalog Button */}
           <a
             href="/workspace/settings/platform-modules/pricing-catalog"
             target="_blank"
             rel="noopener noreferrer"
             title="Open Pricing Catalog in a new tab to add, edit, or delete items"
-            className="h-8 px-3 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 hover:text-white text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm shrink-0"
+            className="h-8 px-3 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm shrink-0"
           >
             <Tag size={14} className="text-zinc-400" />
             <span>Manage Catalog</span>
@@ -977,12 +1016,12 @@ export const PointOfSalePage = () => {
               setShowSalesHistory(true);
               fetchOrders(historyScope);
             }}
-            className="h-8 px-3 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 hover:text-white text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm shrink-0"
+            className="h-8 px-3 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm shrink-0"
           >
             <Receipt size={14} className="text-zinc-400" />
             <span>Sales History</span>
             {salesOrders.length > 0 && (
-              <span className="px-1.5 py-0.5 bg-zinc-700 text-zinc-300 text-[10px] rounded-full font-mono font-medium border border-zinc-600/50">
+              <span className="px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-[10px] rounded-full font-mono font-medium border border-zinc-200 dark:border-zinc-600/50">
                 {salesOrders.length}
               </span>
             )}
@@ -995,7 +1034,7 @@ export const PointOfSalePage = () => {
                 setActualCashCount(Number(activeSession.openingFloat));
                 setShowCloseModal(true);
               }}
-              className="h-8 px-3 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 hover:text-white text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm shrink-0"
+              className="h-8 px-3 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm shrink-0"
             >
               <Clock size={14} className="text-zinc-400" />
               <span>Close Shift (Z-Report)</span>
@@ -1004,7 +1043,7 @@ export const PointOfSalePage = () => {
             <button
               type="button"
               onClick={() => setShowOpenModal(true)}
-              className="h-8 px-3 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 hover:text-white text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm shrink-0"
+              className="h-8 px-3 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-all shadow-sm shrink-0"
             >
               <Plus size={14} className="text-zinc-400" />
               <span>Open Register Shift</span>
@@ -1017,7 +1056,7 @@ export const PointOfSalePage = () => {
             onClick={toggleFullscreen}
             title={isFullscreen ? "Exit Fullscreen (Esc or F11)" : "Enter Fullscreen (F11)"}
             aria-label={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
-            className="h-8 w-8 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 hover:text-white flex items-center justify-center cursor-pointer transition-all shadow-sm shrink-0"
+            className="h-8 w-8 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white flex items-center justify-center cursor-pointer transition-all shadow-sm shrink-0"
           >
             {isFullscreen ? <Minimize2 size={14} className="text-zinc-400" /> : <Maximize2 size={14} className="text-zinc-400" />}
           </button>
@@ -1027,9 +1066,9 @@ export const PointOfSalePage = () => {
       {/* Main Workspace: 2-Column Split */}
       <div className="flex-1 min-h-0 flex overflow-hidden w-full">
         {/* Left Column (65%): Catalog Grid */}
-        <div className="w-[65%] border-r border-zinc-800 flex flex-col bg-zinc-900/30 min-h-0 h-full">
+        <div className="w-[65%] border-r border-zinc-200 dark:border-zinc-800 flex flex-col bg-zinc-50/50 dark:bg-zinc-900/30 min-h-0 h-full">
           {/* Search & Category Pills */}
-          <div className="p-4 border-b border-zinc-800 space-y-3 bg-zinc-900/40 shrink-0">
+          <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 space-y-3 bg-white/60 dark:bg-zinc-900/40 shrink-0">
             <div className="relative">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
               <input
@@ -1037,7 +1076,7 @@ export const PointOfSalePage = () => {
                 placeholder="Search catalog or scan barcode (hotkey: /)"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="w-full bg-zinc-800/80 border border-zinc-700/80 rounded-xl pl-10 pr-4 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 font-medium"
+                className="w-full bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700/80 rounded-xl pl-10 pr-4 py-2 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium shadow-2xs"
               />
             </div>
 
@@ -1050,13 +1089,13 @@ export const PointOfSalePage = () => {
                     "px-3 py-1.5 rounded-xl font-medium transition-all shrink-0 cursor-pointer flex items-center gap-1.5",
                     selectedCategory === tab.id 
                       ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20 font-bold" 
-                      : "bg-zinc-800/60 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                      : "bg-white dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-200 border border-zinc-200/80 dark:border-transparent"
                   )}
                 >
                   <span>{tab.label}</span>
                   <span className={cn(
                     "text-[10px] px-1.5 py-0.2 rounded-full font-mono",
-                    selectedCategory === tab.id ? "bg-white/20 text-white font-bold" : "bg-zinc-700/60 text-zinc-400"
+                    selectedCategory === tab.id ? "bg-white/20 text-white font-bold" : "bg-zinc-100 dark:bg-zinc-700/60 text-zinc-500 dark:text-zinc-400"
                   )}>
                     {tab.count}
                   </span>
@@ -1123,12 +1162,12 @@ export const PointOfSalePage = () => {
                       className={cn(
                         "rounded-2xl border transition-all flex flex-col justify-between overflow-hidden group select-none shadow-sm",
                         isOutOfStock 
-                          ? "opacity-50 bg-zinc-900/60 border-zinc-800 cursor-not-allowed" 
-                          : "bg-zinc-900/90 border-zinc-800/90 hover:border-indigo-500/60 hover:shadow-indigo-500/10 cursor-pointer"
+                          ? "opacity-50 bg-white/60 dark:bg-zinc-900/60 border-zinc-200 dark:border-zinc-800 cursor-not-allowed" 
+                          : "bg-white dark:bg-zinc-900/90 border-zinc-200 dark:border-zinc-800/90 hover:border-indigo-500/60 hover:shadow-indigo-500/10 cursor-pointer"
                       )}
                     >
                       {/* Top Thumbnail Media Area */}
-                      <div className="relative w-full h-28 bg-zinc-950 overflow-hidden shrink-0 border-b border-zinc-800/60">
+                      <div className="relative w-full h-28 bg-zinc-100 dark:bg-zinc-950 overflow-hidden shrink-0 border-b border-zinc-200/80 dark:border-zinc-800/60">
                         {hasImage ? (
                           <img
                             src={(item as any).metadata.imageUrl}
@@ -1147,7 +1186,7 @@ export const PointOfSalePage = () => {
                         {/* Top Badges */}
                         <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none">
                           <div className="flex items-center gap-1 max-w-[68%]">
-                            <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded-md bg-black/75 backdrop-blur-md text-zinc-300 font-bold border border-white/10 shrink-0">
+                            <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded-md bg-white/90 dark:bg-black/75 backdrop-blur-md text-zinc-800 dark:text-zinc-300 font-bold border border-zinc-200 dark:border-white/10 shrink-0">
                               {item.code}
                             </span>
                             {(item as any).metadata?.category && (
@@ -1186,16 +1225,16 @@ export const PointOfSalePage = () => {
                               </span>
                             )}
                           </div>
-                          <h3 className="font-semibold text-xs text-white group-hover:text-indigo-400 transition-colors line-clamp-2 leading-snug">
+                          <h3 className="font-semibold text-xs text-zinc-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-2 leading-snug">
                             {item.name}
                           </h3>
                         </div>
 
-                        <div className="mt-3 flex items-center justify-between pt-2 border-t border-zinc-800/60">
-                          <span className="text-xs font-mono font-extrabold text-white bg-zinc-800/80 px-2 py-0.5 rounded-md border border-zinc-700/50">
+                        <div className="mt-3 flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800/60">
+                          <span className="text-xs font-mono font-extrabold text-zinc-900 dark:text-white bg-zinc-100 dark:bg-zinc-800/80 px-2 py-0.5 rounded-md border border-zinc-200 dark:border-zinc-700/50">
                             ${Number(item.basePrice).toFixed(2)}
                           </span>
-                          <div className="w-6 h-6 rounded-lg bg-zinc-800 group-hover:bg-indigo-600 text-zinc-400 group-hover:text-white flex items-center justify-center transition-colors">
+                          <div className="w-6 h-6 rounded-lg bg-zinc-100 dark:bg-zinc-800 group-hover:bg-indigo-600 text-zinc-500 dark:text-zinc-400 group-hover:text-white flex items-center justify-center transition-colors">
                             <Plus size={14} />
                           </div>
                         </div>
@@ -1209,19 +1248,26 @@ export const PointOfSalePage = () => {
         </div>
 
         {/* Right Column (35%): Interactive Cart */}
-        <div className="w-[35%] flex flex-col bg-zinc-950 min-h-0 h-full border-l border-zinc-800/80">
+        <div className="w-[35%] flex flex-col bg-white dark:bg-zinc-950 min-h-0 h-full border-l border-zinc-200 dark:border-zinc-800/80">
           {/* Customer Bar */}
-          <div className="p-3 border-b border-zinc-800 bg-zinc-900/60 flex items-center justify-between shrink-0">
+          <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-900/60 flex items-center justify-between shrink-0">
             {selectedCustomer ? (
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 flex items-center justify-center text-xs font-bold">
                   {selectedCustomer.person?.firstName?.charAt(0) || selectedCustomer.organization?.legalName?.charAt(0) || 'C'}
                 </div>
                 <div className="leading-tight">
-                  <p className="text-xs font-bold text-white">
+                  <p className="text-xs font-bold text-zinc-900 dark:text-white">
                     {selectedCustomer.organization?.legalName || `${selectedCustomer.person?.firstName || ''} ${selectedCustomer.person?.lastName || ''}`.trim()}
                   </p>
-                  <p className="text-[10px] text-zinc-400 font-mono">Linked Customer</p>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-mono">Linked Customer</span>
+                    {customerStoreCredit.totalBalance > 0 && (
+                      <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-bold font-mono">
+                        Credit: ${customerStoreCredit.totalBalance.toFixed(2)}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <button
                   onClick={() => setSelectedCustomer(null)}
@@ -1233,7 +1279,7 @@ export const PointOfSalePage = () => {
             ) : (
               <button
                 onClick={() => setShowCustomerPicker(true)}
-                className="w-full flex items-center justify-center gap-1.5 py-1.5 border border-dashed border-zinc-700/80 hover:border-indigo-500/80 rounded-xl text-zinc-400 hover:text-indigo-400 text-xs font-medium transition-colors cursor-pointer"
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 border border-dashed border-zinc-300 dark:border-zinc-700/80 hover:border-indigo-500 rounded-xl text-zinc-500 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 text-xs font-medium transition-colors cursor-pointer"
               >
                 <User size={14} />
                 <span>+ Link Customer Profile (Party)</span>
@@ -1242,9 +1288,9 @@ export const PointOfSalePage = () => {
           </div>
 
           {/* Cart Header */}
-          <div className="px-3.5 py-2.5 border-b border-zinc-800/80 bg-zinc-900/40 flex items-center justify-between shrink-0">
+          <div className="px-3.5 py-2.5 border-b border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/40 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-zinc-300">
+              <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
                 Cart ({cart.reduce((s, l) => s + l.quantity, 0)} {cart.reduce((s, l) => s + l.quantity, 0) === 1 ? 'item' : 'items'})
               </span>
               {cart.length > 0 && (
@@ -1275,13 +1321,13 @@ export const PointOfSalePage = () => {
                   className={cn(
                     "p-2.5 rounded-xl border flex items-center justify-between gap-2 transition-all cursor-pointer",
                     selectedCartLineId === line.id
-                      ? "bg-zinc-900 border-indigo-500/80 shadow-sm shadow-indigo-500/10"
-                      : "bg-zinc-900/80 border-zinc-800/80 hover:border-zinc-700"
+                      ? "bg-indigo-50/50 dark:bg-zinc-900 border-indigo-400 dark:border-indigo-500/80 shadow-xs shadow-indigo-500/10"
+                      : "bg-zinc-50/80 dark:bg-zinc-900/80 border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700"
                   )}
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <p className="text-xs font-semibold text-white truncate">{line.title}</p>
+                      <p className="text-xs font-semibold text-zinc-900 dark:text-white truncate">{line.title}</p>
                       {selectedCartLineId === line.id && (
                         <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" title="Selected item" />
                       )}
@@ -1337,13 +1383,13 @@ export const PointOfSalePage = () => {
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    <div className="flex items-center bg-zinc-800 rounded-lg border border-zinc-700/50 p-0.5">
+                    <div className="flex items-center bg-white dark:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700/50 p-0.5">
                       <button
                         onClick={e => {
                           e.stopPropagation();
                           updateCartQty(line.id, -1);
                         }}
-                        className="w-5 h-5 flex items-center justify-center text-zinc-400 hover:text-white cursor-pointer"
+                        className="w-5 h-5 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white cursor-pointer"
                       >
                         <Minus size={12} />
                       </button>
@@ -1353,7 +1399,7 @@ export const PointOfSalePage = () => {
                           e.stopPropagation();
                           openNumpadModal('QTY', line.id);
                         }}
-                        className="w-6 text-center text-xs font-bold text-white hover:text-indigo-400 cursor-pointer"
+                        className="w-6 text-center text-xs font-bold text-zinc-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer"
                         title="Click to enter quantity with numpad"
                       >
                         {line.quantity}
@@ -1363,13 +1409,13 @@ export const PointOfSalePage = () => {
                           e.stopPropagation();
                           updateCartQty(line.id, 1);
                         }}
-                        className="w-5 h-5 flex items-center justify-center text-zinc-400 hover:text-white cursor-pointer"
+                        className="w-5 h-5 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white cursor-pointer"
                       >
                         <Plus size={12} />
                       </button>
                     </div>
 
-                    <span className="text-xs font-bold text-white w-14 text-right font-mono">
+                    <span className="text-xs font-bold text-zinc-900 dark:text-white w-14 text-right font-mono">
                       ${((line.quantity * line.unitPrice) - line.discountAmount).toFixed(2)}
                     </span>
 
@@ -1390,12 +1436,12 @@ export const PointOfSalePage = () => {
           </div>
 
           {/* Quick Action Keypad Toolbar */}
-          <div className="grid grid-cols-4 gap-1.5 px-3 py-2 bg-zinc-950/60 border-t border-zinc-800/80">
+          <div className="grid grid-cols-4 gap-1.5 px-3 py-2 bg-zinc-100/60 dark:bg-zinc-950/60 border-t border-zinc-200 dark:border-zinc-800/80">
             <button
               type="button"
               disabled={cart.length === 0}
               onClick={() => openNumpadModal('DISC')}
-              className="py-1.5 px-1 bg-zinc-850 hover:bg-zinc-800 disabled:opacity-30 disabled:pointer-events-none text-zinc-300 hover:text-white rounded-lg text-[11px] font-bold border border-zinc-750 flex items-center justify-center gap-1 transition-all cursor-pointer"
+              className="py-1.5 px-1 bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700 disabled:opacity-30 disabled:pointer-events-none text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white rounded-lg text-[11px] font-bold border border-zinc-200 dark:border-zinc-700 flex items-center justify-center gap-1 transition-all cursor-pointer shadow-2xs"
               title="Apply discount to cart item"
             >
               <Percent size={11} className="text-emerald-400" />
@@ -1405,7 +1451,7 @@ export const PointOfSalePage = () => {
               type="button"
               disabled={cart.length === 0}
               onClick={() => openNumpadModal('QTY')}
-              className="py-1.5 px-1 bg-zinc-850 hover:bg-zinc-800 disabled:opacity-30 disabled:pointer-events-none text-zinc-300 hover:text-white rounded-lg text-[11px] font-bold border border-zinc-750 flex items-center justify-center gap-1 transition-all cursor-pointer"
+              className="py-1.5 px-1 bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700 disabled:opacity-30 disabled:pointer-events-none text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white rounded-lg text-[11px] font-bold border border-zinc-200 dark:border-zinc-700 flex items-center justify-center gap-1 transition-all cursor-pointer shadow-2xs"
               title="Adjust quantity of cart item"
             >
               <Calculator size={11} className="text-blue-400" />
@@ -1415,7 +1461,7 @@ export const PointOfSalePage = () => {
               type="button"
               disabled={cart.length === 0}
               onClick={() => openNumpadModal('PRICE')}
-              className="py-1.5 px-1 bg-zinc-850 hover:bg-zinc-800 disabled:opacity-30 disabled:pointer-events-none text-zinc-300 hover:text-white rounded-lg text-[11px] font-bold border border-zinc-750 flex items-center justify-center gap-1 transition-all cursor-pointer"
+              className="py-1.5 px-1 bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700 disabled:opacity-30 disabled:pointer-events-none text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white rounded-lg text-[11px] font-bold border border-zinc-200 dark:border-zinc-700 flex items-center justify-center gap-1 transition-all cursor-pointer shadow-2xs"
               title="Override unit price of cart item"
             >
               <DollarSign size={11} className="text-amber-400" />
@@ -1424,7 +1470,7 @@ export const PointOfSalePage = () => {
             <button
               type="button"
               onClick={() => openNumpadModal('CUSTOM_ITEM')}
-              className="py-1.5 px-1 bg-zinc-850 hover:bg-zinc-800 text-zinc-300 hover:text-white rounded-lg text-[11px] font-bold border border-zinc-750 flex items-center justify-center gap-1 transition-all cursor-pointer"
+              className="py-1.5 px-1 bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white rounded-lg text-[11px] font-bold border border-zinc-200 dark:border-zinc-700 flex items-center justify-center gap-1 transition-all cursor-pointer shadow-2xs"
               title="Add custom / open charge item"
             >
               <Plus size={11} className="text-indigo-400" />
@@ -1433,11 +1479,11 @@ export const PointOfSalePage = () => {
           </div>
 
           {/* Cart Summary & Action Bar */}
-          <div className="p-4 border-t border-zinc-800 bg-zinc-900/90 backdrop-blur space-y-3 shrink-0">
-            <div className="space-y-1.5 text-xs text-zinc-400">
+          <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/90 backdrop-blur space-y-3 shrink-0">
+            <div className="space-y-1.5 text-xs text-zinc-500 dark:text-zinc-400">
               <div className="flex justify-between">
                 <span>Subtotal</span>
-                <span className="text-zinc-200 font-mono">${cartTotals.subtotal.toFixed(2)}</span>
+                <span className="text-zinc-800 dark:text-zinc-200 font-mono font-semibold">${cartTotals.subtotal.toFixed(2)}</span>
               </div>
               {cartTotals.discountTotal > 0 && (() => {
                 const overallPct = cartTotals.subtotal > 0
@@ -1460,9 +1506,9 @@ export const PointOfSalePage = () => {
               })()}
               <div className="flex justify-between">
                 <span>GST (10% inc.)</span>
-                <span className="text-zinc-200 font-mono">${cartTotals.taxTotal.toFixed(2)}</span>
+                <span className="text-zinc-800 dark:text-zinc-200 font-mono font-semibold">${cartTotals.taxTotal.toFixed(2)}</span>
               </div>
-              <div className="pt-2 border-t border-zinc-800 flex justify-between text-base font-extrabold text-white">
+              <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800 flex justify-between text-base font-extrabold text-zinc-900 dark:text-white">
                 <span>Total Due</span>
                 <span className="text-emerald-400 font-mono">${cartTotals.total.toFixed(2)}</span>
               </div>
@@ -1472,7 +1518,7 @@ export const PointOfSalePage = () => {
               <Button
                 disabled={cart.length === 0}
                 onClick={() => setCart([])}
-                className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs py-2.5 rounded-xl border border-zinc-700 cursor-pointer disabled:opacity-40"
+                className="w-full bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 cursor-pointer disabled:opacity-40 font-semibold"
               >
                 Clear Cart
               </Button>
@@ -1501,10 +1547,10 @@ export const PointOfSalePage = () => {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl space-y-4"
+              className="w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-2xl space-y-4 text-zinc-900 dark:text-zinc-100"
             >
-              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-                <div className="flex items-center gap-2 text-white font-bold text-sm">
+              <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
+                <div className="flex items-center gap-2 text-zinc-900 dark:text-white font-bold text-sm">
                   <Store size={18} className="text-indigo-400" />
                   <span>Open Register Shift</span>
                 </div>
@@ -1525,7 +1571,7 @@ export const PointOfSalePage = () => {
                   step="1"
                   value={openingFloat}
                   onChange={e => setOpeningFloat(Number(e.target.value))}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-lg font-bold text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-lg font-bold text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
                 />
                 <p className="text-[11px] text-zinc-500">
                   Input the physical cash bills and coins in the till drawer prior to opening the register.
@@ -1553,10 +1599,10 @@ export const PointOfSalePage = () => {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl space-y-4"
+              className="w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-2xl space-y-4 text-zinc-900 dark:text-zinc-100"
             >
-              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-                <div className="flex items-center gap-2 text-white font-bold text-sm">
+              <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
+                <div className="flex items-center gap-2 text-zinc-900 dark:text-white font-bold text-sm">
                   <Clock size={18} className="text-amber-400" />
                   <span>Close Register Shift (Z-Report)</span>
                 </div>
@@ -1575,7 +1621,7 @@ export const PointOfSalePage = () => {
                   step="0.01"
                   value={actualCashCount}
                   onChange={e => setActualCashCount(Number(e.target.value))}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-lg font-bold text-white focus:outline-none focus:border-amber-500"
+                  className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 py-2.5 text-lg font-bold text-zinc-900 dark:text-white focus:outline-none focus:border-amber-500"
                 />
                 <p className="text-[11px] text-zinc-500">
                   Count the cash drawer blindly. The system will compute drawer variance and post discrepancies to the General Ledger.
@@ -1589,14 +1635,14 @@ export const PointOfSalePage = () => {
                   placeholder="Optional shift notes..."
                   value={closeNotes}
                   onChange={e => setCloseNotes(e.target.value)}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                  className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-amber-500"
                 />
               </div>
 
               <div className="pt-2 flex justify-end gap-2">
                 <Button
                   onClick={() => setShowCloseModal(false)}
-                  className="bg-zinc-800 text-zinc-300 text-xs px-3 py-2 rounded-xl"
+                  className="bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700 text-xs px-3 py-2 rounded-xl cursor-pointer"
                 >
                   Cancel
                 </Button>
@@ -1620,10 +1666,10 @@ export const PointOfSalePage = () => {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+              className="w-full max-w-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto text-zinc-900 dark:text-zinc-100"
             >
-              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-                <div className="flex items-center gap-2 text-white font-bold text-sm">
+              <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
+                <div className="flex items-center gap-2 text-zinc-900 dark:text-white font-bold text-sm">
                   <CreditCard size={18} className="text-emerald-400" />
                   <span>Complete Checkout: ${cartTotals.total.toFixed(2)}</span>
                 </div>
@@ -1654,8 +1700,8 @@ export const PointOfSalePage = () => {
                       className={cn(
                         "p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all text-xs font-semibold cursor-pointer",
                         tenderType === t.id
-                          ? "bg-indigo-600/20 border-indigo-500 text-indigo-300"
-                          : "bg-zinc-800/60 border-zinc-700/60 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                          ? "bg-indigo-50 dark:bg-indigo-600/20 border-indigo-500 text-indigo-600 dark:text-indigo-300 font-bold shadow-xs"
+                          : "bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700/60 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-200"
                       )}
                     >
                       <Icon size={18} />
@@ -1667,10 +1713,10 @@ export const PointOfSalePage = () => {
 
               {/* Tender Content */}
               {tenderType === 'CASH' && (
-                <div className="space-y-3.5 p-4 bg-zinc-950/70 rounded-2xl border border-zinc-800">
+                <div className="space-y-3.5 p-4 bg-zinc-50 dark:bg-zinc-950/70 rounded-2xl border border-zinc-200 dark:border-zinc-800">
                   {/* Tendered & Change Row */}
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3">
+                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-[11px] text-zinc-400 font-medium">Cash Tendered</span>
                         {cashInputStr && (
@@ -1696,7 +1742,7 @@ export const PointOfSalePage = () => {
                             const parsed = parseFloat(val);
                             setTenderAmount(isNaN(parsed) ? 0 : parsed);
                           }}
-                          className="w-full bg-transparent text-xl font-mono font-black text-white focus:outline-none"
+                          className="w-full bg-transparent text-xl font-mono font-black text-zinc-900 dark:text-white focus:outline-none"
                         />
                       </div>
                     </div>
@@ -1747,7 +1793,7 @@ export const PointOfSalePage = () => {
                             "py-2 px-1 border rounded-xl text-xs font-mono font-bold transition-all cursor-pointer text-center",
                             tenderAmount === amt
                               ? "bg-indigo-600/30 border-indigo-500 text-indigo-200"
-                              : "bg-zinc-800 hover:bg-zinc-750 border-zinc-700 text-zinc-200"
+                              : "bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200"
                           )}
                         >
                           ${amt}
@@ -1775,7 +1821,7 @@ export const PointOfSalePage = () => {
                           key={k}
                           type="button"
                           onClick={() => handleCashKeypadDigit(k)}
-                          className="py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 rounded-xl text-base font-bold font-mono transition-all active:scale-95 cursor-pointer shadow-sm text-center"
+                          className="py-2.5 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-700 rounded-xl text-base font-bold font-mono transition-all active:scale-95 cursor-pointer shadow-2xs text-center"
                         >
                           {k}
                         </button>
@@ -1793,7 +1839,7 @@ export const PointOfSalePage = () => {
                           key={k}
                           type="button"
                           onClick={() => handleCashKeypadDigit(k)}
-                          className="py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 rounded-xl text-base font-bold font-mono transition-all active:scale-95 cursor-pointer shadow-sm text-center"
+                          className="py-2.5 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-700 rounded-xl text-base font-bold font-mono transition-all active:scale-95 cursor-pointer shadow-2xs text-center"
                         >
                           {k}
                         </button>
@@ -1811,7 +1857,7 @@ export const PointOfSalePage = () => {
                           key={k}
                           type="button"
                           onClick={() => handleCashKeypadDigit(k)}
-                          className="py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 rounded-xl text-base font-bold font-mono transition-all active:scale-95 cursor-pointer shadow-sm text-center"
+                          className="py-2.5 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-700 rounded-xl text-base font-bold font-mono transition-all active:scale-95 cursor-pointer shadow-2xs text-center"
                         >
                           {k}
                         </button>
@@ -1819,7 +1865,7 @@ export const PointOfSalePage = () => {
                       <button
                         type="button"
                         onClick={handleCashKeypadBackspace}
-                        className="py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 rounded-xl text-base font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center"
+                        className="py-2.5 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 rounded-xl text-base font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center shadow-2xs"
                       >
                         <Delete size={16} />
                       </button>
@@ -1827,21 +1873,21 @@ export const PointOfSalePage = () => {
                       <button
                         type="button"
                         onClick={() => handleCashKeypadDigit('.')}
-                        className="py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 rounded-xl text-base font-bold font-mono transition-all active:scale-95 cursor-pointer shadow-sm text-center"
+                        className="py-2.5 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-700 rounded-xl text-base font-bold font-mono transition-all active:scale-95 cursor-pointer shadow-2xs text-center"
                       >
                         .
                       </button>
                       <button
                         type="button"
                         onClick={() => handleCashKeypadDigit('0')}
-                        className="py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 rounded-xl text-base font-bold font-mono transition-all active:scale-95 cursor-pointer shadow-sm text-center"
+                        className="py-2.5 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-700 rounded-xl text-base font-bold font-mono transition-all active:scale-95 cursor-pointer shadow-2xs text-center"
                       >
                         0
                       </button>
                       <button
                         type="button"
                         onClick={() => handleCashKeypadDigit('00')}
-                        className="py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 rounded-xl text-sm font-bold font-mono transition-all active:scale-95 cursor-pointer shadow-sm text-center"
+                        className="py-2.5 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-900 dark:text-white border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm font-bold font-mono transition-all active:scale-95 cursor-pointer shadow-2xs text-center"
                       >
                         00
                       </button>
@@ -1857,8 +1903,39 @@ export const PointOfSalePage = () => {
                 </div>
               )}
 
+              {/* Customer Store Credit One-Click Apply */}
+              {selectedCustomer && customerStoreCredit.totalBalance > 0 && (
+                <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-xl flex items-center justify-between text-xs">
+                  <div>
+                    <span className="font-bold text-purple-300 block">
+                      Customer Store Credit: ${customerStoreCredit.totalBalance.toFixed(2)}
+                    </span>
+                    <span className="text-[10px] text-zinc-400">
+                      {customerStoreCredit.vouchers.length} active credit voucher{customerStoreCredit.vouchers.length > 1 ? 's' : ''} (No Expiry)
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTenderType('VOUCHER');
+                      const firstVoucher = customerStoreCredit.vouchers[0];
+                      if (firstVoucher) {
+                        setTenderVoucherCode(firstVoucher.code);
+                        setVoucherDetails(firstVoucher);
+                        const applyAmount = Math.min(Number(firstVoucher.currentBalance), cartTotals.total);
+                        setTenderAmount(applyAmount);
+                        toast.success(`Applied $${applyAmount.toFixed(2)} from Store Credit ${firstVoucher.code}!`);
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-bold text-xs cursor-pointer shadow-sm transition-all"
+                  >
+                    Apply Store Credit
+                  </button>
+                </div>
+              )}
+
               {tenderType === 'VOUCHER' && (
-                <div className="space-y-3 p-4 bg-zinc-950/60 rounded-xl border border-zinc-800">
+                <div className="space-y-3 p-4 bg-zinc-50 dark:bg-zinc-950/60 rounded-xl border border-zinc-200 dark:border-zinc-800">
                   <label className="text-xs text-zinc-400 block">Voucher / Gift Card Code</label>
                   <div className="flex gap-2">
                     <input
@@ -1866,7 +1943,7 @@ export const PointOfSalePage = () => {
                       placeholder="e.g. GIFT-8492-XQ"
                       value={tenderVoucherCode}
                       onChange={e => setTenderVoucherCode(e.target.value)}
-                      className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-xs font-mono uppercase text-white focus:outline-none focus:border-indigo-500"
+                      className="flex-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs font-mono uppercase text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
                     />
                     <Button
                       disabled={validatingVoucher || !tenderVoucherCode.trim()}
@@ -1885,7 +1962,7 @@ export const PointOfSalePage = () => {
               )}
 
               {tenderType === 'CARD' && (
-                <div className="p-4 bg-zinc-950/60 rounded-xl border border-zinc-800 text-center space-y-2">
+                <div className="p-4 bg-zinc-50 dark:bg-zinc-950/60 rounded-xl border border-zinc-200 dark:border-zinc-800 text-center space-y-2">
                   <CreditCard size={32} className="mx-auto text-indigo-400" />
                   <p className="text-xs font-medium text-zinc-300">
                     Ready for EFTPOS terminal or manual card charge of ${cartTotals.total.toFixed(2)}
@@ -1894,7 +1971,7 @@ export const PointOfSalePage = () => {
               )}
 
               {tenderType === 'ON_ACCOUNT' && (
-                <div className="p-4 bg-zinc-950/60 rounded-xl border border-zinc-800 space-y-2">
+                <div className="p-4 bg-zinc-50 dark:bg-zinc-950/60 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-2">
                   <p className="text-xs text-zinc-300">
                     {selectedCustomer 
                       ? `Charge $${cartTotals.total.toFixed(2)} to ${selectedCustomer.organization?.legalName || selectedCustomer.person?.firstName}'s account.`
@@ -1906,7 +1983,7 @@ export const PointOfSalePage = () => {
               <div className="flex justify-end gap-2 pt-2">
                 <Button
                   onClick={() => setShowPaymentModal(false)}
-                  className="bg-zinc-800 text-zinc-300 text-xs px-3 py-2 rounded-xl"
+                  className="bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700 text-xs px-3 py-2 rounded-xl cursor-pointer"
                 >
                   Cancel
                 </Button>
@@ -1935,10 +2012,10 @@ export const PointOfSalePage = () => {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl space-y-4"
+              className="w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-2xl space-y-4 text-zinc-900 dark:text-zinc-100"
             >
-              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-                <span className="text-white font-bold text-sm">Select Customer Profile</span>
+              <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-3">
+                <span className="text-zinc-900 dark:text-white font-bold text-sm">Select Customer Profile</span>
                 <button onClick={() => setShowCustomerPicker(false)} className="text-zinc-500 hover:text-white">
                   <X size={16} />
                 </button>
@@ -1949,7 +2026,7 @@ export const PointOfSalePage = () => {
                 placeholder="Search customers..."
                 value={customerSearch}
                 onChange={e => setCustomerSearch(e.target.value)}
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
+                className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
               />
 
               <div className="max-h-60 overflow-y-auto space-y-1.5">
@@ -1967,10 +2044,10 @@ export const PointOfSalePage = () => {
                           setSelectedCustomer(c);
                           setShowCustomerPicker(false);
                         }}
-                        className="p-2.5 rounded-xl bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700/40 cursor-pointer flex items-center justify-between"
+                        className="p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-700/40 cursor-pointer flex items-center justify-between"
                       >
                         <div>
-                          <p className="text-xs font-bold text-white">{name}</p>
+                          <p className="text-xs font-bold text-zinc-900 dark:text-white">{name}</p>
                           <p className="text-[10px] text-zinc-400">{c.partyType}</p>
                         </div>
                         <ChevronRight size={14} className="text-zinc-500" />
@@ -1991,18 +2068,18 @@ export const PointOfSalePage = () => {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl space-y-4 text-center"
+              className="w-full max-w-sm bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-2xl space-y-4 text-center text-zinc-900 dark:text-zinc-100"
             >
               <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto">
                 <CheckCircle2 size={24} />
               </div>
 
               <div>
-                <h3 className="text-base font-bold text-white">Sale Successful!</h3>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white">Sale Successful!</h3>
                 <p className="text-xs text-zinc-400 font-mono mt-0.5">{completedOrder.orderNumber}</p>
               </div>
 
-              <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800 text-left text-xs font-mono space-y-1">
+              <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 text-left text-xs font-mono space-y-1 text-zinc-900 dark:text-zinc-100">
                 {Number(completedOrder.discountTotal) > 0 && (() => {
                   const sub = Number(completedOrder.subtotal) || (Number(completedOrder.total) + Number(completedOrder.discountTotal));
                   const disc = Number(completedOrder.discountTotal) || 0;
@@ -2037,7 +2114,7 @@ export const PointOfSalePage = () => {
               <div className="flex gap-2 pt-2">
                 <Button
                   onClick={() => window.print()}
-                  className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="flex-1 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Printer size={14} />
                   <span>Print Receipt</span>
@@ -2062,17 +2139,17 @@ export const PointOfSalePage = () => {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl text-center space-y-4"
+              className="w-full max-w-sm bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-2xl text-center space-y-4 text-zinc-900 dark:text-zinc-100"
             >
               <div className="w-12 h-12 bg-indigo-500/10 text-indigo-400 rounded-2xl flex items-center justify-center mx-auto">
                 <Receipt size={24} />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Shift Z-Report Summary</h3>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white">Shift Z-Report Summary</h3>
                 <p className="text-xs text-zinc-400 font-mono">Register Shift Closed</p>
               </div>
 
-              <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800 text-left text-xs font-mono space-y-1.5">
+              <div className="p-3 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 text-left text-xs font-mono space-y-1.5 text-zinc-900 dark:text-zinc-100">
                 <div className="flex justify-between text-zinc-400">
                   <span>Gross Sales:</span>
                   <span className="text-white font-bold">${Number(zReportData.grossSales || 0).toFixed(2)}</span>
@@ -2110,17 +2187,17 @@ export const PointOfSalePage = () => {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-5xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden"
+              className="w-full max-w-5xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden text-zinc-900 dark:text-zinc-100"
             >
               {/* Header */}
-              <div className="p-4 sm:p-5 border-b border-zinc-800 flex items-center justify-between shrink-0 bg-zinc-900/90">
+              <div className="p-4 sm:p-5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shrink-0 bg-zinc-50 dark:bg-zinc-900/90">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center">
                     <Receipt size={20} />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h2 className="text-sm sm:text-base font-bold text-white">Sales History & Processed Orders</h2>
+                      <h2 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-white">Sales History & Processed Orders</h2>
                       <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700">
                         {filteredSalesOrders.length} {filteredSalesOrders.length === 1 ? 'sale' : 'sales'}
                       </span>
@@ -2143,9 +2220,9 @@ export const PointOfSalePage = () => {
               </div>
 
               {/* Controls Bar */}
-              <div className="p-4 border-b border-zinc-800 bg-zinc-950/60 flex flex-wrap items-center justify-between gap-3 shrink-0">
+              <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/60 flex flex-wrap items-center justify-between gap-3 shrink-0">
                 <div className="flex items-center gap-2">
-                  <div className="flex bg-zinc-800/80 p-0.5 rounded-xl border border-zinc-700/60">
+                  <div className="flex bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-xl border border-zinc-200 dark:border-zinc-700/60">
                     <button
                       type="button"
                       onClick={() => {
@@ -2181,7 +2258,7 @@ export const PointOfSalePage = () => {
                   <Button
                     onClick={() => fetchOrders(historyScope)}
                     disabled={loadingOrders}
-                    className="bg-zinc-800 hover:bg-zinc-750 text-zinc-300 text-xs px-2.5 py-1.5 rounded-xl border border-zinc-700 flex items-center gap-1.5 cursor-pointer"
+                    className="bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs px-2.5 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-700 flex items-center gap-1.5 cursor-pointer"
                   >
                     <RefreshCw size={12} className={cn(loadingOrders && "animate-spin")} />
                     <span>Refresh</span>
@@ -2249,12 +2326,12 @@ export const PointOfSalePage = () => {
                             "p-3.5 rounded-xl border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3",
                             isSelected
                               ? "bg-indigo-600/15 border-indigo-500/60 shadow-sm"
-                              : "bg-zinc-850/60 hover:bg-zinc-800 border-zinc-800/80"
+                              : "bg-white dark:bg-zinc-900/80 hover:bg-zinc-50 dark:hover:bg-zinc-800 border-zinc-200 dark:border-zinc-800/80"
                           )}
                         >
                           <div className="space-y-1">
                             <div className="flex items-center gap-2">
-                              <span className="font-mono font-bold text-xs text-white">{order.orderNumber}</span>
+                              <span className="font-mono font-bold text-xs text-zinc-900 dark:text-white">{order.orderNumber}</span>
                               <span className={cn("text-[10px] font-mono px-2 py-0.5 rounded-full border", badge.color)}>
                                 {badge.label}
                               </span>
@@ -2287,13 +2364,13 @@ export const PointOfSalePage = () => {
                 </div>
 
                 {/* Right Column: Receipt & Detail Inspection Panel */}
-                <div className="w-full md:w-80 lg:w-96 p-4 sm:p-5 bg-zinc-950/80 overflow-y-auto shrink-0 flex flex-col justify-between">
+                <div className="w-full md:w-80 lg:w-96 p-4 sm:p-5 bg-zinc-50 dark:bg-zinc-950/80 border-t md:border-t-0 md:border-l border-zinc-200 dark:border-zinc-800 overflow-y-auto shrink-0 flex flex-col justify-between">
                   {selectedHistoryOrder ? (
                     <div className="space-y-4">
                       {/* Receipt Header */}
                       <div className="text-center pb-3 border-b border-zinc-800 space-y-1">
                         <p className="text-xs font-mono uppercase tracking-wider text-zinc-400">Aurora Retail POS</p>
-                        <h3 className="text-base font-black text-white font-mono">{selectedHistoryOrder.orderNumber}</h3>
+                        <h3 className="text-base font-black text-zinc-900 dark:text-white font-mono">{selectedHistoryOrder.orderNumber}</h3>
                         <p className="text-[11px] text-zinc-500 font-mono">{formatOrderDate(selectedHistoryOrder.createdAt)}</p>
                         <div className="inline-flex items-center gap-1.5 text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full font-mono mt-1">
                           <CheckCircle2 size={11} />
@@ -2393,16 +2470,73 @@ export const PointOfSalePage = () => {
                       </div>
 
                       {/* Action Buttons */}
-                      <div className="pt-2 flex gap-2">
+                      <div className="pt-2 flex flex-col sm:flex-row gap-2">
                         <Button
                           onClick={() => {
                             setCompletedOrder(selectedHistoryOrder);
                           }}
-                          className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 font-bold cursor-pointer shadow-md shadow-indigo-600/20"
+                          className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 font-bold cursor-pointer shadow-md shadow-indigo-600/20"
                         >
                           <Printer size={14} />
-                          <span>Print / Reprint Receipt</span>
+                          <span>Reprint Receipt</span>
                         </Button>
+
+                        {selectedHistoryOrder.status !== 'REFUNDED' && (
+                          <button
+                            type="button"
+                            onClick={() => setShowRefundModal(true)}
+                            className="flex-1 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 hover:text-white text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 font-bold cursor-pointer transition-all shadow-sm"
+                          >
+                            <RotateCcw size={14} />
+                            <span>Return / Refund</span>
+                          </button>
+                        )}
+
+                        {(selectedHistoryOrder.status === 'REFUNDED' || selectedHistoryOrder.status === 'PARTIALLY_REFUNDED' || (selectedHistoryOrder.refunds && selectedHistoryOrder.refunds.length > 0)) && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                const refundItem = selectedHistoryOrder.refunds?.[0];
+                                if (refundItem?.id) {
+                                  const fullRefund = await TransactionClientService.getRefundById(refundItem.id, tenant?.id);
+                                  setActiveReturnSlip({
+                                    ...fullRefund,
+                                    orderNumber: selectedHistoryOrder.orderNumber,
+                                    storeName: tenant?.name || 'AURORA RETAIL & COMMERCE'
+                                  });
+                                  setShowReturnSlipModal(true);
+                                } else {
+                                  setActiveReturnSlip({
+                                    id: 'ad-hoc',
+                                    refundNumber: `RET-${selectedHistoryOrder.orderNumber}`,
+                                    orderNumber: selectedHistoryOrder.orderNumber,
+                                    createdAt: selectedHistoryOrder.createdAt,
+                                    amount: Number(selectedHistoryOrder.total),
+                                    taxAmount: Number(selectedHistoryOrder.taxAmount || 0),
+                                    refundMethod: selectedHistoryOrder.payments?.[0]?.tenderType || 'CASH',
+                                    reason: 'CUSTOMER_RETURN',
+                                    storeName: tenant?.name || 'AURORA RETAIL & COMMERCE',
+                                    items: selectedHistoryOrder.items?.map((it: any) => ({
+                                      title: it.name || it.title,
+                                      quantity: Number(it.quantity),
+                                      unitPrice: Number(it.price || it.unitPrice),
+                                      lineTotal: Number(it.subtotal || it.total || (it.quantity * it.price)),
+                                      isRestocked: true
+                                    }))
+                                  });
+                                  setShowReturnSlipModal(true);
+                                }
+                              } catch (err) {
+                                toast.error('Failed to load return slip');
+                              }
+                            }}
+                            className="bg-zinc-800 hover:bg-zinc-700 text-rose-300 border border-rose-500/30 text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 font-bold cursor-pointer"
+                          >
+                            <RotateCcw size={14} />
+                            <span>Return Slip</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   ) : (
@@ -2429,10 +2563,10 @@ export const PointOfSalePage = () => {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col"
+              className="w-full max-w-sm bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col text-zinc-900 dark:text-zinc-100"
             >
               {/* Header */}
-              <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/90 shrink-0">
+              <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-900/90 shrink-0">
                 <div className="flex items-center gap-2.5">
                   <div className={cn(
                     "w-9 h-9 rounded-xl flex items-center justify-center border shrink-0",
@@ -2447,13 +2581,13 @@ export const PointOfSalePage = () => {
                      <Plus size={18} />}
                   </div>
                   <div>
-                    <h2 className="text-sm font-bold text-white leading-tight">
+                    <h2 className="text-sm font-bold text-zinc-900 dark:text-white leading-tight">
                       {numpadMode === 'DISC' ? 'Apply Discount' :
                        numpadMode === 'QTY' ? 'Set Quantity' :
                        numpadMode === 'PRICE' ? 'Override Unit Price' :
                        'Add Custom Charge'}
                     </h2>
-                    <p className="text-[11px] text-zinc-400">
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                       {numpadMode === 'CUSTOM_ITEM'
                         ? 'Enter price and item description'
                         : 'Touchpad or physical keyboard (Enter to apply)'}
@@ -2469,8 +2603,8 @@ export const PointOfSalePage = () => {
               </div>
 
               {/* Mode Selector Tabs */}
-              <div className="p-2 border-b border-zinc-800/80 bg-zinc-950/40 shrink-0">
-                <div className="grid grid-cols-4 gap-1 p-1 bg-zinc-900 rounded-xl border border-zinc-800">
+              <div className="p-2 border-b border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-950/40 shrink-0">
+                <div className="grid grid-cols-4 gap-1 p-1 bg-zinc-100 dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800">
                   {[
                     { id: 'DISC', label: '% Disc' },
                     { id: 'QTY', label: 'Qty' },
@@ -2488,7 +2622,7 @@ export const PointOfSalePage = () => {
                         "py-1.5 text-[11px] font-bold rounded-lg transition-all cursor-pointer text-center",
                         numpadMode === m.id
                           ? "bg-indigo-600 text-white shadow-sm"
-                          : "text-zinc-400 hover:text-white"
+                          : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
                       )}
                     >
                       {m.label}
@@ -2498,7 +2632,7 @@ export const PointOfSalePage = () => {
               </div>
 
               {/* Target Context (Item Info & Digital Output) */}
-              <div className="p-3 bg-zinc-950/80 border-b border-zinc-800/60 shrink-0">
+              <div className="p-3 bg-zinc-50 dark:bg-zinc-950/80 border-b border-zinc-200 dark:border-zinc-800/60 shrink-0">
                 {numpadMode === 'CUSTOM_ITEM' ? (
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold uppercase text-zinc-400 tracking-wider">Item Label</label>
@@ -2507,7 +2641,7 @@ export const PointOfSalePage = () => {
                       placeholder="e.g. Corkage, Special Catering, Custom Work..."
                       value={customItemTitle}
                       onChange={e => setCustomItemTitle(e.target.value)}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+                      className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
                     />
                   </div>
                 ) : (
@@ -2522,7 +2656,7 @@ export const PointOfSalePage = () => {
                       <select
                         value={selectedCartLineId || ''}
                         onChange={e => setSelectedCartLineId(e.target.value)}
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-medium"
+                        className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 font-medium"
                       >
                         {cart.map(line => (
                           <option key={line.id} value={line.id}>
@@ -2544,7 +2678,7 @@ export const PointOfSalePage = () => {
                 )}
 
                 {/* Digital Value Display */}
-                <div className="mt-2.5 p-3 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-between">
+                <div className="mt-2.5 p-3 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-between shadow-2xs">
                   <div className="min-w-0 pr-2">
                     <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider block">
                       {numpadMode === 'DISC' ? 'Discount Percentage' :
@@ -2589,7 +2723,7 @@ export const PointOfSalePage = () => {
               </div>
 
               {/* Quick Preset Buttons */}
-              <div className="px-3 py-2 border-b border-zinc-800/80 bg-zinc-950/30 shrink-0">
+              <div className="px-3 py-2 border-b border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-950/30 shrink-0">
                 <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-0.5">
                   <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider mr-1 shrink-0">Presets:</span>
                   {numpadMode === 'DISC' && [5, 10, 15, 20, 25, 50, 100].map(pct => (
@@ -2597,7 +2731,7 @@ export const PointOfSalePage = () => {
                       key={pct}
                       type="button"
                       onClick={() => handleNumpadPreset(pct)}
-                      className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-zinc-800 hover:bg-emerald-600 hover:text-white text-zinc-300 border border-zinc-700/60 transition-all cursor-pointer shrink-0"
+                      className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-white dark:bg-zinc-800 hover:bg-emerald-600 hover:text-white text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700/60 transition-all cursor-pointer shrink-0"
                     >
                       {pct === 100 ? 'Free' : `${pct}%`}
                     </button>
@@ -2607,7 +2741,7 @@ export const PointOfSalePage = () => {
                       key={q}
                       type="button"
                       onClick={() => handleNumpadPreset(q)}
-                      className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-zinc-800 hover:bg-blue-600 hover:text-white text-zinc-300 border border-zinc-700/60 transition-all cursor-pointer shrink-0"
+                      className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-white dark:bg-zinc-800 hover:bg-blue-600 hover:text-white text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700/60 transition-all cursor-pointer shrink-0"
                     >
                       {q}x
                     </button>
@@ -2617,7 +2751,7 @@ export const PointOfSalePage = () => {
                       key={amt}
                       type="button"
                       onClick={() => handleNumpadPreset(amt)}
-                      className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-zinc-800 hover:bg-indigo-600 hover:text-white text-zinc-300 border border-zinc-700/60 transition-all cursor-pointer shrink-0"
+                      className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-white dark:bg-zinc-800 hover:bg-indigo-600 hover:text-white text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700/60 transition-all cursor-pointer shrink-0"
                     >
                       ${amt}
                     </button>
@@ -2638,7 +2772,7 @@ export const PointOfSalePage = () => {
                       key={k}
                       type="button"
                       onClick={() => handleNumpadTap(k)}
-                      className="py-3 bg-zinc-800/80 hover:bg-zinc-750 active:scale-95 text-white font-mono font-bold text-base rounded-2xl border border-zinc-700/50 transition-all cursor-pointer shadow-sm flex items-center justify-center"
+                      className="py-3 bg-white dark:bg-zinc-800/80 hover:bg-zinc-100 dark:hover:bg-zinc-700 active:scale-95 text-zinc-900 dark:text-white font-mono font-bold text-base rounded-2xl border border-zinc-200 dark:border-zinc-700/50 transition-all cursor-pointer shadow-xs flex items-center justify-center"
                     >
                       {k}
                     </button>
@@ -2649,14 +2783,14 @@ export const PointOfSalePage = () => {
                   <button
                     type="button"
                     onClick={() => handleNumpadTap('CLEAR')}
-                    className="py-2.5 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 hover:text-white text-xs font-bold rounded-xl border border-zinc-700/60 cursor-pointer"
+                    className="py-2.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white text-xs font-bold rounded-xl border border-zinc-200 dark:border-zinc-700/60 cursor-pointer"
                   >
                     Clear
                   </button>
                   <button
                     type="button"
                     onClick={() => handleNumpadTap('BACKSPACE')}
-                    className="py-2.5 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 hover:text-white text-xs font-bold rounded-xl border border-zinc-700/60 cursor-pointer"
+                    className="py-2.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white text-xs font-bold rounded-xl border border-zinc-200 dark:border-zinc-700/60 cursor-pointer"
                   >
                     ⌫ Back
                   </button>
@@ -2673,6 +2807,37 @@ export const PointOfSalePage = () => {
           </div>
         )}
       </AnimatePresence>
+
+      {/* MODAL 8: Itemized Return & Refund Studio */}
+      {showRefundModal && selectedHistoryOrder && (
+        <PosRefundModal
+          isOpen={showRefundModal}
+          onClose={() => setShowRefundModal(false)}
+          order={selectedHistoryOrder}
+          tenantId={tenant?.id || ''}
+          onRefundSuccess={(refundResult) => {
+            fetchOrders(historyScope);
+            fetchSessionData();
+            if (refundResult) {
+              setActiveReturnSlip({
+                ...refundResult,
+                orderNumber: selectedHistoryOrder.orderNumber,
+                storeName: tenant?.name || 'AURORA RETAIL & COMMERCE'
+              });
+              setShowReturnSlipModal(true);
+            }
+          }}
+        />
+      )}
+
+      {/* MODAL 9: Customer 80mm Return Slip */}
+      {showReturnSlipModal && activeReturnSlip && (
+        <PosReturnSlipModal
+          isOpen={showReturnSlipModal}
+          onClose={() => setShowReturnSlipModal(false)}
+          refund={activeReturnSlip}
+        />
+      )}
     </div>
   );
 };

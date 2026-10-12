@@ -94,4 +94,15 @@ router.post('/redeem', async (req: TenantRequest, res) => {
   }
 });
 
+// GET /api/vouchers/party/:partyId - Get active store credits & total balance for a customer
+router.get('/party/:partyId', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db || globalPrisma;
+    const wallet = await VoucherService.getCustomerVouchers(req.tenantId!, req.params.partyId, db);
+    res.json(wallet);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

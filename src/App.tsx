@@ -56,6 +56,8 @@ const PricingCatalogSettings = lazy(() => import('./pages/Settings/PlatformModul
 const InventoryManagerSettings = lazy(() => import('./pages/Settings/PlatformModules/InventoryManagerSettings').then(m => ({ default: m.InventoryManagerSettings })));
 const PointOfSalePage = lazy(() => import('./pages/Platform/PointOfSalePage').then(m => ({ default: m.PointOfSalePage })));
 const FinancialManagementPage = lazy(() => import('./pages/Platform/FinancialManagementPage').then(m => ({ default: m.FinancialManagementPage })));
+const TransactionsPage = lazy(() => import('./pages/Settings/PlatformModules/TransactionsPage').then(m => ({ default: m.TransactionsPage })));
+const PaymentGatewaysPage = lazy(() => import('./pages/Settings/PlatformModules/PaymentGatewaysPage').then(m => ({ default: m.PaymentGatewaysPage })));
 const HealthMonitor = lazy(() => import('./components/HealthMonitor').then(m => ({ default: m.HealthMonitor })));
 const FleetManager = lazy(() => import('./components/FleetManager').then(m => ({ default: m.FleetManager })));
 const ComputeMatrix = lazy(() => import('./components/ComputeMatrix').then(m => ({ default: m.ComputeMatrix })));
@@ -326,7 +328,7 @@ const App = () => {
                 <Route path="platform/knowledge-base" element={<KnowledgeBaseSettings />} />
                 <Route path="platform/pricing-catalog" element={<PricingCatalogSettings />} />
                 <Route path="platform/inventory-manager" element={<InventoryManagerSettings />} />
-                <Route path="platform/pos" element={<PointOfSalePage />} />
+                <Route path="platform/pos" element={<Navigate to="/workspace/apps/pos" replace />} />
                 <Route path="platform/global-lists" element={<GlobalListsSettings />} />
                 <Route path="platform/workforce" element={<WorkforcePage />} />
                 <Route path="platform/workforce/member/:id" element={<MemberDetailView />} />
@@ -343,6 +345,7 @@ const App = () => {
                 <Route path="platform/api" element={<APISettings />} />
                 <Route path="platform/finance" element={<FinancialManagementPage />} />
                 <Route path="platform/accounting" element={<FinancialManagementPage />} />
+                <Route path="platform/transactions" element={<TransactionsPage />} />
                 <Route path="platform/records-management" element={<RecordsManagement />} />
                 
                 {/* Dynamic Module Routes */}
@@ -368,6 +371,8 @@ const App = () => {
                 <Route path="apps/docs" element={<DocsApp />} />
                 <Route path="apps/docs/:documentId" element={<DocEditor />} />
                 <Route path="apps/query" element={<QueryExplorer />} />
+                <Route path="apps/pos" element={<PointOfSalePage />} />
+                <Route path="pos" element={<Navigate to="/workspace/apps/pos" replace />} />
 
                 {/* Federated Searches (Consumer Runtime) */}
                 <Route path="searches" element={<SearchesDirectoryPage />} />
@@ -445,7 +450,9 @@ const App = () => {
                    <Route path="api-management" element={<APISettings />} />
                    <Route path="financial-management" element={<FinancialManagementPage />} />
                    <Route path="accounting" element={<FinancialManagementPage />} />
-                   <Route path="pos" element={<PointOfSalePage />} />
+                   <Route path="transactions" element={<TransactionsPage />} />
+                   <Route path="payment-gateways" element={<PaymentGatewaysPage />} />
+                   <Route path="pos" element={<Navigate to="/workspace/settings/platform-modules/payment-gateways?tab=pos" replace />} />
                    <Route path="queues-management" element={<QueuesLibraryPage />} />
                    <Route path="queries-library" element={<QueriesLibraryPage />} />
                    <Route path="searches-library" element={<SearchesLibraryPage />} />

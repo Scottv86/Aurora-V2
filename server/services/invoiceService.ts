@@ -1,6 +1,7 @@
 import { globalPrisma } from '../lib/prisma';
 import { recordAudit } from '../lib/audit';
 import { AccountingService } from './accountingService';
+import { TransactionService } from './transactionService';
 
 export interface InvoiceLineInput {
   catalogItemId?: string | null;
@@ -294,8 +295,11 @@ export class InvoiceService {
     const defaultBank = await db.chartOfAccount.findFirst({
       where: { tenantId, systemAccount: 'BANK' }
     });
+    const voucherLiability = await db.chartOfAccount.findFirst({
+      where: { tenantId, systemAccount: 'VOUCHER_LIABILITY' }
+    });
 
-    const bankAccountId = depositAccountId || defaultBank?.id;
+    const bankAccountId = depositAccountId || (paymentMethod === 'STORE_CREDIT' ? voucherLiability?.id : defaultBank?.id) || defaultBank?.id;
 
     let paymentJournalId = null;
     if (arAccount && bankAccountId) {
@@ -345,6 +349,30 @@ export class InvoiceService {
         status: newStatus
       }
     });
+
+    // Record universal PaymentTransaction in omnichannel ledger
+    try {
+      await TransactionService.recordTransaction({
+        tenantId,
+        channel: 'INVOICE',
+        type: 'SALE',
+        status: 'SUCCEEDED',
+        grossAmount: payAmount,
+        netAmount: payAmount,
+        paymentMethod,
+        gatewayRef: reference || null,
+        customerPartyId: invoice.customerPartyId || null,
+        invoiceId: invoice.id,
+        journalEntryId: paymentJournalId,
+        metadata: {
+          invoiceNumber: invoice.invoiceNumber,
+          paymentId: payment.id,
+          reference: reference || null
+        }
+      }, db);
+    } catch (txnErr) {
+      console.warn(`[Invoice] Failed to log universal PaymentTransaction for payment on ${invoice.invoiceNumber}:`, txnErr);
+    }
 
     await recordAudit({
       tenantId,

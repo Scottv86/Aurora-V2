@@ -3,6 +3,7 @@ import { recordAudit } from '../lib/audit';
 import { AccountingService } from './accountingService';
 import { InventoryService } from './inventoryService';
 import { VoucherService } from './voucherService';
+import { TransactionService } from './transactionService';
 
 export interface PosPaymentInput {
   tenderType: 'CASH' | 'CARD' | 'VOUCHER' | 'ON_ACCOUNT';
@@ -489,6 +490,32 @@ export class PosService {
       });
     } catch (err) {
       console.error(`[POS] Failed to post GL journal for order ${order.orderNumber}:`, err);
+    }
+
+    // Record universal PaymentTransaction in omnichannel ledger
+    try {
+      const primaryPayment = order.payments[0];
+      await TransactionService.recordTransaction({
+        tenantId,
+        channel: 'POS',
+        type: 'SALE',
+        status: 'SUCCEEDED',
+        grossAmount: total,
+        taxAmount: Math.round(taxTotal * 100) / 100,
+        netAmount: total,
+        paymentMethod: primaryPayment ? primaryPayment.tenderType : 'CASH',
+        gatewayRef: primaryPayment?.terminalRef || null,
+        customerPartyId: order.customerPartyId || null,
+        posOrderId: order.id,
+        metadata: {
+          orderNumber: order.orderNumber,
+          sessionId: input.sessionId,
+          itemsCount: formattedItems.length,
+          tenders: order.payments.map(p => ({ tenderType: p.tenderType, amount: p.amount }))
+        }
+      }, db);
+    } catch (txnErr) {
+      console.warn(`[POS] Failed to log universal PaymentTransaction for order ${order.orderNumber}:`, txnErr);
     }
 
     await recordAudit({

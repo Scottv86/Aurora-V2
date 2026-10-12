@@ -301,6 +301,24 @@ const SETTINGS_ITEMS: SettingItem[] = [
     tags: ['finance', 'tax', 'payments', 'accounting', 'billing']
   },
   {
+    id: 'transactions-ledger',
+    label: 'Transactions',
+    description: 'Omnichannel payment ledger, authorizations, settlements, and refund management.',
+    icon: 'ArrowLeftRight',
+    to: '/workspace/settings/platform-modules/transactions',
+    category: 'Configure',
+    tags: ['transactions', 'payments', 'refunds', 'settlement', 'cybersource', 'gateway', 'pos', 'invoices']
+  },
+  {
+    id: 'payment-gateways',
+    label: 'Payment Gateways',
+    description: 'Universal plug-and-play gateway connectors, bank merchant accounts, and EFTPOS terminals.',
+    icon: 'CreditCard',
+    to: '/workspace/settings/platform-modules/payment-gateways',
+    category: 'Configure',
+    tags: ['gateways', 'terminals', 'eftpos', 'cybersource', 'commbank', 'stripe', 'tyro', 'square', 'payments']
+  },
+  {
     id: 'pricing-catalog',
     label: 'Pricing Catalog',
     description: 'Centralized registry of products, service rates, application fees, subscriptions, and penalties.',
