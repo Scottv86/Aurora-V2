@@ -12,6 +12,7 @@ import { DocumentTemplate, GeneratedDocument } from '../types/platform';
 import { DocumentService } from '../services/documentService';
 import { usePlatform } from '../hooks/usePlatform';
 import { toast } from 'sonner';
+import { sanitizeHtml } from '../lib/sanitizeHtml';
 
 interface DocumentGeneratorModalProps {
   recordData: any;
@@ -146,7 +147,7 @@ export const DocumentGeneratorModal: React.FC<DocumentGeneratorModalProps> = ({
                   <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Preview Mode</span>
                   <span className="text-[10px] text-zinc-500 italic">Data merged from current record</span>
                 </div>
-                <div dangerouslySetInnerHTML={{ __html: selectedTemplate.content }} />
+                <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedTemplate.content) }} />
               </div>
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-center p-12">

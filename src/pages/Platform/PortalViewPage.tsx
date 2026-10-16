@@ -115,6 +115,7 @@ export const PortalViewPage = () => {
 
   // Customer Invoice Billing State
   const [invoiceLookupQuery, setInvoiceLookupQuery] = useState('');
+  const [invoiceLookupToken, setInvoiceLookupToken] = useState('');
   const [invoiceLookupLoading, setInvoiceLookupLoading] = useState(false);
   const [lookedUpInvoice, setLookedUpInvoice] = useState<any>(null);
   const [invoicePaying, setInvoicePaying] = useState(false);
@@ -363,13 +364,27 @@ export const PortalViewPage = () => {
     if (!invoiceLookupQuery) return;
     setInvoiceLookupLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/public/invoices/${encodeURIComponent(invoiceLookupQuery.trim())}`);
+      let id = invoiceLookupQuery.trim();
+      let tok = invoiceLookupToken.trim();
+      if (id.includes('?token=')) {
+        const parts = id.split('?token=');
+        id = parts[0];
+        tok = parts[1] || tok;
+      } else if (id.includes(':')) {
+        const parts = id.split(':');
+        id = parts[0];
+        tok = parts[1] || tok;
+      }
+      const url = tok
+        ? `${API_BASE_URL}/api/public/invoices/${encodeURIComponent(id)}?token=${encodeURIComponent(tok)}`
+        : `${API_BASE_URL}/api/public/invoices/${encodeURIComponent(id)}`;
+      const res = await fetch(url);
       const data = await res.json();
       if (res.ok) {
         setLookedUpInvoice(data);
       } else {
         setLookedUpInvoice(null);
-        toast.error(data.error || 'Invoice not found. Please check invoice number.');
+        toast.error(data.error || 'Invoice not found. Please check invoice number and access token.');
       }
     } catch {
       toast.error('Failed to lookup invoice');
@@ -388,7 +403,8 @@ export const PortalViewPage = () => {
         body: JSON.stringify({
           amount: lookedUpInvoice.total,
           paymentMethod: 'CARD_ONLINE',
-          reference: `Online Payment for ${lookedUpInvoice.invoiceNumber}`
+          reference: `Online Payment for ${lookedUpInvoice.invoiceNumber}`,
+          token: lookedUpInvoice.publicAccessToken
         })
       });
       const data = await res.json();
@@ -1981,19 +1997,26 @@ export const PortalViewPage = () => {
                   </div>
 
                   {/* Lookup Bar */}
-                  <form onSubmit={handleLookupInvoice} className="flex gap-2 max-w-lg">
+                  <form onSubmit={handleLookupInvoice} className="flex flex-col sm:flex-row gap-2 max-w-xl">
                     <input
                       type="text"
                       required
-                      placeholder="Enter Invoice Number (e.g. INV-1001)..."
+                      placeholder="Invoice Number (e.g. INV-1001)..."
                       value={invoiceLookupQuery}
                       onChange={e => setInvoiceLookupQuery(e.target.value)}
                       className="flex-1 px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white uppercase font-mono"
                     />
+                    <input
+                      type="text"
+                      placeholder="Access Token (from link)..."
+                      value={invoiceLookupToken}
+                      onChange={e => setInvoiceLookupToken(e.target.value)}
+                      className="sm:w-52 px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white font-mono"
+                    />
                     <button
                       type="submit"
                       disabled={invoiceLookupLoading}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
                     >
                       <Search size={14} />
                       {invoiceLookupLoading ? 'Finding...' : 'Find Invoice'}

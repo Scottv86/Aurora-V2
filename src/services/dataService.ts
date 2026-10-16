@@ -2,18 +2,21 @@ import { DATA_API_URL } from '../config';
 import { MODULES } from '../constants/modules';
 
 export const fetchModule = async (moduleId: string, tenantId: string, token: string, contextModules: any[] = []) => {
-  try {
-    const res = await fetch(`${DATA_API_URL}/modules/${moduleId}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'x-tenant-id': tenantId
+  const effectiveToken = token || localStorage.getItem('aurora_token') || '';
+  if (effectiveToken && effectiveToken !== 'undefined' && tenantId) {
+    try {
+      const res = await fetch(`${DATA_API_URL}/modules/${moduleId}`, {
+        headers: {
+          'Authorization': `Bearer ${effectiveToken}`,
+          'x-tenant-id': tenantId
+        }
+      });
+      if (res.ok) {
+        return await res.json();
       }
-    });
-    if (res.ok) {
-      return await res.json();
+    } catch (err) {
+      console.warn('[dataService] Failed to fetch module from DB, falling back to static context:', err);
     }
-  } catch (err) {
-    console.warn('[dataService] Failed to fetch module from DB, falling back to static context:', err);
   }
 
   const prebuilt = MODULES.find(m => m.id === moduleId);
@@ -26,9 +29,13 @@ export const fetchModule = async (moduleId: string, tenantId: string, token: str
 };
 
 export const fetchRecords = async (moduleId: string, tenantId: string, token: string, page: number = 1, pageSize: number = 25) => {
+  const effectiveToken = token || localStorage.getItem('aurora_token') || '';
+  if (!effectiveToken || effectiveToken === 'undefined' || !tenantId) {
+    return { records: [], total: 0 };
+  }
   const res = await fetch(`${DATA_API_URL}/records?moduleId=${moduleId}&page=${page}&limit=${pageSize}`, {
     headers: {
-      'Authorization': `Bearer ${token}`,
+      'Authorization': `Bearer ${effectiveToken}`,
       'x-tenant-id': tenantId
     }
   });

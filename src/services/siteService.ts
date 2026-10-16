@@ -329,8 +329,10 @@ const getApiBaseUrl = () => {
 
 const getHeaders = (tenantIdOverride?: string) => {
   const tenantId = tenantIdOverride || localStorage.getItem('aurora_tenant_id') || 'tenant-aurora-core';
+  const token = localStorage.getItem('aurora_token') || (import.meta as any).env.VITE_DEV_TOKEN || '';
   return {
     'Content-Type': 'application/json',
+    ...(token && token !== 'undefined' ? { Authorization: `Bearer ${token}` } : {}),
     'x-tenant-id': tenantId
   };
 };

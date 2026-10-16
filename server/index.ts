@@ -1,5 +1,24 @@
+import { spawnSync } from 'child_process';
+
+// Ensure Windows system CA root certificates are trusted (e.g., for antivirus SSL proxies or enterprise certs)
+if (process.platform === 'win32' && !process.execArgv.includes('--use-system-ca') && !process.env._NODE_SYSTEM_CA_RESPAWNED) {
+  const result = spawnSync(
+    process.execPath,
+    ['--use-system-ca', ...process.execArgv, ...process.argv.slice(1)],
+    { stdio: 'inherit', env: { ...process.env, _NODE_SYSTEM_CA_RESPAWNED: '1' } }
+  );
+  process.exit(result.status ?? 0);
+}
+
+if (process.env.NODE_ENV !== 'production') {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+}
+
+import crypto from 'crypto';
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
 import adminRoutes from './routes/adminRoutes';
@@ -62,29 +81,108 @@ import { EmailWorker } from './services/emailWorker';
 
 dotenv.config();
 
-// Bypass self-signed SSL/TLS verification issues (UNABLE_TO_VERIFY_LEAF_SIGNATURE) in development
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
 const app = express();
+
+// Trust reverse proxy (Cloudflare, Railway, Render, AWS ALB, Nginx) so req.ip and rate limiters resolve real client IPs
+const trustProxyConfig = process.env.TRUST_PROXY ? (process.env.TRUST_PROXY === 'true' ? true : Number(process.env.TRUST_PROXY)) : 1;
+app.set('trust proxy', trustProxyConfig);
+
 // Increase maxHeaderSize to 32KB to handle large Supabase JWTs (default 16KB causes 431 errors)
 const httpServer = http.createServer({ maxHeaderSize: 32768 }, app);
 const PORT = 3001;
 
-// Middlewares
+// Security Headers & Fingerprint Reduction
+app.disable('x-powered-by');
+app.use(helmet({
+  contentSecurityPolicy: false, // Vite React SPA has its own client bundles; document streams inject their own sandbox CSP
+  crossOriginEmbedderPolicy: false,
+  xContentTypeOptions: true, // nosniff
+  xFrameOptions: { action: 'sameorigin' },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  dnsPrefetchControl: { allow: false }
+}));
+
+// Dynamic CORS Configuration
+const defaultOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3002',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:4173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173',
+];
+
+const configuredOrigins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
+  : [];
+
+const allowedOrigins = Array.from(new Set([...defaultOrigins, ...configuredOrigins]));
+
 app.use(cors({
-  origin: [
-    'http://localhost:3000',
-    'http://localhost:3002',
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://localhost:4173',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:5173',
-  ],
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id', 'x-invoice-token', 'x-aurora-signature'],
   credentials: true
 }));
+
+// Multi-Tiered Rate Limiters
+// 1. General API: 600 req per 15 min per IP
+const globalApiRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many API requests, please try again later.' }
+});
+
+// 2. Public portal submissions: 100 req per 15 min per IP
+const publicRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' }
+});
+
+// 3. Authentication attempts: 60 req per 15 min per IP
+const authRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many authentication attempts, please try again later.' }
+});
+
+// 4. AI endpoints (Antigravity & AI settings): 30 req per 1 min per IP to protect Gemini API quota
+const aiRateLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many AI requests. Please slow down and try again.' }
+});
+
+// 5. Document upload limiter: 40 uploads per 15 min per IP
+const uploadRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Document upload limit reached. Please wait before uploading more files.' }
+});
+
+app.use('/api', globalApiRateLimiter);
+app.use('/api/public', publicRateLimiter);
+app.use('/api/auth', authRateLimiter);
+app.use('/api/antigravity', aiRateLimiter);
+app.use('/api/ai', aiRateLimiter);
+app.use('/api/documents/upload', uploadRateLimiter);
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
@@ -105,16 +203,6 @@ app.get('/health', (req, res) => {
     server: 'Aurora Platform API',
     v: '2026-05-15.1' 
   });
-});
-
-app.get('/api/db-test', async (req, res) => {
-  try {
-    const { globalPrisma } = await import('./lib/prisma');
-    const count = await globalPrisma.tenant.count();
-    res.json({ status: 'ok', tenantCount: count });
-  } catch (err: any) {
-    res.status(500).json({ status: 'error', message: err.message });
-  }
 });
 
 // Registry & Auth Routes
@@ -149,8 +237,8 @@ app.use('/api/reports', authenticate, requireTenantAccess, reportRoutes);
 app.use('/api/antigravity', authenticate, requireTenantAccess, antigravityRoutes);
 app.use('/api/ai', authenticate, requireTenantAccess, aiSettingsRoutes);
 app.use('/api/trash', authenticate, requireTenantAccess, trashRoutes);
-app.use('/api/digital-twin', digitalTwinRoutes);
-app.use('/api/sites', siteRoutes);
+app.use('/api/digital-twin', authenticate, requireTenantAccess, digitalTwinRoutes);
+app.use('/api/sites', authenticate, requireTenantAccess, siteRoutes);
 app.use('/api/forms', authenticate, requireTenantAccess, formRoutes);
 app.use('/api/workflows', authenticate, requireTenantAccess, workflowRoutes);
 app.use('/api/validations', authenticate, requireTenantAccess, validationRoutes);
@@ -193,17 +281,28 @@ app.use((req, res) => {
 });
 
 /**
- * Global Error Handler
+ * Global Error Handler with Incident ID generation and Production Error Masking
  */
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('[Global Error]:', err);
-  
+  const incidentId = crypto.randomUUID();
+  console.error(`[Global Error] [Incident: ${incidentId}] ${req.method} ${req.originalUrl}:`, err);
+
   if (err instanceof SyntaxError && 'status' in err && (err as any).status === 400 && 'body' in err) {
-    return res.status(400).json({ error: 'System received a malformed JSON payload.' });
+    return res.status(400).json({ error: 'System received a malformed JSON payload.', incidentId });
   }
 
-  res.status(err.status || 500).json({ 
-    error: err.message || 'Unexpected server error occurred' 
+  const statusCode = typeof err.status === 'number' && err.status >= 400 && err.status < 600 ? err.status : 500;
+
+  if (process.env.NODE_ENV === 'production' && statusCode >= 500) {
+    return res.status(statusCode).json({
+      error: 'An unexpected internal error occurred. Please quote the incident ID to support if this persists.',
+      incidentId
+    });
+  }
+
+  res.status(statusCode).json({ 
+    error: err.message || 'Unexpected server error occurred',
+    incidentId: statusCode >= 500 ? incidentId : undefined
   });
 });
 

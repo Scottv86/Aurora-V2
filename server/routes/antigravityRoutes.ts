@@ -380,8 +380,12 @@ router.post('/sessions/:id/chat', async (req: TenantRequest, res) => {
     const { id } = req.params;
     const { message, socketId, context, model, attachments } = req.body;
 
-    if (!message) {
+    if (!message || typeof message !== 'string' || message.trim().length === 0) {
       return res.status(400).json({ error: 'Message is required' });
+    }
+
+    if (message.length > 16000) {
+      return res.status(400).json({ error: 'Message exceeds the maximum permitted length of 16,000 characters.' });
     }
 
     // Check AI feature permission for conversational agent

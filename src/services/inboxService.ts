@@ -82,17 +82,19 @@ export function autoDetectEmailSettings(email: string): Partial<EmailServerConfi
 
 function getAuthHeaders(tenantId?: string) {
   const tid = tenantId || localStorage.getItem('aurora_tenant_id') || 'default-tenant';
-  const authDataStr = localStorage.getItem('aurora_auth');
-  let token = '';
-  if (authDataStr) {
-    try {
-      const parsed = JSON.parse(authDataStr);
-      token = parsed.access_token || parsed.token || '';
-    } catch (_) {}
+  let token = localStorage.getItem('aurora_token') || (import.meta as any).env.VITE_DEV_TOKEN || '';
+  if (!token) {
+    const authDataStr = localStorage.getItem('aurora_auth');
+    if (authDataStr) {
+      try {
+        const parsed = JSON.parse(authDataStr);
+        token = parsed.access_token || parsed.token || '';
+      } catch (_) {}
+    }
   }
   return {
     'Content-Type': 'application/json',
-    ...(token && { 'Authorization': `Bearer ${token}` }),
+    ...(token && token !== 'undefined' && { 'Authorization': `Bearer ${token}` }),
     'x-tenant-id': tid
   };
 }

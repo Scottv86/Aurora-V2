@@ -40,6 +40,23 @@ export interface StorageProviderResult {
   url?: string;
 }
 
+export const DANGEROUS_FILE_EXTENSIONS = [
+  '.exe', '.bat', '.cmd', '.sh', '.ps1', '.vbs', '.dll', '.com',
+  '.scr', '.jar', '.msi', '.reg', '.pif', '.hta', '.cpl', '.wsf', '.vb'
+];
+
+export const MAX_UPLOAD_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+
+export function validateFileUpload(filename: string, fileBuffer: Buffer) {
+  const ext = (filename.includes('.') ? filename.substring(filename.lastIndexOf('.')).toLowerCase() : '');
+  if (DANGEROUS_FILE_EXTENSIONS.includes(ext)) {
+    throw new Error(`File upload rejected: Executable and script extensions (${ext}) are prohibited for security.`);
+  }
+  if (fileBuffer.length > MAX_UPLOAD_FILE_SIZE) {
+    throw new Error(`File upload rejected: File exceeds the maximum allowed size of 25MB.`);
+  }
+}
+
 export class DocumentStorageProvider {
   static async saveFile(
     tenantId: string,
@@ -48,6 +65,7 @@ export class DocumentStorageProvider {
     buffer: Buffer,
     mimeType: string
   ): Promise<StorageProviderResult> {
+    validateFileUpload(filename, buffer);
     const ext = path.extname(filename) || '';
     const safeKey = `${tenantId}/${fileId}${ext}`;
 
@@ -102,8 +120,13 @@ export class DocumentStorageProvider {
       }
     }
 
-    // Local Disk
+    // Local Disk (Confinements strictly to uploads directory to prevent path traversal)
     const fullPath = path.resolve(process.cwd(), storagePath);
+    const uploadsRoot = path.resolve(process.cwd(), 'uploads');
+    if (!fullPath.startsWith(uploadsRoot)) {
+      console.warn('[DocumentStorage Security Alert] Path traversal attempt blocked:', storagePath);
+      return null;
+    }
     if (fs.existsSync(fullPath)) {
       return fs.readFileSync(fullPath);
     }
@@ -121,6 +144,11 @@ export class DocumentStorageProvider {
     }
 
     const fullPath = path.resolve(process.cwd(), storagePath);
+    const uploadsRoot = path.resolve(process.cwd(), 'uploads');
+    if (!fullPath.startsWith(uploadsRoot)) {
+      console.warn('[DocumentStorage Security Alert] Path traversal attempt blocked on delete:', storagePath);
+      return false;
+    }
     if (fs.existsSync(fullPath)) {
       try {
         fs.unlinkSync(fullPath);
@@ -142,30 +170,35 @@ export class DocumentService {
   }
 
   /**
-   * Resolve Valid Tenant ID from database, preventing foreign key constraint errors
+   * Resolve Valid Tenant ID from database, strictly enforcing user memberships
    */
   static async resolveValidTenantId(rawTenantId?: string, userTenantIds?: string[]): Promise<string> {
+    const verifiedIds = (userTenantIds || []).filter(Boolean);
+
     if (rawTenantId && rawTenantId !== 'tenant_default' && rawTenantId !== 'default-tenant') {
+      // If user memberships were provided, ensure the requested tenant is authorized
+      if (verifiedIds.length > 0 && !verifiedIds.includes(rawTenantId)) {
+        throw new Error(`Unauthorized: Access to tenant ${rawTenantId} is forbidden`);
+      }
+
       const direct = await globalPrisma.tenant.findUnique({ where: { id: rawTenantId }, select: { id: true } });
       if (direct) return direct.id;
 
       // Try by subdomain
       const bySubdomain = await globalPrisma.tenant.findUnique({ where: { subdomain: rawTenantId }, select: { id: true } });
-      if (bySubdomain) return bySubdomain.id;
+      if (bySubdomain && (verifiedIds.length === 0 || verifiedIds.includes(bySubdomain.id))) {
+        return bySubdomain.id;
+      }
     }
 
-    if (userTenantIds && userTenantIds.length > 0) {
-      for (const uId of userTenantIds) {
+    if (verifiedIds.length > 0) {
+      for (const uId of verifiedIds) {
         const userTenant = await globalPrisma.tenant.findUnique({ where: { id: uId }, select: { id: true } });
         if (userTenant) return userTenant.id;
       }
     }
 
-    // Fallback to first available tenant in database
-    const firstTenant = await globalPrisma.tenant.findFirst({ select: { id: true } });
-    if (firstTenant) return firstTenant.id;
-
-    throw new Error('No active tenant found in database');
+    throw new Error('No authorized active tenant found');
   }
 
   /**

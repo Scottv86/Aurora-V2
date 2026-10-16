@@ -13,6 +13,7 @@ import { usePlatformLookup } from '../hooks/usePlatformLookup';
 import { DatePicker } from './UI/DatePicker';
 import { TimePicker } from './UI/TimePicker';
 import { UserSelector } from './Common/UserSelector';
+import { sanitizeHtml } from '../lib/sanitizeHtml';
 import { resolveConstraint } from '../services/fieldService';
 import { useFormula } from '../hooks/useFormula';
 import { usePlatform } from '../hooks/usePlatform';
@@ -624,7 +625,7 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
   }
 
   if (type === 'html') {
-    return <div dangerouslySetInnerHTML={{ __html: label || '' }} />;
+    return <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(label) }} />;
   }
 
   // Action Components

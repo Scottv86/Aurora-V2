@@ -1,6 +1,7 @@
 import express from 'express';
-import { TenantRequest } from '../middleware/tenantMiddleware';
+import { TenantRequest, requireTenantAdmin } from '../middleware/tenantMiddleware';
 import { globalPrisma } from '../lib/prisma';
+import { encryptSecret } from '../lib/crypto';
 
 const router = express.Router();
 
@@ -45,7 +46,7 @@ router.get('/', async (req: TenantRequest, res) => {
 });
 
 // ACTIVATE a connector
-router.post('/:id/activate', async (req: TenantRequest, res) => {
+router.post('/:id/activate', requireTenantAdmin, async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
     const tenantId = req.tenantId!;
@@ -84,7 +85,7 @@ router.post('/:id/activate', async (req: TenantRequest, res) => {
 });
 
 // DEACTIVATE a connector
-router.post('/:id/deactivate', async (req: TenantRequest, res) => {
+router.post('/:id/deactivate', requireTenantAdmin, async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
     const tenantId = req.tenantId!;
@@ -109,7 +110,7 @@ router.post('/:id/deactivate', async (req: TenantRequest, res) => {
 });
 
 // UPDATE config (secrets)
-router.put('/:id/config', async (req: TenantRequest, res) => {
+router.put('/:id/config', requireTenantAdmin, async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
     const tenantId = req.tenantId!;
@@ -129,8 +130,10 @@ router.put('/:id/config', async (req: TenantRequest, res) => {
       return res.status(404).json({ error: 'Tenant connector not found' });
     }
 
-    // Upsert secrets
+    // Upsert secrets with AES-256-GCM encryption
     for (const [key, value] of Object.entries(secrets)) {
+      if (!value) continue;
+      const encrypted = encryptSecret(String(value));
       await db.tenantConnectorSecret.upsert({
         where: {
           tenantConnectorId_secretKey: {
@@ -139,12 +142,12 @@ router.put('/:id/config', async (req: TenantRequest, res) => {
           }
         },
         update: {
-          secretValue: value as string
+          secretValue: encrypted.encryptedKey
         },
         create: {
           tenantConnectorId: tenantConnector.id,
           secretKey: key,
-          secretValue: value as string
+          secretValue: encrypted.encryptedKey
         }
       });
     }
@@ -183,11 +186,17 @@ router.get('/:id/logs', async (req: TenantRequest, res) => {
 });
 
 // CREATE a custom connector
-router.post('/custom', async (req: TenantRequest, res) => {
+router.post('/custom', requireTenantAdmin, async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
     const tenantId = req.tenantId!;
     const { name, icon, category, ioSchema, edgeFunctionLogic, config } = req.body;
+
+    if (edgeFunctionLogic) {
+      return res.status(400).json({
+        error: 'Arbitrary script evaluation is disabled for security. Please specify declarative HTTP endpoint settings in config.url.'
+      });
+    }
 
     const connector = await globalPrisma.nexusConnector.create({
       data: {

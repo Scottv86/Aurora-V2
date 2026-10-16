@@ -75,8 +75,8 @@ export const SidebarItem = ({
     if (!moduleId) return;
 
     // Ensure we have a token (dev or session)
-    const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-    if (!token) return;
+    const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || localStorage.getItem('aurora_token');
+    if (!token || token === 'undefined') return;
 
     // Prefetch module definition
     queryClient.prefetchQuery({

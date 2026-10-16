@@ -47,7 +47,7 @@ const getHeaders = (tenantId?: string) => {
   const currentTenant = tenantId || localStorage.getItem('aurora_tenant_id') || '';
   return {
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
+    ...(token && token !== 'undefined' ? { Authorization: `Bearer ${token}` } : {}),
     'x-tenant-id': currentTenant
   };
 };

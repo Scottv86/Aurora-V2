@@ -63,6 +63,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setTenantIds(sessionData.tenantIds || []);
         setCurrentRoleId(sessionData.roleId || null);
         
+        // Ensure localStorage aurora_tenant_id is aligned with user's verified tenants
+        const currentStoredTenant = localStorage.getItem('aurora_tenant_id');
+        if (sessionData.tenantIds && sessionData.tenantIds.length > 0) {
+          if (!currentStoredTenant || !sessionData.tenantIds.includes(currentStoredTenant)) {
+            localStorage.setItem('aurora_tenant_id', sessionData.tenantIds[0]);
+          }
+        }
         
         // Update timestamp on success to maintain the debounce window
         if (lastSyncedRef.current) {
@@ -73,7 +80,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const status = response.status;
         const err = await response.json().catch(() => ({}));
         console.error(`[AuthTrace] Backend sync error (Status: ${status}):`, err);
-        toast.error(`Registry Sync Failed (${status}): ${err.error || response.statusText}`);
+        if (status === 401) {
+          toast.error("Your session has expired. Please sign in again.");
+          await supabase.auth.signOut();
+        } else {
+          toast.error(`Registry Sync Failed (${status}): ${err.error || response.statusText}`);
+        }
       }
     } catch (e: any) {
       console.error("[AuthTrace] Backend sync critical failure:", e);
@@ -98,6 +110,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setSession(session);
       setUser(session?.user ?? null);
       
+      if (session?.access_token) {
+        localStorage.setItem('aurora_token', session.access_token);
+        localStorage.setItem('aurora_auth', JSON.stringify({
+          access_token: session.access_token,
+          token: session.access_token,
+          user: session.user
+        }));
+      }
+
       if (session?.access_token && (isSignIn || event === 'USER_UPDATED' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED')) {
         const sessionId = session.user.id + (session.expires_at || '');
         await syncUser(session.access_token, sessionId);
@@ -107,6 +128,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setTenantIds([]);
         setCurrentRoleId(null);
         lastSyncedRef.current = null;
+        localStorage.removeItem('aurora_token');
+        localStorage.removeItem('aurora_auth');
+        localStorage.removeItem('aurora_tenant_id');
       }
       
       // Always ensure loading is false after the first event or sign-in/out

@@ -33,29 +33,38 @@ const getHeaders = (tenantId?: string) => {
   const currentTenant = tenantId || localStorage.getItem('aurora_tenant_id') || '';
   return {
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
+    ...(token && token !== 'undefined' ? { Authorization: `Bearer ${token}` } : {}),
     'x-tenant-id': currentTenant
   };
 };
 
 export const PaymentGatewayClientService = {
   async listPresets(tenantId?: string): Promise<ProviderPreset[]> {
-    const res = await fetch(`${API_BASE_URL}/api/payment-gateways/presets`, {
-      headers: getHeaders(tenantId)
-    });
-    if (!res.ok) throw new Error('Failed to load gateway presets');
-    return await res.json();
+    const token = localStorage.getItem('aurora_token') || (import.meta as any).env.VITE_DEV_TOKEN;
+    if (!token) return [];
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/payment-gateways/presets`, {
+        headers: getHeaders(tenantId)
+      });
+      if (!res.ok) return [];
+      return await res.json();
+    } catch {
+      return [];
+    }
   },
 
   async listConnections(tenantId?: string): Promise<PaymentGatewayConnection[]> {
-    const res = await fetch(`${API_BASE_URL}/api/payment-gateways/connections`, {
-      headers: getHeaders(tenantId)
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Failed to list payment gateways');
+    const token = localStorage.getItem('aurora_token') || (import.meta as any).env.VITE_DEV_TOKEN;
+    if (!token) return [];
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/payment-gateways/connections`, {
+        headers: getHeaders(tenantId)
+      });
+      if (!res.ok) return [];
+      return await res.json();
+    } catch {
+      return [];
     }
-    return await res.json();
   },
 
   async saveConnection(data: Partial<PaymentGatewayConnection>, tenantId?: string): Promise<PaymentGatewayConnection> {

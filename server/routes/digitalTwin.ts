@@ -15,9 +15,13 @@ import { TenantRequest } from '../middleware/tenantMiddleware';
 
 const router = Router();
 
-// Middleware to extract user ID (fallback to default user if unauthenticated in dev)
+// Helper to extract authenticated user ID
 const getUserId = (req: any) => {
-  return req.user?.uid || req.user?.id || req.headers['x-user-id'] || 'default-user';
+  const uid = req.user?.uid || req.user?.id;
+  if (!uid) {
+    throw new Error('Unauthenticated: User session missing');
+  }
+  return uid;
 };
 
 // GET /api/digital-twin/config

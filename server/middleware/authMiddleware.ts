@@ -15,150 +15,187 @@ export interface AuthRequest extends Request {
 }
 
 /**
+ * Provisions a strictly isolated personal sandbox workspace for new user onboarding.
+ * Prevents strangers and public testers from accessing existing company tenant data.
+ */
+export async function provisionIsolatedUserWorkspace(userId: string, email: string, name?: string) {
+  // 1. If an explicit public demo tenant is designated in the environment, use it
+  if (process.env.PUBLIC_DEMO_TENANT_ID) {
+    const demoTenant = await globalPrisma.tenant.findUnique({
+      where: { id: process.env.PUBLIC_DEMO_TENANT_ID }
+    });
+    if (demoTenant) {
+      return await globalPrisma.tenantMember.create({
+        data: {
+          userId,
+          tenantId: demoTenant.id,
+          roleId: 'member',
+          workEmail: email,
+          firstName: name || email.split('@')[0]
+        }
+      });
+    }
+  }
+
+  // 2. Otherwise auto-provision an isolated personal sandbox tenant
+  const cleanEmail = email ? email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '').toLowerCase() : 'user';
+  const uniqueCode = Math.random().toString(36).substring(2, 7);
+  const subdomain = `ws-${cleanEmail.slice(0, 12)}-${uniqueCode}`;
+  const workspaceTitle = `${name || email.split('@')[0]}'s Workspace`;
+
+  console.log(`[Tenant Provisioning] Creating isolated personal workspace "${workspaceTitle}" (${subdomain}) for ${email}`);
+  
+  const newTenant = await globalPrisma.tenant.create({
+    data: {
+      name: workspaceTitle,
+      subdomain,
+      planTier: 'standard',
+      status: 'active'
+    }
+  });
+
+  await globalPrisma.workspace.create({
+    data: {
+      tenantId: newTenant.id,
+      name: 'Default Workspace'
+    }
+  });
+
+  return await globalPrisma.tenantMember.create({
+    data: {
+      userId,
+      tenantId: newTenant.id,
+      roleId: 'admin', // User is admin of their own sandbox
+      workEmail: email,
+      firstName: name || email.split('@')[0]
+    }
+  });
+}
+
+/**
  * Verifies the Supabase Access Token (JWT) and injects user session data.
  */
 export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
-  let token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split('Bearer ')[1]?.trim() : '';
+  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split('Bearer ')[1]?.trim() : '';
 
   if (!token || token === 'undefined' || token === 'null') {
-    // If no Bearer token was provided, fall back to the active user from database
-    try {
-      const fallbackUser = await globalPrisma.user.findFirst({
-        include: { memberships: true }
-      });
-      if (fallbackUser) {
-        const tenantIds = (fallbackUser.memberships || []).map(m => m.tenantId);
-        const membership = (fallbackUser.memberships || [])[0];
-        const name = membership ? `${membership.firstName || ''} ${membership.familyName || ''}`.trim() : '';
-        req.user = {
-          uid: fallbackUser.id,
-          email: fallbackUser.email,
-          name: name || fallbackUser.email,
-          isSuperAdmin: Boolean(fallbackUser.isSuperAdmin),
-          tenantIds: tenantIds.length > 0 ? tenantIds : ['t1', 'tenant_enterprise_01'],
-          memberId: membership?.id,
-          roleId: membership?.roleId || (fallbackUser.isSuperAdmin ? 'SUPERADMIN' : 'admin')
-        };
-        return next();
-      }
-    } catch (e) {
-      console.warn('[Auth Middleware] Fallback user resolution failed:', e);
-    }
-    return res.status(401).json({ error: 'Unauthorized: Missing token' });
+    return res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
   }
 
   try {
-    let supabaseUser: { id: string; email?: string; user_metadata?: any } | null = null;
-
-    if (token === 'dev-token' || token.startsWith('dev-')) {
-      // Fast path for development token
-      const fallbackUser = await globalPrisma.user.findFirst({
-        include: { memberships: true }
-      });
-      if (fallbackUser) {
-        supabaseUser = { id: fallbackUser.id, email: fallbackUser.email };
-      } else {
-        supabaseUser = { id: 'dev-user', email: 'dev@aurora.local' };
+    // 1. Verify the access token with Supabase Admin Client
+    const { data, error } = await supabaseAdmin.auth.getUser(token);
+    if (error || !data?.user) {
+      if (error && (error.status === 0 || error.name === 'AuthRetryableFetchError' || error.message?.includes('fetch failed'))) {
+        console.error('[Auth Middleware] Supabase auth service unreachable:', error.message || error);
+        return res.status(503).json({ error: 'Authentication service temporarily unavailable' });
       }
-    } else {
-      try {
-        // 1. Verify the access token with Supabase Admin Client
-        const { data, error } = await supabaseAdmin.auth.getUser(token);
-        if (error || !data?.user) {
-          console.warn('[Auth Middleware] Supabase getUser failed, falling back to db user:', error?.message);
-          const fallbackUser = await globalPrisma.user.findFirst({ include: { memberships: true } });
-          if (fallbackUser) {
-            supabaseUser = { id: fallbackUser.id, email: fallbackUser.email };
-          } else {
-            return res.status(401).json({ error: 'Unauthorized: Invalid token' });
-          }
-        } else {
-          supabaseUser = data.user;
-        }
-      } catch (sbErr: any) {
-        console.warn('[Auth Middleware] Supabase network exception, falling back to db user:', sbErr?.message);
-        const fallbackUser = await globalPrisma.user.findFirst({ include: { memberships: true } });
-        if (fallbackUser) {
-          supabaseUser = { id: fallbackUser.id, email: fallbackUser.email };
-        } else {
-          return res.status(401).json({ error: 'Unauthorized: Invalid token' });
-        }
-      }
+      return res.status(401).json({ error: 'Unauthorized: Invalid token' });
     }
 
-    if (!supabaseUser) {
-      return res.status(401).json({ error: 'Unauthorized: Invalid user credentials' });
-    }
-
+    const supabaseUser = data.user;
     const { id: uid, email = '' } = supabaseUser;
-    const reqTenantId = (req.headers['x-tenant-id'] as string) || '';
 
-    // Safely look up user and memberships from DB
-    let dbUser: any = null;
-    try {
-      dbUser = await globalPrisma.user.findFirst({
+    // 2. Look up user and memberships from DB
+    let dbUser = await globalPrisma.user.findFirst({
+      where: {
+        OR: [
+          { id: uid },
+          ...(email ? [{ email }] : [])
+        ]
+      },
+      include: {
+        memberships: true
+      }
+    });
+
+    // Auto-provision verified Supabase user if missing from Prisma registry
+    if (!dbUser && email) {
+      console.log(`[Auth Provisioning] Auto-provisioning verified Supabase user: ${email} (${uid})`);
+      try {
+        dbUser = await globalPrisma.user.create({
+          data: {
+            id: uid,
+            email: email,
+            isSuperAdmin: false,
+          },
+          include: { memberships: true }
+        });
+
+        // Auto-assign isolated personal sandbox tenant
+        const userName = (supabaseUser as any).user_metadata?.full_name || '';
+        const membership = await provisionIsolatedUserWorkspace(dbUser.id, email, userName);
+        if (membership) {
+          dbUser.memberships = [membership];
+        }
+      } catch (createErr: any) {
+        console.error('[Auth Provisioning] User creation error:', createErr.message || createErr);
+      }
+    }
+
+    if (!dbUser) {
+      return res.status(401).json({ error: 'Unauthorized: User not found in registry' });
+    }
+
+    let dbMemberships: any[] = dbUser.memberships || [];
+    if (dbMemberships.length === 0) {
+      dbMemberships = await globalPrisma.tenantMember.findMany({
         where: {
           OR: [
-            { id: uid },
-            ...(email ? [{ email }] : [])
+            { userId: dbUser.id },
+            ...(email ? [{ user: { email } }] : [])
           ]
-        },
-        include: {
-          memberships: true
         }
       });
-    } catch (e) {
-      console.warn('[Auth Middleware] User lookup failed:', e);
     }
 
-    let dbMemberships: any[] = dbUser?.memberships || [];
-    if (dbMemberships.length === 0) {
+    // If existing user has zero memberships and is not superadmin, ensure isolated workspace is provisioned
+    const isSuperAdminUser = Boolean(
+      dbUser.isSuperAdmin ?? 
+      (supabaseUser as any).user_metadata?.isSuperAdmin
+    );
+
+    if (dbMemberships.length === 0 && !isSuperAdminUser) {
       try {
-        dbMemberships = await globalPrisma.tenantMember.findMany({
-          where: {
-            OR: [
-              { userId: uid },
-              ...(email ? [{ user: { email } }] : [])
-            ]
-          }
-        });
-      } catch (e) {
-        // Ignored - fallback tenant IDs will apply
+        const userName = (supabaseUser as any).user_metadata?.full_name || '';
+        const membership = await provisionIsolatedUserWorkspace(dbUser.id, email, userName);
+        if (membership) {
+          dbMemberships = [membership];
+        }
+      } catch (provErr: any) {
+        console.error('[Auth Provisioning] Sandbox provisioning error:', provErr.message || provErr);
       }
     }
 
-    const userTenantIds = (dbMemberships || []).map(m => m.tenantId);
-    const combinedTenantIds = Array.from(new Set([
-      ...userTenantIds,
-      ...(reqTenantId ? [reqTenantId] : [])
-    ]));
+    // Strictly derive verified tenant memberships from database - never trust x-tenant-id header
+    const verifiedTenantIds = Array.from(new Set((dbMemberships || []).map(m => m.tenantId).filter(Boolean)));
 
     const membership = (dbMemberships || [])[0];
-    const name = membership ? `${membership.firstName || ''} ${membership.familyName || ''}`.trim() : (supabaseUser as any).user_metadata?.full_name || email || 'User';
+    const name = membership 
+      ? `${membership.firstName || ''} ${membership.familyName || ''}`.trim() 
+      : (supabaseUser as any).user_metadata?.full_name || email || 'User';
 
     const isSuperAdmin = Boolean(
-      dbUser?.isSuperAdmin ?? 
-      (supabaseUser as any).user_metadata?.isSuperAdmin ?? 
-      (email.toLowerCase() === 'superadmin@aurora.com')
+      dbUser.isSuperAdmin ?? 
+      (supabaseUser as any).user_metadata?.isSuperAdmin
     );
 
     req.user = {
-      uid: dbUser?.id || uid,
-      email: dbUser?.email || email,
+      uid: dbUser.id,
+      email: dbUser.email,
       name: name,
       isSuperAdmin: isSuperAdmin,
-      tenantIds: combinedTenantIds.length > 0 ? combinedTenantIds : (isSuperAdmin ? [] : ['cmnx01q3s0000mon3pbr44ju4', 't1', 'tenant_enterprise_01']),
-      memberId: membership?.id || uid,
-      roleId: membership?.roleId || (isSuperAdmin ? 'SUPERADMIN' : 'admin')
+      tenantIds: verifiedTenantIds,
+      memberId: membership?.id || dbUser.id,
+      roleId: membership?.roleId || (isSuperAdmin ? 'SUPERADMIN' : 'member')
     };
 
     next();
   } catch (error: any) {
-    console.error('Auth verification error:', error);
+    console.error('[Auth Middleware] Verification error:', error.message || error);
     res.status(401).json({ 
-      error: 'Unauthorized: Internal verify error',
-      details: error.message || String(error)
+      error: 'Unauthorized: Token verification failed'
     });
   }
 };

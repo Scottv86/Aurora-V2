@@ -11,11 +11,22 @@ const router = Router();
 router.patch('/:id/config', authenticate, async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   const { navigation_manifest } = req.body;
-  const { isSuperAdmin, tenantIds } = req.user!;
+  const { uid, isSuperAdmin, tenantIds } = req.user!;
 
   // Security: Ensure user has access to this tenant or is superadmin
   if (!isSuperAdmin && !tenantIds.includes(id)) {
     return res.status(403).json({ error: 'Access denied to this tenant configuration' });
+  }
+
+  // RBAC: Non-superadmins must have Admin role or Developer license
+  if (!isSuperAdmin) {
+    const membership = await globalPrisma.tenantMember.findUnique({
+      where: { userId_tenantId: { userId: uid, tenantId: id } }
+    });
+    const canUpdate = membership?.licenceType === 'Developer' || membership?.roleId === 'Admin' || membership?.roleId === 'admin';
+    if (!canUpdate) {
+      return res.status(403).json({ error: 'An Admin role or Developer license seat is required to update tenant configuration.' });
+    }
   }
 
   try {

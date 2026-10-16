@@ -945,10 +945,18 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
 
   const refreshInboxUnreadCount = useCallback(async () => {
     if (!tenant?.id) return;
+    const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || localStorage.getItem('aurora_token') || '';
+    if (!token) return;
+
+    const headers: Record<string, string> = {
+      'x-tenant-id': tenant.id,
+      'Authorization': `Bearer ${token}`
+    };
+
     try {
       // 1. Sync personal connected accounts in background
       const accsRes = await fetch(`${API_BASE_URL}/api/inbox/accounts`, {
-        headers: { 'x-tenant-id': tenant.id }
+        headers
       });
       if (accsRes.ok) {
         const accsData = await accsRes.json();
@@ -957,7 +965,7 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
           if (acc.status === 'CONNECTED' && acc.type === 'PERSONAL') {
             const syncRes = await fetch(`${API_BASE_URL}/api/inbox/accounts/${acc.id}/sync`, {
               method: 'POST',
-              headers: { 'x-tenant-id': tenant.id }
+              headers
             });
             if (syncRes.ok) {
               const syncData = await syncRes.json();
@@ -974,7 +982,7 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
                       onMarkRead={async (id) => {
                         await fetch(`${API_BASE_URL}/api/inbox/threads/${id}/actions`, {
                           method: 'PATCH',
-                          headers: { 'Content-Type': 'application/json', 'x-tenant-id': tenant.id },
+                          headers: { 'Content-Type': 'application/json', ...headers },
                           body: JSON.stringify({ action: 'markRead', value: true })
                         });
                         refreshInboxUnreadCount();
@@ -982,7 +990,7 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
                       onArchive={async (id) => {
                         await fetch(`${API_BASE_URL}/api/inbox/threads/${id}/actions`, {
                           method: 'PATCH',
-                          headers: { 'Content-Type': 'application/json', 'x-tenant-id': tenant.id },
+                          headers: { 'Content-Type': 'application/json', ...headers },
                           body: JSON.stringify({ action: 'archive', value: true })
                         });
                         refreshInboxUnreadCount();
@@ -998,7 +1006,7 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
 
       // 2. Compute unread count
       const res = await fetch(`${API_BASE_URL}/api/inbox/threads?folder=inbox`, {
-        headers: { 'x-tenant-id': tenant.id }
+        headers
       });
       if (res.ok) {
         const data = await res.json();
@@ -1007,15 +1015,15 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
         setInboxUnreadCount(unread);
       }
     } catch (_) {}
-  }, [tenant?.id]);
+  }, [tenant?.id, session?.access_token]);
 
   useEffect(() => {
-    if (tenant?.id) {
+    if (tenant?.id && (session?.access_token || localStorage.getItem('aurora_token') || (import.meta as any).env.VITE_DEV_TOKEN)) {
       refreshInboxUnreadCount();
       const interval = setInterval(refreshInboxUnreadCount, 30000);
       return () => clearInterval(interval);
     }
-  }, [tenant?.id, refreshInboxUnreadCount]);
+  }, [tenant?.id, session?.access_token, refreshInboxUnreadCount]);
 
   return (
     <PlatformContext.Provider value={{ 

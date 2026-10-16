@@ -1,6 +1,8 @@
 import express from 'express';
 import { TenantRequest } from '../middleware/tenantMiddleware';
 import { globalPrisma } from '../lib/prisma';
+import { safeFetch } from '../lib/ssrfGuard';
+import { decryptSecret } from '../lib/crypto';
 
 const router = express.Router();
 
@@ -81,7 +83,12 @@ router.post('/execute', async (req: TenantRequest, res) => {
 
     const secrets: Record<string, string> = {};
     tenantConnector?.secrets.forEach(s => {
-      secrets[s.secretKey] = s.secretValue;
+      try {
+        secrets[s.secretKey] = decryptSecret(s.secretValue);
+      } catch {
+        // Fallback in case of legacy plaintext secret
+        secrets[s.secretKey] = s.secretValue;
+      }
     });
 
     // 3. Prepare the execution context
@@ -95,20 +102,39 @@ router.post('/execute', async (req: TenantRequest, res) => {
       executionPath = 'vm';
       const requestedUrls: string[] = [];
       const wrappedFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-        const urlStr = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : (input as Request).url || String(input));
+        const urlStr = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : (input as any).url || String(input));
         requestedUrls.push(urlStr);
-        return fetch(input, init);
+        return safeFetch(urlStr, init);
       };
 
       try {
-        console.log(`[NexusProxy] Running VM script for connector: ${connector.name}`);
+        console.log(`[NexusProxy] Running sandboxed VM script for connector: ${connector.name}`);
         const vm = await import('vm');
         
         const context = {
           params: payload || {},
           secrets: secrets || {},
           fetch: wrappedFetch,
-          console,
+          console: {
+            log: (...args: any[]) => console.log(`[Connector:${connector.name}]`, ...args),
+            warn: (...args: any[]) => console.warn(`[Connector:${connector.name}]`, ...args),
+            error: (...args: any[]) => console.error(`[Connector:${connector.name}]`, ...args)
+          },
+          JSON,
+          Math,
+          Date,
+          parseInt,
+          parseFloat,
+          encodeURIComponent,
+          decodeURIComponent,
+          isNaN,
+          isFinite,
+          RegExp,
+          Array,
+          Object,
+          String,
+          Number,
+          Boolean,
           promise: null as any
         };
         
@@ -122,7 +148,7 @@ router.post('/execute', async (req: TenantRequest, res) => {
         `;
         
         const script = new vm.Script(wrapperCode);
-        script.runInContext(context);
+        script.runInContext(context, { timeout: 10000 });
         
         const execResult = await context.promise;
         rawResultData = execResult || {};
@@ -184,7 +210,8 @@ router.post('/execute', async (req: TenantRequest, res) => {
           }
         }
         
-        const fetchRes = await fetch(targetUrlStr, {
+        // Execute request through SSRF-guarded safeFetch
+        const fetchRes = await safeFetch(targetUrlStr, {
           method,
           headers,
           body

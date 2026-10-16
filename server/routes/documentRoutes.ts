@@ -1,25 +1,72 @@
 import { Router } from 'express';
-import { DocumentService, DocumentStorageProvider } from '../services/documentService';
+import crypto from 'crypto';
+import { DocumentService, DocumentStorageProvider, validateFileUpload } from '../services/documentService';
 import { DocumentAiService } from '../services/documentAiService';
 import { FileMetadataExtractor } from '../lib/fileMetadataExtractor';
 import { globalPrisma } from '../lib/prisma';
 import { authenticate } from '../middleware/authMiddleware';
 import { checkAIFeatureOrThrow, resolveAIFeatureAccess } from '../lib/aiPermissions';
+import { supabaseAdmin } from '../lib/supabaseAdmin';
 
 const router = Router();
 
 /**
  * GET /api/documents/stream/:id
- * Direct file streaming endpoint for browser preview, embed (iframe/img), and download
- * Does not require x-tenant-id header (direct browser navigation friendly)
+ * Direct file streaming endpoint for browser preview, embed (iframe/img), and download.
+ * Requires either an active Bearer session OR a valid signed HMAC token.
  */
 router.get('/stream/:id', async (req: any, res) => {
   try {
+    const authHeader = req.headers.authorization;
+    const bearerToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split('Bearer ')[1]?.trim() : '';
+    const queryToken = (req.query.token as string) || '';
+
     const doc = await globalPrisma.universalDocument.findUnique({
       where: { id: req.params.id }
     });
 
     if (!doc) return res.status(404).send('Document not found');
+
+    // Verification 1: Valid signed query token (e.g. for embeds/preview URLs)
+    const docSecret = process.env.ENCRYPTION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'aurora-doc-signing-key';
+    const expectedSignedToken = crypto
+      .createHmac('sha256', docSecret)
+      .update(`${doc.id}:${doc.tenantId}`)
+      .digest('hex');
+
+    const isSignedTokenValid = queryToken && queryToken === expectedSignedToken;
+
+    // Verification 2: Active Supabase session token
+    let isSessionValid = false;
+    if (bearerToken) {
+      try {
+        const { data, error } = await supabaseAdmin.auth.getUser(bearerToken);
+        if (!error && data?.user) {
+          // Check that user is authorized for doc's tenant
+          const membership = await globalPrisma.tenantMember.findFirst({
+            where: {
+              tenantId: doc.tenantId,
+              OR: [
+                { userId: data.user.id },
+                ...(data.user.email ? [{ user: { email: data.user.email } }] : [])
+              ]
+            }
+          });
+          const userRecord = await globalPrisma.user.findFirst({
+            where: { id: data.user.id }
+          });
+          if (membership || userRecord?.isSuperAdmin) {
+            isSessionValid = true;
+          }
+        }
+      } catch (authErr) {
+        // Fall through to unauthorized
+      }
+    }
+
+    if (!isSignedTokenValid && !isSessionValid) {
+      return res.status(401).send('Unauthorized: Document stream requires active session or valid signed token');
+    }
 
     let storageProvider = doc.storageProvider;
     let storagePath = doc.storagePath;
@@ -44,10 +91,24 @@ router.get('/stream/:id', async (req: any, res) => {
     if (!buffer) return res.status(404).send('File blob not found on storage');
 
     const isDownload = req.query.download === 'true';
+    const lowerMime = (mimeType || '').toLowerCase();
+    const isScriptableWebType = lowerMime.includes('html') || lowerMime.includes('xhtml');
+    const isSvg = lowerMime.includes('svg');
+
+    // Security: Stored XSS Mitigation
+    // Force download as attachment for scriptable HTML/XHTML to prevent execution in app origin
+    const dispositionType = (isDownload || isScriptableWebType) ? 'attachment' : 'inline';
+    
+    // For SVG or any potentially scriptable web content, enforce strict sandbox CSP
+    if (isSvg || isScriptableWebType) {
+      res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+    }
+
     res.setHeader('Content-Type', mimeType || 'application/octet-stream');
     res.setHeader(
       'Content-Disposition',
-      `${isDownload ? 'attachment' : 'inline'}; filename="${encodeURIComponent(filename)}"`
+      `${dispositionType}; filename="${encodeURIComponent(filename)}"`
     );
     res.send(buffer);
   } catch (err: any) {
@@ -89,6 +150,11 @@ router.post('/upload', async (req: any, res) => {
     }
 
     const fileBuffer = Buffer.from(contentBase64, 'base64');
+    try {
+      validateFileUpload(filename, fileBuffer);
+    } catch (valErr: any) {
+      return res.status(400).json({ error: valErr.message });
+    }
     const safeMimeType = mimeType || 'application/octet-stream';
     const actor = req.user?.name || req.user?.email || 'User';
 
@@ -184,6 +250,11 @@ router.post('/process-ai-direct', async (req: any, res) => {
     await checkAIFeatureOrThrow(tenantId, req.user?.uid, 'ai:document_magic_populate', req.db || globalPrisma);
 
     const fileBuffer = Buffer.from(contentBase64, 'base64');
+    try {
+      validateFileUpload(filename || 'document.pdf', fileBuffer);
+    } catch (valErr: any) {
+      return res.status(400).json({ error: valErr.message });
+    }
     const result = await DocumentAiService.analyzeDocument(
       fileBuffer,
       mimeType || 'application/pdf',
@@ -352,6 +423,11 @@ router.post('/:id/version', async (req: any, res) => {
 
     const actor = req.user?.name || req.user?.email || 'User';
     const fileBuffer = Buffer.from(contentBase64, 'base64');
+    try {
+      validateFileUpload(filename || 'version_update', fileBuffer);
+    } catch (valErr: any) {
+      return res.status(400).json({ error: valErr.message });
+    }
 
     const updated = await DocumentService.uploadNewVersion(
       req.params.id,

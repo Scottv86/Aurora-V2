@@ -13,6 +13,7 @@ import {
 import { cn } from '../lib/utils';
 import { GeneratedDocument, DocumentTemplate } from '../types/platform';
 import { DocumentService } from '../services/documentService';
+import { sanitizeHtml } from '../lib/sanitizeHtml';
 import { usePlatform } from '../hooks/usePlatform';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -254,7 +255,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
             </div>
             <div className="flex-1 overflow-y-auto p-12 bg-zinc-900">
               <div className="max-w-4xl mx-auto bg-zinc-950 border border-zinc-800 shadow-2xl rounded-xl p-12 min-h-[1056px] prose prose-invert prose-indigo text-zinc-200">
-                <div dangerouslySetInnerHTML={{ __html: selectedDoc.content || '' }} />
+                <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedDoc.content) }} />
               </div>
             </div>
             <div className="px-6 py-4 border-t border-zinc-800 flex justify-end gap-3 bg-zinc-950">

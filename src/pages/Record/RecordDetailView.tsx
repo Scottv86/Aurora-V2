@@ -123,8 +123,9 @@ export const RecordDetailView = ({
   useEffect(() => {
     const fetchQuickActions = async () => {
       if (!tenant?.id || !moduleId) return;
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || localStorage.getItem('aurora_token') || '';
+      if (!token) return;
       try {
-        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';
         const res = await fetch(`${API_BASE_URL}/api/automations?moduleId=${moduleId}`, {
           headers: {
             'x-tenant-id': tenant.id,
@@ -133,7 +134,7 @@ export const RecordDetailView = ({
         });
         if (res.ok) {
           const data = await res.json();
-          const qa = data.filter((auto: any) => 
+          const qa = (Array.isArray(data) ? data : []).filter((auto: any) => 
             auto.isActive && 
             Array.isArray(auto.triggers) && 
             auto.triggers.some((t: any) => t.type === 'QUICK_ACTION' || t.type === 'MANUAL_BUTTON')
@@ -145,13 +146,13 @@ export const RecordDetailView = ({
       }
     };
     fetchQuickActions();
-  }, [moduleId, tenant?.id]);
+  }, [moduleId, tenant?.id, session?.access_token]);
 
   const handleTriggerQuickAction = async (automation: any) => {
     if (!tenant?.id || !record?.id) return;
     setTriggeringAutomationId(automation.id);
     try {
-      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || localStorage.getItem('aurora_token') || '';
       const res = await fetch(`${API_BASE_URL}/api/automations/${automation.id}/trigger`, {
         method: 'POST',
         headers: {
@@ -617,7 +618,8 @@ export const RecordDetailView = ({
       });
 
       try {
-        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || localStorage.getItem('aurora_token');
+        if (!token || token === 'undefined') return;
         const res = await fetch(`${API_BASE_URL}/api/nexus-proxy/execute`, {
           method: 'POST',
           headers: {
@@ -633,7 +635,11 @@ export const RecordDetailView = ({
           })
         });
 
-        if (!res.ok) throw new Error("Connector execution failed");
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          console.warn(`[DataPopulationRule] Connector "${rule.name || rule.connectorId}" failed (HTTP ${res.status}):`, errData.error || res.statusText);
+          continue;
+        }
         const json = await res.json();
         const rawData = json.data || json;
 
@@ -733,9 +739,13 @@ export const RecordDetailView = ({
 
     const fetchModAndRecord = async () => {
       setLoading(true);
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || localStorage.getItem('aurora_token');
+      if (!token || token === 'undefined') {
+        setLoading(false);
+        return;
+      }
+
       try {
-        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-        
         let recData = record;
         if (!recData || recData.id !== recordId) {
           const recRes = await fetch(`${DATA_API_URL}/records/${recordId}`, {

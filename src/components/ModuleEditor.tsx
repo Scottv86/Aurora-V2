@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ReactGridLayout from 'react-grid-layout';
+import { sanitizeHtml } from '../lib/sanitizeHtml';
 
 const useMyContainerWidth = (loading: boolean) => {
   const [width, setWidth] = useState(1280);
@@ -1777,7 +1778,7 @@ const FormCanvasItem = ({ fObj, isSelected, onSelect, onDelete, layout, isRestri
           {field?.type === 'html' && (
             <div 
               className="text-sm text-zinc-500 leading-relaxed prose dark:prose-invert max-w-none" 
-              dangerouslySetInnerHTML={{ __html: fObj.labelOverride || field?.label || 'HTML content...' }} 
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(fObj.labelOverride || field?.label || 'HTML content...') }} 
             />
           )}
           {field?.type === 'button' && (
@@ -7807,7 +7808,7 @@ export const ModuleEditor = () => {
                                       <div className="pt-2">
                                         <div 
                                           className="text-sm text-zinc-500 leading-relaxed prose dark:prose-invert max-w-none" 
-                                          dangerouslySetInnerHTML={{ __html: block.label || 'HTML content...' }} 
+                                          dangerouslySetInnerHTML={{ __html: sanitizeHtml(block.label || 'HTML content...') }} 
                                         />
                                       </div>
                                     ) : block.type === 'button' ? (

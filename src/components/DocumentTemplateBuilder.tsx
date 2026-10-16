@@ -63,6 +63,7 @@ import { DocumentService } from '../services/documentService';
 import { executeServerCompletion } from '../services/aiService';
 import { usePlatform } from '../hooks/usePlatform';
 import { useTheme } from '../hooks/useTheme';
+import { sanitizeHtml } from '../lib/sanitizeHtml';
 import { toast } from 'sonner';
 import { UnsavedChangesModal } from './Common/UnsavedChangesModal';
 import { BlockCanvas } from './ContentBuilder/BlockCanvas';
@@ -1431,7 +1432,7 @@ Rule: ${typeInstructions[contentType]}`;
                       "p-4 prose max-w-none", 
                       previewMode === 'dark' ? "prose-invert prose-indigo text-zinc-200" : "prose-slate"
                     )} 
-                    dangerouslySetInnerHTML={{ __html: compiledPreviewHTML }} 
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(compiledPreviewHTML) }} 
                   />
                 )}
               </div>
@@ -1508,7 +1509,7 @@ Rule: ${typeInstructions[contentType]}`;
                         previewMode === 'dark' ? "prose-invert prose-indigo text-zinc-200" : "prose-slate text-zinc-800",
                         "[&_table]:border-collapse [&_table]:border-0 [&_table_td]:border-0 [&_table_th]:border-0 [&_table_td]:p-2"
                       )}
-                      dangerouslySetInnerHTML={{ __html: compiledPreviewHTML }}
+                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(compiledPreviewHTML) }}
                     />
 
                     {/* Document Footer */}
@@ -1583,7 +1584,7 @@ Rule: ${typeInstructions[contentType]}`;
                       "prose max-w-none", 
                       previewMode === 'dark' ? "prose-invert prose-indigo text-zinc-200" : "prose-slate"
                     )} 
-                    dangerouslySetInnerHTML={{ __html: compiledPreviewHTML }} 
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(compiledPreviewHTML) }} 
                   />
                 )}
               </div>

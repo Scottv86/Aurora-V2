@@ -1,4 +1,6 @@
 import { globalPrisma } from '../lib/prisma';
+import { safeFetch } from '../lib/ssrfGuard';
+import crypto from 'crypto';
 
 /**
  * Fires outgoing webhooks asynchronously for active tenant subscriptions.
@@ -17,18 +19,28 @@ export async function triggerWebhooks(tenantId: string, eventType: string, paylo
       if (eventTypes.includes(eventType) || eventTypes.includes('*')) {
         console.log(`[WebhookService] Triggering webhook for subscription "${sub.name}" (${sub.id}) - Event: ${eventType}`);
         
-        fetch(sub.url, {
+        const timestamp = new Date().toISOString();
+        const bodyString = JSON.stringify({
+          event: eventType,
+          timestamp,
+          data: payload
+        });
+
+        // Compute HMAC signature if secret is configured
+        let signature = '';
+        if (sub.secret) {
+          signature = crypto.createHmac('sha256', sub.secret).update(bodyString).digest('hex');
+        }
+
+        safeFetch(sub.url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'x-aurora-event': eventType,
-            'x-aurora-signature': sub.secret || ''
+            'x-aurora-timestamp': timestamp,
+            'x-aurora-signature': signature || sub.secret || ''
           },
-          body: JSON.stringify({
-            event: eventType,
-            timestamp: new Date().toISOString(),
-            data: payload
-          })
+          body: bodyString
         }).catch((err: any) => {
           console.error(`[WebhookService] Webhook delivery failed for ${sub.url}:`, err.message || err);
         });

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import crypto from 'crypto';
 import { globalPrisma } from '../lib/prisma';
 import { SecurityScreeningService } from '../services/securityScreening';
 import { logRecordActivity } from '../lib/audit';
@@ -184,8 +185,19 @@ router.get('/modules/:moduleId', async (req, res) => {
       return res.status(404).json({ error: 'Module not found' });
     }
     const config = (moduleData.config || {}) as any;
-    const forms = config.forms || [];
-    const publicForms = forms.filter((f: any) => f.usage === 'public_link');
+    const forms = Array.isArray(config.forms) ? config.forms : [];
+    const publicForms = forms.filter((f: any) => f.usage === 'public_link' || f.isPublic);
+    const isPublicAllowed = Boolean(
+      config.isPublicIntake ||
+      config.isPublicPortal ||
+      config.isPublicViewable ||
+      publicForms.length > 0
+    );
+
+    if (!isPublicAllowed) {
+      return res.status(403).json({ error: 'Access denied: Module is not configured for public access' });
+    }
+
     res.json({
       id: moduleData.id,
       name: moduleData.name,
@@ -209,6 +221,20 @@ router.post('/modules/:moduleId/submissions', async (req, res) => {
     });
     if (!moduleData) {
       return res.status(404).json({ error: 'Module not found' });
+    }
+
+    const config = (moduleData.config || {}) as any;
+    const forms = Array.isArray(config.forms) ? config.forms : [];
+    const publicForms = forms.filter((f: any) => f.usage === 'public_link' || f.isPublic);
+    const isPublicAllowed = Boolean(
+      config.isPublicIntake ||
+      config.isPublicPortal ||
+      config.isPublicViewable ||
+      publicForms.length > 0
+    );
+
+    if (!isPublicAllowed) {
+      return res.status(403).json({ error: 'Access denied: Module is not configured for public submissions' });
     }
 
     // Run security screening
@@ -408,10 +434,27 @@ router.post('/webhooks/:automationId', async (req, res) => {
     }
 
     const triggersConfig = Array.isArray(automation.triggers) ? automation.triggers : [];
-    const hasWebhookTrigger = triggersConfig.some((t: any) => t.type === 'INBOUND_WEBHOOK');
+    const webhookTrigger = triggersConfig.find((t: any) => t.type === 'INBOUND_WEBHOOK');
 
-    if (!hasWebhookTrigger) {
+    if (!webhookTrigger) {
       return res.status(400).json({ error: 'Automation is not configured for webhook triggers' });
+    }
+
+    // Verify secret / HMAC signature if configured
+    const expectedSecret = webhookTrigger.secret || webhookTrigger.config?.secret;
+    if (expectedSecret) {
+      const incomingSecret = (req.headers['x-aurora-signature'] || req.headers['x-webhook-secret'] || req.query.secret || req.query.token) as string;
+      if (!incomingSecret) {
+        return res.status(401).json({ error: 'Unauthorized: Missing webhook secret or signature header' });
+      }
+
+      const rawPayload = JSON.stringify(payload);
+      const computedHmac = crypto.createHmac('sha256', expectedSecret).update(rawPayload).digest('hex');
+      const isValid = incomingSecret === expectedSecret || incomingSecret === computedHmac;
+
+      if (!isValid) {
+        return res.status(403).json({ error: 'Forbidden: Invalid webhook secret or signature' });
+      }
     }
 
     // Run security screening
@@ -465,6 +508,10 @@ router.get('/sites/:id/records', async (req, res) => {
     const { id } = req.params;
     const { moduleId, search } = req.query;
 
+    if (!moduleId || String(moduleId) === 'undefined') {
+      return res.status(400).json({ error: 'Missing required moduleId parameter' });
+    }
+
     const site = await globalPrisma.site.findFirst({
       where: { OR: [{ id }, { domain: id }] }
     });
@@ -473,13 +520,34 @@ router.get('/sites/:id/records', async (req, res) => {
       return res.status(404).json({ error: 'Site not found' });
     }
 
-    const whereClause: any = {
-      tenantId: site.tenantId
-    };
+    // Verify module exists, belongs to this tenant, and is explicitly allowed for public access
+    const targetModule = await globalPrisma.module.findFirst({
+      where: {
+        id: String(moduleId),
+        tenantId: site.tenantId
+      }
+    });
 
-    if (moduleId && String(moduleId) !== 'undefined') {
-      whereClause.moduleId = String(moduleId);
+    if (!targetModule) {
+      return res.status(404).json({ error: 'Module not found for this site' });
     }
+
+    const moduleConfig = (targetModule.config as any) || {};
+    const isPublicAllowed = Boolean(
+      moduleConfig.isPublicViewable ??
+      moduleConfig.isPublicPortal ??
+      moduleConfig.isPublicIntake
+    );
+
+    if (!isPublicAllowed) {
+      return res.status(403).json({ error: 'Access denied: Module is not configured for public viewing' });
+    }
+
+    const whereClause: any = {
+      tenantId: site.tenantId,
+      moduleId: targetModule.id,
+      status: 'active'
+    };
 
     const records = await globalPrisma.record.findMany({
       where: whereClause,
@@ -744,7 +812,30 @@ router.post('/checkout', async (req, res) => {
 
     for (const item of items) {
       const qty = Number(item.quantity || 1);
-      const price = Number(item.unitPrice || item.basePrice || 0);
+      if (qty <= 0 || isNaN(qty)) {
+        return res.status(400).json({ error: 'Invalid item quantity' });
+      }
+
+      let price = Number(item.unitPrice || item.basePrice || 0);
+      const catalogItemId = item.catalogItemId || item.id || null;
+
+      // Anti-tampering: verify against database price if catalog item exists
+      if (catalogItemId) {
+        const dbCatalogItem = await globalPrisma.catalogItem.findUnique({
+          where: { id: catalogItemId }
+        });
+        if (dbCatalogItem) {
+          if (dbCatalogItem.tenantId !== tenant.id) {
+            return res.status(400).json({ error: 'Catalog item does not belong to this site or organization' });
+          }
+          price = Number(dbCatalogItem.basePrice);
+        }
+      }
+
+      if (price < 0 || isNaN(price)) {
+        return res.status(400).json({ error: 'Invalid item price' });
+      }
+
       const taxRate = Number(item.taxRate !== undefined ? item.taxRate : 0.10);
       const lineSubtotal = qty * price;
       const lineTax = Math.round((lineSubtotal * taxRate) * 100) / 100;
@@ -930,6 +1021,8 @@ router.post('/checkout', async (req, res) => {
 router.get('/invoices/:identifier', async (req, res) => {
   try {
     const { identifier } = req.params;
+    const providedToken = (req.query.token || req.headers['x-invoice-token']) as string;
+
     const invoice = await globalPrisma.invoice.findFirst({
       where: {
         OR: [
@@ -948,7 +1041,18 @@ router.get('/invoices/:identifier', async (req, res) => {
       return res.status(404).json({ error: 'Invoice not found. Please verify the invoice number.' });
     }
 
-    res.json(invoice);
+    // Require signed HMAC token unconditionally for all public invoice views to prevent IDOR / enumeration
+    const invoiceSecret = process.env.ENCRYPTION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'aurora-invoice-salt';
+    const expectedToken = crypto.createHmac('sha256', invoiceSecret).update(`${invoice.id}:${invoice.tenantId}`).digest('hex').substring(0, 24);
+
+    if (!providedToken || providedToken !== expectedToken) {
+      return res.status(403).json({ error: 'Secure access token required to view this invoice.' });
+    }
+
+    res.json({
+      ...invoice,
+      publicAccessToken: expectedToken
+    });
   } catch (err: any) {
     console.error('[PublicInvoiceLookup] Error:', err);
     res.status(500).json({ error: err.message || 'Failed to lookup invoice' });
@@ -957,16 +1061,24 @@ router.get('/invoices/:identifier', async (req, res) => {
 
 /**
  * POST /api/public/invoices/:id/pay
- * Public portal invoice payment endpoint
+ * Public portal invoice payment endpoint (requires cryptographic invoice access token)
  */
 router.post('/invoices/:id/pay', async (req, res) => {
   try {
     const { id } = req.params;
-    const { amount, paymentMethod = 'CARD_ONLINE', reference } = req.body;
+    const { amount, paymentMethod = 'CARD_ONLINE', reference, token } = req.body;
+    const providedToken = token || req.query.token || req.headers['x-invoice-token'];
 
     const invoice = await globalPrisma.invoice.findUnique({ where: { id } });
     if (!invoice) {
       return res.status(404).json({ error: 'Invoice not found' });
+    }
+
+    const invoiceSecret = process.env.ENCRYPTION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'aurora-invoice-salt';
+    const expectedToken = crypto.createHmac('sha256', invoiceSecret).update(`${invoice.id}:${invoice.tenantId}`).digest('hex').substring(0, 24);
+
+    if (providedToken !== expectedToken) {
+      return res.status(403).json({ error: 'Forbidden: Invalid or missing invoice payment authorization token.' });
     }
 
     const { InvoiceService } = await import('../services/invoiceService');

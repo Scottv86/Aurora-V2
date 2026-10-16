@@ -46,7 +46,7 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
     // We prioritize actual database memberships over the token's snapshot
     const primaryMembership = user.memberships[0];
     let tenant: any = primaryMembership?.tenant || null;
-    if (!tenant) {
+    if (!tenant && req.user?.isSuperAdmin) {
       tenant = await globalPrisma.tenant.findFirst({
         where: { status: 'active' }
       }) || await globalPrisma.tenant.findFirst();
@@ -54,7 +54,7 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
 
     // Calculate flattened capabilities for the primary membership
     const groupIds = primaryMembership?.permissionGroups?.map((pg: any) => pg.permissionGroupId) || [];
-    const capabilities = await resolveCapabilities(groupIds, tenant?.id || '');
+    const capabilities = tenant ? await resolveCapabilities(groupIds, tenant.id) : [];
     
     // Menu Configuration Resolution: User Customization > Specific User Override > Team Override > Position Override > Role Override > Tenant Default
     const memberId = primaryMembership?.id;
@@ -145,6 +145,10 @@ router.put('/menu-config', authenticate, async (req: AuthRequest, res: Response)
     return res.status(400).json({ error: 'No active tenant found for request' });
   }
 
+  if (!isSuperAdmin && !tenantIds.includes(tenantId)) {
+    return res.status(403).json({ error: 'Access denied: Not authorized for this tenant' });
+  }
+
   try {
     if (scope === 'tenant') {
       // Check if user has Developer license or is superadmin
@@ -188,6 +192,10 @@ router.patch('/settings', authenticate, async (req: AuthRequest, res: Response) 
 
   if (!tenantId) {
     return res.status(400).json({ error: 'No active tenant found for request' });
+  }
+
+  if (!isSuperAdmin && !tenantIds.includes(tenantId)) {
+    return res.status(403).json({ error: 'Access denied: Not authorized for this tenant' });
   }
 
   try {
@@ -248,6 +256,10 @@ router.patch('/config', authenticate, async (req: AuthRequest, res: Response) =>
 
   if (!tenantId) {
     return res.status(400).json({ error: 'No active tenant found for request' });
+  }
+
+  if (!isSuperAdmin && !tenantIds.includes(tenantId)) {
+    return res.status(403).json({ error: 'Access denied: Not authorized for this tenant' });
   }
 
   try {

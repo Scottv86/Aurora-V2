@@ -6,15 +6,30 @@ import { globalPrisma } from './lib/prisma';
 export let io: SocketIOServer;
 
 export const initSocket = (httpServer: HttpServer) => {
+  const defaultOrigins = [
+    'http://localhost:3000',
+    'http://localhost:3002',
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://localhost:4173',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:5173'
+  ];
+
+  const configuredOrigins = process.env.ALLOWED_ORIGINS 
+    ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
+    : [];
+
+  const socketOrigins = Array.from(new Set([...defaultOrigins, ...configuredOrigins]));
+
   io = new SocketIOServer(httpServer, {
     cors: {
-      origin: [
-        'http://localhost:3000',
-        'http://localhost:3002',
-        'http://localhost:5173',
-        'http://localhost:5174',
-        'http://localhost:4173'
-      ],
+      origin: (origin, callback) => {
+        if (!origin || socketOrigins.includes(origin)) {
+          return callback(null, true);
+        }
+        return callback(new Error(`WebSocket CORS blocked for origin: ${origin}`));
+      },
       methods: ['GET', 'POST'],
       credentials: true
     }
@@ -74,8 +89,21 @@ export const initSocket = (httpServer: HttpServer) => {
     });
 
     // Chat Channel Rooms
-    socket.on('join_channel', (channelId: string) => {
-      socket.join(`channel_${channelId}`);
+    socket.on('join_channel', async (channelId: string) => {
+      try {
+        if (!channelId || typeof channelId !== 'string') return;
+        const channel = await globalPrisma.chatChannel.findUnique({
+          where: { id: channelId },
+          select: { tenantId: true }
+        });
+        if (channel && (socket.data.user?.tenantIds.includes(channel.tenantId) || socket.data.user?.isSuperAdmin)) {
+          socket.join(`channel_${channelId}`);
+        } else {
+          console.warn(`[Socket Security Alert] User ${socket.data.user?.uid} denied access to channel ${channelId}`);
+        }
+      } catch (err) {
+        console.error('[Socket] Channel authorization error:', err);
+      }
     });
 
     socket.on('leave_channel', (channelId: string) => {
@@ -84,7 +112,7 @@ export const initSocket = (httpServer: HttpServer) => {
 
     // Real-time typing indicator
     socket.on('chat:typing', (data: { tenantId: string; channelId: string; userId: string; userName: string; isTyping: boolean }) => {
-      if (data.tenantId) {
+      if (data.tenantId && (socket.data.user?.tenantIds.includes(data.tenantId) || socket.data.user?.isSuperAdmin)) {
         socket.to(`tenant_${data.tenantId}`).emit('chat:user_typing', data);
       }
     });
@@ -98,10 +126,9 @@ export const initSocket = (httpServer: HttpServer) => {
   return io;
 };
 
-// Helper for emitting events to a specific tenant
+// Helper for emitting events strictly to a specific tenant
 export const emitTenantUpdate = (tenantId: string, event: string, payload: any) => {
-  if (io) {
+  if (io && tenantId) {
     io.to(`tenant_${tenantId}`).emit(event, payload);
-    io.emit(event, payload);
   }
 };

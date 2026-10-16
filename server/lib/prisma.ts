@@ -3,17 +3,20 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
 /**
  * Global shared connection pool and adapter for the Registry.
  * Prisma 7 requires explicit adapters for database connectivity.
  */
+const rawDbUrl = process.env.DATABASE_URL || '';
+const connectionString = rawDbUrl.includes('sslmode=require')
+  ? rawDbUrl.replace('sslmode=require', 'sslmode=no-verify')
+  : rawDbUrl;
+
 const pool = new Pool({ 
-  connectionString: process.env.DATABASE_URL,
-  max: 50, // Increase pool size from default 10 to 50
+  connectionString,
+  max: 25, // Supabase session mode pool safety with adequate concurrency
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000,
+  connectionTimeoutMillis: 15000,
   ssl: { rejectUnauthorized: false },
 });
 const adapter = new PrismaPg(pool);

@@ -931,7 +931,8 @@ const ModuleTableWidget: React.FC<{ widget: any, tenant: any, session: any }> = 
       if (!tenant?.id || !moduleId) return;
       if (!builderCache.has(recordsCacheKey)) setLoading(true);
       try {
-        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || localStorage.getItem('aurora_token');
+        if (!token || token === 'undefined') return;
         const res = await fetchRecords(moduleId, tenant.id, token, 1, 50);
         const data = res.records || [];
         setRecords(data);
@@ -1235,7 +1236,8 @@ const ChartWidget: React.FC<{ widget: any, tenant: any, session: any }> = ({ wid
       if (!tenant?.id || !moduleId) return;
       if (!builderCache.has(chartCacheKey)) setLoading(true);
       try {
-        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || localStorage.getItem('aurora_token');
+        if (!token || token === 'undefined') return;
         const res = await fetchRecords(moduleId, tenant.id, token, 1, 100);
         const recs = res.records || [];
         
@@ -1277,8 +1279,8 @@ const ChartWidget: React.FC<{ widget: any, tenant: any, session: any }> = ({ wid
       ) : chartData.length === 0 ? (
         <p className="text-xs text-zinc-400 italic py-10 text-center">No record data found to display.</p>
       ) : (
-        <div className="flex-1 min-h-[160px] w-full text-xs">
-          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={160}>
+        <div className="flex-1 w-full h-full min-h-[160px] min-w-0 text-xs">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={160} initialDimension={{ width: 100, height: 160 }}>
             {chartType === 'line' ? (
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
@@ -1754,7 +1756,7 @@ export const ReportWidgetEmbed: React.FC<{ widget: any, tenant: any, session: an
                     </div>
                   ) : (
                     <div className="w-full h-full min-h-[160px] min-w-0">
-                      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={160}>
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={160} initialDimension={{ width: 100, height: 160 }}>
                         {w.type === 'bar' ? (
                           <BarChart 
                             data={aggData}

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { TenantRequest } from '../middleware/tenantMiddleware';
+import { TenantRequest, requireTenantAdmin } from '../middleware/tenantMiddleware';
 import { globalPrisma } from '../lib/prisma';
 import { encryptSecret, decryptSecret, generateKeyHint } from '../lib/crypto';
 import { PROVIDER_PRICING, calculateEstimatedCost, resolveTenantAIClient, executeAICompletion, logAIUsageMetric } from '../services/aiProviderService';
@@ -48,7 +48,7 @@ router.get('/keys', async (req: TenantRequest, res) => {
 });
 
 // POST save or update a BYOK API key
-router.post('/keys', async (req: TenantRequest, res) => {
+router.post('/keys', requireTenantAdmin, async (req: TenantRequest, res) => {
   try {
     const db = req.db || globalPrisma;
     const tenantId = req.tenantId!;
@@ -109,7 +109,7 @@ router.post('/keys', async (req: TenantRequest, res) => {
 });
 
 // DELETE a BYOK API Key
-router.delete('/keys/:id', async (req: TenantRequest, res) => {
+router.delete('/keys/:id', requireTenantAdmin, async (req: TenantRequest, res) => {
   try {
     const db = req.db || globalPrisma;
     const tenantId = req.tenantId!;
@@ -132,7 +132,7 @@ router.delete('/keys/:id', async (req: TenantRequest, res) => {
 });
 
 // POST test connectivity for an API Key
-router.post('/keys/test', async (req: TenantRequest, res) => {
+router.post('/keys/test', requireTenantAdmin, async (req: TenantRequest, res) => {
   try {
     const { keyId, apiKey, rawKey: inputRawKey, provider, baseUrl } = req.body;
     const tenantId = req.tenantId;
@@ -274,7 +274,7 @@ router.get('/config', async (req: TenantRequest, res) => {
 });
 
 // PUT update AI Config & Tier Mappings
-router.put('/config', async (req: TenantRequest, res) => {
+router.put('/config', requireTenantAdmin, async (req: TenantRequest, res) => {
   try {
     const db = req.db || globalPrisma;
     const tenantId = req.tenantId!;
@@ -456,7 +456,7 @@ router.get('/governance', async (req: TenantRequest, res) => {
 });
 
 // PUT update Tenant AI feature defaults
-router.put('/governance/defaults', async (req: TenantRequest, res) => {
+router.put('/governance/defaults', requireTenantAdmin, async (req: TenantRequest, res) => {
   try {
     const db = req.db || globalPrisma;
     const tenantId = req.tenantId!;
@@ -508,6 +508,9 @@ router.post('/completion', async (req: TenantRequest, res) => {
     const tenantId = req.tenantId || 'default-tenant';
     const userId = req.user?.uid;
     const { model, prompt, contents, systemInstruction, responseMimeType, feature } = req.body;
+    if (typeof prompt === 'string' && prompt.length > 16000) {
+      return res.status(400).json({ error: 'Prompt exceeds the maximum permitted length of 16,000 characters.' });
+    }
 
     // Feature Gating Check
     const targetFeature = feature || 'ai:formula_assistant';

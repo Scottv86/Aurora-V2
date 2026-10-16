@@ -3,7 +3,7 @@ import { globalPrisma } from '../lib/prisma';
 import { resolveCapabilities } from '../lib/permissions';
 import { resolveTenantAIClient, logAIUsageMetric, executeAICompletion } from './aiProviderService';
 import { io } from '../socket';
-import { exec } from 'child_process';
+import { safeFetch } from '../lib/ssrfGuard';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -66,10 +66,10 @@ async function scrapeDuckDuckGo(query: string): Promise<any[]> {
   }
 }
 
-// Plain text extractor for fetch page
+// Plain text extractor for fetch page (SSRF-guarded)
 async function fetchPageText(url: string): Promise<string> {
   try {
-    const response = await fetch(url, {
+    const response = await safeFetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
       }
