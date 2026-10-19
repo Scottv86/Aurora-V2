@@ -89,4 +89,49 @@ router.post('/test-connection', async (req: TenantRequest, res: Response) => {
   }
 });
 
+// GET /api/payment-gateways/channels - Fetch channel routing configuration
+router.get('/channels', async (req: TenantRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const tenant = await globalPrisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { workspaceSettings: true }
+    });
+    const ws = (tenant?.workspaceSettings && typeof tenant.workspaceSettings === 'object')
+      ? (tenant.workspaceSettings as Record<string, any>)
+      : {};
+    res.json(ws.paymentChannels || null);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to fetch payment channels' });
+  }
+});
+
+// POST /api/payment-gateways/channels - Save channel routing configuration
+router.post('/channels', async (req: TenantRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const { channels } = req.body;
+    const tenant = await globalPrisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { workspaceSettings: true }
+    });
+    const ws = (tenant?.workspaceSettings && typeof tenant.workspaceSettings === 'object')
+      ? (tenant.workspaceSettings as Record<string, any>)
+      : {};
+
+    await globalPrisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        workspaceSettings: {
+          ...ws,
+          paymentChannels: channels
+        } as any
+      }
+    });
+    res.json({ success: true, channels });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to save payment channels' });
+  }
+});
+
 export default router;

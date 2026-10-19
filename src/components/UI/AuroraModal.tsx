@@ -7,6 +7,7 @@ export interface AuroraModalProps {
   isOpen: boolean;
   onClose: () => void;
   children: React.ReactNode;
+  title?: React.ReactNode;
   className?: string;
   containerClassName?: string;
   drawer?: boolean;

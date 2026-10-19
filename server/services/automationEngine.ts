@@ -19,7 +19,12 @@ export interface AutomationAction {
     | 'GEMINI_PROMPT'
     | 'GENERATE_PDF'
     | 'GOOGLE_SHEETS_SYNC'
-    | 'STRIPE_PAYMENT_LINK';
+    | 'STRIPE_PAYMENT_LINK'
+    | 'CREATE_REMINDER'
+    | 'COMPLETE_REMINDER'
+    | 'CREATE_NOTE'
+    | 'PIN_RECORD_NOTE'
+    | 'ROUTE_TO_MODULE';
   config: any;
 }
 
@@ -416,8 +421,11 @@ export class AutomationEngine {
           const subject = this.interpolateString(action.config.subject || '', context);
           const body = this.interpolateString(action.config.body || '', context);
 
-          console.log(`[Email Simulator] TO: ${to} | SUBJECT: ${subject} | BODY:\n${body}`);
-          output = { sent: true, simulated: true, to, subject };
+          const emailRes = await ActionRegistry['EMAIL'].execute(
+            { ...(context.trigger.record || {}), tenantId },
+            { to, subject, body }
+          );
+          output = { sent: true, simulated: !emailRes.smtpSent, to, subject, ...emailRes };
           break;
         }
 
@@ -425,8 +433,11 @@ export class AutomationEngine {
           const message = this.interpolateString(action.config.message || '', context);
           const channel = this.interpolateString(action.config.channel || 'system', context);
 
-          console.log(`[Internal Ping] CHANNEL: ${channel} | MESSAGE: ${message}`);
-          output = { success: true, channel, message };
+          const notifyRes = await ActionRegistry['NOTIFY'].execute(
+            { ...(context.trigger.record || {}), tenantId },
+            { channel, message }
+          );
+          output = { success: true, channel, message, ...notifyRes };
           break;
         }
 

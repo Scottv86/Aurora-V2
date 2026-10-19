@@ -121,7 +121,7 @@ const getStatusStyles = (status: string) => {
 };
 
 export const TriageInboxPage = () => {
-  const { tenant, modules, modulesLoading, members = [], teams = [] } = usePlatform();
+  const { tenant, modules, modulesLoading, members = [], teams = [], updateTenant } = usePlatform();
   const { session, user } = useAuth();
   const queryClient = useQueryClient();
   const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';
@@ -135,8 +135,19 @@ export const TriageInboxPage = () => {
   const [triageRules, setTriageRules] = useState<any[]>([]);
   const [countdownText, setCountdownText] = useState<string>('');
   const [isRunningTriage, setIsRunningTriage] = useState(false);
-  const [isTimerPaused, setIsTimerPaused] = useState<boolean>(() => localStorage.getItem('auto_distribution_paused') === 'true');
+  const [isTimerPaused, setIsTimerPaused] = useState<boolean>(() => {
+    const ws = (tenant?.workspaceSettings as any)?.triageAutoDistributionPaused;
+    if (ws !== undefined) return Boolean(ws);
+    return localStorage.getItem('auto_distribution_paused') === 'true';
+  });
   const [quarantineCount, setQuarantineCount] = useState<number>(0);
+
+  useEffect(() => {
+    const ws = (tenant?.workspaceSettings as any)?.triageAutoDistributionPaused;
+    if (ws !== undefined) {
+      setIsTimerPaused(Boolean(ws));
+    }
+  }, [tenant?.workspaceSettings]);
 
   // Query for records
   const { data: recordsData, isFetching: isRecordsFetching } = useQuery({
@@ -1547,6 +1558,14 @@ export const TriageInboxPage = () => {
                     const newVal = !isTimerPaused;
                     setIsTimerPaused(newVal);
                     localStorage.setItem('auto_distribution_paused', String(newVal));
+                    if (updateTenant && tenant) {
+                      updateTenant({
+                        workspaceSettings: {
+                          ...(tenant.workspaceSettings as object || {}),
+                          triageAutoDistributionPaused: newVal
+                        }
+                      }).catch(() => {});
+                    }
                     if (newVal) {
                       pausedTimeRef.current = Date.now();
                     } else {
@@ -2048,20 +2067,30 @@ export const TriageInboxPage = () => {
                                 {/* SLA Target Banner */}
                                 {selectedRecord.slaDeadline && (
                                   <div className={`p-3 rounded-xl border flex items-center justify-between text-xs ${
-                                    selectedRecord.slaStatus === 'BREACHED'
-                                      ? 'bg-rose-955/20 border-rose-500/20 text-rose-455'
+                                    selectedRecord.slaStatus === 'PAUSED'
+                                      ? 'bg-blue-500/10 border-blue-500/30 text-blue-500 dark:text-blue-400'
+                                      : selectedRecord.slaStatus === 'ESCALATED'
+                                      ? 'bg-purple-500/15 border-purple-500/40 text-purple-600 dark:text-purple-300 animate-pulse'
+                                      : selectedRecord.slaStatus === 'BREACHED'
+                                      ? 'bg-rose-500/15 border-rose-500/30 text-rose-600 dark:text-rose-400'
                                       : selectedRecord.slaStatus === 'WARNING'
-                                      ? 'bg-amber-955/20 border-amber-500/20 text-amber-455'
-                                      : 'bg-emerald-955/20 border-emerald-500/20 text-emerald-455'
+                                      ? 'bg-amber-500/15 border-amber-500/30 text-amber-600 dark:text-amber-400'
+                                      : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
                                   }`}>
                                     <div className="flex items-center gap-2">
                                       <Clock size={14} />
                                       <span className="font-bold">
-                                        SLA Response Limit: {selectedRecord.slaStatus || 'MET'}
+                                        {selectedRecord.slaStatus === 'PAUSED' && '⏸️ SLA Paused (Waiting on Client / Hold)'}
+                                        {selectedRecord.slaStatus === 'ESCALATED' && '🚨 Executive Escalation (>120% Breached)'}
+                                        {selectedRecord.slaStatus === 'BREACHED' && '⚠️ SLA Breached (Response Overdue)'}
+                                        {selectedRecord.slaStatus === 'WARNING' && '⏳ Amber Warning (>75% Elapsed)'}
+                                        {(!selectedRecord.slaStatus || selectedRecord.slaStatus === 'MET') && '✅ On Track (Business Hours SLA)'}
                                       </span>
                                     </div>
                                     <span className="font-mono text-[10px]">
-                                      Deadline: {new Date(selectedRecord.slaDeadline).toLocaleString()}
+                                      {selectedRecord.slaStatus === 'PAUSED'
+                                        ? 'Timer Frozen'
+                                        : `Target: ${new Date(selectedRecord.slaDeadline).toLocaleString()}`}
                                     </span>
                                   </div>
                                 )}

@@ -58,9 +58,8 @@ router.get('/usage', authorize('view:settings'), async (req: TenantRequest, res)
  * GET /api/billing/invoices
  * Returns mock invoice history.
  */
-router.get('/invoices', authorize('view:settings'), async (req: TenantRequest, res) => {
+router.get('/invoices', authorize('view:settings'), async (_req: TenantRequest, res) => {
   try {
-    const tenantId = req.tenantId!;
     
     // In a real app, this would query a Stripe/Billing service or an Invoices table.
     // We'll return mock data for the high-fidelity UI.

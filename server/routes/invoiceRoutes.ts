@@ -115,7 +115,11 @@ router.post('/', async (req: TenantRequest, res) => {
     const tenantId = req.tenantId!;
     const validated = InvoiceSchema.parse(req.body);
 
-    const invoice = await InvoiceService.createInvoice(tenantId, validated, req.user?.uid, db);
+    const invoice = await InvoiceService.createInvoice(tenantId, {
+      ...validated,
+      issueDate: validated.issueDate || new Date(),
+      dueDate: validated.dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    }, req.user?.uid, db);
     res.status(201).json(invoice);
   } catch (err: any) {
     console.error('[InvoiceAPI] POST / error:', err);
@@ -196,7 +200,11 @@ router.post('/bills', async (req: TenantRequest, res) => {
     const tenantId = req.tenantId!;
     const validated = BillSchema.parse(req.body);
 
-    const bill = await InvoiceService.createBill(tenantId, validated, req.user?.uid, db);
+    const bill = await InvoiceService.createBill(tenantId, {
+      ...validated,
+      issueDate: validated.issueDate || new Date(),
+      dueDate: validated.dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    }, req.user?.uid, db);
     res.status(201).json(bill);
   } catch (err: any) {
     res.status(400).json({ error: err.message });

@@ -2,17 +2,8 @@ import React from 'react';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import { 
-  Type, 
-  Heading as HeadingIcon, 
-  Layout, 
-  PenTool, 
   Table as TableIcon, 
-  AlertCircle, 
-  Columns, 
-  MousePointerClick, 
-  Minus, 
-  Quote as QuoteIcon, 
-  Code as CodeIcon
+  AlertCircle
 } from 'lucide-react';
 import { ContentBlock } from '../../types/platform';
 import { getFontFamilyCSS } from './contentCompiler';
@@ -33,7 +24,7 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({
   globalFont,
   onUpdateData,
   onUpdateStyles,
-  onInsertTag
+  onInsertTag: _onInsertTag
 }) => {
   const styles = block.styles || {};
   const currentFont = getFontFamilyCSS(styles.fontFamily || globalFont);

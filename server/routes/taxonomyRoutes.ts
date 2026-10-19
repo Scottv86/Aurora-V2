@@ -116,7 +116,7 @@ router.post('/', async (req: TenantRequest, res) => {
     res.status(201).json(taxonomy);
   } catch (err: any) {
     if (err instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Validation failed', details: err.errors });
+      return res.status(400).json({ error: 'Validation failed', details: err.issues });
     }
     res.status(500).json({ error: err.message });
   }
@@ -154,7 +154,7 @@ router.put('/:id', async (req: TenantRequest, res) => {
     res.json(updated);
   } catch (err: any) {
     if (err instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Validation failed', details: err.errors });
+      return res.status(400).json({ error: 'Validation failed', details: err.issues });
     }
     res.status(500).json({ error: err.message });
   }

@@ -3,15 +3,11 @@ import {
   FileOutput, 
   X, 
   Users, 
-  Building2, 
   Database, 
   Sparkles, 
-  CheckCircle2, 
   AlertTriangle, 
   Loader2, 
-  ArrowRight, 
   Table, 
-  ExternalLink,
   ShieldCheck,
   Check
 } from 'lucide-react';
@@ -34,7 +30,7 @@ export const DocumentConvertToRecordModal: React.FC<DocumentConvertToRecordModal
   document,
   onRecordCreated
 }) => {
-  const { tenant, modules } = usePlatform();
+  const { modules } = usePlatform();
   const [targetType, setTargetType] = useState<'PEOPLE_ORG' | 'MODULE'>('PEOPLE_ORG');
   const [entityType, setEntityType] = useState<'ORGANIZATION' | 'PERSON'>('ORGANIZATION');
   const [selectedModuleId, setSelectedModuleId] = useState<string>('');
@@ -112,7 +108,7 @@ export const DocumentConvertToRecordModal: React.FC<DocumentConvertToRecordModal
 
       const [draftRes, lineItemsRes] = await Promise.all([
         DocumentClientService.previewConvertToRecord(document.id, targetType, targetSchema),
-        DocumentClientService.extractLineItems(document.id).catch(() => [])
+        DocumentClientService.extractLineItems(document.id).catch((): LineItemRow[] => [])
       ]);
 
       setDraft(draftRes);

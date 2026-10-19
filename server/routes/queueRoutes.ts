@@ -1,23 +1,61 @@
 import { Router, Response } from 'express';
 import { TenantRequest } from '../middleware/tenantMiddleware';
+import { globalPrisma } from '../lib/prisma';
 
 const router = Router();
 
 // In-memory queue store fallback
 const memoryQueues = new Map<string, any[]>();
 
-const getTenantQueues = (tenantId: string): any[] => {
+const loadTenantQueues = async (tenantId: string): Promise<any[]> => {
+  try {
+    const tenant = await globalPrisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { workspaceSettings: true }
+    });
+    const settings = (tenant?.workspaceSettings as any) || {};
+    if (Array.isArray(settings.queues)) {
+      memoryQueues.set(tenantId, settings.queues);
+      return settings.queues;
+    }
+  } catch (err) {
+    // Fallback to in-memory if DB is unreachable
+  }
   if (!memoryQueues.has(tenantId)) {
     memoryQueues.set(tenantId, []);
   }
   return memoryQueues.get(tenantId)!;
 };
 
+const saveTenantQueues = async (tenantId: string, queues: any[]): Promise<void> => {
+  memoryQueues.set(tenantId, queues);
+  try {
+    const tenant = await globalPrisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { workspaceSettings: true }
+    });
+    if (tenant) {
+      const settings = (tenant.workspaceSettings as any) || {};
+      await globalPrisma.tenant.update({
+        where: { id: tenantId },
+        data: {
+          workspaceSettings: {
+            ...settings,
+            queues
+          }
+        }
+      });
+    }
+  } catch (err) {
+    console.warn('[QueuesAPI] Fallback to memory persistence:', err);
+  }
+};
+
 // GET /api/queues - List all queues for tenant
 router.get('/', async (req: TenantRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || 't1';
-    const queues = getTenantQueues(tenantId);
+    const queues = await loadTenantQueues(tenantId);
     res.json(queues);
   } catch (err: any) {
     console.error('[QueuesAPI] GET / Error:', err);
@@ -30,7 +68,7 @@ router.get('/:id', async (req: TenantRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || 't1';
     const { id } = req.params;
-    const queues = getTenantQueues(tenantId);
+    const queues = await loadTenantQueues(tenantId);
     const found = queues.find(q => q.id === id || q.slug === id);
 
     if (!found) {
@@ -54,7 +92,7 @@ router.post('/', async (req: TenantRequest, res: Response) => {
       return res.status(400).json({ error: 'Queue name is required' });
     }
 
-    const queues = getTenantQueues(tenantId);
+    const queues = [...(await loadTenantQueues(tenantId))];
     const existingIndex = id ? queues.findIndex(q => q.id === id) : -1;
 
     const queueRecord = {
@@ -84,7 +122,7 @@ router.post('/', async (req: TenantRequest, res: Response) => {
     } else {
       queues.unshift(queueRecord);
     }
-    memoryQueues.set(tenantId, queues);
+    await saveTenantQueues(tenantId, queues);
 
     res.status(201).json(queueRecord);
   } catch (err: any) {
@@ -98,7 +136,7 @@ router.put('/:id', async (req: TenantRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || 't1';
     const { id } = req.params;
-    const queues = getTenantQueues(tenantId);
+    const queues = [...(await loadTenantQueues(tenantId))];
     const index = queues.findIndex(q => q.id === id);
 
     if (index === -1) {
@@ -111,7 +149,7 @@ router.put('/:id', async (req: TenantRequest, res: Response) => {
         updatedAt: new Date().toISOString()
       };
       queues.unshift(newQueue);
-      memoryQueues.set(tenantId, queues);
+      await saveTenantQueues(tenantId, queues);
       return res.json(newQueue);
     }
 
@@ -126,7 +164,7 @@ router.put('/:id', async (req: TenantRequest, res: Response) => {
     };
 
     queues[index] = updated;
-    memoryQueues.set(tenantId, queues);
+    await saveTenantQueues(tenantId, queues);
 
     res.json(updated);
   } catch (err: any) {
@@ -140,10 +178,10 @@ router.delete('/:id', async (req: TenantRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || 't1';
     const { id } = req.params;
-    const queues = getTenantQueues(tenantId);
+    const queues = await loadTenantQueues(tenantId);
     const filtered = queues.filter(q => q.id !== id);
 
-    memoryQueues.set(tenantId, filtered);
+    await saveTenantQueues(tenantId, filtered);
     res.json({ success: true, message: 'Queue deleted' });
   } catch (err: any) {
     console.error('[QueuesAPI] DELETE /:id Error:', err);

@@ -11,11 +11,7 @@ import {
   Maximize, 
   Zap,
   Plus,
-  Trash2,
-  Sparkles,
-  Layers,
-  HelpCircle,
-  CheckCircle2
+  Trash2
 } from 'lucide-react';
 import { 
   ContentBlock, 
@@ -32,17 +28,6 @@ interface BlockSettingsDrawerProps {
   onUpdateStyles: (newStyles: Record<string, any>) => void;
   onUpdateConditions?: (newConditions: ContentBlockCondition) => void;
 }
-
-const COMMON_FIELDS = [
-  { key: 'account.tier', label: 'Account Tier (e.g. Enterprise, Growth)' },
-  { key: 'account.status', label: 'Account Status (Active, Suspended)' },
-  { key: 'deal.amount', label: 'Deal / Opportunity Amount' },
-  { key: 'deal.stage', label: 'Deal Stage (e.g. Closed Won)' },
-  { key: 'contact.role', label: 'Contact Role / Title' },
-  { key: 'invoice.status', label: 'Invoice Status (Paid, Overdue)' },
-  { key: 'recipient_organization', label: 'Recipient Organization' },
-  { key: 'status', label: 'General Record Status' }
-];
 
 const OPERATORS: { value: ConditionOperator; label: string; symbol: string }[] = [
   { value: 'equals', label: 'Equals (==)', symbol: '==' },

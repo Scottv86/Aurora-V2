@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -10,47 +10,143 @@ import {
   FileText, 
   Clock, 
   User, 
-  Loader2 
+  Loader2,
+  Plus,
+  CheckCircle2,
+  Circle,
+  Trash2,
+  AlertCircle,
+  ArrowRight
 } from 'lucide-react';
 import { ScheduledActivity, ScheduledActivityType } from '../../lib/workflowProcessUtils';
 import { cn } from '../../lib/utils';
 
-interface ScheduleActivityModalProps {
+export interface ScheduleActivityModalProps {
   isOpen: boolean;
   onClose: () => void;
+  recordId?: string;
+  recordKey?: string;
   recordTitle?: string;
+  moduleName?: string;
   onSchedule: (activity: ScheduledActivity) => Promise<void> | void;
+  onCompleteActivity?: (activityId: string) => Promise<void> | void;
+  onDeleteActivity?: (activityId: string) => Promise<void> | void;
+  activities?: ScheduledActivity[];
   currentUserName?: string;
   currentUserId?: string;
   isSubmitting?: boolean;
 }
 
-const ACTIVITY_TYPES: { id: ScheduledActivityType; label: string; icon: React.ElementType; color: string }[] = [
-  { id: 'call', label: 'Call', icon: Phone, color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' },
-  { id: 'email', label: 'Email', icon: Mail, color: 'text-sky-500 bg-sky-500/10 border-sky-500/20' },
-  { id: 'meeting', label: 'Meeting', icon: Calendar, color: 'text-indigo-500 bg-indigo-500/10 border-indigo-500/20' },
-  { id: 'todo', label: 'To-Do', icon: CheckSquare, color: 'text-amber-500 bg-amber-500/10 border-amber-500/20' },
-  { id: 'document', label: 'Document', icon: FileText, color: 'text-violet-500 bg-violet-500/10 border-violet-500/20' }
+const ACTIVITY_TYPES: { id: ScheduledActivityType; label: string; icon: React.ElementType; color: string; badge: string }[] = [
+  { id: 'call', label: 'Call', icon: Phone, color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20', badge: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' },
+  { id: 'email', label: 'Email', icon: Mail, color: 'text-sky-500 bg-sky-500/10 border-sky-500/20', badge: 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20' },
+  { id: 'meeting', label: 'Meeting', icon: Calendar, color: 'text-indigo-500 bg-indigo-500/10 border-indigo-500/20', badge: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20' },
+  { id: 'todo', label: 'To-Do', icon: CheckSquare, color: 'text-amber-500 bg-amber-500/10 border-amber-500/20', badge: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' },
+  { id: 'document', label: 'Document', icon: FileText, color: 'text-violet-500 bg-violet-500/10 border-violet-500/20', badge: 'bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20' }
 ];
+
+type FilterTab = 'PENDING' | 'COMPLETED' | 'ALL';
 
 export const ScheduleActivityModal: React.FC<ScheduleActivityModalProps> = ({
   isOpen,
   onClose,
+  recordId,
+  recordKey,
   recordTitle,
+  moduleName,
   onSchedule,
+  onCompleteActivity,
+  onDeleteActivity,
+  activities = [],
   currentUserName,
   currentUserId,
   isSubmitting = false
 }) => {
+  const drawerRef = useRef<HTMLDivElement>(null);
+  const summaryInputRef = useRef<HTMLInputElement>(null);
+
+  // Cached record metadata so exit animation displays cleanly
+  const recordInfoRef = useRef({
+    recordId,
+    recordKey,
+    recordTitle,
+    moduleName
+  });
+
+  if (recordId || recordTitle) {
+    recordInfoRef.current = {
+      recordId,
+      recordKey,
+      recordTitle,
+      moduleName
+    };
+  }
+
+  const activeRecordKey = recordKey || recordInfoRef.current.recordKey;
+  const activeRecordTitle = recordTitle || recordInfoRef.current.recordTitle;
+  const activeModuleName = moduleName || recordInfoRef.current.moduleName;
+
+  // View state
+  const [activeFilter, setActiveFilter] = useState<FilterTab>('PENDING');
+  const [isComposerExpanded, setIsComposerExpanded] = useState(activities.length === 0);
+
+  // Form state
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const defaultDueDate = tomorrow.toISOString().split('T')[0];
 
   const [type, setType] = useState<ScheduledActivityType>('call');
   const [summary, setSummary] = useState('');
+  const [duePreset, setDuePreset] = useState<'tomorrow' | '3days' | '1week' | 'custom'>('tomorrow');
   const [dueDate, setDueDate] = useState(defaultDueDate);
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
+  const [localSubmitting, setLocalSubmitting] = useState(false);
+
+  // Auto-expand composer if no activities exist
+  useEffect(() => {
+    if (activities.length === 0) {
+      setIsComposerExpanded(true);
+    }
+  }, [activities.length]);
+
+  // Escape key listener
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  // Lock body scroll while open
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isOpen]);
+
+  const handlePresetChange = (preset: 'tomorrow' | '3days' | '1week' | 'custom') => {
+    setDuePreset(preset);
+    const target = new Date();
+    if (preset === 'tomorrow') {
+      target.setDate(target.getDate() + 1);
+      setDueDate(target.toISOString().split('T')[0]);
+    } else if (preset === '3days') {
+      target.setDate(target.getDate() + 3);
+      setDueDate(target.toISOString().split('T')[0]);
+    } else if (preset === '1week') {
+      target.setDate(target.getDate() + 7);
+      setDueDate(target.toISOString().split('T')[0]);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,197 +159,523 @@ export const ScheduleActivityModal: React.FC<ScheduleActivityModalProps> = ({
       return;
     }
 
-    const newActivity: ScheduledActivity = {
-      id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-      type,
-      summary: summary.trim(),
-      dueDate,
-      assignedToName: currentUserName || 'Current User',
-      assignedToId: currentUserId,
-      note: note.trim() || undefined,
-      done: false,
-      createdAt: new Date().toISOString()
-    };
+    try {
+      setLocalSubmitting(true);
+      const newActivity: ScheduledActivity = {
+        id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+        type,
+        summary: summary.trim(),
+        dueDate,
+        assignedToName: currentUserName || 'Current User',
+        assignedToId: currentUserId,
+        note: note.trim() || undefined,
+        done: false,
+        createdAt: new Date().toISOString()
+      };
 
-    await onSchedule(newActivity);
+      await onSchedule(newActivity);
+      setSummary('');
+      setNote('');
+      setError('');
+      setIsComposerExpanded(false);
+      handlePresetChange('tomorrow');
+    } catch (err) {
+      console.error('Error creating activity:', err);
+    } finally {
+      setLocalSubmitting(false);
+    }
   };
 
-  if (!isOpen) return null;
+  // Filtered Activities
+  const pendingCount = useMemo(() => {
+    return activities.filter(a => !a.done).length;
+  }, [activities]);
+
+  const filteredActivities = useMemo(() => {
+    let result = [...activities];
+    if (activeFilter === 'PENDING') {
+      result = result.filter(a => !a.done);
+    } else if (activeFilter === 'COMPLETED') {
+      result = result.filter(a => a.done);
+    }
+
+    // Sort by due date
+    return result.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+  }, [activities, activeFilter]);
+
+  const formatDueDate = (dateStr: string) => {
+    const due = new Date(dateStr);
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const dueZero = new Date(due);
+    dueZero.setHours(0, 0, 0, 0);
+
+    const isOverdue = dueZero.getTime() < now.getTime();
+    const isToday = dueZero.getTime() === now.getTime();
+    const isTomorrow = new Date(now.getTime() + 86400000).getTime() === dueZero.getTime();
+
+    let text = '';
+    if (isToday) {
+      text = 'Today';
+    } else if (isTomorrow) {
+      text = 'Tomorrow';
+    } else {
+      text = due.toLocaleDateString([], { month: 'short', day: 'numeric', year: due.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+    }
+
+    return { text, isOverdue, isToday };
+  };
 
   return createPortal(
     <AnimatePresence>
-      <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
-        {/* Backdrop */}
+      {isOpen && (
         <motion.div
+          key="schedule-drawer-backdrop"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          onClick={isSubmitting ? undefined : onClose}
-          className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
+          transition={{ duration: 0.25, ease: 'easeInOut' }}
+          onClick={onClose}
+          className="fixed inset-0 z-[99998] bg-zinc-950/60 backdrop-blur-xs cursor-pointer"
         />
+      )}
 
-        {/* Modal Window */}
+      {isOpen && (
         <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 10 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 10 }}
-          transition={{ duration: 0.18, ease: 'easeOut' }}
-          className="relative w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl overflow-hidden z-10"
+          key="schedule-drawer-panel"
+          ref={drawerRef}
+          initial={{ x: '100%' }}
+          animate={{ x: 0 }}
+          exit={{ x: '100%', transition: { type: 'spring', damping: 30, stiffness: 300 } }}
+          transition={{ type: 'spring', damping: 28, stiffness: 280 }}
+          className="fixed inset-y-0 right-0 z-[99999] w-full max-w-xl bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 shadow-2xl flex flex-col overflow-hidden"
         >
-          {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 flex items-center justify-center shrink-0">
-                <Clock size={16} />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
-                  Schedule Follow-up Activity
-                </h3>
-                {recordTitle && (
-                  <p className="text-xs text-zinc-500 truncate max-w-[240px]">
-                    For: <span className="font-semibold text-zinc-700 dark:text-zinc-300">{recordTitle}</span>
+          {/* TOP HEADER */}
+          <div className="p-5 border-b border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/70 dark:bg-zinc-900/60 flex flex-col gap-3 shrink-0">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 flex items-center justify-center shrink-0">
+                  <Calendar size={18} />
+                </div>
+
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-bold text-zinc-900 dark:text-white truncate">
+                      Scheduled Activities & Tasks
+                    </h2>
+                    {pendingCount > 0 ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shrink-0">
+                        {pendingCount} pending
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 shrink-0">
+                        All clear
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
+                    {activeModuleName ? `${activeModuleName} • ` : ''}
+                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">
+                      {activeRecordKey || activeRecordTitle || 'Record'}
+                    </span>
                   </p>
-                )}
+                </div>
+              </div>
+
+              {/* Close Button */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700/80 bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white flex items-center gap-1.5 text-xs font-semibold transition-colors cursor-pointer"
+                  title="Close Drawer (Esc)"
+                >
+                  <X size={14} />
+                  <span className="hidden sm:inline">Close</span>
+                  <kbd className="hidden sm:inline text-[9px] px-1 py-0.5 rounded bg-zinc-100 dark:bg-zinc-700 text-zinc-400 font-mono">Esc</kbd>
+                </button>
               </div>
             </div>
-            <button
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-            >
-              <X size={16} />
-            </button>
+
+            {/* TAB SELECTOR & COMPOSER TOGGLE */}
+            <div className="flex items-center justify-between gap-2.5 pt-1">
+              <div className="flex items-center p-0.5 rounded-xl bg-zinc-200/70 dark:bg-zinc-800/80 text-xs font-semibold">
+                {[
+                  { id: 'PENDING', label: `Pending (${pendingCount})` },
+                  { id: 'COMPLETED', label: `Completed (${activities.filter(a => a.done).length})` },
+                  { id: 'ALL', label: `All (${activities.length})` }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveFilter(tab.id as any)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg transition-all cursor-pointer text-xs",
+                      activeFilter === tab.id
+                        ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-xs font-bold"
+                        : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+                    )}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {!isComposerExpanded && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsComposerExpanded(true);
+                    setTimeout(() => summaryInputRef.current?.focus(), 50);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer shrink-0"
+                >
+                  <Plus size={13} />
+                  <span>New Activity</span>
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Form */}
-          <form onSubmit={handleSubmit}>
-            <div className="p-6 space-y-4">
-              {/* Activity Type Picker */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
-                  Activity Type
-                </label>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {ACTIVITY_TYPES.map(item => {
-                    const Icon = item.icon;
-                    const isSelected = type === item.id;
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => setType(item.id)}
-                        className={cn(
-                          "flex flex-col items-center justify-center py-2 px-1 rounded-xl border text-center transition-all cursor-pointer",
-                          isSelected
-                            ? "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-500 text-indigo-600 dark:text-indigo-400 ring-2 ring-indigo-500/20 shadow-xs"
-                            : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
-                        )}
-                      >
-                        <Icon size={16} className={cn("mb-1", isSelected ? "text-indigo-500" : "text-zinc-400")} />
-                        <span className="text-[10px] font-semibold">{item.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Summary */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
-                  Summary / Next Task <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={summary}
-                  onChange={(e) => {
-                    setSummary(e.target.value);
-                    if (error) setError('');
+          {/* DRAWER BODY */}
+          <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
+            
+            {/* Quick Activity Composer */}
+            <div className={cn(
+              "rounded-2xl border transition-all duration-200 overflow-hidden",
+              isComposerExpanded
+                ? "bg-white dark:bg-zinc-900 border-indigo-400/60 dark:border-indigo-500/40 shadow-md ring-1 ring-indigo-400/20"
+                : "bg-zinc-50/80 dark:bg-zinc-900/50 border-zinc-200/80 dark:border-zinc-800 hover:border-indigo-400/40"
+            )}>
+              {!isComposerExpanded ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsComposerExpanded(true);
+                    setTimeout(() => summaryInputRef.current?.focus(), 50);
                   }}
-                  placeholder={
-                    type === 'call' 
-                      ? 'e.g. Call client to discuss scope' 
-                      : type === 'email' 
-                      ? 'e.g. Send updated pricing proposal' 
-                      : type === 'meeting' 
-                      ? 'e.g. Review requirements kick-off' 
-                      : 'e.g. Complete invoice review'
-                  }
-                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all"
-                />
-              </div>
-
-              {/* Due Date & Assignee */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
-                    Due Date <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all cursor-pointer"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
-                    Assigned To
-                  </label>
-                  <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-zinc-700 dark:text-zinc-300">
-                    <User size={13} className="text-zinc-400 shrink-0" />
-                    <span className="truncate">{currentUserName || 'You'}</span>
+                  className="w-full px-4 py-3 text-left flex items-center justify-between gap-3 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 cursor-pointer group"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-6 h-6 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                      <Plus size={14} />
+                    </div>
+                    <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-800 dark:group-hover:text-zinc-200">
+                      Schedule a call, email, meeting, or task...
+                    </span>
                   </div>
-                </div>
-              </div>
+                  <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 opacity-80 group-hover:opacity-100 flex items-center gap-1">
+                    Schedule <ArrowRight size={11} />
+                  </span>
+                </button>
+              ) : (
+                <form onSubmit={handleSubmit} className="p-4 space-y-3.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                      <Clock size={13} className="text-indigo-500" /> New Activity
+                    </span>
+                    {activities.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setIsComposerExpanded(false)}
+                        className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
 
-              {/* Note */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
-                  Note / Log Instructions (Optional)
-                </label>
-                <textarea
-                  rows={2}
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Additional context or talking points..."
-                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all resize-none"
-                />
-              </div>
+                  {/* Activity Type Selection Chips */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-400">
+                      Activity Type
+                    </label>
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {ACTIVITY_TYPES.map(item => {
+                        const Icon = item.icon;
+                        const isSelected = type === item.id;
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => setType(item.id)}
+                            className={cn(
+                              "flex flex-col items-center justify-center py-2 px-1 rounded-xl border text-center transition-all cursor-pointer",
+                              isSelected
+                                ? "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-500 text-indigo-600 dark:text-indigo-400 ring-2 ring-indigo-500/20 shadow-xs"
+                                : "bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+                            )}
+                          >
+                            <Icon size={16} className={cn("mb-1", isSelected ? "text-indigo-500" : "text-zinc-400")} />
+                            <span className="text-[10px] font-semibold">{item.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
 
-              {error && (
-                <p className="text-xs text-rose-500 font-medium">{error}</p>
+                  {/* Summary Input */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-400">
+                      Summary / Next Action <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      ref={summaryInputRef}
+                      type="text"
+                      value={summary}
+                      onChange={(e) => {
+                        setSummary(e.target.value);
+                        if (error) setError('');
+                      }}
+                      placeholder={
+                        type === 'call' 
+                          ? 'e.g. Call client to discuss quote approval' 
+                          : type === 'email' 
+                          ? 'e.g. Send updated pricing proposal' 
+                          : type === 'meeting' 
+                          ? 'e.g. Review requirements kick-off' 
+                          : 'e.g. Complete invoice review'
+                      }
+                      className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-indigo-500 transition-colors"
+                    />
+                  </div>
+
+                  {/* Due Date & Presets */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 flex items-center gap-1">
+                      <Clock size={11} /> Due Date
+                    </label>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {[
+                        { id: 'tomorrow', label: 'Tomorrow' },
+                        { id: '3days', label: 'In 3 Days' },
+                        { id: '1week', label: 'Next Week' },
+                        { id: 'custom', label: 'Custom' }
+                      ].map(preset => (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => handlePresetChange(preset.id as any)}
+                          className={cn(
+                            "px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer",
+                            duePreset === preset.id
+                              ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                              : "bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+                          )}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {duePreset === 'custom' && (
+                      <div className="pt-1">
+                        <input
+                          type="date"
+                          value={dueDate}
+                          onChange={(e) => setDueDate(e.target.value)}
+                          className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Assignee & Note */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 flex items-center gap-1">
+                      <User size={11} /> Assigned To
+                    </label>
+                    <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-700 dark:text-zinc-300">
+                      <div className="w-5 h-5 rounded-full bg-indigo-500/10 text-indigo-600 font-bold flex items-center justify-center text-[10px]">
+                        {(currentUserName || 'U').charAt(0).toUpperCase()}
+                      </div>
+                      <span className="truncate">{currentUserName || 'Current User'}</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-400">
+                      Notes / Talking Points (Optional)
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      placeholder="Add talking points, context, or instructions..."
+                      className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-indigo-500 resize-y"
+                    />
+                  </div>
+
+                  {error && (
+                    <p className="text-xs text-rose-500 font-medium flex items-center gap-1">
+                      <AlertCircle size={12} /> {error}
+                    </p>
+                  )}
+
+                  {/* Footer Actions */}
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-100 dark:border-zinc-800/80">
+                    {activities.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setIsComposerExpanded(false)}
+                        className="px-3 py-1.5 text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={localSubmitting || isSubmitting || !summary.trim()}
+                      className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {localSubmitting || isSubmitting ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <Calendar size={13} />
+                      )}
+                      <span>Schedule Activity</span>
+                    </button>
+                  </div>
+                </form>
               )}
             </div>
 
-            {/* Footer Buttons */}
-            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={isSubmitting}
-                className="px-4 py-2 text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-sm transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
-              >
-                {isSubmitting ? (
-                  <Loader2 size={13} className="animate-spin" />
-                ) : (
-                  <Calendar size={13} />
+            {/* Activities Feed */}
+            {filteredActivities.length === 0 ? (
+              <div className="py-12 px-4 rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800 text-center space-y-2">
+                <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto">
+                  <Calendar size={20} />
+                </div>
+                <h3 className="text-xs font-bold text-zinc-900 dark:text-white">
+                  {activeFilter === 'COMPLETED' ? 'No completed activities' : 'No activities scheduled'}
+                </h3>
+                <p className="text-[11px] text-zinc-500 max-w-xs mx-auto">
+                  {activeFilter === 'COMPLETED'
+                    ? 'Completed calls, emails, and meetings will be cataloged here for audit.'
+                    : 'Schedule next steps to keep this record progressing smoothly through the pipeline.'}
+                </p>
+                {!isComposerExpanded && activeFilter !== 'COMPLETED' && (
+                  <button
+                    type="button"
+                    onClick={() => setIsComposerExpanded(true)}
+                    className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-lg text-xs font-bold border border-indigo-500/30 transition-colors cursor-pointer"
+                  >
+                    <Plus size={13} />
+                    <span>Schedule First Activity</span>
+                  </button>
                 )}
-                <span>Schedule Activity</span>
-              </button>
-            </div>
-          </form>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {filteredActivities.map(act => {
+                  const typeConfig = ACTIVITY_TYPES.find(t => t.id === act.type) || ACTIVITY_TYPES[0];
+                  const Icon = typeConfig.icon;
+                  const isCompleted = act.done;
+                  const { text: dueFormatted, isOverdue, isToday } = formatDueDate(act.dueDate);
+
+                  return (
+                    <div
+                      key={act.id}
+                      className={cn(
+                        "group relative flex items-start gap-3 p-3.5 rounded-2xl border transition-all shadow-xs",
+                        isCompleted
+                          ? "bg-zinc-50/50 dark:bg-zinc-900/30 border-zinc-200/50 dark:border-zinc-800/50 opacity-70"
+                          : "bg-white dark:bg-zinc-900 border-zinc-200/80 dark:border-zinc-800 hover:border-indigo-300 dark:hover:border-indigo-900/50"
+                      )}
+                    >
+                      {/* Checkbox */}
+                      {onCompleteActivity && (
+                        <button
+                          type="button"
+                          onClick={() => onCompleteActivity(act.id)}
+                          className="mt-0.5 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer shrink-0"
+                          title={isCompleted ? 'Mark not done' : 'Mark done'}
+                        >
+                          {isCompleted ? (
+                            <CheckCircle2 size={18} className="text-emerald-500 fill-emerald-500/20" />
+                          ) : (
+                            <Circle size={18} className="hover:scale-110 transition-transform" />
+                          )}
+                        </button>
+                      )}
+
+                      {/* Content */}
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            {/* Type Pill */}
+                            <span className={cn(
+                              "inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md border shrink-0",
+                              typeConfig.badge
+                            )}>
+                              <Icon size={11} />
+                              <span>{typeConfig.label}</span>
+                            </span>
+
+                            <h4 className={cn(
+                              "text-xs font-bold truncate",
+                              isCompleted
+                                ? "line-through text-zinc-400 dark:text-zinc-500"
+                                : "text-zinc-900 dark:text-white"
+                            )}>
+                              {act.summary}
+                            </h4>
+                          </div>
+
+                          {/* Delete Action */}
+                          {onDeleteActivity && (
+                            <button
+                              type="button"
+                              onClick={() => onDeleteActivity(act.id)}
+                              className="opacity-0 group-hover:opacity-100 p-1 text-zinc-400 hover:text-rose-500 transition-opacity cursor-pointer"
+                              title="Delete activity"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          )}
+                        </div>
+
+                        {act.note && (
+                          <p className={cn(
+                            "text-xs leading-relaxed bg-zinc-50 dark:bg-zinc-950 p-2 rounded-xl border border-zinc-200/60 dark:border-zinc-800/60",
+                            isCompleted ? "text-zinc-400 dark:text-zinc-500 line-through" : "text-zinc-600 dark:text-zinc-300"
+                          )}>
+                            {act.note}
+                          </p>
+                        )}
+
+                        {/* Metadata Footer */}
+                        <div className="flex items-center justify-between text-[10px] pt-1 text-zinc-400">
+                          <div className="flex items-center gap-1.5">
+                            <Clock size={11} className={!isCompleted && isOverdue ? "text-rose-500" : ""} />
+                            <span className={cn(
+                              !isCompleted && isOverdue && "text-rose-600 dark:text-rose-400 font-bold",
+                              !isCompleted && isToday && "text-amber-600 dark:text-amber-400 font-bold"
+                            )}>
+                              {!isCompleted && isOverdue ? `Overdue • Due ${dueFormatted}` : `Due ${dueFormatted}`}
+                            </span>
+                          </div>
+
+                          {act.assignedToName && (
+                            <div className="flex items-center gap-1 text-zinc-500 dark:text-zinc-400">
+                              <User size={10} />
+                              <span>{act.assignedToName}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </motion.div>
-      </div>
+      )}
     </AnimatePresence>,
     document.body
   );
 };
+
+export { ScheduleActivityModal as RecordScheduleDrawer };
+

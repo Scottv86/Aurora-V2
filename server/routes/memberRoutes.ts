@@ -11,7 +11,6 @@ const router = express.Router();
 router.get('/', async (req: TenantRequest, res) => {
   try {
     const db = req.db || globalPrisma;
-    const tenantId = req.tenantId!;
 
     const members = await db.tenantMember.findMany({
       include: {
@@ -251,6 +250,7 @@ router.post('/provision', authorize('manage:staff'), async (req: TenantRequest, 
 
     const agent = await db.agent.create({
       data: {
+        tenantId,
         name: name || `${modelType.split(' ')[0]} Assistant`,
         modelType,
         config: { humour: aiHumour || 0.5, ...agentConfig }
@@ -297,8 +297,9 @@ router.post('/clone/:id', authorize('manage:staff'), async (req: TenantRequest, 
     if (source.isSynthetic) {
       const newAgent = await db.agent.create({
         data: {
+          tenantId,
           name: source.agent?.name ? `${source.agent.name} (Clone)` : 'Cloned Agent',
-          modelType: source.modelType || undefined,
+          modelType: source.agent?.modelType || 'gemini-2.5-flash',
           config: source.agent?.config ? { ...(source.agent.config as any) } : undefined
         }
       });
@@ -520,6 +521,164 @@ router.put('/:id/ai-overrides', authorize('manage:staff'), async (req: TenantReq
   } catch (err: any) {
     console.error(`[MemberAPI] AI Overrides update error for member ${req.params.id}:`, err);
     res.status(500).json({ error: err.message || 'Failed to update member AI overrides' });
+  }
+});
+
+// GET /api/members/:id/hr - Fetch HR details (contracts, leave, timesheets)
+router.get('/:id/hr', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db || globalPrisma;
+    const tenantId = req.tenantId!;
+    const { id } = req.params;
+
+    const member = await db.tenantMember.findFirst({ where: { id, tenantId } });
+    if (!member) {
+      return res.status(404).json({ error: 'Member not found' });
+    }
+
+    const [contracts, leaveBalances, leaveRequests, timesheets] = await Promise.all([
+      db.employmentContract.findMany({
+        where: { memberId: id, tenantId },
+        include: { remuneration: true },
+        orderBy: { startDate: 'desc' }
+      }),
+      db.leaveBalance.findMany({
+        where: { memberId: id }
+      }),
+      db.leaveRequest.findMany({
+        where: { memberId: id },
+        orderBy: { startDate: 'desc' }
+      }),
+      db.timesheet.findMany({
+        where: { memberId: id },
+        include: { entries: true },
+        orderBy: { periodStart: 'desc' }
+      })
+    ]);
+
+    res.json({
+      contracts,
+      leaveBalances,
+      leaveRequests,
+      timesheets
+    });
+  } catch (err: any) {
+    console.error('[MemberAPI] GET /:id/hr Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch HR details' });
+  }
+});
+
+// POST /api/members/:id/contracts - Create employment contract & remuneration
+router.post('/:id/contracts', authorize('manage:staff'), async (req: TenantRequest, res) => {
+  try {
+    const db = req.db || globalPrisma;
+    const tenantId = req.tenantId!;
+    const { id } = req.params;
+    const { type, startDate, endDate, salary, currency } = req.body;
+
+    const member = await db.tenantMember.findFirst({ where: { id, tenantId } });
+    if (!member) {
+      return res.status(404).json({ error: 'Member not found' });
+    }
+
+    const contract = await db.employmentContract.create({
+      data: {
+        tenantId,
+        memberId: id,
+        type: type || 'Permanent',
+        startDate: startDate ? new Date(startDate) : new Date(),
+        endDate: endDate ? new Date(endDate) : null,
+        status: 'Active',
+        remuneration: salary ? {
+          create: {
+            amount: parseFloat(salary),
+            currency: currency || 'AUD',
+            effectiveDate: startDate ? new Date(startDate) : new Date()
+          }
+        } : undefined
+      },
+      include: {
+        remuneration: true
+      }
+    });
+
+    await recordAudit({
+      tenantId,
+      actorId: req.user?.uid || 'SYSTEM',
+      action: 'MEMBER_CONTRACT_CREATE',
+      resourceId: contract.id,
+      newValue: contract
+    });
+
+    res.status(201).json(contract);
+  } catch (err: any) {
+    console.error('[MemberAPI] Create Contract Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to create contract' });
+  }
+});
+
+// POST /api/members/:id/leave-requests - Submit leave request & update leave balance
+router.post('/:id/leave-requests', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db || globalPrisma;
+    const tenantId = req.tenantId!;
+    const { id } = req.params;
+    const { leaveType, startDate, endDate, reason } = req.body;
+
+    const member = await db.tenantMember.findFirst({ where: { id, tenantId } });
+    if (!member) {
+      return res.status(404).json({ error: 'Member not found' });
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate || startDate);
+    const diffDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+
+    const leaveRequest = await db.leaveRequest.create({
+      data: {
+        memberId: id,
+        type: leaveType || 'Annual Leave',
+        startDate: start,
+        endDate: end,
+        reason: reason || null,
+        status: 'Pending'
+      }
+    });
+
+    // Update or seed LeaveBalance
+    const balance = await db.leaveBalance.findFirst({
+      where: { memberId: id, type: leaveType || 'Annual Leave' }
+    });
+    if (!balance) {
+      await db.leaveBalance.create({
+        data: {
+          memberId: id,
+          type: leaveType || 'Annual Leave',
+          accrued: 20,
+          used: diffDays
+        }
+      });
+    } else {
+      await db.leaveBalance.update({
+        where: { id: balance.id },
+        data: {
+          used: balance.used + diffDays
+        }
+      });
+    }
+
+    await recordAudit({
+      tenantId,
+      actorId: req.user?.uid || 'SYSTEM',
+      action: 'LEAVE_REQUEST_CREATE',
+      resourceId: leaveRequest.id,
+      newValue: leaveRequest
+    });
+
+    res.status(201).json(leaveRequest);
+  } catch (err: any) {
+    console.error('[MemberAPI] Create Leave Request Error:', err);
+    res.status(500).json({ error: err.message || 'Failed to submit leave request' });
   }
 });
 

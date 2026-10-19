@@ -1,5 +1,10 @@
 import { Router, Response } from 'express';
 import { TenantRequest } from '../middleware/tenantMiddleware';
+import {
+  ensureTenantBuilderEntitiesMigrated,
+  resolveModuleName,
+  syncStandaloneToModuleConfig,
+} from '../services/builderSyncService';
 
 const router = Router();
 
@@ -9,6 +14,8 @@ router.get('/', async (req: TenantRequest, res: Response) => {
     const db = req.db!;
     const tenantId = req.tenantId!;
     const { moduleId } = req.query;
+
+    const modulesMap = await ensureTenantBuilderEntitiesMigrated(db, tenantId);
 
     const where: any = { tenantId };
     if (moduleId) {
@@ -20,7 +27,12 @@ router.get('/', async (req: TenantRequest, res: Response) => {
       orderBy: { updatedAt: 'desc' }
     });
 
-    res.json(rulesets);
+    const enriched = rulesets.map((r: any) => ({
+      ...r,
+      moduleName: resolveModuleName(r.moduleId, modulesMap),
+    }));
+
+    res.json(enriched);
   } catch (err: any) {
     console.error('[ValidationsAPI] GET / Error:', err);
     res.status(500).json({ error: err.message || 'Failed to fetch validation rulesets' });
@@ -34,6 +46,8 @@ router.get('/:id', async (req: TenantRequest, res: Response) => {
     const tenantId = req.tenantId!;
     const { id } = req.params;
 
+    const modulesMap = await ensureTenantBuilderEntitiesMigrated(db, tenantId);
+
     const ruleset = await db.validationRuleset.findFirst({
       where: { id, tenantId }
     });
@@ -42,7 +56,10 @@ router.get('/:id', async (req: TenantRequest, res: Response) => {
       return res.status(404).json({ error: 'Validation ruleset not found' });
     }
 
-    res.json(ruleset);
+    res.json({
+      ...ruleset,
+      moduleName: resolveModuleName(ruleset.moduleId, modulesMap),
+    });
   } catch (err: any) {
     console.error('[ValidationsAPI] GET /:id Error:', err);
     res.status(500).json({ error: err.message || 'Failed to fetch validation ruleset' });
@@ -60,16 +77,23 @@ router.post('/', async (req: TenantRequest, res: Response) => {
       return res.status(400).json({ error: 'Validation ruleset name is required' });
     }
 
+    const resolvedModuleId = moduleId || null;
+    const resolvedScope = scope || (resolvedModuleId ? 'MODULE' : 'GLOBAL');
+
     const ruleset = await db.validationRuleset.create({
       data: {
         tenantId,
         name,
         description: description || '',
-        moduleId: moduleId || null,
-        scope: scope || 'GLOBAL',
+        moduleId: resolvedModuleId,
+        scope: resolvedScope,
         rules: rules || []
       }
     });
+
+    if (resolvedModuleId) {
+      await syncStandaloneToModuleConfig(db, tenantId, resolvedModuleId);
+    }
 
     res.status(201).json(ruleset);
   } catch (err: any) {
@@ -84,7 +108,7 @@ router.put('/:id', async (req: TenantRequest, res: Response) => {
     const db = req.db!;
     const tenantId = req.tenantId!;
     const { id } = req.params;
-    const { name, description, scope, rules } = req.body;
+    const { name, description, moduleId, scope, rules } = req.body;
 
     const existing = await db.validationRuleset.findFirst({
       where: { id, tenantId }
@@ -94,15 +118,26 @@ router.put('/:id', async (req: TenantRequest, res: Response) => {
       return res.status(404).json({ error: 'Validation ruleset not found' });
     }
 
+    const nextModuleId = moduleId !== undefined ? (moduleId || null) : existing.moduleId;
+    const nextScope = scope || (nextModuleId ? 'MODULE' : 'GLOBAL');
+
     const updated = await db.validationRuleset.update({
       where: { id },
       data: {
         name: name || existing.name,
         description: description !== undefined ? description : existing.description,
-        scope: scope || existing.scope,
+        moduleId: nextModuleId,
+        scope: nextScope,
         rules: rules !== undefined ? rules : existing.rules
       }
     });
+
+    if (existing.moduleId && existing.moduleId !== nextModuleId) {
+      await syncStandaloneToModuleConfig(db, tenantId, existing.moduleId);
+    }
+    if (nextModuleId) {
+      await syncStandaloneToModuleConfig(db, tenantId, nextModuleId);
+    }
 
     res.json(updated);
   } catch (err: any) {
@@ -130,6 +165,10 @@ router.delete('/:id', async (req: TenantRequest, res: Response) => {
       where: { id }
     });
 
+    if (existing.moduleId) {
+      await syncStandaloneToModuleConfig(db, tenantId, existing.moduleId);
+    }
+
     res.json({ success: true, message: 'Validation ruleset deleted' });
   } catch (err: any) {
     console.error('[ValidationsAPI] DELETE /:id Error:', err);
@@ -138,3 +177,4 @@ router.delete('/:id', async (req: TenantRequest, res: Response) => {
 });
 
 export default router;
+

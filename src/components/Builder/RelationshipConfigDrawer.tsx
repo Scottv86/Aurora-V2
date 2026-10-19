@@ -4,16 +4,7 @@ import {
   X, 
   Layers, 
   Database, 
-  Plus, 
-  Trash2, 
-  Check, 
-  ArrowRight, 
-  Settings2, 
-  Table, 
-  LayoutGrid, 
-  ShieldAlert,
-  Sliders,
-  Columns
+  Check
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
@@ -61,7 +52,7 @@ export const RelationshipConfigDrawer: React.FC<RelationshipConfigDrawerProps> =
   const [cascadeBehavior, setCascadeBehavior] = useState<RelationshipConfig['cascadeBehavior']>(
     initialConfig?.cascadeBehavior || 'restrict'
   );
-  const [displayMode, setDisplayMode] = useState<'table' | 'cards'>(
+  const [displayMode] = useState<'table' | 'cards'>(
     initialConfig?.displayMode || 'table'
   );
   const [visibleColumns, setVisibleColumns] = useState<string[]>(
@@ -73,7 +64,7 @@ export const RelationshipConfigDrawer: React.FC<RelationshipConfigDrawerProps> =
   const [allowInlineEdit, setAllowInlineEdit] = useState<boolean>(
     initialConfig?.allowInlineEdit !== false
   );
-  const [pageSize, setPageSize] = useState<number>(
+  const [pageSize] = useState<number>(
     initialConfig?.pageSize || 10
   );
 

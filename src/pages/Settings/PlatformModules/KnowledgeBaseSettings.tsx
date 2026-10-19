@@ -77,28 +77,68 @@ export const KnowledgeBaseSettings = () => {
   const [editCategory, setEditCategory] = useState('');
   const [editContent, setEditContent] = useState('');
 
-  // Load articles from localStorage on mount/tenant change
+  // Load articles from PostgreSQL API on mount/tenant change
   useEffect(() => {
     if (!tenant?.id) return;
-    const storageKey = `aurora_kb_articles_${tenant.id}`;
-    const stored = localStorage.getItem(storageKey);
-    if (stored) {
+    const fetchArticles = async () => {
       try {
-        setArticles(JSON.parse(stored));
+        const token = (import.meta as any).env?.VITE_DEV_TOKEN || localStorage.getItem('aurora_token') || '';
+        const res = await fetch(`http://127.0.0.1:3001/api/data/knowledge`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant.id
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setArticles(data);
+            return;
+          }
+        }
       } catch (e) {
+        console.warn('Failed to load KB articles from server, falling back to local cache:', e);
+      }
+
+      // Offline fallback
+      const storageKey = `aurora_kb_articles_${tenant.id}`;
+      const stored = localStorage.getItem(storageKey);
+      if (stored) {
+        try {
+          setArticles(JSON.parse(stored));
+        } catch {
+          setArticles(DEFAULT_ARTICLES);
+        }
+      } else {
         setArticles(DEFAULT_ARTICLES);
       }
-    } else {
-      localStorage.setItem(storageKey, JSON.stringify(DEFAULT_ARTICLES));
-      setArticles(DEFAULT_ARTICLES);
-    }
+    };
+    fetchArticles();
   }, [tenant?.id]);
 
-  const saveArticlesToStorage = (newArticles: KBArticle[]) => {
+  const saveArticlesToStorage = async (newArticles: KBArticle[]) => {
     if (!tenant?.id) return;
+    setArticles(newArticles);
+    
+    // Save to PostgreSQL backend
+    try {
+      const token = (import.meta as any).env?.VITE_DEV_TOKEN || localStorage.getItem('aurora_token') || '';
+      await fetch(`http://127.0.0.1:3001/api/data/knowledge`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        },
+        body: JSON.stringify({ articles: newArticles })
+      });
+    } catch (e) {
+      console.warn('Failed to save KB articles to backend, saving locally:', e);
+    }
+
+    // Local cache update
     const storageKey = `aurora_kb_articles_${tenant.id}`;
     localStorage.setItem(storageKey, JSON.stringify(newArticles));
-    setArticles(newArticles);
   };
 
   const categories = ['All', ...Array.from(new Set(articles.map(a => a.category)))];

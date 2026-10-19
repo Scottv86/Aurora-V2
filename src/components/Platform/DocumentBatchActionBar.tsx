@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
 import { 
-  CheckSquare, 
   Layers, 
   Lock, 
   Trash2, 
   Calendar, 
   X, 
-  Loader2, 
-  Sparkles 
+  Loader2
 } from 'lucide-react';
 import { UniversalDocument, UniversalDisposalSchedule } from '../../types/document';
 import { DocumentClientService } from '../../services/documentClientService';
@@ -24,7 +22,7 @@ interface DocumentBatchActionBarProps {
 
 export const DocumentBatchActionBar: React.FC<DocumentBatchActionBarProps> = ({
   selectedDocIds,
-  documents,
+  documents: _documents,
   schedules,
   onClearSelection,
   onRefresh,

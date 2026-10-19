@@ -335,7 +335,7 @@ router.post('/', async (req: TenantRequest, res) => {
     res.status(201).json(newItem);
   } catch (err: any) {
     if (err instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Validation failed', details: err.errors });
+      return res.status(400).json({ error: 'Validation failed', details: err.issues });
     }
     console.error('[PricingCatalog POST Error]:', err);
     res.status(500).json({ error: err.message });
@@ -433,7 +433,7 @@ router.put('/:id', async (req: TenantRequest, res) => {
     res.json(updatedItem);
   } catch (err: any) {
     if (err instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Validation failed', details: err.errors });
+      return res.status(400).json({ error: 'Validation failed', details: err.issues });
     }
     console.error('[PricingCatalog PUT Error]:', err);
     res.status(500).json({ error: err.message });

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ArrowRightLeft, 
@@ -19,6 +19,9 @@ import { Button } from '../../components/UI/Primitives';
 import { SettingsSubNavLayout, SettingsSubNavItem } from '../../components/Settings/SettingsSubNavLayout';
 import { ImportWizardModal } from '../../components/Settings/Migration/ImportWizardModal';
 import { ExportEngineModal } from '../../components/Settings/Migration/ExportEngineModal';
+import { usePlatform } from '../../context/PlatformContext';
+import { useAuth } from '../../hooks/useAuth';
+import { API_BASE_URL } from '../../config';
 
 interface MigrationJob {
   id: string;
@@ -48,11 +51,52 @@ const PREBUILT_CONNECTORS = [
 ];
 
 export const MigrationPage: React.FC = () => {
+  const { modules, tenant, user: currentUser } = usePlatform();
+  const { session } = useAuth();
+  const activeTenantId = tenant?.id;
   const [activeTab, setActiveTab] = useState('overview');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [history, setHistory] = useState<MigrationJob[]>(INITIAL_HISTORY);
   const [searchQuery, setSearchQuery] = useState('');
+
+  const persistHistory = async (updatedHistory: MigrationJob[]) => {
+    setHistory(updatedHistory);
+    try {
+      const token = session?.access_token || (import.meta as any).env?.VITE_DEV_TOKEN || localStorage.getItem('aurora_token') || '';
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-tenant-id': activeTenantId || 'tenant_default'
+      };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      await fetch(`${API_BASE_URL}/api/data/migration-history`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ history: updatedHistory })
+      });
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    const loadHistory = async () => {
+      try {
+        const token = session?.access_token || (import.meta as any).env?.VITE_DEV_TOKEN || localStorage.getItem('aurora_token') || '';
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'x-tenant-id': activeTenantId || 'tenant_default'
+        };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const res = await fetch(`${API_BASE_URL}/api/data/migration-history`, { headers });
+        if (res.ok) {
+          const serverHistory = await res.json();
+          if (Array.isArray(serverHistory) && serverHistory.length > 0) {
+            setHistory(serverHistory);
+          }
+        }
+      } catch (_) {}
+    };
+    loadHistory();
+  }, [activeTenantId, session]);
 
   const subNavItems: SettingsSubNavItem[] = [
     { id: 'overview', label: 'Overview & Hub', icon: ArrowRightLeft, description: 'Migration status & tools' },
@@ -63,21 +107,30 @@ export const MigrationPage: React.FC = () => {
   ];
 
   const handleRollback = (jobId: string) => {
-    setHistory(prev => prev.map(job => {
+    const updated = history.map(job => {
       if (job.id === jobId) {
         return { ...job, status: 'Rolled Back' as const };
       }
       return job;
-    }));
+    });
+    persistHistory(updated);
     toast.success(`Job ${jobId} rolled back successfully. Database snapshot restored.`);
   };
 
   const handleExportBlueprint = () => {
     const blueprintData = {
-      workspace: 'Aurora V2 Main',
+      workspace: tenant?.name || activeTenantId || 'Aurora V2 Main',
       exportedAt: new Date().toISOString(),
-      modules: ['Document Generation', 'Records Management', 'Pricing Catalog'],
-      schemaVersion: '2.4.0'
+      schemaVersion: '2.4.0',
+      modules: (modules || []).map((m: any) => ({
+        id: m.id,
+        name: m.name,
+        category: m.category,
+        type: m.type,
+        icon: m.icon,
+        layout: m.layout,
+        views: m.views
+      }))
     };
     const blob = new Blob([JSON.stringify(blueprintData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -88,6 +141,17 @@ export const MigrationPage: React.FC = () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+
+    const newJob: MigrationJob = {
+      id: `MIG-${Math.floor(1000 + Math.random() * 9000)}`,
+      type: 'Blueprint Sync',
+      entity: `Workspace Blueprint (${(modules || []).length} modules)`,
+      records: (modules || []).length,
+      status: 'Completed',
+      initiatedBy: currentUser?.name || currentUser?.email || 'Admin User',
+      timestamp: new Date().toISOString().replace('T', ' ').slice(0, 16)
+    };
+    persistHistory([newJob, ...history]);
     toast.success('Workspace blueprint exported successfully!');
   };
 
@@ -511,26 +575,35 @@ export const MigrationPage: React.FC = () => {
       <ImportWizardModal
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
-        onSuccess={() => {
-          // add to top of history
-          setHistory(prev => [
-            {
-              id: `MIG-${Math.floor(1000 + Math.random() * 9000)}`,
-              type: 'Import',
-              entity: 'Module Records',
-              records: 4,
-              status: 'Completed',
-              initiatedBy: 'Current User',
-              timestamp: new Date().toISOString().replace('T', ' ').slice(0, 16)
-            },
-            ...prev
-          ]);
+        onSuccess={(info) => {
+          const newJob: MigrationJob = {
+            id: `MIG-${Math.floor(1000 + Math.random() * 9000)}`,
+            type: 'Import',
+            entity: info?.entity || 'Module Records',
+            records: info?.records ?? 0,
+            status: 'Completed',
+            initiatedBy: currentUser?.name || currentUser?.email || 'Current User',
+            timestamp: new Date().toISOString().replace('T', ' ').slice(0, 16)
+          };
+          persistHistory([newJob, ...history]);
         }}
       />
 
       <ExportEngineModal
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
+        onExportSuccess={(info) => {
+          const newJob: MigrationJob = {
+            id: `MIG-${Math.floor(1000 + Math.random() * 9000)}`,
+            type: 'Export',
+            entity: info.entity,
+            records: info.records,
+            status: 'Completed',
+            initiatedBy: currentUser?.name || currentUser?.email || 'Current User',
+            timestamp: new Date().toISOString().replace('T', ' ').slice(0, 16)
+          };
+          persistHistory([newJob, ...history]);
+        }}
       />
     </SettingsSubNavLayout>
   );

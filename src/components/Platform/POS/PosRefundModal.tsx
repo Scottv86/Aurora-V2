@@ -2,14 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   RotateCcw, 
   X, 
-  CheckCircle2, 
-  AlertCircle, 
   RefreshCw, 
-  Package, 
-  DollarSign, 
-  CreditCard, 
-  Banknote, 
-  Receipt,
   Plus,
   Minus,
   AlertTriangle

@@ -43,7 +43,7 @@ export const getScopedPrisma = (
   return client.$extends({
     query: {
       $allModels: {
-        async $allOperations({ model, operation, args, query }) {
+        async $allOperations({ model, operation, args, query }: any) {
           // Models that should be isolated by tenant_id
           const TENANT_SCOPED_MODELS = [
             'Workspace', 
@@ -94,7 +94,42 @@ export const getScopedPrisma = (
             'PosRegister',
             'PosSession',
             'PosOrder',
-            'BankStatementLine'
+            'BankStatementLine',
+            'SavedView',
+            'PaymentTransaction',
+            'PaymentGatewayConfig',
+            'PaymentGatewayConnection',
+            'Refund',
+            'RmaRequest',
+            'ReturnRequest',
+            'CustomFont',
+            'BrandAsset',
+            'BrandKit',
+            'Report',
+            'KpiDefinition',
+            'QuarantineRecord',
+            'ConnectorLog',
+            'ConnectorMapping',
+            'ChatChannel',
+            'ChatMessage',
+            'ChatUserPresence',
+            'RecyclingBinItem',
+            'Notification',
+            'Webhook',
+            'WebhookSubscription',
+            'ScheduledJob',
+            'AntigravityScheduledTask',
+            'AIUsageMetric',
+            'InboxAccount',
+            'InboxFolder',
+            'InboxThread',
+            'InboxSnippet',
+            'InboxSignature',
+            'InboxRule',
+            'UniversalDocument',
+            'UniversalDocumentLink',
+            'UniversalDisposalSchedule',
+            'UniversalDocumentAuditLog'
           ];
 
           const isScopedModel = (TENANT_SCOPED_MODELS as readonly string[]).includes(model as string);

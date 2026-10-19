@@ -62,7 +62,7 @@ router.post('/quarantine/:id/release', async (req: TenantRequest, res) => {
       }
 
       // Trigger the pipeline
-      AutomationEngine.runPipeline(automation, null, qRecord.payload, 'INBOUND_WEBHOOK', db).catch(err => {
+      AutomationEngine.runPipeline(automation, null, (qRecord.payload as Record<string, any>) || {}, 'INBOUND_WEBHOOK', db).catch(err => {
         console.error('[AutomationRoutes] Failed to run released pipeline:', err);
       });
     } else {
@@ -656,7 +656,117 @@ router.get('/runs/record/:recordId', async (req: TenantRequest, res) => {
 
     res.json(runs);
   } catch (err: any) {
-    console.error('[AutomationRoutes] GET /runs/record/:recordId Error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /queue - Fetch all queued and dead-letter jobs
+router.get('/queue', async (req: TenantRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const db = req.db || globalPrisma;
+
+    const tenant = await db.tenant.findUnique({
+      where: { id: tenantId },
+      select: { workspaceSettings: true }
+    });
+
+    const wsSettings = (tenant?.workspaceSettings as any) || {};
+    const queue = Array.isArray(wsSettings.durableJobQueue) ? wsSettings.durableJobQueue : [];
+
+    res.json(queue);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /queue/enqueue - Enqueue a durable delayed job
+router.post('/queue/enqueue', async (req: TenantRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const { DurableJobQueue } = await import('../services/durableJobQueue');
+    const job = await DurableJobQueue.enqueue({
+      tenantId,
+      ...req.body
+    });
+    res.status(201).json(job);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /queue/:id/replay - Replay dead-letter job
+router.post('/queue/:id/replay', async (req: TenantRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const db = req.db || globalPrisma;
+    const { id } = req.params;
+
+    const tenant = await db.tenant.findUnique({
+      where: { id: tenantId },
+      select: { workspaceSettings: true }
+    });
+
+    const wsSettings = (tenant?.workspaceSettings as any) || {};
+    const queue = Array.isArray(wsSettings.durableJobQueue) ? wsSettings.durableJobQueue : [];
+
+    const updatedQueue = queue.map((job: any) => {
+      if (job.id === id) {
+        return {
+          ...job,
+          status: 'PENDING',
+          retryCount: 0,
+          runAt: new Date().toISOString(),
+          lastError: undefined
+        };
+      }
+      return job;
+    });
+
+    await db.tenant.update({
+      where: { id: tenantId },
+      data: {
+        workspaceSettings: {
+          ...wsSettings,
+          durableJobQueue: updatedQueue
+        }
+      }
+    });
+
+    res.json({ success: true, message: `Job ${id} re-enqueued for immediate execution` });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /queue/:id - Cancel/Delete queued job
+router.delete('/queue/:id', async (req: TenantRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const db = req.db || globalPrisma;
+    const { id } = req.params;
+
+    const tenant = await db.tenant.findUnique({
+      where: { id: tenantId },
+      select: { workspaceSettings: true }
+    });
+
+    const wsSettings = (tenant?.workspaceSettings as any) || {};
+    const queue = Array.isArray(wsSettings.durableJobQueue) ? wsSettings.durableJobQueue : [];
+    const updatedQueue = queue.filter((job: any) => job.id !== id);
+
+    await db.tenant.update({
+      where: { id: tenantId },
+      data: {
+        workspaceSettings: {
+          ...wsSettings,
+          durableJobQueue: updatedQueue
+        }
+      }
+    });
+
+    res.json({ success: true });
+  } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });

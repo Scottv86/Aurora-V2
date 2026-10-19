@@ -3,6 +3,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, Clock, Calendar, CheckCircle2 } from 'lucide-react';
 import { Button, Input, Select } from '../../UI/Primitives';
 
+import { usePlatform } from '../../../hooks/usePlatform';
+import { useAuth } from '../../../hooks/useAuth';
+import { toast } from 'sonner';
+
 interface RequestLeaveModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -10,7 +14,9 @@ interface RequestLeaveModalProps {
   onSuccess: () => void;
 }
 
-export const RequestLeaveModal = ({ isOpen, onClose, memberId: _memberId, onSuccess }: RequestLeaveModalProps) => {
+export const RequestLeaveModal = ({ isOpen, onClose, memberId, onSuccess }: RequestLeaveModalProps) => {
+  const { tenant } = usePlatform();
+  const { session } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   
@@ -24,14 +30,36 @@ export const RequestLeaveModal = ({ isOpen, onClose, memberId: _memberId, onSucc
     setIsSubmitting(true);
     
     try {
-      // Simulate API call to request leave
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const token = session?.access_token || (import.meta as any).env?.VITE_DEV_TOKEN || localStorage.getItem('aurora_token') || '';
+      const tenantId = tenant?.id || localStorage.getItem('aurora_tenant_id') || '';
+      const res = await fetch(`http://127.0.0.1:3001/api/members/${memberId}/leave-requests`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenantId
+        },
+        body: JSON.stringify({
+          leaveType,
+          startDate,
+          endDate: endDate || startDate,
+          reason
+        })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to submit leave request');
+      }
+
       setIsSuccess(true);
       setTimeout(() => {
         onSuccess();
         onClose();
         setIsSuccess(false);
-      }, 2000);
+      }, 1500);
+    } catch (err: any) {
+      toast.error(err.message || 'Error submitting leave request');
     } finally {
       setIsSubmitting(false);
     }

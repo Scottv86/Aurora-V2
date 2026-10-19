@@ -102,6 +102,9 @@ router.post('/submissions', async (req, res) => {
 
     // 2. Ensure the Intake Triage module exists and use it
     let targetModule = await ensureTriageModule(tenant.id);
+    if (!targetModule) {
+      return res.status(500).json({ error: 'Intake Triage module could not be provisioned' });
+    }
     let isRoutedToTriage = true;
 
     // 3. Create the Record
@@ -441,7 +444,7 @@ router.post('/webhooks/:automationId', async (req, res) => {
     }
 
     // Verify secret / HMAC signature if configured
-    const expectedSecret = webhookTrigger.secret || webhookTrigger.config?.secret;
+    const expectedSecret = (webhookTrigger as any).secret || (webhookTrigger as any).config?.secret;
     if (expectedSecret) {
       const incomingSecret = (req.headers['x-aurora-signature'] || req.headers['x-webhook-secret'] || req.query.secret || req.query.token) as string;
       if (!incomingSecret) {
@@ -1032,7 +1035,7 @@ router.get('/invoices/:identifier', async (req, res) => {
       },
       include: {
         lines: true,
-        party: true,
+        customer: true,
         payments: true,
       }
     });

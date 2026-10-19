@@ -2038,7 +2038,7 @@ export const ModuleEditor = () => {
       });
     }
   }, [isLoading, id, moduleSettings.name]);
-  const [scheduledDeploymentsCount, setScheduledDeploymentsCount] = useState(0);
+  const [_scheduledDeploymentsCount, setScheduledDeploymentsCount] = useState(0);
 
   useEffect(() => {
     const updateCount = () => {
@@ -2451,9 +2451,18 @@ export const ModuleEditor = () => {
             ...prev,
             [moduleId]: { layout: data.layout || [], tabs: data.tabs || [] }
           }));
+        } else {
+          setRelatedModulesMap(prev => ({
+            ...prev,
+            [moduleId]: { layout: [], tabs: [], notFound: true }
+          }));
         }
       } catch (err) {
         console.error(`Failed to fetch related module schema for ${moduleId}:`, err);
+        setRelatedModulesMap(prev => ({
+          ...prev,
+          [moduleId]: { layout: [], tabs: [], error: true }
+        }));
       }
     });
   }, [layout, tenant?.id, session?.access_token, relatedModulesMap]);
@@ -15855,9 +15864,10 @@ export const ModuleEditor = () => {
           };
           const availableFieldsForCalc = deepFilter(layout, editingCalculation?.targetId || '');
           
+          if (!editingCalculation) return null;
           return (
             <CalculatorModal 
-              isOpen={!!editingCalculation}
+              isOpen={true}
               onClose={() => setEditingCalculation(null)}
               onSave={(logic, triggers, showAsCurrency, currencySymbol) => {
                 if (editingCalculation) {
@@ -16054,7 +16064,7 @@ export const ModuleEditor = () => {
           tabs={tabs}
           moduleName={moduleSettings.name}
           onApplyChanges={(newLayout, description) => {
-            setLayout(newLayout);
+            setLayout(newLayout as any);
             if (description) {
               toast.success(description);
             }
@@ -16106,14 +16116,14 @@ export const ModuleEditor = () => {
             fieldSecurity
           })}
           onRollbackApplied={async (restoredState, newTag) => {
-            setLayout(restoredState.layout || []);
+            setLayout((restoredState.layout || []) as any);
             setTabs(restoredState.tabs || []);
             if (restoredState.moduleSettings) setModuleSettings(restoredState.moduleSettings);
             if (restoredState.interfaceSettings) setInterfaceSettings(restoredState.interfaceSettings);
             if (restoredState.forms) setForms(restoredState.forms);
             if (restoredState.validationRules) setValidationRules(restoredState.validationRules);
             if (restoredState.fieldSecurity) setFieldSecurity(restoredState.fieldSecurity);
-            setPersistedLayout(restoredState.layout || []);
+            setPersistedLayout((restoredState.layout || []) as any);
             setSchemaVersion(newTag.replace('v', ''));
             await handleSave();
           }}

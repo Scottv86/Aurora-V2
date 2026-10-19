@@ -241,7 +241,7 @@ export async function checkAIFeatureOrThrow(
   tenantId: string,
   userId: string | undefined,
   featureKey: string,
-  db = globalPrisma
+  db: any = globalPrisma
 ): Promise<AIFeatureAccessResult> {
   const result = await resolveAIFeatureAccess({ tenantId, userId, featureKey, db });
   if (!result.allowed) {
@@ -261,7 +261,7 @@ export async function checkAIFeatureOrThrow(
 export async function getAllUserEffectiveAIPolicies(
   tenantId: string,
   userId: string | undefined,
-  db = globalPrisma
+  db: any = globalPrisma
 ): Promise<Record<string, { allowed: boolean; reason: string; level: string }>> {
   const results: Record<string, { allowed: boolean; reason: string; level: string }> = {};
 

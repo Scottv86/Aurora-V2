@@ -1,24 +1,9 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { Type } from "@google/genai";
 import { globalPrisma } from '../lib/prisma';
 import { resolveCapabilities } from '../lib/permissions';
 import { resolveTenantAIClient, logAIUsageMetric, executeAICompletion } from './aiProviderService';
 import { io } from '../socket';
 import { safeFetch } from '../lib/ssrfGuard';
-import * as fs from 'fs';
-import * as path from 'path';
-
-let aiInstance: GoogleGenAI | null = null;
-
-const getAI = () => {
-  if (aiInstance) return aiInstance;
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    console.warn("Gemini API Key is missing on the server. AI features will not work.");
-    return null;
-  }
-  aiInstance = new GoogleGenAI({ apiKey });
-  return aiInstance;
-};
 
 // DuckDuckGo Scraper for web search
 async function scrapeDuckDuckGo(query: string): Promise<any[]> {
@@ -110,7 +95,7 @@ export async function resolveSessionSharingContext(
   tenantId: string,
   session: any,
   currentUserId: string,
-  currentUserName: string
+  _currentUserName: string
 ) {
   let sessionOwnerId = session?.userId || 'system';
   let sessionOwnerName = 'System / Unassigned';
@@ -732,7 +717,7 @@ export const runAgentLoop = async (
   context?: any,
   modelName?: string,
   attachments?: { name: string; type: string; base64: string }[]
-): Promise<{ text: string; steps: any[] }> => {
+): Promise<{ text: string; steps: any[]; paused?: boolean; promptTokens?: number; completionTokens?: number; model?: string; provider?: string; isBYOK?: boolean; keyHint?: string }> => {
   const client = await resolveTenantAIClient(tenantId, modelName);
   const db = globalPrisma;
 
@@ -835,7 +820,7 @@ export const runAgentLoop = async (
   }
 
   // System time and timezone calculations
-  const tenantTimezone = tenantDetails?.timezone || 'UTC';
+  const tenantTimezone = (tenantDetails?.localization as any)?.timezone || (tenantDetails as any)?.timezone || 'UTC';
   const localTimeStr = new Date().toLocaleString('en-US', { timeZone: tenantTimezone });
   const serverTimeStr = new Date().toISOString();
 
@@ -888,7 +873,7 @@ ${contextBlock}
 CURRENT TENANT CONTEXT:
   - Tenant ID: "${tenantId}"
   - Subdomain: "${tenantDetails?.subdomain || 'None'}"
-  - Currency: "${tenantDetails?.currency || 'USD'}"
+  - Currency: "${(tenantDetails?.localization as any)?.currency || (tenantDetails as any)?.currency || 'USD'}"
   - Installed Connectors / Integrations:
 ${connectorList}
 
@@ -2018,7 +2003,7 @@ export const executeAgentTool = async (
             result = { success: true, message: "Plan metadata updated successfully." };
           }
           else if (name === 'delegate_subagent') {
-            const { role, prompt, model } = args;
+            const { role, prompt, model: _model } = args;
             const subagentId = 'sub_' + Math.random().toString(36).substring(2, 9);
             result = {
               success: true,
@@ -2061,7 +2046,7 @@ export const executeAgentTool = async (
             }
           }
           else if (name === 'bulk_data_etl') {
-            const { action, moduleId, recordsData, filter } = args;
+            const { action, moduleId, recordsData, filter: _filter } = args;
             const targetMod = await db.module.findUnique({ where: { id: moduleId } });
             if (!targetMod) {
               result = { error: `Target module '${moduleId}' not found.` };
@@ -2107,14 +2092,13 @@ export const executeAgentTool = async (
           }
           else if (name === 'create_aurora_document') {
             const { name: docName, content: docContent, driveType, classification, subjectTags, templateId, recordId } = args;
-            const formattedContent = convertMarkdownToDocumentHtml(docContent || '');
+            const formattedContent = String(docContent || '');
             const docId = 'doc_' + Math.random().toString(36).substring(2, 11);
             const targetDriveType = (driveType === 'PERSONAL' || driveType === 'MY_DRIVE') ? 'PERSONAL' : 'TENANT_SHARED';
             const classificationVal = classification || 'INTERNAL';
 
-            let savedDoc;
             try {
-              savedDoc = await db.generatedDocument.create({
+              await db.generatedDocument.create({
                 data: {
                   id: docId,
                   tenantId,
@@ -2133,12 +2117,6 @@ export const executeAgentTool = async (
               });
             } catch (dbErr: any) {
               console.warn('[antigravityAgent] Document create in DB warning:', dbErr?.message);
-              savedDoc = {
-                id: docId,
-                tenantId,
-                name: docName || 'Untitled Document',
-                content: formattedContent
-              };
             }
 
             const driveItem = {
@@ -2261,7 +2239,7 @@ export const executeAgentTool = async (
             }
           }
           else if (name === 'manage_security_and_permissions') {
-            const { action, groupId, memberId, groupName, permissions } = args;
+            const { action, groupId, memberId, groupName, permissions: _permissions } = args;
             if (action === 'LIST_GROUPS') {
               const groups = await db.permissionGroup.findMany({ where: { tenantId } });
               result = { success: true, count: groups.length, groups };
@@ -2288,7 +2266,7 @@ export const executeAgentTool = async (
             }
           }
           else if (name === 'search_tenant_knowledge_base') {
-            const { query, category } = args;
+            const { query, category: _category } = args;
             const auditMatches = await db.auditLog.findMany({
               where: { tenantId },
               orderBy: { createdAt: 'desc' },
@@ -2305,7 +2283,7 @@ export const executeAgentTool = async (
             };
           }
           else if (name === 'diagnose_and_heal_system') {
-            const { targetType, targetId, autoFix } = args;
+            const { targetType, targetId: _targetId, autoFix } = args;
             let logDetails = [];
             if (targetType === 'AUTOMATION') {
               const autos = await db.automation.findMany({ where: { tenantId, isActive: false } });
@@ -2342,7 +2320,7 @@ export const resumeAgentLoop = async (
   socketId?: string,
   modelName?: string,
   activeMetadata?: any
-): Promise<{ text: string; steps: any[] }> => {
+): Promise<{ text: string; steps: any[]; paused?: boolean; promptTokens?: number; completionTokens?: number; model?: string; provider?: string; isBYOK?: boolean; keyHint?: string }> => {
   const client = await resolveTenantAIClient(tenantId, modelName);
 
   const db = globalPrisma;
@@ -2383,14 +2361,13 @@ export const resumeAgentLoop = async (
     fields: (m.config as any)?.layout?.flatMap((t: any) => t.columns?.flatMap((c: any) => c.fields || [])) || []
   }));
 
-  const tenantTimezone = tenantDetails?.timezone || 'UTC';
+  const tenantTimezone = (tenantDetails?.localization as any)?.timezone || (tenantDetails as any)?.timezone || 'UTC';
   const localTimeStr = new Date().toLocaleString('en-US', { timeZone: tenantTimezone });
   const serverTimeStr = new Date().toISOString();
 
   const session = await db.antigravitySession.findUnique({ where: { id: sessionId } });
   const sharingCtx = await resolveSessionSharingContext(db, tenantId, session, userId, userFullName);
 
-  let contextBlock = "";
   const systemInstruction = `You are Aurora, the autonomous agentic co-pilot for the Aurora Business Platform.
 You assist both developers (building database modules, automations, public websites) and business users (querying records, auditing leads, writing communications).
 
@@ -2424,7 +2401,7 @@ SHARED CHAT DIRECTIVES & RESPONSE TAILORING:
 CURRENT TENANT CONTEXT:
   - Tenant ID: "${tenantId}"
   - Subdomain: "${tenantDetails?.subdomain || 'None'}"
-  - Currency: "${tenantDetails?.currency || 'USD'}"
+  - Currency: "${(tenantDetails?.localization as any)?.currency || (tenantDetails as any)?.currency || 'USD'}"
   - Installed Connectors / Integrations:
 ${connectorList}
 

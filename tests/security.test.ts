@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { isPrivateOrReservedIp, validateSafeUrl } from '../server/lib/ssrfGuard';
 import { encryptSecret, decryptSecret } from '../server/lib/crypto';
 import { sanitizeHtml } from '../src/lib/sanitizeHtml';

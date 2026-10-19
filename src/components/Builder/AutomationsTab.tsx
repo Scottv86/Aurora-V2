@@ -7,10 +7,12 @@ import {
   Zap, Plus, Trash2, CheckCircle2, XCircle, 
   Mail, MessageSquare, ChevronDown, ChevronUp, RefreshCw, Database,
   ArrowRight, ToggleLeft, ToggleRight, Clock, HelpCircle, Search, Sparkles, Code, Play, Layers,
-  Copy, GripVertical, UserCheck, GitFork, Route, RotateCw, FileText, Grid, CreditCard
+  Copy, GripVertical, UserCheck, GitFork, Route, RotateCw, FileText, Grid, CreditCard,
+  Bell, CheckSquare, StickyNote, Pin
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, flattenFields } from '../../lib/utils';
+import { PLATFORM_MODULES } from '../../config/platformModules';
 
 interface AutomationsTabProps {
   moduleId: string | undefined;
@@ -713,7 +715,24 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
   deletedAutomationIds,
   setDeletedAutomationIds
 }) => {
-  const { tenant, modules, members = [], teams = [] } = usePlatform();
+  const { tenant, modules: customModules = [], members = [], teams = [] } = usePlatform();
+  const modules = useMemo(() => {
+    const existingIds = new Set((customModules || []).map((m: any) => m.id));
+    const platformEntries = PLATFORM_MODULES.filter(pm => !existingIds.has(pm.id)).map(pm => ({
+      id: pm.id,
+      name: `${pm.name} (Platform)`,
+      type: 'RECORD',
+      isPlatformModule: true,
+      layout: [
+        { id: 'name', name: 'name', label: 'Name / Title', type: 'text' },
+        { id: 'status', name: 'status', label: 'Status', type: 'select' },
+        { id: 'email', name: 'email', label: 'Email', type: 'email' },
+        { id: 'amount', name: 'amount', label: 'Amount', type: 'number' },
+        { id: 'assigneeId', name: 'assigneeId', label: 'Assignee', type: 'user' }
+      ]
+    }));
+    return [...(customModules || []), ...platformEntries];
+  }, [customModules]);
   const { positions } = usePositions();
   const { session } = useAuth();
   const triageModule = modules.find((m: any) => m.isIntakeTriage === true || m.config?.isIntakeTriage === true);
@@ -962,7 +981,11 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
       GENERATE_PDF: { template: 'Default Invoice' },
       GOOGLE_SHEETS_SYNC: { sheetId: '' },
       STRIPE_PAYMENT_LINK: { amount: 1000 },
-      ROUTE_TO_MODULE: { targetModuleId: '', fieldMapping: {}, archiveSource: true }
+      ROUTE_TO_MODULE: { targetModuleId: '', fieldMapping: {}, archiveSource: true },
+      CREATE_REMINDER: { title: 'Follow up on {{name}}', dueOffset: '+3 days at 09:00', priority: 'MEDIUM', assignedTo: '{{ownerId}}', description: '' },
+      COMPLETE_REMINDER: { match: 'ALL_ON_RECORD', titleContains: '' },
+      CREATE_NOTE: { title: 'Operational Note', body: '', color: 'zinc', isPinned: false },
+      PIN_RECORD_NOTE: { title: 'Important Alert', body: '', color: 'amber' }
     };
 
     const newActions = [...actions, { type, config: defaultConfigs[type] || {} }];
@@ -1250,7 +1273,11 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                   { id: 'GENERATE_PDF', label: 'Generate PDF', desc: 'Create document file', icon: FileText },
                   { id: 'GOOGLE_SHEETS_SYNC', label: 'Google Sheets', desc: 'Append sheet row', icon: Grid },
                   { id: 'STRIPE_PAYMENT_LINK', label: 'Stripe Payment', desc: 'Generate payment link', icon: CreditCard },
-                  { id: 'ROUTE_TO_MODULE', label: 'Route Record', desc: 'Migrate to another module', icon: GitFork }
+                  { id: 'ROUTE_TO_MODULE', label: 'Route Record', desc: 'Migrate to another module', icon: GitFork },
+                  { id: 'CREATE_REMINDER', label: 'Create Reminder', desc: 'Schedule follow-up task', icon: Bell },
+                  { id: 'COMPLETE_REMINDER', label: 'Complete Reminder', desc: 'Mark record tasks done', icon: CheckSquare },
+                  { id: 'CREATE_NOTE', label: 'Create Note', desc: 'Log note on record', icon: StickyNote },
+                  { id: 'PIN_RECORD_NOTE', label: 'Pin Alert Note', desc: 'Pin banner note to top', icon: Pin }
                 ].map((actionType) => {
                   const Icon = actionType.icon;
                   return (
@@ -1870,6 +1897,253 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                             />
                             Archive source Intake record automatically upon routing
                           </label>
+                        </div>
+                      )}
+
+                      {/* Create Reminder Form */}
+                      {action.type === 'CREATE_REMINDER' && (
+                        <div className="space-y-3 text-left">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-400">Reminder Title / Task</label>
+                            <input 
+                              type="text"
+                              value={action.config.title || ''}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                updated[idx].config.title = e.target.value;
+                                setActions(updated);
+                              }}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500/50"
+                              placeholder="e.g. Follow up on proposal with {{clientName}}"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-zinc-400">Due Date / Relative Offset</label>
+                              <input 
+                                type="text"
+                                value={action.config.dueOffset || ''}
+                                onChange={(e) => {
+                                  const updated = [...actions];
+                                  updated[idx].config.dueOffset = e.target.value;
+                                  setActions(updated);
+                                }}
+                                className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500/50"
+                                placeholder="+3 days at 09:00"
+                              />
+                              <p className="text-[8px] text-zinc-400">e.g. +1 day, +3 days at 09:00, +2 hours, or tomorrow</p>
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-zinc-400">Priority Level</label>
+                              <select 
+                                value={action.config.priority || 'MEDIUM'}
+                                onChange={(e) => {
+                                  const updated = [...actions];
+                                  updated[idx].config.priority = e.target.value;
+                                  setActions(updated);
+                                }}
+                                className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white cursor-pointer"
+                              >
+                                <option value="LOW">Low</option>
+                                <option value="MEDIUM">Medium</option>
+                                <option value="HIGH">High</option>
+                                <option value="URGENT">Urgent</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-400">Assigned To (Member ID or Token)</label>
+                            <input 
+                              type="text"
+                              value={action.config.assignedTo || ''}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                updated[idx].config.assignedTo = e.target.value;
+                                setActions(updated);
+                              }}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500/50"
+                              placeholder="e.g. {{ownerId}}, {{assignedToId}}, or leave blank for record creator"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-400">Additional Instructions / Context</label>
+                            <textarea 
+                              value={action.config.description || ''}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                updated[idx].config.description = e.target.value;
+                                setActions(updated);
+                              }}
+                              rows={2}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500/50"
+                              placeholder="Optional context for the assignee..."
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Complete Reminder Form */}
+                      {action.type === 'COMPLETE_REMINDER' && (
+                        <div className="space-y-3 text-left">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-400">Match Mode</label>
+                            <select 
+                              value={action.config.match || 'ALL_ON_RECORD'}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                updated[idx].config.match = e.target.value;
+                                setActions(updated);
+                              }}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white cursor-pointer"
+                            >
+                              <option value="ALL_ON_RECORD">Complete All Open Reminders on Record</option>
+                              <option value="BY_TITLE">Complete Reminders Matching Title</option>
+                            </select>
+                          </div>
+
+                          {action.config.match === 'BY_TITLE' && (
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-zinc-400">Title Contains</label>
+                              <input 
+                                type="text"
+                                value={action.config.titleContains || ''}
+                                onChange={(e) => {
+                                  const updated = [...actions];
+                                  updated[idx].config.titleContains = e.target.value;
+                                  setActions(updated);
+                                }}
+                                className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500/50"
+                                placeholder="e.g. Follow up on payment"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Create Note Form */}
+                      {action.type === 'CREATE_NOTE' && (
+                        <div className="space-y-3 text-left">
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="col-span-2 space-y-1">
+                              <label className="text-[10px] font-bold text-zinc-400">Note Title (Optional)</label>
+                              <input 
+                                type="text"
+                                value={action.config.title || ''}
+                                onChange={(e) => {
+                                  const updated = [...actions];
+                                  updated[idx].config.title = e.target.value;
+                                  setActions(updated);
+                                }}
+                                className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500/50"
+                                placeholder="e.g. Automated Triage Note"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-zinc-400">Badge Color</label>
+                              <select 
+                                value={action.config.color || 'zinc'}
+                                onChange={(e) => {
+                                  const updated = [...actions];
+                                  updated[idx].config.color = e.target.value;
+                                  setActions(updated);
+                                }}
+                                className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white cursor-pointer"
+                              >
+                                <option value="zinc">Zinc (Neutral)</option>
+                                <option value="yellow">Yellow (Attention)</option>
+                                <option value="blue">Blue (Info)</option>
+                                <option value="emerald">Emerald (Success)</option>
+                                <option value="purple">Purple (Special)</option>
+                                <option value="rose">Rose (Urgent)</option>
+                                <option value="amber">Amber (Warning)</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-400">Note Body (Supports Markdown & Tokens)</label>
+                            <textarea 
+                              value={action.config.body || ''}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                updated[idx].config.body = e.target.value;
+                                setActions(updated);
+                              }}
+                              rows={3}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500/50 font-mono"
+                              placeholder="e.g. Stage updated to **{{status}}** by {{updatedBy}}."
+                            />
+                          </div>
+
+                          <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-700 dark:text-zinc-300">
+                            <input 
+                              type="checkbox"
+                              checked={Boolean(action.config.isPinned)}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                updated[idx].config.isPinned = e.target.checked;
+                                setActions(updated);
+                              }}
+                              className="rounded border-zinc-700 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span>Pin this note to the top of the record view</span>
+                          </label>
+                        </div>
+                      )}
+
+                      {/* Pin Record Note Form */}
+                      {action.type === 'PIN_RECORD_NOTE' && (
+                        <div className="space-y-3 text-left">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-400">Banner Alert Title</label>
+                            <input 
+                              type="text"
+                              value={action.config.title || ''}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                updated[idx].config.title = e.target.value;
+                                setActions(updated);
+                              }}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500/50"
+                              placeholder="e.g. High Priority Customer Alert"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-400">Banner Notice Content</label>
+                            <textarea 
+                              value={action.config.body || ''}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                updated[idx].config.body = e.target.value;
+                                setActions(updated);
+                              }}
+                              rows={2}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500/50"
+                              placeholder="e.g. Requires executive sign-off before discount approval."
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-400">Alert Color</label>
+                            <select 
+                              value={action.config.color || 'amber'}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                updated[idx].config.color = e.target.value;
+                                setActions(updated);
+                              }}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white cursor-pointer"
+                            >
+                              <option value="amber">Amber (Warning)</option>
+                              <option value="rose">Rose (Urgent / Danger)</option>
+                              <option value="indigo">Indigo (Information)</option>
+                            </select>
+                          </div>
                         </div>
                       )}
 

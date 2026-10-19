@@ -6,8 +6,6 @@ import {
   Download, 
   RefreshCw, 
   CheckCircle2, 
-  AlertCircle, 
-  Clock, 
   XCircle, 
   DollarSign, 
   CreditCard, 
@@ -17,14 +15,8 @@ import {
   ChevronRight, 
   X, 
   ShieldAlert, 
-  Calendar, 
-  User, 
   FileText, 
-  Store, 
-  Globe, 
   Banknote,
-  Percent,
-  Layers,
   Printer
 } from 'lucide-react';
 import { usePlatform } from '../../../hooks/usePlatform';
@@ -141,7 +133,7 @@ export const TransactionsPage: React.FC = () => {
     if (!tenant?.id) return;
     try {
       setRmaLoading(true);
-      const res = await RmaClientService.listRequests({ tenantId: tenant.id });
+      const res = await RmaClientService.listRequests();
       const list = Array.isArray(res) ? res : (res?.requests || []);
       setRmaRequests(list);
     } catch (err: any) {
@@ -946,7 +938,7 @@ export const TransactionsPage: React.FC = () => {
             <label className="text-zinc-700 dark:text-zinc-300 font-semibold block mb-1.5">Refund Tender</label>
             <select
               value={blindForm.refundMethod}
-              onChange={e => setBlindForm({ ...refundForm, refundMethod: e.target.value })}
+              onChange={e => setBlindForm({ ...blindForm, refundMethod: e.target.value })}
               className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/40"
             >
               <option value="STORE_CREDIT">Store Credit / Digital Voucher (Recommended)</option>

@@ -1,18 +1,15 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { 
   X, 
   Database, 
   AlertTriangle, 
   CheckCircle2, 
-  Plus, 
-  Minus, 
   RefreshCw, 
   ShieldAlert, 
   FileCode, 
   Copy, 
   Download, 
-  ArrowRight, 
   Layers, 
   Sparkles,
   History,
@@ -21,9 +18,6 @@ import {
   Terminal,
   Check,
   Calendar,
-  Clock,
-  Bell,
-  RotateCcw,
   Sliders,
   FileText,
   Wand2

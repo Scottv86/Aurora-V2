@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  FolderLock, 
   Files,
   X, 
   Search, 
@@ -226,7 +225,7 @@ export const RecordDocumentsDrawer: React.FC<RecordDocumentsDrawerProps> = ({
       setLoading(true);
       const [docs, scheds] = await Promise.all([
         DocumentClientService.getRecordDocuments(recordId),
-        DocumentClientService.getDisposalSchedules().catch(() => [])
+        DocumentClientService.getDisposalSchedules().catch((): any[] => [])
       ]);
       const safeDocs = Array.isArray(docs) ? docs : [];
       const safeScheds = Array.isArray(scheds) ? scheds : [];
@@ -304,10 +303,6 @@ export const RecordDocumentsDrawer: React.FC<RecordDocumentsDrawerProps> = ({
       setIsUploading(false);
       setUploadProgressText(null);
     }
-  };
-
-  const handleFileUpload = async (file: File) => {
-    await handleFilesUpload([file]);
   };
 
   const handleDragEnter = (e: React.DragEvent) => {

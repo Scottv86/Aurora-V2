@@ -420,23 +420,145 @@ export class WorkflowEngine {
 
       context.record = mappedRecord;
 
-      const identifierRegex = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
-      const validKeys: string[] = [];
-      const validValues: any[] = [];
-      
-      Object.entries(context).forEach(([key, val]) => {
-        if (identifierRegex.test(key)) {
-          validKeys.push(key);
-          validValues.push(val);
-        }
-      });
-
-      const fn = new Function(...validKeys, `return ${condition}`);
-      return !!fn(...validValues);
+      return this.safeEvaluateExpression(condition.trim(), context);
     } catch (e) {
       console.error('Error evaluating condition:', condition, e);
       return false;
     }
+  }
+
+  private static safeEvaluateExpression(expr: string, context: Record<string, any>): boolean {
+    const clean = expr.trim();
+    if (!clean || clean === 'true') return true;
+    if (clean === 'false') return false;
+
+    // Strip outer balanced parentheses
+    if (clean.startsWith('(') && clean.endsWith(')')) {
+      let depth = 0;
+      let balanced = true;
+      for (let i = 0; i < clean.length - 1; i++) {
+        if (clean[i] === '(') depth++;
+        else if (clean[i] === ')') depth--;
+        if (depth === 0) {
+          balanced = false;
+          break;
+        }
+      }
+      if (balanced) {
+        return this.safeEvaluateExpression(clean.slice(1, -1), context);
+      }
+    }
+
+    // Split top-level || then &&
+    const orParts = this.splitTopLevel(clean, '||');
+    if (orParts.length > 1) {
+      return orParts.some(p => this.safeEvaluateExpression(p, context));
+    }
+
+    const andParts = this.splitTopLevel(clean, '&&');
+    if (andParts.length > 1) {
+      return andParts.every(p => this.safeEvaluateExpression(p, context));
+    }
+
+    // Unary negation
+    if (clean.startsWith('!!')) {
+      return Boolean(this.resolveOperand(clean.slice(2).trim(), context));
+    }
+    if (clean.startsWith('!')) {
+      return !this.safeEvaluateExpression(clean.slice(1).trim(), context);
+    }
+
+    // String method calls: String(x).includes('y') or x.includes('y')
+    const includesMatch = clean.match(/^(?:String\(([^)]+)\)|([a-zA-Z0-9_$.]+))\.(includes|startsWith|endsWith)\((.+)\)$/);
+    if (includesMatch) {
+      const targetKey = (includesMatch[1] || includesMatch[2]).trim();
+      const method = includesMatch[3];
+      const argVal = String(this.resolveOperand(includesMatch[4].trim(), context) ?? '');
+      const targetVal = String(this.resolveOperand(targetKey, context) ?? '');
+      if (method === 'includes') return targetVal.includes(argVal);
+      if (method === 'startsWith') return targetVal.startsWith(argVal);
+      if (method === 'endsWith') return targetVal.endsWith(argVal);
+    }
+
+    // Comparison operators
+    const operators = ['===', '!==', '==', '!=', '>=', '<=', '>', '<'];
+    for (const op of operators) {
+      const parts = this.splitTopLevel(clean, op);
+      if (parts.length === 2) {
+        const left = this.resolveOperand(parts[0].trim(), context);
+        const right = this.resolveOperand(parts[1].trim(), context);
+        switch (op) {
+          case '===': return left === right;
+          case '!==': return left !== right;
+          case '==': return left == right;
+          case '!=': return left != right;
+          case '>=': return Number(left) >= Number(right);
+          case '<=': return Number(left) <= Number(right);
+          case '>': return Number(left) > Number(right);
+          case '<': return Number(left) < Number(right);
+        }
+      }
+    }
+
+    return Boolean(this.resolveOperand(clean, context));
+  }
+
+  private static splitTopLevel(expr: string, delimiter: string): string[] {
+    const result: string[] = [];
+    let depth = 0;
+    let quote: string | null = null;
+    let lastIdx = 0;
+
+    for (let i = 0; i < expr.length; i++) {
+      const ch = expr[i];
+      if (quote) {
+        if (ch === quote && expr[i - 1] !== '\\') quote = null;
+        continue;
+      }
+      if (ch === "'" || ch === '"') {
+        quote = ch;
+        continue;
+      }
+      if (ch === '(') depth++;
+      else if (ch === ')') depth--;
+      else if (depth === 0 && expr.slice(i, i + delimiter.length) === delimiter) {
+        // Avoid matching '==' inside '===' or '!=' inside '!=='
+        if ((delimiter === '==' || delimiter === '!=') && expr[i + 2] === '=') {
+          continue;
+        }
+        result.push(expr.slice(lastIdx, i));
+        i += delimiter.length - 1;
+        lastIdx = i + 1;
+      }
+    }
+    if (result.length > 0) {
+      result.push(expr.slice(lastIdx));
+      return result;
+    }
+    return [expr];
+  }
+
+  private static resolveOperand(token: string, context: Record<string, any>): any {
+    const t = token.trim();
+    if ((t.startsWith("'") && t.endsWith("'")) || (t.startsWith('"') && t.endsWith('"'))) {
+      return t.slice(1, -1).replace(/\\'/g, "'").replace(/\\"/g, '"');
+    }
+    if (t === 'true') return true;
+    if (t === 'false') return false;
+    if (t === 'null') return null;
+    if (t === 'undefined') return undefined;
+    if (t !== '' && !isNaN(Number(t))) return Number(t);
+
+    // Support bracket notation e.g. record['case-amount'] or record["case-amount"] along with dot notation
+    const normalized = t.replace(/\[['"]([^'"]+)['"]\]/g, '.$1');
+    const parts = normalized.split('.').filter(Boolean);
+    let current: any = context;
+    for (const part of parts) {
+      if (current == null || typeof current !== 'object') return undefined;
+      if (part === '__proto__' || part === 'constructor' || part === 'prototype') return undefined;
+      current = current[part];
+    }
+    return current;
   }
 
 }

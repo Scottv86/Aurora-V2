@@ -3,8 +3,7 @@ import {
   ContentBlockType, 
   ContentType, 
   ContentBlockCondition, 
-  ContentBlockRule, 
-  ConditionOperator 
+  ContentBlockRule
 } from '../../types/platform';
 
 export interface FontFamilyConfig {

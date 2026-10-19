@@ -1,7 +1,7 @@
 import { globalPrisma } from '../lib/prisma';
 import { AutomationEngine } from './automationEngine';
-import { WorkflowState } from './workflowEngine';
 import { emitTenantUpdate } from '../socket';
+import { SlaService } from './slaService';
 
 export class AutomationScheduler {
   private static intervalId: NodeJS.Timeout | null = null;
@@ -53,6 +53,9 @@ export class AutomationScheduler {
 
     // Check statutory Record Disposal Schedules (RDS) and purge expired records
     await this.checkRecordDisposalSchedules();
+
+    // Check time-sensitive reminders & workflow follow-up alerts
+    await this.checkDueReminders();
 
     // Fetch and execute active Antigravity scheduled tasks
     try {
@@ -109,9 +112,9 @@ export class AutomationScheduler {
                   data: {
                     tenantId: job.tenantId,
                     connectorId: connector.connectorId,
+                    connectorName: connector.displayName || connector.connectorId,
                     status: 'SUCCESS',
-                    payload: JSON.stringify({ message: "Scheduled sync execution" }),
-                    direction: 'OUTBOUND'
+                    payload: { message: "Scheduled sync execution" }
                   }
                 });
               }
@@ -137,7 +140,7 @@ export class AutomationScheduler {
     });
 
     for (const automation of automations) {
-      const triggersConfig = Array.isArray(automation.triggers) ? automation.triggers : [];
+      const triggersConfig: any[] = Array.isArray(automation.triggers) ? (automation.triggers as any[]) : [];
       
       for (const trigger of triggersConfig) {
         if (trigger.type === 'CRON') {
@@ -320,26 +323,17 @@ export class AutomationScheduler {
         const config = (record.module.config || {}) as any;
         const slaConfig = config.slaConfig || {};
         
-        const breachHours = parseFloat(slaConfig.breachHours || '24');
-        const warningHours = parseFloat(slaConfig.warningHours || '0.5'); // default 30 mins
-        
-        const createdAt = record.createdAt.getTime();
-        const warningTime = new Date(createdAt + warningHours * 60 * 60 * 1000);
+        const evaluation = SlaService.evaluateSla(
+          record.createdAt,
+          slaDeadline,
+          record.status,
+          now
+        );
 
-        let newStatus: string | null = null;
+        const newStatus = evaluation.slaStatus;
 
-        if (now >= slaDeadline) {
-          if (record.slaStatus !== 'BREACHED') {
-            newStatus = 'BREACHED';
-          }
-        } else if (now >= warningTime) {
-          if (record.slaStatus === 'MET') {
-            newStatus = 'WARNING';
-          }
-        }
-
-        if (newStatus) {
-          console.log(`[Scheduler] SLA state transition for record ${record.id}: ${record.slaStatus} -> ${newStatus}`);
+        if (newStatus && newStatus !== record.slaStatus) {
+          console.log(`[Scheduler] SLA state transition for record ${record.id}: ${record.slaStatus} -> ${newStatus} (${evaluation.percentElapsed}% elapsed, paused=${evaluation.isPaused})`);
           
           await globalPrisma.record.update({
             where: { id: record.id },
@@ -352,12 +346,14 @@ export class AutomationScheduler {
             recordId: record.id,
             moduleId: record.moduleId,
             moduleName: record.module?.name || 'Triage',
-            slaStatus: newStatus
+            slaStatus: newStatus,
+            percentElapsed: evaluation.percentElapsed,
+            isPaused: evaluation.isPaused
           });
 
-          // If breached, we can trigger custom escalation triggers (like sending emails or firing automation events)
-          if (newStatus === 'BREACHED') {
-            console.log(`[Scheduler] SLA Breach Escalation for record ${record.id}`);
+          // If escalated/breached, log high-priority event
+          if (newStatus === 'ESCALATED' || newStatus === 'BREACHED') {
+            console.log(`[Scheduler] SLA Breach Escalation for record ${record.id}: Tier ${newStatus}`);
           }
         }
       }
@@ -619,21 +615,26 @@ export class AutomationScheduler {
         }
 
         // Check if there are any automations subscribed to KPI_THRESHOLD_BREACH for this KPI
-        const automations = await globalPrisma.automation.findMany({
+        const allAutomations = await globalPrisma.automation.findMany({
           where: {
             tenantId: kpi.tenantId,
-            isActive: true,
-            triggerType: 'KPI_THRESHOLD_BREACH'
+            isActive: true
           }
         }).catch(() => []);
+
+        const automations = allAutomations.filter(a => {
+          const triggers = Array.isArray(a.triggers) ? (a.triggers as any[]) : [];
+          return triggers.some(t => t.type === 'KPI_THRESHOLD_BREACH') || (a as any).triggerType === 'KPI_THRESHOLD_BREACH';
+        });
 
         if (automations.length === 0) continue;
 
         // Perform threshold checks and trigger automations
         for (const auto of automations) {
-          const config = typeof auto.triggerConfig === 'string' 
-            ? JSON.parse(auto.triggerConfig || '{}') 
-            : (auto.triggerConfig || {});
+          const rawConfig = (auto as any).triggerConfig;
+          const config = typeof rawConfig === 'string' 
+            ? JSON.parse(rawConfig || '{}') 
+            : (rawConfig || {});
 
           if (config.kpiId && config.kpiId !== kpi.id && config.kpiId !== kpi.slug) {
             continue;
@@ -691,6 +692,60 @@ export class AutomationScheduler {
       console.warn('[Scheduler] Record disposal schedule notice:', err);
     }
   }
+
+  /**
+   * Scans for pending or snoozed reminders that are now due,
+   * dispatches real-time WebSocket notifications, and fires automation triggers.
+   */
+  private static async checkDueReminders() {
+    try {
+      const now = new Date();
+      const dueReminders = await (globalPrisma as any).universalReminder.findMany({
+        where: {
+          status: { in: ['PENDING', 'SNOOZED'] },
+          dueAt: { lte: now }
+        },
+        include: {
+          module: { select: { id: true, name: true, icon: true } },
+          record: { select: { id: true, status: true, data: true } }
+        },
+        take: 50
+      });
+
+      if (!dueReminders || dueReminders.length === 0) return;
+
+      for (const reminder of dueReminders) {
+        // Emit live socket reminder event
+        emitTenantUpdate(reminder.tenantId, 'REMINDER_DUE', reminder);
+
+        // General notification feed
+        emitTenantUpdate(reminder.tenantId, 'notification', {
+          id: reminder.id,
+          title: `Reminder: ${reminder.title}`,
+          message: reminder.description || reminder.title,
+          type: 'reminder',
+          dueAt: reminder.dueAt,
+          assignedToId: reminder.assignedToId,
+          timestamp: new Date().toISOString()
+        });
+
+        // Trigger automations if registered for REMINDER_DUE
+        if (reminder.moduleId) {
+          AutomationEngine.handleEvent({
+            type: 'REMINDER_DUE',
+            tenantId: reminder.tenantId,
+            moduleId: reminder.moduleId,
+            record: reminder
+          }, globalPrisma).catch(err => {
+            console.warn('[Scheduler] Automation REMINDER_DUE execution warning:', err);
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[Scheduler] Check due reminders notice:', err);
+    }
+  }
 }
+
 
 

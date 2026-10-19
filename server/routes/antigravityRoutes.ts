@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { TenantRequest } from '../middleware/tenantMiddleware';
+import { globalPrisma } from '../lib/prisma';
 import { runAgentLoop, executeAgentTool, resumeAgentLoop } from '../services/antigravityAgent';
 import { resolveTenantAIClient, executeAICompletion } from '../services/aiProviderService';
 import { checkAIFeatureOrThrow } from '../lib/aiPermissions';
@@ -38,8 +39,9 @@ async function generateSmartSessionTitle(message: string): Promise<string> {
   return fallback.charAt(0).toUpperCase() + fallback.slice(1);
 }
 
-function canUserAccessSession(session: any, userId?: string): boolean {
+function canUserAccessSession(session: any, userId?: string, isSuperAdmin?: boolean): boolean {
   if (!session) return false;
+  if (isSuperAdmin) return true;
   if (!userId) return true;
   if (!session.userId) return true; // Legacy session with no owner
   if (session.userId === userId) return true; // Creator/owner
@@ -310,6 +312,58 @@ router.delete('/sessions/:id', async (req: TenantRequest, res) => {
   } catch (err: any) {
     console.error('[AntigravityRoutes] DELETE /sessions/:id Error:', err);
     res.status(500).json({ error: err.message || 'Failed to delete session' });
+  }
+});
+
+// GET /api/antigravity/folders - Get user chat folders
+router.get('/folders', async (req: TenantRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const userId = req.user?.uid || 'default';
+    const tenant = await globalPrisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { workspaceSettings: true }
+    });
+    const ws = (tenant?.workspaceSettings && typeof tenant.workspaceSettings === 'object')
+      ? (tenant.workspaceSettings as Record<string, any>)
+      : {};
+    const key = `chatFolders_${userId}`;
+    const folders = Array.isArray(ws[key]) ? ws[key] : [{ id: 'aurora', name: 'aurora' }];
+    res.json(folders);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to fetch folders' });
+  }
+});
+
+// POST /api/antigravity/folders - Save user chat folders
+router.post('/folders', async (req: TenantRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const userId = req.user?.uid || 'default';
+    const { folders } = req.body;
+    if (!Array.isArray(folders)) {
+      return res.status(400).json({ error: 'folders array is required' });
+    }
+    const tenant = await globalPrisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { workspaceSettings: true }
+    });
+    const ws = (tenant?.workspaceSettings && typeof tenant.workspaceSettings === 'object')
+      ? (tenant.workspaceSettings as Record<string, any>)
+      : {};
+    const key = `chatFolders_${userId}`;
+    await globalPrisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        workspaceSettings: {
+          ...ws,
+          [key]: folders
+        } as any
+      }
+    });
+    res.json({ success: true, folders });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to save folders' });
   }
 });
 

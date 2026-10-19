@@ -32,7 +32,6 @@ const queryClient = new QueryClient({
 import { PlatformShell } from './components/Layout/PlatformShell';
 import { ProtectedRoute } from './components/Auth/ProtectedRoute';
 import { Login } from './components/Auth/Login';
-import { ComingSoon } from './components/Common/ComingSoon';
 import { LicenseGate, LicenseRestrictedPlaceholder } from './components/Auth/LicenseGate';
 
 // Lazy-loaded Pages & Heavy Builders
@@ -41,7 +40,6 @@ const Onboarding = lazy(() => import('./components/Onboarding').then(m => ({ def
 const WorkQueue = lazy(() => import('./components/WorkQueue').then(m => ({ default: m.WorkQueue })));
 const ExternalPortal = lazy(() => import('./components/ExternalPortal').then(m => ({ default: m.ExternalPortal })));
 const ModuleEditor = lazy(() => import('./components/ModuleEditor').then(m => ({ default: m.ModuleEditor })));
-const Analytics = lazy(() => import('./components/Analytics').then(m => ({ default: m.Analytics })));
 const AntigravityChat = lazy(() => import('./components/AntigravityChat').then(m => ({ default: m.AntigravityChat })));
 
 const DocumentAutomation = lazy(() => import('./components/DocumentAutomation').then(m => ({ default: m.DocumentAutomation })));
@@ -109,7 +107,6 @@ const SitesPage = lazy(() => import('./pages/Settings/SitesPage').then(m => ({ d
 const SiteBuilderPage = lazy(() => import('./pages/Settings/SiteBuilderPage').then(m => ({ default: m.SiteBuilderPage })));
 const PortalViewPage = lazy(() => import('./pages/Platform/PortalViewPage').then(m => ({ default: m.PortalViewPage })));
 
-const BrandingSettingsPage = lazy(() => import('./pages/Settings/BrandingSettingsPage').then(m => ({ default: m.BrandingSettingsPage })));
 const BrandBuilderPage = lazy(() => import('./pages/Settings/BrandBuilderPage').then(m => ({ default: m.BrandBuilderPage })));
 const BrandStudioPage = lazy(() => import('./pages/Settings/BrandStudioPage').then(m => ({ default: m.BrandStudioPage })));
 const NotificationSettingsPage = lazy(() => import('./pages/Settings/NotificationSettingsPage').then(m => ({ default: m.NotificationSettingsPage })));
@@ -135,8 +132,11 @@ const DocEditor = lazy(() => import('./pages/Apps/DocEditor').then(m => ({ defau
 const InboxApp = lazy(() => import('./pages/Apps/InboxApp').then(m => ({ default: m.InboxApp })));
 const ChatApp = lazy(() => import('./pages/Apps/ChatApp').then(m => ({ default: m.ChatApp })));
 const FeedApp = lazy(() => import('./pages/Apps/FeedApp').then(m => ({ default: m.FeedApp })));
+const NotesApp = lazy(() => import('./pages/Apps/NotesApp').then(m => ({ default: m.NotesApp })));
+const RemindersApp = lazy(() => import('./pages/Apps/RemindersApp').then(m => ({ default: m.RemindersApp })));
 const SearchesDirectoryPage = lazy(() => import('./pages/Search/SearchesDirectoryPage').then(m => ({ default: m.SearchesDirectoryPage })));
 const SearchRunnerPage = lazy(() => import('./pages/Search/SearchRunnerPage').then(m => ({ default: m.SearchRunnerPage })));
+const ApprovalsHubPage = lazy(() => import('./pages/Approvals/ApprovalsHubPage'));
 import { slugify } from './lib/utils';
 
 
@@ -176,9 +176,7 @@ const SettingsLayout = () => {
 const WorkspaceLayout = () => {
   return (
     <PlatformShell fullBleed={true}>
-      <LicenseGate fallback={<LicenseRestrictedPlaceholder />}>
-        <Outlet />
-      </LicenseGate>
+      <Outlet />
     </PlatformShell>
   );
 };
@@ -360,6 +358,7 @@ const App = () => {
                 
                 {/* Platform Operations */}
                 <Route path="my-work" element={<MyWorkRouteWrapper />} />
+                <Route path="approvals" element={<ApprovalsHubPage />} />
                 <Route path="queue" element={<Navigate to="/workspace/my-work" replace />} />
                 
                 {/* Aurora Utility Apps */}
@@ -370,6 +369,10 @@ const App = () => {
                 <Route path="apps/drive" element={<DriveApp />} />
                 <Route path="apps/docs" element={<DocsApp />} />
                 <Route path="apps/docs/:documentId" element={<DocEditor />} />
+                <Route path="apps/notes" element={<NotesApp />} />
+                <Route path="notes" element={<Navigate to="/workspace/apps/notes" replace />} />
+                <Route path="apps/reminders" element={<RemindersApp />} />
+                <Route path="reminders" element={<Navigate to="/workspace/apps/reminders" replace />} />
                 <Route path="apps/query" element={<QueryExplorer />} />
                 <Route path="apps/pos" element={<PointOfSalePage />} />
                 <Route path="pos" element={<Navigate to="/workspace/apps/pos" replace />} />

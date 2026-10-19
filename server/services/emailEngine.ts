@@ -503,7 +503,6 @@ export class ImapClient {
           servername: host
         });
 
-        let tag = 1;
         let buffer = '';
 
         socket.on('data', (chunk) => {

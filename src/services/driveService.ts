@@ -585,9 +585,10 @@ export class DriveService {
   ): DriveItem {
     const items = this.getItems();
     const now = new Date().toISOString();
+    const tempId = `file-${Date.now()}`;
 
     const newFile: DriveItem = {
-      id: `file-${Date.now()}`,
+      id: tempId,
       name: file.name,
       type: 'FILE',
       driveType,
@@ -618,7 +619,7 @@ export class DriveService {
       auditLogs: [
         {
           id: `log-${Date.now()}`,
-          itemId: `file-${Date.now()}`,
+          itemId: tempId,
           timestamp: now,
           actor: ownerName,
           action: 'CREATE',
@@ -629,6 +630,60 @@ export class DriveService {
 
     items.push(newFile);
     this.saveItems(items);
+
+    // Asynchronously ingest file bytes into the backend UniversalDocument vault
+    if (typeof window !== 'undefined' && typeof FileReader !== 'undefined') {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const resultStr = String(reader.result || '');
+          const base64 = resultStr.includes(',') ? resultStr.split(',')[1] : resultStr;
+          const { supabase } = await import('../lib/supabase');
+          const { API_BASE_URL } = await import('../config');
+          const { data } = await supabase.auth.getSession();
+          const token = data?.session?.access_token || (import.meta as any).env?.VITE_DEV_TOKEN || localStorage.getItem('aurora_token') || '';
+          const tenantId = localStorage.getItem('aurora_active_tenant_id') || 'tenant_default';
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'x-tenant-id': tenantId
+          };
+          if (token) headers['Authorization'] = `Bearer ${token}`;
+
+          const res = await fetch(`${API_BASE_URL}/api/documents/upload`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              filename: file.name,
+              mimeType: file.type || 'application/octet-stream',
+              contentBase64: base64,
+              classification: 'INTERNAL',
+              documentType: 'GENERAL',
+              sourceType: 'DRIVE',
+              folderId: parentId || undefined,
+              analyzeWithAi: false
+            })
+          });
+
+          if (res.ok) {
+            const payload = await res.json();
+            const doc = payload.document || payload;
+            if (doc && doc.id) {
+              const currentItems = DriveService.getItems();
+              const idx = currentItems.findIndex(i => i.id === tempId);
+              if (idx !== -1) {
+                (currentItems[idx] as any).url = doc.url || `/api/documents/stream/${doc.id}`;
+                (currentItems[idx] as any).universalDocumentId = doc.id;
+                DriveService.saveItems(currentItems);
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('[DriveService] Background upload to /api/documents/upload warning:', err);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+
     return newFile;
   }
 

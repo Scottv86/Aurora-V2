@@ -1622,9 +1622,9 @@ LIMIT 50;`
                                 <div className="flex items-center justify-between gap-3">
                                   <div className="flex items-center gap-1.5">
                                     {meta.isPrimary ? (
-                                      <KeyIcon size={10} className="text-yellow-500 shrink-0" title="Primary Key" />
+                                      <span title="Primary Key" className="inline-flex items-center shrink-0"><KeyIcon size={10} className="text-yellow-500 shrink-0" /></span>
                                     ) : meta.foreignKey ? (
-                                      <Link2 size={10} className="text-emerald-400 shrink-0" title={`Foreign Key -> ${meta.foreignKey.targetTable}.${meta.foreignKey.targetColumn}`} />
+                                      <span title={`Foreign Key -> ${meta.foreignKey.targetTable}.${meta.foreignKey.targetColumn}`} className="inline-flex items-center shrink-0"><Link2 size={10} className="text-emerald-400 shrink-0" /></span>
                                     ) : null}
                                     <span className={cn(isJson && "text-indigo-300 font-semibold")}>
                                       {col.label}

@@ -23,10 +23,7 @@ import {
   Folder,
   FolderPlus,
   FolderMinus,
-  Check,
-  CheckSquare,
-  Square,
-  ArrowRight
+  CheckSquare
 } from 'lucide-react';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { useAuth } from '../../../hooks/useAuth';
@@ -142,7 +139,6 @@ export const PricingCatalogSettings = () => {
   const [isAssignItemsModalOpen, setIsAssignItemsModalOpen] = useState(false);
   const [itemIdsToAssignChecklist, setItemIdsToAssignChecklist] = useState<string[]>([]);
   const [assignSearchQuery, setAssignSearchQuery] = useState('');
-  const [assignTypeFilter, setAssignTypeFilter] = useState<string>('ALL');
   const [isCreateCategoryModalOpen, setIsCreateCategoryModalOpen] = useState(false);
   const [newCategoryNameInput, setNewCategoryNameInput] = useState('');
 

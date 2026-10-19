@@ -13,6 +13,7 @@ import { Modal } from '../../components/UI/TabsAndModal';
 import { toast } from 'sonner';
 import { API_BASE_URL } from '../../config';
 import { usePlatform } from '../../hooks/usePlatform';
+import { useAuth } from '../../hooks/useAuth';
 import { motion } from 'motion/react';
 import { TrashService } from '../../services/trashService';
 import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
@@ -21,7 +22,9 @@ import { NewFormModal, FormTemplateItem } from '../../components/Modals/NewFormM
 import { builderCache } from '../../utils/builderCache';
 
 export const FormsLibraryPage: React.FC = () => {
-  const { tenant, modules } = usePlatform();
+  const { tenant } = usePlatform();
+  const { session } = useAuth();
+  const token = session?.access_token;
   const cacheKey = `forms_${tenant?.id || 'default'}`;
   const [forms, setForms] = useState<FormEntity[]>(() => builderCache.get<FormEntity[]>(cacheKey) || []);
   const [loading, setLoading] = useState(() => !builderCache.has(cacheKey));
@@ -42,7 +45,10 @@ export const FormsLibraryPage: React.FC = () => {
     }
     try {
       const res = await fetch(`${API_BASE_URL}/api/forms`, {
-        headers: { 'x-tenant-id': tenant?.id || '' }
+        headers: {
+          'x-tenant-id': tenant?.id || '',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
       });
       if (res.ok) {
         const data = await res.json();
@@ -62,7 +68,7 @@ export const FormsLibraryPage: React.FC = () => {
 
   useEffect(() => {
     fetchForms();
-  }, [tenant?.id]);
+  }, [tenant?.id, token]);
 
   // Modal Handlers
   const handleSelectBlank = () => {
@@ -153,7 +159,10 @@ export const FormsLibraryPage: React.FC = () => {
       }
       await fetch(`${API_BASE_URL}/api/forms/${form.id}`, {
         method: 'DELETE',
-        headers: { 'x-tenant-id': tenant?.id || '' }
+        headers: {
+          'x-tenant-id': tenant?.id || '',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
       }).catch(() => {});
       toast.success('Form moved to Recycling Bin');
       setForms(prev => {
@@ -169,60 +178,10 @@ export const FormsLibraryPage: React.FC = () => {
     }
   };
 
-  // Combine standalone created forms with custom user-created module forms
-  const allForms = React.useMemo(() => {
-    const userModules = (modules || []).filter((mod: any) => {
-      if (!mod) return false;
-      if (mod.type === 'PAGE') return false;
-      // Filter out auto-provisioned system intake triage services
-      if (mod.isGlobal || mod.isIntakeTriage || mod.config?.isIntakeTriage || mod.name === 'Work Distribution') {
-        return false;
-      }
-      return true;
-    });
-
-    const moduleForms: FormEntity[] = userModules.flatMap((mod: any) => {
-      const items: FormEntity[] = [];
-      
-      const configForms = mod.config?.forms || mod.forms || [];
-      if (Array.isArray(configForms) && configForms.length > 0) {
-        configForms.forEach((cf: any, i: number) => {
-          items.push({
-            id: `mod_${mod.id}_${cf.id || i}`,
-            tenantId: tenant?.id || 't1',
-            name: cf.name || `${mod.name} Custom Form #${i + 1}`,
-            description: cf.description || `Form created within ${mod.name} module.`,
-            isGlobal: false,
-            moduleId: mod.id,
-            moduleName: mod.name,
-            version: cf.version || 1,
-            status: cf.status || 'PUBLISHED',
-            schema: cf.schema || { layout: cf.fields || [] }
-          });
-        });
-      } else if (mod.layout && mod.layout.length > 0) {
-        items.push({
-          id: `mod_form_${mod.id}`,
-          tenantId: tenant?.id || 't1',
-          name: `${mod.name} Form`,
-          description: `Primary data intake form for ${mod.name} module.`,
-          isGlobal: false,
-          moduleId: mod.id,
-          moduleName: mod.name,
-          version: 1,
-          status: 'PUBLISHED',
-          schema: { layout: mod.layout }
-        });
-      }
-      return items;
-    });
-
-    return [...forms, ...moduleForms];
-  }, [forms, modules, tenant?.id]);
-
-  const filteredForms = allForms.filter(f => {
+  const filteredForms = forms.filter(f => {
     const matchesSearch = f.name.toLowerCase().includes(search.toLowerCase()) || 
-                          (f.description && f.description.toLowerCase().includes(search.toLowerCase()));
+                          (f.description && f.description.toLowerCase().includes(search.toLowerCase())) ||
+                          (f.moduleName && f.moduleName.toLowerCase().includes(search.toLowerCase()));
     if (filter === 'global') return matchesSearch && f.isGlobal;
     if (filter === 'module') return matchesSearch && !f.isGlobal;
     return matchesSearch;
@@ -325,7 +284,7 @@ export const FormsLibraryPage: React.FC = () => {
                             ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
                             : 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20'
                         }`}>
-                          {form.isGlobal ? 'Global' : 'Module-Bound'}
+                          {form.isGlobal ? 'Global' : (form.moduleName || 'Module-Bound')}
                         </span>
 
                         <button

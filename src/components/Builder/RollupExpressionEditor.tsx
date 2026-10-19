@@ -9,9 +9,7 @@ import {
   DollarSign, 
   Hash, 
   Percent, 
-  Calendar,
-  Sparkles,
-  ArrowRight
+  Sparkles
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
@@ -57,7 +55,7 @@ export const RollupExpressionEditor: React.FC<RollupExpressionEditorProps> = ({
   initialConfig,
   relationshipFields,
   availableModules,
-  currentFieldLabel = 'Rollup Field'
+  currentFieldLabel: _currentFieldLabel = 'Rollup Field'
 }) => {
   const [selectedRelId, setSelectedRelId] = useState<string>(
     initialConfig?.relationshipFieldId || relationshipFields[0]?.id || ''
@@ -86,10 +84,10 @@ export const RollupExpressionEditor: React.FC<RollupExpressionEditorProps> = ({
   const [format, setFormat] = useState<'number' | 'currency' | 'percent'>(
     initialConfig?.format || 'currency'
   );
-  const [currencySymbol, setCurrencySymbol] = useState<string>(
+  const [currencySymbol] = useState<string>(
     initialConfig?.currencySymbol || '$'
   );
-  const [decimals, setDecimals] = useState<number>(
+  const [decimals] = useState<number>(
     initialConfig?.decimals !== undefined ? initialConfig.decimals : 2
   );
 

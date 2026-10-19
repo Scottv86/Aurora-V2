@@ -244,6 +244,7 @@ router.post('/:id/deploy', async (req: TenantRequest, res) => {
         if (db.agent) {
           agentRecord = await db.agent.create({
             data: {
+              tenantId,
               name: agentName,
               modelType,
               config: agentConfig
@@ -361,8 +362,8 @@ router.post('/:id/deploy', async (req: TenantRequest, res) => {
     for (const bArt of brandArtifacts) {
       try {
         const bContent = bArt.content || {};
-        if (db.brandKit || globalPrisma.brandKit) {
-          const brandKitModel = db.brandKit || globalPrisma.brandKit;
+        const brandKitModel: any = (db as any).brandKit || globalPrisma.brandKit;
+        if (brandKitModel) {
           const brandSlug = bContent.slug || bArt.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `brand-${bArt.id}`;
           const brandData = {
             name: bArt.name || bContent.name || 'Brand Identity',
@@ -443,8 +444,8 @@ router.post('/:id/deploy', async (req: TenantRequest, res) => {
     for (const sArt of searchArtifacts) {
       try {
         const sContent = sArt.content || {};
-        if (db.savedQuery || globalPrisma.savedQuery) {
-          const queryModel = db.savedQuery || globalPrisma.savedQuery;
+        const queryModel: any = (db as any).savedQuery || globalPrisma.savedQuery;
+        if (queryModel) {
           const searchSlug = sContent.slug || sArt.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `search-${sArt.id}`;
           const searchData = {
             name: sArt.name || sContent.name || 'Federated Search',

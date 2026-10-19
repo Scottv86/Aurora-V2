@@ -1,24 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  FileText, 
   MapPin, 
   Camera, 
-  Calendar, 
   User, 
-  Cpu, 
   HardDrive, 
-  Hash, 
-  Layers, 
   ExternalLink, 
   Copy, 
   Check, 
   ChevronDown, 
   ChevronUp, 
-  Sparkles,
-  ShieldCheck,
-  Compass,
-  Maximize,
-  Clock,
   Code
 } from 'lucide-react';
 import { UniversalDocument, FileTechnicalMetadata } from '../../types/document';
@@ -35,7 +25,7 @@ export const DocumentMetadataInspector: React.FC<DocumentMetadataInspectorProps>
   const [metadata, setMetadata] = useState<FileTechnicalMetadata | null>(
     document.aiMetadata?.technicalMetadata || null
   );
-  const [loading, setLoading] = useState(false);
+  const [_loading, setLoading] = useState(false);
 
   useEffect(() => {
     // If not already in aiMetadata, fetch on demand

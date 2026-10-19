@@ -1,23 +1,16 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { 
   X, 
   Sparkles, 
   Send, 
   Bot, 
   User, 
-  Check, 
-  Layers, 
   Calculator, 
   ShieldCheck, 
   Wand2, 
   FileCheck2, 
-  AlertCircle, 
-  Plus, 
-  ArrowRight,
   RefreshCw,
-  Zap,
-  Code2
+  Zap
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';

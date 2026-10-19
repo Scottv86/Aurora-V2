@@ -417,13 +417,14 @@ router.post('/execute', async (req: TenantRequest, res: Response) => {
             const toIso = to.includes('T') ? to : `${to}T23:59:59.999Z`;
             whereConditions.push(`${dateColumn} <= '${toIso.replace(/'/g, "''")}'`);
           }
-        } else if (typeof resolvedVal === 'object' && resolvedVal && (resolvedVal.from || resolvedVal.to)) {
-          if (resolvedVal.from) {
-            const fromIso = String(resolvedVal.from).includes('T') ? resolvedVal.from : `${resolvedVal.from}T00:00:00.000Z`;
+        } else if (typeof resolvedVal === 'object' && resolvedVal && ((resolvedVal as any).from || (resolvedVal as any).to)) {
+          const rVal = resolvedVal as any;
+          if (rVal.from) {
+            const fromIso = String(rVal.from).includes('T') ? rVal.from : `${rVal.from}T00:00:00.000Z`;
             whereConditions.push(`${dateColumn} >= '${fromIso.replace(/'/g, "''")}'`);
           }
-          if (resolvedVal.to) {
-            const toIso = String(resolvedVal.to).includes('T') ? resolvedVal.to : `${resolvedVal.to}T23:59:59.999Z`;
+          if (rVal.to) {
+            const toIso = String(rVal.to).includes('T') ? rVal.to : `${rVal.to}T23:59:59.999Z`;
             whereConditions.push(`${dateColumn} <= '${toIso.replace(/'/g, "''")}'`);
           }
         } else if (resolvedVal === 'today') {

@@ -9,7 +9,8 @@ import { SecurityGroups } from '../../components/Settings/Workforce/SecurityGrou
 import { ActivityLog } from '../../components/Settings/Workforce/ActivityLog';
 import { OnboardingWizard } from '../../components/Settings/Workforce/OnboardingWizard';
 import { CreateTeamModal } from '../../components/Settings/Workforce/CreateTeamModal';
-import { LayoutGrid, Users, ShieldCheck, Filter, Plus, Network, Shield, Activity, Bot, Sparkles } from 'lucide-react';
+import { ResourceDispatchBoard } from '../../components/Settings/Workforce/ResourceDispatchBoard';
+import { LayoutGrid, Users, ShieldCheck, Filter, Plus, Network, Shield, Activity, Bot, Sparkles, CalendarDays } from 'lucide-react';
 import { useCapabilities } from '../../hooks/useCapabilities';
 import { Button } from '../../components/UI/Primitives';
 import { LicenseGate, LicenseRestrictedPlaceholder } from '../../components/Auth/LicenseGate';
@@ -19,7 +20,8 @@ import { cn } from '../../lib/utils';
 export const WorkforcePage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const [activeTab, setActiveTab] = useState(tabParam && ['people', 'agents', 'teams', 'positions', 'groups', 'visualizer', 'audit'].includes(tabParam) ? tabParam : 'people');
+  const validTabs = ['people', 'agents', 'teams', 'positions', 'dispatch', 'groups', 'visualizer', 'audit'];
+  const [activeTab, setActiveTab] = useState(tabParam && validTabs.includes(tabParam) ? tabParam : 'people');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
@@ -46,6 +48,7 @@ export const WorkforcePage = () => {
     { id: 'agents', label: 'Digital Coworkers', icon: Bot, description: 'AI agents' },
     { id: 'teams', label: 'Teams & Squads', icon: Network, description: 'Organizational units' },
     { id: 'positions', label: 'Positions & Roles', icon: Shield, description: 'Job title hierarchy' },
+    { id: 'dispatch', label: 'Resource Dispatch', icon: CalendarDays, description: 'Shift scheduling & certified worker dispatch' },
     ...(hasCapability('view:settings') ? [{ id: 'groups', label: 'Security Groups', icon: ShieldCheck, description: 'Access permissions' }] : []),
     { id: 'visualizer', label: 'Org Visualizer', icon: LayoutGrid, description: 'Interactive org tree' },
     ...(hasCapability('view:audit_logs') ? [{ id: 'audit', label: 'Activity Log', icon: Activity, description: 'Audit trail' }] : [])
@@ -245,6 +248,7 @@ export const WorkforcePage = () => {
               onAddPosition={() => setIsPositionModalOpen(true)}
             />
           )}
+          {activeTab === 'dispatch' && <ResourceDispatchBoard />}
           {activeTab === 'groups' && (
             <SecurityGroups 
               isModalOpen={isGroupModalOpen} 

@@ -13,7 +13,9 @@ import {
   MessageSquare,
   LayoutGrid,
   Loader2,
-  Trash2
+  Trash2,
+  ShieldCheck,
+  StickyNote
 } from 'lucide-react';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
@@ -82,9 +84,19 @@ export const Navbar = () => {
         setShowEnvMenu(false);
       }
     };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setIsAppLauncherOpen(!isAppLauncherOpen);
+      }
+    };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isAppLauncherOpen, setIsAppLauncherOpen]);
 
   useEffect(() => {
     // Branding handled via style bindings below
@@ -196,7 +208,19 @@ export const Navbar = () => {
       </div>
 
       <div className="hidden md:flex flex-1 justify-center px-4">
-        <button className="relative w-full max-w-md group">
+        <button
+          type="button"
+          onClick={() => {
+            setIsAppLauncherOpen(!isAppLauncherOpen);
+            if (!isAppLauncherOpen) {
+              setIsChatOpen(false);
+              setIsAIAssistantOpen(false);
+              setIsNotificationsOpen(false);
+              setIsRecyclingBinOpen(false);
+            }
+          }}
+          className="relative w-full max-w-md group cursor-pointer"
+        >
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 group-hover:text-indigo-500 transition-colors" size={16} />
           <div className="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-3 py-1.5 text-sm text-zinc-500 dark:text-zinc-400 text-left flex items-center justify-between group-hover:border-zinc-300 dark:group-hover:border-zinc-700 transition-all shadow-sm">
             <span>Search or type a command...</span>
@@ -290,6 +314,27 @@ export const Navbar = () => {
               </button>
             )}
 
+            {/* Approvals & Decision Hub */}
+            <button 
+              onClick={() => {
+                setIsAppLauncherOpen(false);
+                setIsChatOpen(false);
+                setIsAIAssistantOpen(false);
+                setIsNotificationsOpen(false);
+                setIsRecyclingBinOpen(false);
+                navigate('/workspace/approvals');
+              }}
+              className={cn(
+                "p-2 transition-all duration-300 rounded-lg relative",
+                location.pathname === '/workspace/approvals'
+                  ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/10" 
+                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+              )}
+              title="Executive Approvals & Decision Hub"
+            >
+              <ShieldCheck size={20} />
+            </button>
+
             {/* Recycling Bin Icon */}
             <button 
               onClick={() => {
@@ -319,7 +364,14 @@ export const Navbar = () => {
           </>
         )}
 
-        {/* Old Launch Aurora Vibe button replaced by header experience switcher */}
+        {/* Notes & Reminders Quick Shortcuts */}
+        <button
+          onClick={() => navigate('/workspace/apps/notes')}
+          className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-amber-500 dark:hover:text-amber-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
+          title="Open Notes"
+        >
+          <StickyNote size={18} />
+        </button>
 
         <button 
           onClick={() => {

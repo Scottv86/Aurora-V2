@@ -68,7 +68,7 @@ export const authorize = (capability: string) => {
 
       // 4. Check for presence of required capability
       // Support basic wildcard: if they have 'manage:*', they match 'manage:staff'
-      const [category, action] = capability.split(':');
+      const [category] = capability.split(':');
       const hasDirectCap = allCapabilities.has(capability);
       const hasWildcardCap = allCapabilities.has(`${category}:*`) || allCapabilities.has('*:*');
 

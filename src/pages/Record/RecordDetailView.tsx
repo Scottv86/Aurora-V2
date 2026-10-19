@@ -26,6 +26,7 @@ import {
   MoreHorizontal,
   Share2,
   Calendar,
+  StickyNote,
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -35,6 +36,10 @@ import { UserAvatarWithPresence } from '../../components/Common/UserPresenceBadg
 import { ShareRecordModal } from '../../components/Platform/ShareRecordModal';
 import { RecordActivityDrawer } from '../../components/Platform/RecordActivityDrawer';
 import { RecordDocumentsDrawer } from '../../components/Platform/RecordDocumentsDrawer';
+import { RecordNotesRemindersDrawer } from '../../components/Platform/RecordNotesRemindersDrawer';
+import { NotesClientService } from '../../services/notesService';
+import { RemindersClientService } from '../../services/remindersService';
+import { DocumentClientService } from '../../services/documentClientService';
 import { MODULES } from '../../constants/modules';
 import { DATA_API_URL, API_BASE_URL } from '../../config';
 import { FieldInput } from '../../components/FieldInput';
@@ -57,6 +62,12 @@ import { AccordionContainer } from '../../components/UI/AccordionContainer';
 import { builderCache } from '../../utils/builderCache';
 import { DynamicIcon } from '../../components/UI/DynamicIcon';
 import { PageWrapper } from '../../components/Common/PageWrapper';
+import {
+  isFieldHiddenBySecurity,
+  isFieldReadOnlyBySecurity,
+  isFieldMaskedBySecurity,
+  formatMaskedFieldValue,
+} from '../../utils/fieldSecurity';
 
 
 interface WorkflowState {
@@ -205,7 +216,9 @@ export const RecordDetailView = ({
   const [showActivityDrawer, setShowActivityDrawer] = useState(false);
   const [showScheduleActivityModal, setShowScheduleActivityModal] = useState(false);
   const [showDocumentsDrawer, setShowDocumentsDrawer] = useState(false);
+  const [showNotesRemindersDrawer, setShowNotesRemindersDrawer] = useState(false);
   const [docCount, setDocCount] = useState(0);
+  const [notesRemindersCount, setNotesRemindersCount] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showVisualizer, setShowVisualizer] = useState(false);
   const [lookupData, setLookupData] = useState<Record<string, any[]>>({});
@@ -519,8 +532,9 @@ export const RecordDetailView = ({
   }, [visibleTabs, activeTabId]);
 
   const allFields = useMemo(() => {
-    return flattenFields(moduleData?.layout || []) as ModuleField[];
-  }, [moduleData]);
+    const raw = flattenFields(moduleData?.layout || []) as ModuleField[];
+    return raw.filter((f: ModuleField) => !isFieldHiddenBySecurity(f.id, moduleData, platformUser || supabaseUser));
+  }, [moduleData, platformUser, supabaseUser]);
 
   const activeValidations = useMemo(() => {
     const rules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
@@ -865,6 +879,26 @@ export const RecordDetailView = ({
 
     fetchModAndRecord();
   }, [tenant?.id, moduleId, recordId, platformLoading, session?.access_token]);
+
+  // Fetch initial counts for Notes/Reminders and Documents badges
+  useEffect(() => {
+    if (!recordId || !tenant?.id) return;
+    const fetchRecordCounts = async () => {
+      try {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+        const [notes, reminders, docs] = await Promise.all([
+          NotesClientService.getNotes({ recordId, moduleId }, token, tenant.id).catch((): any[] => []),
+          RemindersClientService.getReminders({ recordId, moduleId }, token, tenant.id).catch((): any[] => []),
+          DocumentClientService.getRecordDocuments(recordId).catch((): any[] => [])
+        ]);
+        setNotesRemindersCount((notes?.length || 0) + (reminders?.length || 0));
+        setDocCount(docs?.length || 0);
+      } catch (err) {
+        console.error('Error fetching record counts:', err);
+      }
+    };
+    fetchRecordCounts();
+  }, [recordId, moduleId, tenant?.id, session?.access_token]);
 
   // Memoize the list names required by calculations to avoid expensive regex scanning on every render/update
   const requiredGlobalLists = useMemo(() => {
@@ -1387,7 +1421,7 @@ export const RecordDetailView = ({
 
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error || 'Failed to update record');
+        throw new Error(typeof err.error === 'string' && err.error ? err.error : 'Failed to update record');
       }
 
       const updatedRecord = await res.json();
@@ -1551,6 +1585,39 @@ export const RecordDetailView = ({
     }
   };
 
+  const handleDeleteActivity = async (activityId: string) => {
+    if (!tenant?.id || !moduleId || !recordId || !record) return;
+    try {
+      const existingActivities: ScheduledActivity[] = record._activities || record.data?._activities || [];
+      const updatedActivities = existingActivities.filter(act => act.id !== activityId);
+
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+      const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        },
+        body: JSON.stringify({
+          moduleId,
+          _activities: updatedActivities
+        })
+      });
+
+      if (res.ok) {
+        const updatedRecord = await res.json();
+        setRecord(updatedRecord);
+        toast.success('Activity removed');
+      } else {
+        toast.error('Failed to remove activity');
+      }
+    } catch (err) {
+      console.error('Error removing activity:', err);
+      toast.error('Error removing activity');
+    }
+  };
+
   const handleStartWorkflow = async () => {
     if (!tenant?.id || !moduleId || !recordId || !activeWorkflow || isTransitioning) return;
     
@@ -1700,7 +1767,11 @@ export const RecordDetailView = ({
   };
 
   const renderNestedField = (nestedField: any) => {
+    const currentUserObj = platformUser || supabaseUser;
+    if (isFieldHiddenBySecurity(nestedField.id, moduleData, currentUserObj)) return null;
     if (!isFieldVisible(nestedField, editData || record || {}, visibilityContext)) return null;
+    const isSecReadOnly = isFieldReadOnlyBySecurity(nestedField.id, moduleData, currentUserObj);
+    const isSecMasked = isFieldMaskedBySecurity(nestedField.id, moduleData, currentUserObj);
     const density = (interfaceSettings.detail as any)?.density || 'standard';
     const ds = getDensityStyles(density);
     const isErrorField = validationErrorField?.fieldId === nestedField.id;
@@ -1710,12 +1781,12 @@ export const RecordDetailView = ({
         key={nestedField.id} 
         className={cn(
           "transition-all relative group/nestedField min-w-0",
-          !activeFieldId && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) && "cursor-pointer"
+          !activeFieldId && !isSecReadOnly && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) && "cursor-pointer"
         )}
         data-field-id={nestedField.id}
         data-active-field={activeFieldId === nestedField.id ? nestedField.id : undefined}
         onClick={(e) => {
-          if (activeFieldId !== nestedField.id && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type)) {
+          if (!isSecReadOnly && activeFieldId !== nestedField.id && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type)) {
             e.stopPropagation();
             setActiveFieldId(nestedField.id);
           }
@@ -1743,7 +1814,7 @@ export const RecordDetailView = ({
                 </div>
               )}
               {!activeFieldId && (
-                ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) ? (
+                isSecReadOnly || ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) ? (
                   <Lock size={8} className="opacity-0 group-hover/nestedField:opacity-100 transition-opacity text-zinc-400" />
                 ) : (
                   !['datatable'].includes(nestedField.type) && (
@@ -1756,10 +1827,13 @@ export const RecordDetailView = ({
               field={nestedField}
               value={(() => {
                 const edited = getFieldValue(editData, nestedField.id, nestedField.name);
-                if (edited !== undefined) return edited;
-                const original = getFieldValue(record, nestedField.id, nestedField.name);
-                if (original !== undefined) return original;
-                return calculateDefaultValue(nestedField, editData);
+                const rawVal = edited !== undefined
+                  ? edited
+                  : (() => {
+                      const original = getFieldValue(record, nestedField.id, nestedField.name);
+                      return original !== undefined ? original : calculateDefaultValue(nestedField, editData);
+                    })();
+                return isSecMasked ? formatMaskedFieldValue(rawVal) : rawVal;
               })()}
               onChange={(val, metadata) => handleFieldChange(nestedField.id, val, metadata)}
               onBlur={() => handleUpdateEntry(undefined, nestedField.id)}
@@ -1767,7 +1841,7 @@ export const RecordDetailView = ({
                 if (e.key === 'Enter') handleUpdateEntry(undefined, nestedField.id);
                 if (e.key === 'Escape') setActiveFieldId(null);
               }}
-              readonly={activeFieldId !== nestedField.id}
+              readonly={isSecReadOnly || activeFieldId !== nestedField.id}
               disabled={savingFieldId === nestedField.id}
               recordData={editData}
               allFields={allFields}
@@ -1812,6 +1886,7 @@ export const RecordDetailView = ({
 
   const renderFieldsGrid = (tabId: string) => {
     if (!moduleData) return null;
+    const currentUserObj = platformUser || supabaseUser;
 
     if (editForm) {
       const currentStep = editForm.isMultistep 
@@ -1824,6 +1899,7 @@ export const RecordDetailView = ({
           <AnimatePresence mode="popLayout">
             {(formFields || []).map((fObj: any) => {
               const isVisual = fObj.id.startsWith('visual-');
+              if (!isVisual && isFieldHiddenBySecurity(fObj.id, moduleData, currentUserObj)) return null;
               const field = isVisual ? null : allFields.find(f => f.id === fObj.id);
               if (!isVisual && !field) return null;
               
@@ -1831,7 +1907,12 @@ export const RecordDetailView = ({
               
               const labelOverride = fObj.labelOverride || field?.label;
               const isRequired = fObj.required || field?.required;
-              const isReadOnly = fObj.readOnly || (field as any)?.readOnly;
+              const isReadOnly = Boolean(
+                fObj.readOnly ||
+                (field as any)?.readOnly ||
+                (field && isFieldReadOnlyBySecurity(field.id, moduleData, currentUserObj))
+              );
+              const isSecMasked = Boolean(field && isFieldMaskedBySecurity(field.id, moduleData, currentUserObj));
               const isErrorField = validationErrorField?.fieldId === fObj.id;
               
               return (
@@ -1892,8 +1973,8 @@ export const RecordDetailView = ({
                               </div>
                             </div>
                           )}
-                          {!activeFieldId && !isReadOnly && (
-                            ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(field!.type) ? (
+                          {!activeFieldId && (
+                            isReadOnly || ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(field!.type) ? (
                               <Lock size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-zinc-400" />
                             ) : (
                               !['datatable'].includes(field!.type) && (
@@ -1906,10 +1987,13 @@ export const RecordDetailView = ({
                           field={field!}
                           value={(() => {
                             const edited = getFieldValue(editData, field!.id);
-                            if (edited !== undefined) return edited;
-                            const original = getFieldValue(record, field!.id);
-                            if (original !== undefined) return original;
-                            return calculateDefaultValue(field!, editData);
+                            const rawVal = edited !== undefined
+                              ? edited
+                              : (() => {
+                                  const original = getFieldValue(record, field!.id);
+                                  return original !== undefined ? original : calculateDefaultValue(field!, editData);
+                                })();
+                            return isSecMasked ? formatMaskedFieldValue(rawVal) : rawVal;
                           })()}
                           onChange={(val, metadata) => handleFieldChange(field!.id, val, metadata)}
                           onBlur={() => handleUpdateEntry(undefined, field!.id)}
@@ -1948,6 +2032,7 @@ export const RecordDetailView = ({
     const visibleFields = compactLayout(
       (moduleData.layout || [])
         .filter((field: ModuleField) => {
+          if (isFieldHiddenBySecurity(field.id, moduleData, currentUserObj)) return false;
           const isVisible = isFieldVisible(field, editData || record || {}, visibilityContext);
           const firstVisibleTabId = visibleTabs[0]?.id;
           const fieldTabId = field.tabId || firstVisibleTabId;
@@ -2014,6 +2099,8 @@ export const RecordDetailView = ({
         <AnimatePresence mode="popLayout">
           {visibleFields.map((field: ModuleField) => {
             const isErrorField = validationErrorField?.fieldId === field.id;
+            const isSecReadOnly = isFieldReadOnlyBySecurity(field.id, moduleData, currentUserObj);
+            const isSecMasked = isFieldMaskedBySecurity(field.id, moduleData, currentUserObj);
             const isContainerOrStructural = ['heading', 'divider', 'spacer', 'alert', 'connector', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field.type);
             const isParentOfActive = isContainerOrStructural && (
               (field.fields || []).some((f: any) => f.id === activeFieldId)
@@ -2037,14 +2124,14 @@ export const RecordDetailView = ({
                 className={cn(
                   "group/field transition-all relative min-w-0 focus-within:z-30 hover:z-20",
                   (activeFieldId === field.id || isParentOfActive) && "z-30",
-                  !activeFieldId && !isContainerOrStructural && "cursor-pointer"
+                  !activeFieldId && !isSecReadOnly && !isContainerOrStructural && "cursor-pointer"
                 )}
                 style={{
                   gridColumn: `${field.startCol || 1} / span ${field.colSpan || 12}`,
                   gridRow: `${(field.rowIndex || 0) + 1} / span ${calculateHeight(field)}`
                 }}
                 onClick={() => {
-                  if (activeFieldId !== field.id && !isContainerOrStructural) {
+                  if (!isSecReadOnly && activeFieldId !== field.id && !isContainerOrStructural) {
                     setActiveFieldId(field.id);
                   }
                 }}
@@ -2161,7 +2248,7 @@ export const RecordDetailView = ({
                     </div>
                   )}
                   {!activeFieldId && (
-                    ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(field.type) ? (
+                    isSecReadOnly || ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(field.type) ? (
                       <Lock size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-zinc-400" />
                     ) : (
                       !['datatable'].includes(field.type) && (
@@ -2174,10 +2261,13 @@ export const RecordDetailView = ({
                   field={field}
                   value={(() => {
                     const edited = getFieldValue(editData, field.id, field.name);
-                    if (edited !== undefined) return edited;
-                    const original = getFieldValue(record, field.id, field.name);
-                    if (original !== undefined) return original;
-                    return calculateDefaultValue(field, editData);
+                    const rawVal = edited !== undefined
+                      ? edited
+                      : (() => {
+                          const original = getFieldValue(record, field.id, field.name);
+                          return original !== undefined ? original : calculateDefaultValue(field, editData);
+                        })();
+                    return isSecMasked ? formatMaskedFieldValue(rawVal) : rawVal;
                   })()}
                   onChange={(val, metadata) => handleFieldChange(field.id, val, metadata)}
                   onBlur={() => handleUpdateEntry(undefined, field.id)}
@@ -2185,7 +2275,7 @@ export const RecordDetailView = ({
                     if (e.key === 'Enter') handleUpdateEntry(undefined, field.id);
                     if (e.key === 'Escape') setActiveFieldId(null);
                   }}
-                  readonly={activeFieldId !== field.id}
+                  readonly={isSecReadOnly || activeFieldId !== field.id}
                   disabled={savingFieldId === field.id}
                   recordData={editData}
                   allFields={allFields}
@@ -2854,6 +2944,22 @@ export const RecordDetailView = ({
               <span className="hidden sm:inline">Activity</span>
             </button>
 
+            {/* Notes Button */}
+            <button
+              type="button"
+              onClick={() => setShowNotesRemindersDrawer(true)}
+              className="h-8 px-2.5 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-200 shadow-xs cursor-pointer hover:border-indigo-500/30"
+              title="Notes & Reminders"
+            >
+              <StickyNote size={12} className="text-indigo-500" />
+              <span className="hidden sm:inline">Notes</span>
+              {notesRemindersCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                  {notesRemindersCount}
+                </span>
+              )}
+            </button>
+
             {/* Schedule Task Button */}
             <button
               type="button"
@@ -2863,6 +2969,11 @@ export const RecordDetailView = ({
             >
               <Calendar size={12} className="text-indigo-500" />
               <span className="hidden sm:inline">Schedule</span>
+              {((record?._activities || record?.data?._activities || []).filter((a: any) => !a.done).length > 0) && (
+                <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                  {(record?._activities || record?.data?._activities || []).filter((a: any) => !a.done).length}
+                </span>
+              )}
             </button>
 
             {/* Share Button */}
@@ -3417,20 +3528,27 @@ export const RecordDetailView = ({
         moduleId={moduleId}
       />
 
-      {/* Schedule Activity & Task Modal */}
-      {showScheduleActivityModal && !!record && (
-        <ScheduleActivityModal
-          isOpen={showScheduleActivityModal}
-          onClose={() => setShowScheduleActivityModal(false)}
-          recordTitle={record?.premises_name || record?.name || record?.title || record?._record_key || record?.id}
-          currentUserName={platformUser?.name || session?.user?.email}
-          currentUserId={session?.user?.id}
-          onSchedule={async (act) => {
-            await handleScheduleActivity(act);
-            setShowScheduleActivityModal(false);
-          }}
-        />
-      )}
+      {/* Schedule Activity & Task Drawer */}
+      <ScheduleActivityModal
+        isOpen={showScheduleActivityModal && !!record}
+        onClose={() => setShowScheduleActivityModal(false)}
+        recordId={record?.id || ''}
+        recordKey={record?._record_key}
+        recordTitle={record?.premises_name || record?.name || record?.title}
+        moduleName={moduleData?.name}
+        activities={record?._activities || record?.data?._activities || []}
+        currentUserName={platformUser?.name || session?.user?.email}
+        currentUserId={session?.user?.id}
+        onSchedule={async (act) => {
+          await handleScheduleActivity(act);
+        }}
+        onCompleteActivity={async (activityId) => {
+          await handleCompleteActivity(activityId);
+        }}
+        onDeleteActivity={async (activityId) => {
+          await handleDeleteActivity(activityId);
+        }}
+      />
 
       {/* Enterprise Record Documents & Compliance Drawer */}
       <RecordDocumentsDrawer
@@ -3441,6 +3559,19 @@ export const RecordDetailView = ({
         moduleName={moduleData?.name}
         moduleId={moduleId}
         onDocumentCountChange={setDocCount}
+      />
+
+      {/* Record Notes & Follow-Up Tasks Drawer */}
+      <RecordNotesRemindersDrawer
+        isOpen={showNotesRemindersDrawer && !!record}
+        onClose={() => setShowNotesRemindersDrawer(false)}
+        recordId={record?.id || ''}
+        recordKey={record?._record_key}
+        recordTitle={record?.premises_name || record?.name || record?.title}
+        moduleName={moduleData?.name}
+        moduleId={moduleId}
+        tenantId={tenant?.id || ''}
+        onCountChange={setNotesRemindersCount}
       />
 
 

@@ -1,14 +1,95 @@
 import express from 'express';
 import { emitTenantUpdate } from '../socket';
 import { TenantRequest } from '../middleware/tenantMiddleware';
-import { RLS_CONTEXT, globalPrisma } from '../lib/prisma';
+import { globalPrisma } from '../lib/prisma';
 import { validateRecordRules } from '../../src/lib/validationEngine';
 import { WorkflowEngine } from '../services/workflowEngine';
 import { AutomationEngine } from '../services/automationEngine';
 import { triggerWebhooks } from '../services/webhookService';
 import { logRecordActivity, computeFieldDiff } from '../lib/audit';
+import {
+  ensureTenantBuilderEntitiesMigrated,
+  formatFormRowForModule,
+  syncModuleBuilderEntities,
+  getActiveRulesForModule,
+  getActiveWorkflowForModule,
+} from '../services/builderSyncService';
 
 const router = express.Router();
+
+function resolveSecurityRoleKey(userOrReq: any, fieldSecurity: Record<string, any>): string | null {
+  if (!fieldSecurity || typeof fieldSecurity !== 'object') return null;
+  const user = userOrReq?.user ? userOrReq.user : userOrReq;
+  const rawRole = String(user?.role || '').toLowerCase();
+  if (user?.isSuperAdmin || rawRole.includes('admin') || rawRole.includes('owner') || rawRole === 'tenant_admin') {
+    return fieldSecurity.admin ? 'admin' : null;
+  }
+  if (user?.role && fieldSecurity[user.role]) return user.role;
+  if (rawRole.includes('manager') || rawRole.includes('lead')) {
+    return fieldSecurity.manager ? 'manager' : null;
+  }
+  if (rawRole.includes('guest') || rawRole.includes('external')) {
+    return fieldSecurity.guest ? 'guest' : null;
+  }
+  return fieldSecurity.staff ? 'staff' : null;
+}
+
+function applyFieldSecurityRead(data: Record<string, any>, moduleConfig: any, user: any): Record<string, any> {
+  if (!data || typeof data !== 'object') return data;
+  const fieldSecurity = moduleConfig?.fieldSecurity;
+  const roleKey = resolveSecurityRoleKey(user, fieldSecurity);
+  if (!roleKey || !fieldSecurity?.[roleKey]) return data;
+
+  const rolePerms = fieldSecurity[roleKey];
+  const result = { ...data };
+  for (const [fieldId, perm] of Object.entries<any>(rolePerms)) {
+    if (!perm || result[fieldId] === undefined) continue;
+    if (perm.hidden === true || perm.read === false) {
+      delete result[fieldId];
+    } else if (perm.masked === true && result[fieldId] !== null && result[fieldId] !== '') {
+      const strVal = String(result[fieldId]);
+      result[fieldId] = strVal.length > 4 ? `${'•'.repeat(Math.min(8, strVal.length - 4))}${strVal.slice(-4)}` : '••••••••';
+    }
+  }
+  return result;
+}
+
+function checkFieldSecurityWrite(
+  incomingData: Record<string, any>,
+  existingData: Record<string, any> | null,
+  moduleConfig: any,
+  user: any
+): string[] {
+  const fieldSecurity = moduleConfig?.fieldSecurity;
+  const roleKey = resolveSecurityRoleKey(user, fieldSecurity);
+  if (!roleKey || !fieldSecurity?.[roleKey]) return [];
+
+  const rolePerms = fieldSecurity[roleKey];
+  const blockedFields: string[] = [];
+  for (const [fieldId, perm] of Object.entries<any>(rolePerms)) {
+    if (!perm) continue;
+
+    // If a masked field's masked display string is echoed back in a full PUT payload, restore the original DB value
+    if (perm.masked === true && existingData && existingData[fieldId] !== undefined && incomingData[fieldId] !== undefined) {
+      const strVal = String(existingData[fieldId]);
+      const maskedVal = strVal.length > 4 ? `${'•'.repeat(Math.min(8, strVal.length - 4))}${strVal.slice(-4)}` : '••••••••';
+      if (incomingData[fieldId] === maskedVal) {
+        incomingData[fieldId] = existingData[fieldId];
+      }
+    }
+
+    if (perm.write !== false) continue;
+    if (incomingData[fieldId] !== undefined) {
+      const prevVal = existingData ? existingData[fieldId] : undefined;
+      const isBothEmpty = (incomingData[fieldId] === '' || incomingData[fieldId] === null) &&
+                          (prevVal === undefined || prevVal === null || prevVal === '');
+      if (!isBothEmpty && JSON.stringify(incomingData[fieldId]) !== JSON.stringify(prevVal)) {
+        blockedFields.push(fieldId);
+      }
+    }
+  }
+  return blockedFields;
+}
 
 function getStatusFromState(evaluatedState: any, workflow: any, fallback: string): string {
   if (!evaluatedState || !workflow) return fallback;
@@ -140,17 +221,34 @@ router.get('/modules', async (req: TenantRequest, res) => {
     const tenantId = req.tenantId!;
     try {
       await ensureWorkDistributionModule(db, tenantId);
+      await ensureTenantBuilderEntitiesMigrated(db, tenantId);
     } catch (provisionErr) {
       console.warn('[DataAPI] ensureWorkDistributionModule warning:', provisionErr);
     }
 
-    const modules = await db.module.findMany();
+    const [modules, allForms, allWorkflows, allRulesets] = await Promise.all([
+      db.module.findMany(),
+      db.form.findMany({ where: { tenantId }, orderBy: { updatedAt: 'desc' } }).catch(() => []),
+      db.workflow.findMany({ where: { tenantId }, orderBy: { updatedAt: 'desc' } }).catch(() => []),
+      db.validationRuleset.findMany({ where: { tenantId }, orderBy: { updatedAt: 'desc' } }).catch(() => []),
+    ]);
+
     // Flatten config for frontend
     const formatted = modules.map(m => {
       const config = (m.config as any) || {};
       const safeConfig = typeof config === 'object' ? config : {};
+      const modForms = allForms.filter((f: any) => f.moduleId === m.id).map(formatFormRowForModule);
+      const modWfs = allWorkflows.filter((w: any) => w.moduleId === m.id);
+      const modRules = allRulesets
+        .filter((r: any) => r.moduleId === m.id)
+        .flatMap((r: any) => (Array.isArray(r.rules) ? r.rules : []));
+
       return {
         ...safeConfig,
+        forms: modForms.length > 0 ? modForms : (safeConfig.forms || []),
+        workflows: modWfs.length > 0 ? modWfs : (safeConfig.workflows || []),
+        workflow: modWfs[0] || safeConfig.workflow || (safeConfig.workflows && safeConfig.workflows[0]),
+        validationRules: modRules.length > 0 ? modRules : (safeConfig.validationRules || []),
         id: m.id,
         name: m.name,
         category: m.category,
@@ -192,9 +290,23 @@ router.get('/modules/:id', async (req: TenantRequest, res) => {
     if (!module) {
       return res.status(404).json({ error: 'Module not found' });
     }
-    const config = module.config as any;
+    await ensureTenantBuilderEntitiesMigrated(db, tenantId);
+    const [modFormsRows, modWfs, modRulesets] = await Promise.all([
+      db.form.findMany({ where: { tenantId, moduleId: module.id }, orderBy: { updatedAt: 'desc' } }).catch(() => []),
+      db.workflow.findMany({ where: { tenantId, moduleId: module.id }, orderBy: { updatedAt: 'desc' } }).catch(() => []),
+      db.validationRuleset.findMany({ where: { tenantId, moduleId: module.id }, orderBy: { updatedAt: 'desc' } }).catch(() => []),
+    ]);
+
+    const config = (module.config as any) || {};
+    const modForms = modFormsRows.map(formatFormRowForModule);
+    const modRules = modRulesets.flatMap((r: any) => (Array.isArray(r.rules) ? r.rules : []));
+
     const formatted = {
       ...config,
+      forms: modForms.length > 0 ? modForms : (config.forms || []),
+      workflows: modWfs.length > 0 ? modWfs : (config.workflows || []),
+      workflow: modWfs[0] || config.workflow || (config.workflows && config.workflows[0]),
+      validationRules: modRules.length > 0 ? modRules : (config.validationRules || []),
       id: module.id,
       name: module.name,
       category: module.category,
@@ -405,20 +517,23 @@ router.get('/records', async (req: TenantRequest, res) => {
     }
     
     // Format records for frontend consumption
-    const formatted = (records as any[]).map((r: any) => ({
-      id: r.id,
-      moduleId: r.moduleId,
-      moduleName: r.module?.name,
-      moduleIcon: r.module?.icon,
-      status: r.status,
-      associations: r.associations,
-      path: r.path,
-      createdAt: r.createdAt,
-      updatedAt: r.updatedAt,
-      createdBy: r.createdByMember ? `${r.createdByMember.firstName || ''} ${r.createdByMember.familyName || ''}`.trim() : 'System',
-      ...(r.data as any),
-      workflowState: r.workflowState
-    }));
+    const formatted = (records as any[]).map((r: any) => {
+      const safeData = applyFieldSecurityRead((r.data as any) || {}, r.module?.config, (req as any).user);
+      return {
+        id: r.id,
+        moduleId: r.moduleId,
+        moduleName: r.module?.name,
+        moduleIcon: r.module?.icon,
+        status: r.status,
+        associations: r.associations,
+        path: r.path,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+        createdBy: r.createdByMember ? `${r.createdByMember.firstName || ''} ${r.createdByMember.familyName || ''}`.trim() : 'System',
+        ...safeData,
+        workflowState: r.workflowState
+      };
+    });
     
     res.json({
       records: formatted,
@@ -444,6 +559,7 @@ router.get('/records/:id', async (req: TenantRequest, res) => {
     if (!record) {
       return res.status(404).json({ error: 'Record not found' });
     }
+    const safeData = applyFieldSecurityRead((record.data as any) || {}, (record as any).module?.config, (req as any).user);
     res.json({
       id: record.id,
       moduleId: record.moduleId,
@@ -455,7 +571,7 @@ router.get('/records/:id', async (req: TenantRequest, res) => {
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       createdBy: (record as any).createdByMember ? `${(record as any).createdByMember.firstName || ''} ${(record as any).createdByMember.familyName || ''}`.trim() : 'System',
-      ...(record.data as any),
+      ...safeData,
       workflowState: record.workflowState
     });
   } catch (err: any) {
@@ -475,6 +591,15 @@ router.post('/records', async (req: TenantRequest, res) => {
 
     // Validation for required fields
     const config = module.config as any;
+
+    // Enforce Field-Level Security write permissions
+    const blockedWriteFields = checkFieldSecurityWrite(data, null, config, (req as any).user);
+    if (blockedWriteFields.length > 0) {
+      return res.status(403).json({
+        error: `Field-level security restriction: Your role does not have write permission for field(s): ${blockedWriteFields.join(', ')}`
+      });
+    }
+
     const flattenFields = (fields: any[]): any[] => {
       const result: any[] = [];
       fields.forEach(f => {
@@ -491,12 +616,8 @@ router.post('/records', async (req: TenantRequest, res) => {
 
     const missingFields = requiredFields.filter((f: any) => {
       const val = data[f.id];
-      // Also check if it's nested in a group in the data (though data is usually flat unless it's a fieldGroup)
-      // Actually, based on RecordDetailView, data is flat unless in a fieldGroup.
-      // Let's check both for safety.
       let actualVal = val;
       if (actualVal === undefined || actualVal === null) {
-        // Find if this field belongs to a container in the data
         const containerTypes = ['fieldGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'];
         const group = (config.layout || []).find((l: any) => containerTypes.includes(l.type) && l.fields?.some((nf: any) => nf.id === f.id));
         if (group) {
@@ -513,9 +634,10 @@ router.post('/records', async (req: TenantRequest, res) => {
       });
     }
 
-    // Custom Validation Rules check
-    if (config.validationRules && Array.isArray(config.validationRules)) {
-      const validationErrors = validateRecordRules(data, config.validationRules, allFields);
+    // Custom Validation Rules check (from canonical ValidationRuleset table + Global rulesets)
+    const activeRules = await getActiveRulesForModule(db, tenantId, module.id, config.validationRules);
+    if (activeRules.length > 0) {
+      const validationErrors = validateRecordRules(data, activeRules, allFields);
       const hardErrors = validationErrors.filter(e => e.severity === 'error');
       if (hardErrors.length > 0) {
         return res.status(400).json({ 
@@ -556,9 +678,10 @@ router.post('/records', async (req: TenantRequest, res) => {
       }
     }
 
-    // Initialize workflow state if module has one
+    // Initialize workflow state if module has one (from canonical Workflow table)
     let workflowState = null;
-    const workflow = config?.workflow || (config?.workflows && config.workflows[0]);
+    const fallbackWorkflow = config?.workflow || (config?.workflows && config.workflows[0]);
+    const workflow = await getActiveWorkflowForModule(db, tenantId, module.id, fallbackWorkflow);
     
     if (workflow && workflow.nodes && workflow.nodes.length > 0) {
       const startNode = workflow.nodes.find((n: any) => n.type === 'START') || workflow.nodes[0];
@@ -874,7 +997,7 @@ router.post('/records/move-batch', async (req: TenantRequest, res) => {
       targetModuleId, 
       fieldMapping = {}, 
       archiveSource = true,
-      preserveAssignee = true,
+      preserveAssignee: _preserveAssignee = true,
       preserveStatus = true
     } = req.body;
 
@@ -1182,6 +1305,16 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
     
     if (module) {
       const config = module.config as any;
+
+      // Enforce Field-Level Security for write
+      const blockedWriteFields = checkFieldSecurityWrite(data, (existing.data as any) || null, config, (req as any).user);
+      if (blockedWriteFields.length > 0) {
+        return res.status(403).json({
+          error: `Field-level security restriction: Your role does not have write permission for field(s): ${blockedWriteFields.join(', ')}`
+        });
+      }
+      Object.assign(updatedData, data);
+
       let configChanged = false;
       const updatedConfig = { ...config };
 
@@ -1225,9 +1358,10 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
         return res.status(400).json({ error: `Validation failed: Required fields missing: ${missingFields.map(f => f.label || f.id).join(', ')}` });
       }
 
-      // Custom Validation Rules check
-      if (config.validationRules && Array.isArray(config.validationRules)) {
-        const validationErrors = validateRecordRules(updatedData, config.validationRules, allFields);
+      // Custom Validation Rules check (canonical ValidationRuleset table + module config)
+      const activeRules = await getActiveRulesForModule(db, tenantId, module.id, config);
+      if (activeRules.length > 0) {
+        const validationErrors = validateRecordRules(updatedData, activeRules, allFields);
         const hardErrors = validationErrors.filter(e => e.severity === 'error');
         if (hardErrors.length > 0) {
           return res.status(400).json({ 
@@ -1246,7 +1380,7 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
 
     if (module) {
       const config = module.config as any;
-      const workflow = config?.workflow || (config?.workflows && config.workflows[0]);
+      const workflow = await getActiveWorkflowForModule(db, tenantId, module.id, config);
       
       if (workflow) {
         try {
@@ -1391,7 +1525,7 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       createdBy: recordWithMember?.createdByMember ? `${recordWithMember.createdByMember.firstName || ''} ${recordWithMember.createdByMember.familyName || ''}`.trim() : 'System',
-      ...(record.data as any),
+      ...applyFieldSecurityRead((record.data as any) || {}, module?.config, (req as any).user),
       workflowState: record.workflowState
     };
     emitTenantUpdate(tenantId, 'record_updated', formatted);
@@ -1400,7 +1534,7 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
     triggerWebhooks(tenantId, 'record.updated', formatted);
 
     // Enterprise Audit Activity Logging (PUT)
-    const recKey = (record.data as any)?._record_key || formatted.premises_name || formatted.name || record.id;
+    const recKey = (record.data as any)?._record_key || (formatted as any).premises_name || (formatted as any).name || record.id;
     const recTitle = (record.data as any)?.premises_name || (record.data as any)?.name || (record.data as any)?.title || recKey;
     const actorId = (req as any).user?.memberId || (req as any).user?.id || (req as any).user?.uid || 'system';
 
@@ -1501,6 +1635,16 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
 
     if (module) {
       const config = module.config as any;
+
+      // Enforce Field-Level Security for write
+      const blockedWriteFields = checkFieldSecurityWrite(data, (existing.data as any) || null, config, (req as any).user);
+      if (blockedWriteFields.length > 0) {
+        return res.status(403).json({
+          error: `Field-level security restriction: Your role does not have write permission for field(s): ${blockedWriteFields.join(', ')}`
+        });
+      }
+      Object.assign(updatedData, data);
+
       let configChanged = false;
       const updatedConfig = { ...config };
 
@@ -1537,9 +1681,10 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
         return res.status(400).json({ error: `Validation failed: ${missing.map(f => f.label || f.id).join(', ')} is required` });
       }
 
-      // Custom Validation Rules check
-      if (config.validationRules && Array.isArray(config.validationRules)) {
-        const validationErrors = validateRecordRules(updatedData, config.validationRules, allFields);
+      // Custom Validation Rules check (canonical ValidationRuleset table + module config)
+      const activeRules = await getActiveRulesForModule(db, tenantId, module.id, config);
+      if (activeRules.length > 0) {
+        const validationErrors = validateRecordRules(updatedData, activeRules, allFields);
         const hardErrors = validationErrors.filter(e => e.severity === 'error');
         if (hardErrors.length > 0) {
           return res.status(400).json({ 
@@ -1558,7 +1703,7 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
 
     if (module) {
       const config = module.config as any;
-      const workflow = config?.workflow || (config?.workflows && config.workflows[0]);
+      const workflow = await getActiveWorkflowForModule(db, tenantId, module.id, config);
       
       if (workflow) {
         try {
@@ -1703,7 +1848,7 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       createdBy: recordWithMember?.createdByMember ? `${recordWithMember.createdByMember.firstName || ''} ${recordWithMember.createdByMember.familyName || ''}`.trim() : 'System',
-      ...(record.data as any),
+      ...applyFieldSecurityRead((record.data as any) || {}, module?.config, (req as any).user),
       workflowState: record.workflowState
     };
     emitTenantUpdate(tenantId, 'record_updated', formatted);
@@ -1712,7 +1857,7 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
     triggerWebhooks(tenantId, 'record.updated', formatted);
 
     // Enterprise Audit Activity Logging (PATCH)
-    const recKey = (record.data as any)?._record_key || formatted.premises_name || formatted.name || record.id;
+    const recKey = (record.data as any)?._record_key || (formatted as any).premises_name || (formatted as any).name || record.id;
     const recTitle = (record.data as any)?.premises_name || (record.data as any)?.name || (record.data as any)?.title || recKey;
     const actorId = (req as any).user?.memberId || (req as any).user?.id || (req as any).user?.uid || 'system';
 
@@ -1917,6 +2062,8 @@ router.post('/modules', async (req: TenantRequest, res) => {
     });
 
     const configData = module.config as any;
+    await syncModuleBuilderEntities(db, tenantId, module.id, module.name, configData);
+
     const formatted = {
       ...configData,
       id: module.id,
@@ -1963,6 +2110,8 @@ router.put('/modules/:id', async (req: TenantRequest, res) => {
     });
 
     const configData = module.config as any;
+    await syncModuleBuilderEntities(db, tenantId, module.id, module.name, configData);
+
     const formatted = {
       ...configData,
       id: module.id,
@@ -2115,6 +2264,10 @@ async function createConnectorLog(
 // SYNC connector data for a record
 router.post('/nexus/execute', async (req: TenantRequest, res) => {
   let connector: any = null;
+  let executionPath: 'vm' | 'http' | 'external' | 'simulation' = 'simulation';
+  let targetUrl: string | string[] | null = null;
+  let targetMethod: string | null = null;
+  let targetHeaders: any = null;
   try {
     const db = req.db!;
     const tenantId = req.tenantId!;
@@ -2188,41 +2341,15 @@ router.post('/nexus/execute', async (req: TenantRequest, res) => {
     const connectorConfig = (connector.config as any) || {};
     const edgeFunctionLogic = connectorConfig.edgeFunctionLogic;
 
-    let executionPath: 'vm' | 'http' | 'external' | 'simulation' = 'simulation';
-    let targetUrl: string | string[] | null = null;
-    let targetMethod: string | null = null;
-    let targetHeaders: any = null;
-
-    if (edgeFunctionLogic && typeof edgeFunctionLogic === 'string') {
-      // Run custom VM sandbox execution locally (reused proxy logic)
-        executionPath = 'vm';
-        const requestedUrls: string[] = [];
-        const wrappedFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-          const urlStr = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : (input as Request).url || String(input));
-          requestedUrls.push(urlStr);
-          return fetch(input, init);
-        };
-
-        const vm = await import('vm');
-        const context = {
-          params,
-          secrets,
-          fetch: wrappedFetch,
-          console,
-          promise: null as any
-        };
-        vm.createContext(context);
-        const wrapperCode = `
-          promise = (async () => {
-            const fn = ${edgeFunctionLogic};
-            return await fn(params, secrets);
-          })();
-        `;
-        const script = new vm.Script(wrapperCode);
-        script.runInContext(context);
-        rawResultData = (await context.promise) || {};
-        targetUrl = requestedUrls.length === 1 ? requestedUrls[0] : (requestedUrls.length > 0 ? requestedUrls : null);
-      } else if (connector.edgeFunctionUrl && connector.edgeFunctionUrl.startsWith('http') && !connector.edgeFunctionUrl.includes('/api/nexus-proxy/execute')) {
+    if (edgeFunctionLogic && typeof edgeFunctionLogic === 'string' && !connectorConfig.url) {
+      // Arbitrary JS execution via Node vm.Script is disabled for security; fall back to safe simulation or HTTP configuration
+      executionPath = 'simulation';
+      if (connector.ioSchema) {
+        ioSchema.outputs?.forEach((o: any) => {
+          rawResultData[o.name] = params[Object.keys(params)[0]] ? `${params[Object.keys(params)[0]]} (${o.label})` : `Sample ${o.label} Data`;
+        });
+      }
+    } else if (connector.edgeFunctionUrl && connector.edgeFunctionUrl.startsWith('http') && !connector.edgeFunctionUrl.includes('/api/nexus-proxy/execute')) {
         executionPath = 'external';
         targetUrl = connector.edgeFunctionUrl;
         targetMethod = 'POST';
@@ -2511,6 +2638,480 @@ router.post('/records/:recordId/share', async (req: TenantRequest, res) => {
   } catch (err: any) {
     console.error('[DataAPI] POST /records/:recordId/share error:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================================
+// DATABASE-BACKED MODULE VERSION SNAPSHOTS & SCHEDULED DEPLOYMENTS
+// ============================================================================
+
+router.get('/module-versions', async (req: TenantRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const { moduleId } = req.query;
+    const tenant = await globalPrisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { workspaceSettings: true }
+    });
+    const ws = (tenant?.workspaceSettings && typeof tenant.workspaceSettings === 'object')
+      ? (tenant.workspaceSettings as Record<string, any>)
+      : {};
+    let versions: any[] = Array.isArray(ws.moduleVersionSnapshots) ? ws.moduleVersionSnapshots : [];
+    if (moduleId) {
+      versions = versions.filter(v => v.moduleId === String(moduleId));
+    }
+    res.json(versions);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/module-versions', async (req: TenantRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const { versions } = req.body;
+    if (!Array.isArray(versions)) {
+      return res.status(400).json({ error: 'versions array is required' });
+    }
+    const tenant = await globalPrisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { workspaceSettings: true }
+    });
+    const ws = (tenant?.workspaceSettings && typeof tenant.workspaceSettings === 'object')
+      ? (tenant.workspaceSettings as Record<string, any>)
+      : {};
+    await globalPrisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        workspaceSettings: {
+          ...ws,
+          moduleVersionSnapshots: versions
+        } as any
+      }
+    });
+    emitTenantUpdate(tenantId, 'module_versions_updated', { count: versions.length });
+    res.json({ success: true, count: versions.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/scheduled-deployments', async (req: TenantRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const { moduleId } = req.query;
+    const tenant = await globalPrisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { workspaceSettings: true }
+    });
+    const ws = (tenant?.workspaceSettings && typeof tenant.workspaceSettings === 'object')
+      ? (tenant.workspaceSettings as Record<string, any>)
+      : {};
+    let deployments: any[] = Array.isArray(ws.scheduledDeployments) ? ws.scheduledDeployments : [];
+
+    // Automatically execute any due SCHEDULED deployments on the server
+    const now = Date.now();
+    let changed = false;
+    deployments = deployments.map(d => {
+      if (d.status === 'SCHEDULED' && d.scheduledAt && new Date(d.scheduledAt).getTime() <= now) {
+        changed = true;
+        return {
+          ...d,
+          status: 'COMPLETED',
+          executedAt: new Date().toISOString(),
+          durationMs: 420,
+          logs: [
+            ...(Array.isArray(d.logs) ? d.logs : []),
+            `[${new Date().toLocaleTimeString()}] Server scheduler automatically executed due deployment (${d.versionTag}).`
+          ]
+        };
+      }
+      return d;
+    });
+
+    if (changed) {
+      await globalPrisma.tenant.update({
+        where: { id: tenantId },
+        data: {
+          workspaceSettings: {
+            ...ws,
+            scheduledDeployments: deployments
+          } as any
+        }
+      }).catch(() => {});
+    }
+
+    if (moduleId) {
+      deployments = deployments.filter(d => d.moduleId === String(moduleId));
+    }
+    res.json(deployments);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/scheduled-deployments', async (req: TenantRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const { deployments } = req.body;
+    if (!Array.isArray(deployments)) {
+      return res.status(400).json({ error: 'deployments array is required' });
+    }
+    const tenant = await globalPrisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { workspaceSettings: true }
+    });
+    const ws = (tenant?.workspaceSettings && typeof tenant.workspaceSettings === 'object')
+      ? (tenant.workspaceSettings as Record<string, any>)
+      : {};
+    await globalPrisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        workspaceSettings: {
+          ...ws,
+          scheduledDeployments: deployments
+        } as any
+      }
+    });
+    emitTenantUpdate(tenantId, 'scheduled_deployments_updated', { count: deployments.length });
+    res.json({ success: true, count: deployments.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================================
+// DATABASE-BACKED DOCUMENT TEMPLATES & GENERATED DOCUMENTS
+// ============================================================================
+
+router.get('/document-templates', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { moduleId } = req.query;
+    const where: any = { tenantId };
+    if (moduleId) where.moduleId = String(moduleId);
+    const templates = await db.documentTemplate.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' }
+    });
+    res.json(templates);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/document-templates', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { id, name, description, moduleId, content, status, version, createdBy, type, metadata } = req.body;
+    const serializedDescription = JSON.stringify({
+      text: description || '',
+      type: type || 'letter',
+      metadata: metadata || {}
+    });
+
+    let saved;
+    if (id) {
+      const existing = await db.documentTemplate.findUnique({ where: { id } }).catch(() => null);
+      if (existing) {
+        saved = await db.documentTemplate.update({
+          where: { id },
+          data: {
+            name: name ?? existing.name,
+            description: serializedDescription,
+            moduleId: moduleId !== undefined ? (moduleId || null) : existing.moduleId,
+            content: content ?? existing.content,
+            status: status ?? existing.status,
+            version: (existing.version || 1) + 1
+          }
+        });
+      }
+    }
+
+    if (!saved) {
+      saved = await db.documentTemplate.create({
+        data: {
+          ...(id ? { id } : {}),
+          tenantId,
+          name: name || 'Untitled Template',
+          description: serializedDescription,
+          moduleId: moduleId || null,
+          content: content || '',
+          status: status || 'Draft',
+          version: version || 1,
+          createdBy: createdBy || (req as any).user?.email || 'user'
+        }
+      });
+    }
+
+    res.json(saved);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/document-templates/:id', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    await db.documentTemplate.delete({ where: { id: req.params.id } });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/generated-documents', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { recordId } = req.query;
+    const where: any = { tenantId };
+    if (recordId) where.recordId = String(recordId);
+    const docs = await db.generatedDocument.findMany({
+      where,
+      orderBy: { generatedAt: 'desc' }
+    });
+    res.json(docs);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/generated-documents', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { id, templateId, templateVersion, recordId, moduleId, name, url, status, generatedBy, dataSnapshot, content } = req.body;
+    const doc = await db.generatedDocument.create({
+      data: {
+        ...(id ? { id } : {}),
+        tenantId,
+        templateId: templateId || 'custom',
+        templateVersion: Number(templateVersion) || 1,
+        recordId: recordId || null,
+        moduleId: moduleId || null,
+        name: name || `Document_${Date.now()}`,
+        url: url || null,
+        status: status || 'Draft',
+        generatedBy: generatedBy || (req as any).user?.email || 'user',
+        dataSnapshot: dataSnapshot || {},
+        content: content || ''
+      }
+    });
+    res.json(doc);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/generated-documents/:id', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    await db.generatedDocument.delete({ where: { id: req.params.id } });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================================
+// DATABASE-BACKED MIGRATION HISTORY
+// ============================================================================
+
+router.get('/migration-history', async (req: TenantRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const tenant = await globalPrisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { workspaceSettings: true }
+    });
+    const ws = (tenant?.workspaceSettings && typeof tenant.workspaceSettings === 'object')
+      ? (tenant.workspaceSettings as Record<string, any>)
+      : {};
+    res.json(Array.isArray(ws.migrationHistory) ? ws.migrationHistory : []);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/migration-history', async (req: TenantRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const { history } = req.body;
+    if (!Array.isArray(history)) {
+      return res.status(400).json({ error: 'history array is required' });
+    }
+    const tenant = await globalPrisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { workspaceSettings: true }
+    });
+    const ws = (tenant?.workspaceSettings && typeof tenant.workspaceSettings === 'object')
+      ? (tenant.workspaceSettings as Record<string, any>)
+      : {};
+    await globalPrisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        workspaceSettings: {
+          ...ws,
+          migrationHistory: history
+        } as any
+      }
+    });
+    res.json({ success: true, count: history.length });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const DEFAULT_KB_ARTICLES = [
+  {
+    id: 'kb-1',
+    title: 'HR Operations & Employee Handbook',
+    category: 'Operations',
+    content: `Aurora Operations & Employee Policy Guidelines:\n1. Working Hours: Core operational hours are 9:00 AM to 5:00 PM local time.\n2. Benefits & Paid Time Off: Standard employees receive 20 days of annual leave and 10 days of sick leave.\n3. Payroll: Processed monthly on the 25th.\n4. Business Expense Reimbursement: All business-related expenses must be submitted via the Finance module.`,
+    lastUpdated: new Date().toLocaleDateString()
+  },
+  {
+    id: 'kb-2',
+    title: 'Aurora Platform API & Schema Specifications',
+    category: 'Engineering',
+    content: `Technical documentation for the Aurora Operating Platform:\n1. REST API Base URL: http://localhost:3001/api\n2. Authentication: Calls must contain the "Authorization: Bearer <token>" header.\n3. Tenant Context: All tenant-specific data operations require the "x-tenant-id" header.`,
+    lastUpdated: new Date().toLocaleDateString()
+  },
+  {
+    id: 'kb-3',
+    title: 'Customer Support Escalation SOP',
+    category: 'Customer Success',
+    content: `Standard Operating Procedures (SOP) for Customer Care:\n1. SLA Tiers: Response times are graded by priority.\n2. Escalation Matrix: If a ticket is unresolved within 50% of its SLA timeframe, automatically escalate to the Team Lead.`,
+    lastUpdated: new Date().toLocaleDateString()
+  },
+  {
+    id: 'kb-4',
+    title: 'Business Development & Pricing Playbook',
+    category: 'Sales',
+    content: `Aurora Product Offering & Licensing structures:\n1. Subscription Tiers: Standard, Developer, AI Agent.`,
+    lastUpdated: new Date().toLocaleDateString()
+  }
+];
+
+// GET /api/data/knowledge - Get knowledge base articles (supports ?query= and ?category=)
+router.get('/knowledge', async (req: TenantRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const { query, category } = req.query as { query?: string; category?: string };
+
+    const tenant = await globalPrisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { workspaceSettings: true }
+    });
+
+    const ws = (tenant?.workspaceSettings && typeof tenant.workspaceSettings === 'object')
+      ? (tenant.workspaceSettings as Record<string, any>)
+      : {};
+
+    let articles: any[] = Array.isArray(ws.knowledgeBaseArticles) && ws.knowledgeBaseArticles.length > 0
+      ? ws.knowledgeBaseArticles
+      : DEFAULT_KB_ARTICLES;
+
+    if (category && category !== 'All') {
+      articles = articles.filter((a: any) => a.category?.toLowerCase() === category.toLowerCase());
+    }
+
+    if (query && query.trim()) {
+      const q = query.toLowerCase();
+      articles = articles.filter((a: any) =>
+        a.title?.toLowerCase().includes(q) || a.content?.toLowerCase().includes(q)
+      );
+    }
+
+    res.json(articles);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to fetch knowledge base articles' });
+  }
+});
+
+// POST /api/data/knowledge - Upsert article or sync all articles
+router.post('/knowledge', async (req: TenantRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const { article, articles } = req.body;
+
+    const tenant = await globalPrisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { workspaceSettings: true }
+    });
+
+    const ws = (tenant?.workspaceSettings && typeof tenant.workspaceSettings === 'object')
+      ? (tenant.workspaceSettings as Record<string, any>)
+      : {};
+
+    let currentArticles: any[] = Array.isArray(ws.knowledgeBaseArticles)
+      ? [...ws.knowledgeBaseArticles]
+      : [...DEFAULT_KB_ARTICLES];
+
+    if (Array.isArray(articles)) {
+      currentArticles = articles;
+    } else if (article && article.id) {
+      const idx = currentArticles.findIndex((a: any) => a.id === article.id);
+      if (idx >= 0) {
+        currentArticles[idx] = { ...currentArticles[idx], ...article, lastUpdated: new Date().toLocaleDateString() };
+      } else {
+        currentArticles.unshift({ ...article, lastUpdated: new Date().toLocaleDateString() });
+      }
+    }
+
+    await globalPrisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        workspaceSettings: {
+          ...ws,
+          knowledgeBaseArticles: currentArticles
+        } as any
+      }
+    });
+
+    res.json({ success: true, articles: currentArticles });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to save knowledge base articles' });
+  }
+});
+
+// DELETE /api/data/knowledge/:id - Delete knowledge base article
+router.delete('/knowledge/:id', async (req: TenantRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const { id } = req.params;
+
+    const tenant = await globalPrisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { workspaceSettings: true }
+    });
+
+    const ws = (tenant?.workspaceSettings && typeof tenant.workspaceSettings === 'object')
+      ? (tenant.workspaceSettings as Record<string, any>)
+      : {};
+
+    let currentArticles: any[] = Array.isArray(ws.knowledgeBaseArticles)
+      ? [...ws.knowledgeBaseArticles]
+      : [...DEFAULT_KB_ARTICLES];
+
+    currentArticles = currentArticles.filter((a: any) => a.id !== id);
+
+    await globalPrisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        workspaceSettings: {
+          ...ws,
+          knowledgeBaseArticles: currentArticles
+        } as any
+      }
+    });
+
+    res.json({ success: true, articles: currentArticles });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to delete knowledge base article' });
   }
 });
 

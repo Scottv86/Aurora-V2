@@ -82,6 +82,8 @@ model Tenant {
   refunds                Refund[]
   returnRequests         ReturnRequest[]
   paymentGatewayConnections PaymentGatewayConnection[]
+  universalNotes         UniversalNote[]
+  universalReminders     UniversalReminder[]
 
   @@map("tenants")
 }
@@ -129,6 +131,8 @@ model Module {
   blueprintId String?   @map("blueprint_id")
   workspace   Workspace @relation(fields: [workspaceId], references: [id], map: "Module_workspaceId_fkey")
   records     Record[]
+  universalNotes UniversalNote[]
+  universalReminders UniversalReminder[]
 
   @@unique([id, tenantId])
   @@index([tenantId], map: "Module_tenantId_idx")
@@ -302,9 +306,12 @@ model Record {
   slaStatus     String?   @default("MET") @map("sla_status")
   module        Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade, map: "Record_moduleId_fkey")
   createdByMember TenantMember? @relation("RecordCreator", fields: [createdByMemberId, tenantId], references: [id, tenantId])
+  universalNotes  UniversalNote[]
+  universalReminders UniversalReminder[]
 
   @@index([moduleId], map: "Record_moduleId_idx")
   @@index([tenantId], map: "Record_tenantId_idx")
+  @@index([data(ops: JsonbPathOps)], type: Gin, map: "idx_records_data_gin")
   @@map("records")
 }
 
@@ -2425,3 +2432,85 @@ model PaymentGatewayConnection {
   @@index([tenantId, provider])
   @@map("payment_gateway_connections")
 }
+
+model UniversalNote {
+  id              String         @id @default(cuid())
+  tenantId        String         @map("tenant_id")
+  authorId        String         @map("author_id")
+  authorName      String?        @map("author_name")
+  authorEmail     String?        @map("author_email")
+  authorAvatar    String?        @map("author_avatar")
+  
+  title           String?
+  body            String         @db.Text
+  snippet         String?        @db.Text
+  color           String         @default("zinc") // zinc, yellow, blue, emerald, purple, rose, amber
+  isPinned        Boolean        @default(false) @map("is_pinned")
+  isArchived      Boolean        @default(false) @map("is_archived")
+  isPersonal      Boolean        @default(false) @map("is_personal")
+  tags            Json           @default("[]")
+  mentions        Json           @default("[]")
+  metadata        Json?
+  
+  moduleId        String?        @map("module_id")
+  recordId        String?        @map("record_id")
+  entityType      String?        @map("entity_type")
+  entityId        String?        @map("entity_id")
+  
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  module          Module?        @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  record          Record?        @relation(fields: [recordId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, authorId])
+  @@index([tenantId, moduleId, recordId])
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, isPinned, updatedAt])
+  @@map("universal_notes")
+}
+
+model UniversalReminder {
+  id                 String         @id @default(cuid())
+  tenantId           String         @map("tenant_id")
+  createdById        String?        @map("created_by_id")
+  createdByName      String?        @map("created_by_name")
+  assignedToId       String         @map("assigned_to_id")
+  assignedToName     String?        @map("assigned_to_name")
+  assignedToEmail    String?        @map("assigned_to_email")
+  assignedToAvatar   String?        @map("assigned_to_avatar")
+  
+  title              String
+  description        String?        @db.Text
+  dueAt              DateTime       @map("due_at")
+  priority           String         @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  status             String         @default("PENDING") // PENDING, COMPLETED, SNOOZED, CANCELLED
+  completedAt        DateTime?      @map("completed_at")
+  snoozeCount        Int            @default(0) @map("snooze_count")
+  lastSnoozedAt      DateTime?      @map("last_snoozed_at")
+  recurrenceRule     String?        @map("recurrence_rule")
+  notifyChannels     Json           @default("[\"IN_APP\"]")
+  
+  moduleId           String?        @map("module_id")
+  recordId           String?        @map("record_id")
+  entityType         String?        @map("entity_type")
+  entityId           String?        @map("entity_id")
+  
+  originWorkflowId   String?        @map("origin_workflow_id")
+  originAutomationId String?        @map("origin_automation_id")
+  
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+  
+  tenant             Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  module             Module?        @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  record             Record?        @relation(fields: [recordId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, assignedToId, status])
+  @@index([tenantId, status, dueAt])
+  @@index([tenantId, moduleId, recordId])
+  @@index([tenantId, entityType, entityId])
+  @@map("universal_reminders")
+}
+

@@ -7,14 +7,9 @@ import {
   Check, 
   Download, 
   Wand2, 
-  Layers, 
-  Layout, 
-  Type, 
   Loader2,
-  RefreshCw,
   Sun,
   Moon,
-  Smartphone,
   Globe
 } from 'lucide-react';
 import { Button, Input } from '../UI/Primitives';
@@ -74,9 +69,6 @@ export const LogoStudioModal: React.FC<LogoStudioModalProps> = ({
   // AI Prompt State
   const [aiPrompt, setAiPrompt] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
-
-  // Active preview tab for mobile/modal viewing
-  const [previewTab, setPreviewTab] = useState<'dual' | 'light' | 'dark' | 'favicon'>('dual');
 
   // Sync brand name when modal opens
   React.useEffect(() => {

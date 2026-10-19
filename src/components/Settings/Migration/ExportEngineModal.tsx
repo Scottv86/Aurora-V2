@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import { 
@@ -11,43 +11,72 @@ import {
 } from 'lucide-react';
 import { Button } from '../../UI/Primitives';
 import { toast } from 'sonner';
+import { usePlatform } from '../../../context/PlatformContext';
+import { useAuth } from '../../../hooks/useAuth';
+import { API_BASE_URL } from '../../../config';
 
 interface ExportEngineModalProps {
   isOpen: boolean;
   onClose: () => void;
   defaultEntity?: string;
+  onExportSuccess?: (info: { entity: string; records: number }) => void;
 }
 
-const EXPORT_ENTITIES = [
-  { id: 'records', label: 'All Module Records & Deals', count: '1,420 records' },
-  { id: 'workforce', label: 'Workforce Members & Positions', count: '48 members' },
-  { id: 'global_lists', label: 'Global System Lists & Options', count: '12 lists' },
-  { id: 'catalog', label: 'Pricing Catalog Items & Services', count: '340 items' },
-  { id: 'audit_logs', label: 'Security & System Audit Logs', count: '8,950 events' },
-  { id: 'blueprints', label: 'Platform Blueprints & Module Specs', count: '8 modules' },
+const STATIC_EXPORT_ENTITIES = [
+  { id: 'records', label: 'All Module Records & Deals', count: 'Live DB' },
+  { id: 'workforce', label: 'Workforce Members & Positions', count: 'Live DB' },
+  { id: 'global_lists', label: 'Global System Lists & Options', count: 'Live DB' },
+  { id: 'catalog', label: 'Pricing Catalog Items & Services', count: 'Live DB' },
+  { id: 'audit_logs', label: 'Security & System Audit Logs', count: 'Live DB' },
+  { id: 'blueprints', label: 'Platform Blueprints & Module Specs', count: 'Live DB' },
 ];
 
-const AVAILABLE_FIELDS: Record<string, string[]> = {
-  records: ['ID', 'Title', 'Primary Email', 'Value', 'Stage', 'Assignee', 'Created At', 'Updated At'],
-  workforce: ['Member ID', 'Full Name', 'Email', 'Role', 'Department', 'Status', 'Joined Date'],
-  global_lists: ['List Code', 'Label', 'Category', 'Description', 'Active Status'],
-  catalog: ['SKU', 'Product Name', 'Unit Price', 'Category', 'Tax Rate', 'Created At'],
-  audit_logs: ['Event ID', 'Timestamp', 'User', 'Action', 'Resource', 'IP Address'],
-  blueprints: ['Module ID', 'Display Name', 'Field Schema', 'Workflow Actions', 'Version']
+const STATIC_AVAILABLE_FIELDS: Record<string, string[]> = {
+  records: ['id', 'moduleId', 'status', 'title', 'name', 'email', 'value', 'createdAt', 'updatedAt'],
+  workforce: ['id', 'firstName', 'familyName', 'workEmail', 'roleId', 'licenceType', 'status', 'createdAt'],
+  global_lists: ['id', 'name', 'description', 'items'],
+  catalog: ['id', 'code', 'name', 'type', 'basePrice', 'currency', 'status', 'createdAt'],
+  audit_logs: ['id', 'timestamp', 'actorId', 'action', 'resource', 'ipAddress'],
+  blueprints: ['id', 'name', 'category', 'type', 'layout', 'createdAt']
 };
 
 export const ExportEngineModal: React.FC<ExportEngineModalProps> = ({
   isOpen,
   onClose,
-  defaultEntity = 'records'
+  defaultEntity = 'records',
+  onExportSuccess
 }) => {
+  const { modules, tenant } = usePlatform();
+  const { session } = useAuth();
+  const activeTenantId = tenant?.id;
+
+  const { EXPORT_ENTITIES, AVAILABLE_FIELDS } = useMemo(() => {
+    const entities = [...STATIC_EXPORT_ENTITIES];
+    const fieldsMap: Record<string, string[]> = { ...STATIC_AVAILABLE_FIELDS };
+
+    (modules || []).filter((m: any) => m.type !== 'PAGE').forEach((m: any) => {
+      const entId = `mod:${m.id}`;
+      entities.push({
+        id: entId,
+        label: `Module: ${m.name}`,
+        count: 'Live DB'
+      });
+      const modFields = ((m.layout || []) as any[])
+        .filter((f: any) => !['divider', 'spacer', 'heading', 'alert'].includes(f.type))
+        .map((f: any) => f.id);
+      fieldsMap[entId] = ['id', 'status', ...modFields, 'createdAt', 'updatedAt'];
+    });
+
+    return { EXPORT_ENTITIES: entities, AVAILABLE_FIELDS: fieldsMap };
+  }, [modules]);
+
   const [selectedEntity, setSelectedEntity] = useState<string>(defaultEntity);
   const [format, setFormat] = useState<'csv' | 'json' | 'xlsx'>('csv');
   const [dateRange, setDateRange] = useState<'all' | '30d' | '90d' | 'year'>('all');
   const [isExporting, setIsExporting] = useState(false);
 
   // Field toggling state
-  const initialFields = AVAILABLE_FIELDS[selectedEntity] || [];
+  const initialFields = AVAILABLE_FIELDS[selectedEntity] || STATIC_AVAILABLE_FIELDS.records;
   const [selectedFields, setSelectedFields] = useState<string[]>(initialFields);
 
   if (!isOpen) return null;
@@ -69,7 +98,7 @@ export const ExportEngineModal: React.FC<ExportEngineModalProps> = ({
     setSelectedFields(AVAILABLE_FIELDS[entityId] || []);
   };
 
-  const handleRunExport = () => {
+  const handleRunExport = async () => {
     if (selectedFields.length === 0) {
       toast.error('Please select at least one field to export');
       return;
@@ -77,27 +106,119 @@ export const ExportEngineModal: React.FC<ExportEngineModalProps> = ({
 
     setIsExporting(true);
 
-    setTimeout(() => {
-      setIsExporting(false);
+    try {
+      const token = session?.access_token || (import.meta as any).env?.VITE_DEV_TOKEN || localStorage.getItem('aurora_token') || '';
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-tenant-id': activeTenantId || 'tenant_default'
+      };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      // Create a mock blob download
-      const content = format === 'csv' 
-        ? `${selectedFields.join(',')}\n"DEMO-001","Sample Record Data","2026-08-03"`
-        : JSON.stringify({ entity: selectedEntity, fields: selectedFields, exportedAt: new Date().toISOString() }, null, 2);
+      let rowsToExport: any[] = [];
 
-      const blob = new Blob([content], { type: format === 'csv' ? 'text/csv' : 'application/json' });
+      if (selectedEntity.startsWith('mod:')) {
+        const modId = selectedEntity.replace('mod:', '');
+        const res = await fetch(`${API_BASE_URL}/api/data/records?moduleId=${encodeURIComponent(modId)}&limit=5000`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          rowsToExport = Array.isArray(data) ? data : (data.records || []);
+        }
+      } else if (selectedEntity === 'records') {
+        const res = await fetch(`${API_BASE_URL}/api/data/records?limit=5000`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          rowsToExport = Array.isArray(data) ? data : (data.records || []);
+        }
+      } else if (selectedEntity === 'catalog') {
+        const res = await fetch(`${API_BASE_URL}/api/catalog/items`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          rowsToExport = Array.isArray(data) ? data : (data.items || []);
+        }
+      } else if (selectedEntity === 'global_lists') {
+        const res = await fetch(`${API_BASE_URL}/api/lists`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          rowsToExport = Array.isArray(data) ? data : (data.lists || []);
+        }
+      } else if (selectedEntity === 'blueprints') {
+        rowsToExport = modules || [];
+      } else if (selectedEntity === 'workforce') {
+        const res = await fetch(`${API_BASE_URL}/api/tenants/${encodeURIComponent(activeTenantId || 'tenant_default')}/members`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          rowsToExport = Array.isArray(data) ? data : (data.members || []);
+        }
+      } else if (selectedEntity === 'audit_logs') {
+        const res = await fetch(`${API_BASE_URL}/api/audit?limit=1000`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          rowsToExport = Array.isArray(data) ? data : (data.logs || []);
+        }
+      }
+
+      // Filter by dateRange if applicable
+      if (dateRange !== 'all') {
+        const days = dateRange === '30d' ? 30 : dateRange === '90d' ? 90 : 365;
+        const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+        rowsToExport = rowsToExport.filter(r => {
+          const ts = r.createdAt || r.timestamp || r.updatedAt;
+          return !ts || new Date(ts).getTime() >= cutoff;
+        });
+      }
+
+      // Project selected fields
+      const projectedRows = rowsToExport.map(row => {
+        const projected: Record<string, any> = {};
+        selectedFields.forEach(f => {
+          projected[f] = row[f] !== undefined ? row[f] : (row.data?.[f] ?? '');
+        });
+        return projected;
+      });
+
+      const escapeCsvCell = (val: any): string => {
+        if (val === null || val === undefined) return '""';
+        const str = typeof val === 'object' ? JSON.stringify(val) : String(val);
+        return `"${str.replace(/"/g, '""')}"`;
+      };
+
+      const ext = format === 'xlsx' ? 'csv' : format;
+      const content = format === 'json'
+        ? JSON.stringify({
+            entity: selectedEntity,
+            exportedAt: new Date().toISOString(),
+            count: projectedRows.length,
+            records: projectedRows
+          }, null, 2)
+        : [
+            selectedFields.join(','),
+            ...projectedRows.map(r => selectedFields.map(f => escapeCsvCell(r[f])).join(','))
+          ].join('\n');
+
+      const blob = new Blob([content], { type: format === 'json' ? 'application/json' : 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `aurora_${selectedEntity}_export.${format}`;
+      const safeName = selectedEntity.replace(/[^a-zA-Z0-9_-]/g, '_');
+      a.download = `aurora_${safeName}_export.${ext}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      toast.success(`Export created! Downloaded aurora_${selectedEntity}_export.${format}`);
+      const entityObj = EXPORT_ENTITIES.find(e => e.id === selectedEntity);
+      onExportSuccess?.({
+        entity: entityObj?.label || selectedEntity,
+        records: projectedRows.length
+      });
+
+      toast.success(`Exported ${projectedRows.length} records to aurora_${safeName}_export.${ext}`);
       onClose();
-    }, 1200);
+    } catch (err: any) {
+      toast.error(`Export failed: ${err.message || 'Unknown error'}`);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const modalNode = (

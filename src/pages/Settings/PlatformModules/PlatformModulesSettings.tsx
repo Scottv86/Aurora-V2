@@ -39,10 +39,6 @@ export const PlatformModulesSettings = () => {
   }, [location.search, openNewModuleModal]);
 
   const isIndex = location.pathname === '/workspace/settings/platform-modules' || location.pathname === '/workspace/settings/platform-modules/';
-  const isBuilderActive = (location.pathname.includes('report-management') && location.search.includes('mode=builder')) ||
-                          (location.pathname.includes('solutions') && (location.search.includes('mode=studio') || location.search.includes('mode=builder') || location.search.includes('id=')));
-  const isPos = location.pathname.includes('/pos');
-  const isFullHeight = isBuilderActive || isPos;
 
   const [activeTab, setActiveTab] = useState<'all' | 'custom' | 'system'>('all');
 

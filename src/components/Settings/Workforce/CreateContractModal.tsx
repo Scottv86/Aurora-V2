@@ -3,6 +3,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, Receipt, Calendar, Briefcase, DollarSign, CheckCircle2 } from 'lucide-react';
 import { Button, Input, Select } from '../../UI/Primitives';
 
+import { usePlatform } from '../../../hooks/usePlatform';
+import { useAuth } from '../../../hooks/useAuth';
+import { toast } from 'sonner';
+
 interface CreateContractModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -11,7 +15,9 @@ interface CreateContractModalProps {
   onSuccess: () => void;
 }
 
-export const CreateContractModal = ({ isOpen, onClose, memberId: _memberId, memberName, onSuccess }: CreateContractModalProps) => {
+export const CreateContractModal = ({ isOpen, onClose, memberId, memberName, onSuccess }: CreateContractModalProps) => {
+  const { tenant } = usePlatform();
+  const { session } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   
@@ -25,14 +31,36 @@ export const CreateContractModal = ({ isOpen, onClose, memberId: _memberId, memb
     setIsSubmitting(true);
     
     try {
-      // Simulate API call to create contract
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const token = session?.access_token || (import.meta as any).env?.VITE_DEV_TOKEN || localStorage.getItem('aurora_token') || '';
+      const tenantId = tenant?.id || localStorage.getItem('aurora_tenant_id') || '';
+      const res = await fetch(`http://127.0.0.1:3001/api/members/${memberId}/contracts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenantId
+        },
+        body: JSON.stringify({
+          type,
+          salary,
+          currency,
+          startDate
+        })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to create contract');
+      }
+
       setIsSuccess(true);
       setTimeout(() => {
         onSuccess();
         onClose();
         setIsSuccess(false);
-      }, 2000);
+      }, 1500);
+    } catch (err: any) {
+      toast.error(err.message || 'Error creating contract');
     } finally {
       setIsSubmitting(false);
     }

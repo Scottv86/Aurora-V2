@@ -10,15 +10,12 @@ import {
   RefreshCw, 
   Trash2, 
   Settings2, 
-  X, 
   Building2, 
   Terminal, 
   Globe, 
-  Lock,
   ArrowRight,
   ArrowLeft,
   Search,
-  Sparkles,
   Store,
   FileText,
   ShoppingCart,
@@ -26,11 +23,7 @@ import {
   ExternalLink,
   Save,
   Radio,
-  Printer,
-  QrCode,
-  DollarSign,
   Layers,
-  ChevronRight,
   SlidersHorizontal
 } from 'lucide-react';
 import { Button } from '../../UI/Primitives';
@@ -188,6 +181,33 @@ export const PaymentGatewaysTab: React.FC<PaymentGatewaysTabProps> = ({ tenantId
       setConnections(connList);
       setPresets(presetList);
 
+      // Try to load saved channel routing from PostgreSQL backend
+      try {
+        const token = (import.meta as any).env?.VITE_DEV_TOKEN || localStorage.getItem('aurora_token') || '';
+        const chRes = await fetch(`http://127.0.0.1:3001/api/payment-gateways/channels`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenantId
+          }
+        });
+        if (chRes.ok) {
+          const chData = await chRes.json();
+          if (chData && typeof chData === 'object' && chData.pos) {
+            setChannelConfigs(chData);
+            return;
+          }
+        }
+      } catch (_) {}
+
+      // Fallback to local cache
+      const savedChannels = localStorage.getItem(`aurora_payment_channels_${tenantId}`);
+      if (savedChannels) {
+        try {
+          setChannelConfigs(JSON.parse(savedChannels));
+          return;
+        } catch (_) {}
+      }
+
       // Auto-assign first available gateway if channels unassigned
       setChannelConfigs(prev => {
         let updated = { ...prev };
@@ -219,9 +239,19 @@ export const PaymentGatewaysTab: React.FC<PaymentGatewaysTabProps> = ({ tenantId
     }
   };
 
-  const handleSaveChannelSettings = () => {
+  const handleSaveChannelSettings = async () => {
     try {
       setIsSavingChannels(true);
+      const token = (import.meta as any).env?.VITE_DEV_TOKEN || localStorage.getItem('aurora_token') || '';
+      await fetch(`http://127.0.0.1:3001/api/payment-gateways/channels`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenantId
+        },
+        body: JSON.stringify({ channels: channelConfigs })
+      });
       localStorage.setItem(`aurora_payment_channels_${tenantId}`, JSON.stringify(channelConfigs));
       toast.success('Commerce touchpoint routing saved successfully!');
     } catch (e: any) {
@@ -282,7 +312,7 @@ export const PaymentGatewaysTab: React.FC<PaymentGatewaysTabProps> = ({ tenantId
       category: 'OMNICHANNEL',
       description: '',
       badge: conn.provider,
-      fields: []
+      fields: [] as ProviderPreset['fields']
     };
     setSelectedPreset(matchedPreset);
     setEditingConnection(conn);

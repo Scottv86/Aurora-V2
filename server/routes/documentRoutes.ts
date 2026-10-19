@@ -81,9 +81,9 @@ router.get('/stream/:id', async (req: any, res) => {
         where: { documentId: doc.id, versionNumber }
       });
       if (ver) {
-        storageProvider = ver.storageProvider;
+        storageProvider = (ver as any).storageProvider || storageProvider;
         storagePath = ver.storagePath;
-        mimeType = ver.mimeType;
+        mimeType = (ver as any).mimeType || mimeType;
       }
     }
 
@@ -729,7 +729,7 @@ router.post('/:id/convert-to-record', async (req: any, res) => {
       // Perform deduplication check for People & Org
       let dedupMatch = null;
       if (targetType === 'PEOPLE_ORG') {
-        const { taxIdentifier, email, legalName } = extraction.fields || {};
+        const { taxIdentifier, legalName } = extraction.fields || {};
         if (taxIdentifier) {
           const match = await (req.db || globalPrisma).party.findFirst({
             where: {
@@ -798,7 +798,6 @@ router.post('/:id/convert-to-record', async (req: any, res) => {
     // Step 2: Execute actual record creation
     const db = req.db || globalPrisma;
     let createdRecordId = '';
-    let createdRecordType = targetType;
     let createdRecordName = '';
 
     if (targetType === 'PEOPLE_ORG') {

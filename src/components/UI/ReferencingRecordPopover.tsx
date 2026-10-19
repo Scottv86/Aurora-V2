@@ -223,9 +223,9 @@ export const ReferencingRecordPopover: React.FC<ReferencingRecordPopoverProps> =
                       >
                         <div className="flex items-center gap-1.5">
                           {col.isPrimary ? (
-                            <Key size={10} className="text-yellow-500 shrink-0" title="Primary Key" />
-                          ) : col.foreignKey ? (
-                            <Link2 size={10} className="text-emerald-400 shrink-0" title={`Foreign Key -> ${col.foreignKey.targetTable}`} />
+                            <span title="Primary Key" className="inline-flex items-center shrink-0"><Key size={10} className="text-yellow-500 shrink-0" /></span>
+                          ) : 'foreignKey' in col && col.foreignKey ? (
+                            <span title={`Foreign Key -> ${col.foreignKey.targetTable}`} className="inline-flex items-center shrink-0"><Link2 size={10} className="text-emerald-400 shrink-0" /></span>
                           ) : null}
                           <span className="text-zinc-200">{col.name}</span>
                           <span className="text-zinc-500 text-[10px] font-normal">{col.type}</span>

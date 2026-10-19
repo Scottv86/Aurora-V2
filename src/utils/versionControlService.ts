@@ -1,6 +1,9 @@
 import { ModuleVersionSnapshot, ModuleVersionSnapshotState, VersionFieldDiff, Field } from '../types/versionControl';
+import { API_BASE_URL } from '../config';
+import { supabase } from '../lib/supabase';
 
 const STORAGE_KEY = 'aurora_module_version_snapshots';
+let hasHydratedFromServer = false;
 
 type Listener = (versions: ModuleVersionSnapshot[]) => void;
 const listeners = new Set<Listener>();
@@ -13,6 +16,56 @@ function notifyListeners(versions: ModuleVersionSnapshot[]) {
       console.error('Error notifying version control listener:', e);
     }
   });
+}
+
+async function resolveAuthHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data?.session?.access_token || (import.meta as any).env?.VITE_DEV_TOKEN || localStorage.getItem('aurora_token') || '';
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const tenantId = localStorage.getItem('aurora_active_tenant_id') || 'tenant_default';
+    headers['x-tenant-id'] = tenantId;
+  } catch (_) {}
+  return headers;
+}
+
+async function hydrateVersionsFromBackend(): Promise<void> {
+  if (typeof window === 'undefined' || hasHydratedFromServer) return;
+  hasHydratedFromServer = true;
+  try {
+    const headers = await resolveAuthHeaders();
+    const res = await fetch(`${API_BASE_URL}/api/data/module-versions`, { headers });
+    if (res.ok) {
+      const serverVersions: ModuleVersionSnapshot[] = await res.json();
+      if (Array.isArray(serverVersions) && serverVersions.length > 0) {
+        const localRaw = localStorage.getItem(STORAGE_KEY);
+        const localVersions: ModuleVersionSnapshot[] = localRaw ? JSON.parse(localRaw) : [];
+        const mergedMap = new Map<string, ModuleVersionSnapshot>();
+        localVersions.forEach(v => mergedMap.set(v.id, v));
+        serverVersions.forEach(v => mergedMap.set(v.id, v));
+        const merged = Array.from(mergedMap.values()).sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+        notifyListeners(merged);
+      }
+    }
+  } catch (_) {}
+}
+
+async function syncVersionsToBackend(list: ModuleVersionSnapshot[]): Promise<void> {
+  if (typeof window === 'undefined') return;
+  try {
+    const headers = await resolveAuthHeaders();
+    await fetch(`${API_BASE_URL}/api/data/module-versions`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ versions: list })
+    });
+  } catch (err) {
+    console.warn('[versionControlService] Background server sync warning:', err);
+  }
 }
 
 const mapFieldTypeToSql = (type?: string): string => {
@@ -73,6 +126,7 @@ const flatten = (fields: Field[]): Field[] => {
 
 export const versionControlService = {
   getAllVersions(): ModuleVersionSnapshot[] {
+    hydrateVersionsFromBackend();
     try {
       const data = localStorage.getItem(STORAGE_KEY);
       return data ? JSON.parse(data) : [];
@@ -97,6 +151,7 @@ export const versionControlService = {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
       notifyListeners(list);
+      syncVersionsToBackend(list);
     } catch (e) {
       console.error('Failed to save version snapshots', e);
     }

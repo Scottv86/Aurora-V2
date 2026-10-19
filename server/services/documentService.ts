@@ -796,7 +796,7 @@ export class DocumentService {
 
     metadata.annotations = [...existingAnnotations, newAnnotation];
 
-    const updated = await globalPrisma.universalDocument.update({
+    await globalPrisma.universalDocument.update({
       where: { id: documentId },
       data: { aiMetadata: metadata }
     });
@@ -1101,11 +1101,14 @@ export class DocumentService {
           affected++;
         } else if (action === 'ASSIGN_RDS') {
           if (payload?.retentionScheduleId) {
-            await this.assignRetentionSchedule(tenantId, docId, payload.retentionScheduleId, actorUser?.id);
-            affected++;
+            const doc = await globalPrisma.universalDocument.findUnique({ where: { id: docId } });
+            if (doc) {
+              await this.updateClassification(docId, doc.classification, payload.retentionScheduleId, actorUser?.name || actorUser?.id || 'User');
+              affected++;
+            }
           }
         } else if (action === 'TRASH') {
-          await this.deleteDocument(tenantId, docId, false, actorUser?.id);
+          await this.deleteDocument(docId, actorUser?.name || actorUser?.id || 'User', false);
           affected++;
         }
       } catch (err) {
@@ -1138,7 +1141,6 @@ export class DocumentService {
       .map((d, i) => `=== DOCUMENT ${i + 1}: ${d.name} (${d.documentType}) ===\n${d.ocrText || 'No transcript'}\n`)
       .join('\n\n');
 
-    const totalBytes = docs.reduce((acc, d) => acc + (d.sizeBytes || 0), 0);
     const combinedSummary = `Master Document Binder containing ${docs.length} files: ${docs.map(d => d.name).join(', ')}.`;
 
     // Create a new merged document record

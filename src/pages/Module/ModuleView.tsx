@@ -55,6 +55,7 @@ import { BulkPasteRecordModal } from '../../components/Platform/BulkPasteRecordM
 import { RecordActivityDrawer } from '../../components/Platform/RecordActivityDrawer';
 import { TransitionRequirementsModal } from '../../components/Platform/TransitionRequirementsModal';
 import { resolveRecordNextStep, checkMissingRequiredFields, resolveRecordSlaStatus } from '../../lib/workflowProcessUtils';
+import { isFieldHiddenBySecurity, isFieldMaskedBySecurity, formatMaskedFieldValue } from '../../utils/fieldSecurity';
 
 const InlineAssigneeCell = ({
   record,
@@ -1052,8 +1053,9 @@ export const ModuleView = () => {
   }, [moduleData]);
 
   const allFields = useMemo(() => {
-    return flattenFields(moduleData?.layout || []) as ModuleField[];
-  }, [moduleData]);
+    const raw = flattenFields(moduleData?.layout || []) as ModuleField[];
+    return raw.filter((f: ModuleField) => !isFieldHiddenBySecurity(f.id, moduleData, platformUser || user));
+  }, [moduleData, platformUser, user]);
 
   const displayFields = useMemo(() => {
     return allFields.filter((f: ModuleField) => 
@@ -4772,7 +4774,10 @@ export const ModuleView = () => {
       className: densityClass,
       style: field.columnWidth ? { width: `${field.columnWidth}px`, minWidth: `${field.columnWidth}px` } : undefined,
       accessor: (record: any) => {
-        const val = record[field.id] || record[field.name];
+        const rawVal = record[field.id] || record[field.name];
+        const val = isFieldMaskedBySecurity(field.id, moduleData, platformUser || user)
+          ? formatMaskedFieldValue(rawVal)
+          : rawVal;
         if (field.type === 'checkbox') return val ? 'Yes' : 'No';
         
         if (field.type === 'user') {

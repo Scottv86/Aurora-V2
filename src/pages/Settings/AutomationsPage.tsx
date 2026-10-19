@@ -21,6 +21,7 @@ import { EmptyState } from '../../components/UI/EmptyState';
 import { motion } from 'motion/react';
 import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
 import { builderCache } from '../../utils/builderCache';
+import { PLATFORM_MODULES } from '../../config/platformModules';
 
 
 
@@ -690,7 +691,24 @@ const DEFAULT_AUTOMATIONS = [
 export const AutomationsPage: React.FC = () => {
   const location = useLocation();
   const isSettingsMode = location.pathname.startsWith('/workspace/settings');
-  const { tenant, modules, members = [], teams = [] } = usePlatform();
+  const { tenant, modules: customModules = [], members = [], teams = [] } = usePlatform();
+  const modules = useMemo(() => {
+    const existingIds = new Set((customModules || []).map((m: any) => m.id));
+    const platformEntries = PLATFORM_MODULES.filter(pm => !existingIds.has(pm.id)).map(pm => ({
+      id: pm.id,
+      name: `${pm.name} (Platform)`,
+      type: 'RECORD',
+      isPlatformModule: true,
+      layout: [
+        { id: 'name', name: 'name', label: 'Name / Title', type: 'text' },
+        { id: 'status', name: 'status', label: 'Status', type: 'select' },
+        { id: 'email', name: 'email', label: 'Email', type: 'email' },
+        { id: 'amount', name: 'amount', label: 'Amount', type: 'number' },
+        { id: 'assigneeId', name: 'assigneeId', label: 'Assignee', type: 'user' }
+      ]
+    }));
+    return [...(customModules || []), ...platformEntries];
+  }, [customModules]);
   const { positions } = usePositions();
   const { session } = useAuth();
   const triageModule = modules?.find((m: any) => m.isIntakeTriage === true || m.config?.isIntakeTriage === true);

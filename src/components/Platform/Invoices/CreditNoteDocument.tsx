@@ -1,6 +1,5 @@
 import React from 'react';
-import { Printer, X, FileText, CheckCircle2, ArrowDownLeft, Building2 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { Printer, X, FileText, CheckCircle2 } from 'lucide-react';
 import { Button } from '../../UI/Primitives';
 
 export interface CreditNoteData {

@@ -9,16 +9,13 @@ import {
   RotateCcw, 
   ShieldAlert, 
   CheckCircle2, 
-  AlertTriangle, 
   FileCode, 
   Terminal, 
   Lock, 
   Bell, 
   RefreshCw,
-  ExternalLink,
   ChevronDown,
   ChevronRight,
-  Layers,
   Sparkles,
   Info
 } from 'lucide-react';

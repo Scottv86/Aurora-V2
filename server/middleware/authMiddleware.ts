@@ -4,6 +4,7 @@ import { globalPrisma } from '../lib/prisma';
 
 export interface AuthRequest extends Request {
   user?: {
+    id?: string;
     uid: string;
     email: string;
     name: string;
@@ -11,6 +12,7 @@ export interface AuthRequest extends Request {
     tenantIds: string[];
     memberId?: string;
     roleId?: string;
+    avatarUrl?: string;
   };
 }
 
@@ -181,14 +183,18 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
       (supabaseUser as any).user_metadata?.isSuperAdmin
     );
 
+    const avatarUrl = membership?.avatarUrl || (supabaseUser as any).user_metadata?.avatar_url || (supabaseUser as any).user_metadata?.picture;
+
     req.user = {
+      id: dbUser.id,
       uid: dbUser.id,
       email: dbUser.email,
       name: name,
       isSuperAdmin: isSuperAdmin,
       tenantIds: verifiedTenantIds,
       memberId: membership?.id || dbUser.id,
-      roleId: membership?.roleId || (isSuperAdmin ? 'SUPERADMIN' : 'member')
+      roleId: membership?.roleId || (isSuperAdmin ? 'SUPERADMIN' : 'member'),
+      avatarUrl: avatarUrl || undefined
     };
 
     next();

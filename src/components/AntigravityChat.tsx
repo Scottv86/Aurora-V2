@@ -627,30 +627,67 @@ export const AntigravityChat = () => {
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    const key = `aurora_chat_folders_${platformUser?.id || authUser?.id || 'guest'}_${tenant?.id || 'global'}`;
-    try {
-      const saved = localStorage.getItem(key);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setFolders(parsed);
-          return;
+    const fetchFolders = async () => {
+      try {
+        const token = authSession?.access_token || (import.meta as any).env?.VITE_DEV_TOKEN || localStorage.getItem('aurora_token') || '';
+        const tenantId = tenant?.id || localStorage.getItem('aurora_tenant_id') || '';
+        const res = await fetch(`${API_BASE_URL}/folders`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenantId
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setFolders(data);
+            return;
+          }
         }
+      } catch (_) {}
+
+      // Fallback to local cache
+      const key = `aurora_chat_folders_${platformUser?.id || authUser?.id || 'guest'}_${tenant?.id || 'global'}`;
+      try {
+        const saved = localStorage.getItem(key);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setFolders(parsed);
+            return;
+          }
+        }
+      } catch (e) {
+        console.error('[AntigravityChat] Error loading scoped folders:', e);
       }
-    } catch (e) {
-      console.error('[AntigravityChat] Error loading scoped folders:', e);
-    }
-    setFolders([{ id: 'aurora', name: 'aurora' }]);
-  }, [platformUser?.id, authUser?.id, tenant?.id]);
+      setFolders([{ id: 'aurora', name: 'aurora' }]);
+    };
+
+    fetchFolders();
+  }, [platformUser?.id, authUser?.id, tenant?.id, authSession?.access_token]);
 
   const toggleFolderCollapse = (folderId: string) => {
     setCollapsedFolders(prev => ({ ...prev, [folderId]: !prev[folderId] }));
   };
 
-  const saveFolders = (updatedFolders: { id: string; name: string }[]) => {
+  const saveFolders = async (updatedFolders: { id: string; name: string }[]) => {
     setFolders(updatedFolders);
     const key = `aurora_chat_folders_${platformUser?.id || authUser?.id || 'guest'}_${tenant?.id || 'global'}`;
     localStorage.setItem(key, JSON.stringify(updatedFolders));
+
+    try {
+      const token = authSession?.access_token || (import.meta as any).env?.VITE_DEV_TOKEN || localStorage.getItem('aurora_token') || '';
+      const tenantId = tenant?.id || localStorage.getItem('aurora_tenant_id') || '';
+      await fetch(`${API_BASE_URL}/folders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenantId
+        },
+        body: JSON.stringify({ folders: updatedFolders })
+      });
+    } catch (_) {}
   };
 
   const handleCreateFolder = () => {

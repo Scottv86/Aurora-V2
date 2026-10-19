@@ -181,14 +181,66 @@ export function getDocumentTemplates(): DocumentTemplate[] {
   return getStoredTemplates();
 }
 
+async function resolveDocAuthHeaders(explicitTenantId?: string): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  try {
+    const { supabase } = await import('../lib/supabase');
+    const { data } = await supabase.auth.getSession();
+    const token = data?.session?.access_token || (import.meta as any).env?.VITE_DEV_TOKEN || localStorage.getItem('aurora_token') || '';
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const tenantId = explicitTenantId || localStorage.getItem('aurora_active_tenant_id') || 'tenant_default';
+    headers['x-tenant-id'] = tenantId;
+  } catch (_) {}
+  return headers;
+}
+
+function parseDbTemplate(t: any): DocumentTemplate {
+  let descText = t.description || '';
+  let type: DocumentTemplate['type'] = 'letter';
+  let metadata: Record<string, any> = {};
+  if (typeof t.description === 'string' && t.description.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(t.description);
+      descText = parsed.text || '';
+      type = parsed.type || 'letter';
+      metadata = parsed.metadata || {};
+    } catch (_) {}
+  }
+  return {
+    id: t.id,
+    tenantId: t.tenantId || 'default',
+    name: t.name,
+    type,
+    description: descText,
+    moduleId: t.moduleId || undefined,
+    content: t.content || '',
+    metadata,
+    status: (t.status as any) || 'Draft',
+    version: t.version || 1,
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
+    createdBy: t.createdBy || 'user'
+  };
+}
+
 export const DocumentService = {
   async getTemplates(tenantId?: string, moduleId?: string) {
-    console.log(`[DocumentService] Fetching templates for tenant ${tenantId}, module ${moduleId}`);
     let dbTemplates: DocumentTemplate[] = [];
     try {
+      const { API_BASE_URL } = await import('../config');
+      const headers = await resolveDocAuthHeaders(tenantId);
+      const query = moduleId ? `?moduleId=${encodeURIComponent(moduleId)}` : '';
+      const dbRes = await fetch(`${API_BASE_URL}/api/data/document-templates${query}`, { headers });
+      if (dbRes.ok) {
+        const rows = await dbRes.json();
+        if (Array.isArray(rows)) {
+          dbTemplates.push(...rows.map(parseDbTemplate));
+        }
+      }
+
       const res = await queryTemplateCatalog({ builderType: 'DOCUMENT', includePayload: true }, undefined, tenantId);
       if (res.templates && res.templates.length > 0) {
-        dbTemplates = res.templates.map((t: any) => {
+        const catalogItems = res.templates.map((t: any) => {
           const payload = (t.payload || t.schemaPayload || {}) as any;
           return {
             id: t.slug.replace(/^doc-/, ''),
@@ -204,6 +256,11 @@ export const DocumentService = {
             updatedAt: t.updatedAt,
             createdBy: 'system'
           };
+        });
+        catalogItems.forEach((c: DocumentTemplate) => {
+          if (!dbTemplates.some(d => d.id === c.id)) {
+            dbTemplates.push(c);
+          }
         });
       }
     } catch (err) {
@@ -226,7 +283,6 @@ export const DocumentService = {
   },
 
   async saveTemplate(tenantId: string, template: Partial<DocumentTemplate>) {
-    console.log(`[DocumentService] Saving template for tenant ${tenantId}`, template);
     const all = getStoredTemplates();
     const existingIndex = template.id ? all.findIndex(t => t.id === template.id) : -1;
 
@@ -270,14 +326,40 @@ export const DocumentService = {
     }
 
     saveStoredTemplates(all);
+
+    try {
+      const { API_BASE_URL } = await import('../config');
+      const headers = await resolveDocAuthHeaders(tenantId);
+      const res = await fetch(`${API_BASE_URL}/api/data/document-templates`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(saved)
+      });
+      if (res.ok) {
+        const dbSaved = await res.json();
+        return parseDbTemplate(dbSaved);
+      }
+    } catch (err) {
+      console.warn('[DocumentService] Server template save warning:', err);
+    }
+
     return saved;
   },
 
   async deleteTemplate(tenantId: string, templateId: string) {
-    console.log(`[DocumentService] Deleting template ${templateId} for tenant ${tenantId}`);
     const all = getStoredTemplates();
     const filtered = all.filter(t => t.id !== templateId);
     saveStoredTemplates(filtered);
+
+    try {
+      const { API_BASE_URL } = await import('../config');
+      const headers = await resolveDocAuthHeaders(tenantId);
+      await fetch(`${API_BASE_URL}/api/data/document-templates/${encodeURIComponent(templateId)}`, {
+        method: 'DELETE',
+        headers
+      });
+    } catch (_) {}
+
     return true;
   },
 
@@ -341,13 +423,42 @@ export const DocumentService = {
     allDocs.push(docData);
     saveStoredDocuments(allDocs);
 
+    try {
+      const { API_BASE_URL } = await import('../config');
+      const headers = await resolveDocAuthHeaders(tenantId);
+      const res = await fetch(`${API_BASE_URL}/api/data/generated-documents`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(docData)
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.warn('[DocumentService] Server generated document save warning:', err);
+    }
+
     return docData;
   },
 
   async getDocuments(tenantId: string, recordId?: string) {
-    console.log(`[DocumentService] Fetching documents for tenant ${tenantId}, record ${recordId}`);
     const allDocs = getStoredDocuments();
-    return allDocs.filter(d => {
+    let dbDocs: GeneratedDocument[] = [];
+    try {
+      const { API_BASE_URL } = await import('../config');
+      const headers = await resolveDocAuthHeaders(tenantId);
+      const query = recordId ? `?recordId=${encodeURIComponent(recordId)}` : '';
+      const res = await fetch(`${API_BASE_URL}/api/data/generated-documents${query}`, { headers });
+      if (res.ok) {
+        const rows = await res.json();
+        if (Array.isArray(rows)) {
+          dbDocs = rows;
+        }
+      }
+    } catch (_) {}
+
+    const combined = [...dbDocs, ...allDocs.filter(l => !dbDocs.some(d => d.id === l.id))];
+    return combined.filter(d => {
       const matchesTenant = !tenantId || !d.tenantId || d.tenantId === tenantId || d.tenantId === 'default';
       const matchesRecord = !recordId || d.recordId === recordId;
       return matchesTenant && matchesRecord;
@@ -355,10 +466,19 @@ export const DocumentService = {
   },
 
   async deleteDocument(tenantId: string, docId: string) {
-    console.log(`[DocumentService] Deleting document ${docId} for tenant ${tenantId}`);
     const allDocs = getStoredDocuments();
     const filtered = allDocs.filter(d => d.id !== docId);
     saveStoredDocuments(filtered);
+
+    try {
+      const { API_BASE_URL } = await import('../config');
+      const headers = await resolveDocAuthHeaders(tenantId);
+      await fetch(`${API_BASE_URL}/api/data/generated-documents/${encodeURIComponent(docId)}`, {
+        method: 'DELETE',
+        headers
+      });
+    } catch (_) {}
+
     return true;
   }
 };

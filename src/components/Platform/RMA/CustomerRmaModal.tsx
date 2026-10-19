@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { RotateCcw, X, CheckCircle2, AlertCircle, Package, ArrowRight, ShieldCheck } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { RotateCcw, X, CheckCircle2 } from 'lucide-react';
 import { Button } from '../../UI/Primitives';
 import { AuroraModal } from '../../UI/AuroraModal';
 import { RmaClientService } from '../../../services/rmaService';

@@ -9,7 +9,6 @@ import {
   Mail,
   Globe,
   MessageSquare,
-  Sparkles,
   Layers
 } from 'lucide-react';
 import { DocumentTemplate, ContentType } from '../types/platform';
@@ -303,15 +302,11 @@ export const DocumentAutomation = () => {
                 ? "Try adjusting your search criteria or type filters." 
                 : "Create your first email template, formal letter agreement, site page snippet, or SMS notification."
             }
-            action={
-              <Button
-                onClick={handleOpenTypePicker}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
-              >
-                <Plus size={16} />
-                <span>Create</span>
-              </Button>
-            }
+            action={{
+              label: 'Create',
+              onClick: handleOpenTypePicker,
+              icon: Plus
+            }}
           />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

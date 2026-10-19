@@ -1080,7 +1080,7 @@ Return ONLY valid JSON mapping each desired field key to its extracted value (or
   },
 
   /**
-   * Get sync diagnostics logs
+   * Get sync diagnostics logs from PostgreSQL
    */
   async getSyncLogs(tenantId?: string): Promise<Array<{
     id: string;
@@ -1092,46 +1092,26 @@ Return ONLY valid JSON mapping each desired field key to its extracted value (or
     durationMs: number;
   }>> {
     try {
+      const res = await fetch(`${API_BASE_URL}/api/inbox/sync-logs`, {
+        headers: getAuthHeaders(tenantId)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) return data;
+      }
+    } catch (_) {}
+
+    try {
       const key = tenantId ? `${STORAGE_SYNC_LOGS_KEY}_${tenantId}` : STORAGE_SYNC_LOGS_KEY;
       const saved = localStorage.getItem(key);
       if (saved) return JSON.parse(saved);
     } catch (_) {}
 
-    // Default seeded telemetry logs for admin observability
-    const now = Date.now();
-    return [
-      {
-        id: 'log_1',
-        timestamp: new Date(now - 1000 * 60 * 2).toISOString(),
-        accountEmail: 'support@aurora.internal',
-        type: 'IMAP_POLL',
-        status: 'SUCCESS',
-        message: 'Synchronized folder INBOX. 2 new messages retrieved.',
-        durationMs: 342
-      },
-      {
-        id: 'log_2',
-        timestamp: new Date(now - 1000 * 60 * 8).toISOString(),
-        accountEmail: 'sales@aurora.internal',
-        type: 'IMAP_POLL',
-        status: 'SUCCESS',
-        message: 'IDLE keep-alive heartbeat acknowledged.',
-        durationMs: 120
-      },
-      {
-        id: 'log_3',
-        timestamp: new Date(now - 1000 * 60 * 25).toISOString(),
-        accountEmail: 'billing@aurora.internal',
-        type: 'OAUTH_REFRESH',
-        status: 'SUCCESS',
-        message: 'OAuth refresh token rotated successfully for tenant.',
-        durationMs: 510
-      }
-    ];
+    return [];
   },
 
   /**
-   * Add a sync log entry
+   * Add a sync log entry to PostgreSQL
    */
   async addSyncLog(entry: {
     accountEmail: string;
@@ -1139,9 +1119,18 @@ Return ONLY valid JSON mapping each desired field key to its extracted value (or
     status: 'SUCCESS' | 'ERROR' | 'WARNING';
     message: string;
     durationMs: number;
-  }): Promise<void> {
+  }, tenantId?: string): Promise<void> {
     try {
-      const logs = await this.getSyncLogs();
+      await fetch(`${API_BASE_URL}/api/inbox/sync-logs`, {
+        method: 'POST',
+        headers: getAuthHeaders(tenantId),
+        body: JSON.stringify(entry)
+      });
+    } catch (_) {}
+
+    try {
+      const key = tenantId ? `${STORAGE_SYNC_LOGS_KEY}_${tenantId}` : STORAGE_SYNC_LOGS_KEY;
+      const logs = await this.getSyncLogs(tenantId);
       const newLog = {
         id: `log_${Date.now()}`,
         timestamp: new Date().toISOString(),
@@ -1149,7 +1138,7 @@ Return ONLY valid JSON mapping each desired field key to its extracted value (or
       };
       logs.unshift(newLog);
       if (logs.length > 100) logs.pop();
-      localStorage.setItem(STORAGE_SYNC_LOGS_KEY, JSON.stringify(logs));
+      localStorage.setItem(key, JSON.stringify(logs));
     } catch (_) {}
   }
 };

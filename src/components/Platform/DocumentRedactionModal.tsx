@@ -6,9 +6,7 @@ import {
   CheckSquare, 
   Square, 
   Plus, 
-  Loader2, 
-  Lock, 
-  Sparkles 
+  Loader2
 } from 'lucide-react';
 import { UniversalDocument } from '../../types/document';
 import { DocumentClientService } from '../../services/documentClientService';

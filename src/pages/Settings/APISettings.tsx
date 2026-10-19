@@ -11,7 +11,9 @@ import {
   Tag, 
   ChevronRight, 
   Copy,
-  Check
+  Check,
+  ShieldCheck,
+  Database
 } from 'lucide-react';
 import { SettingsSubNavLayout, SettingsSubNavItem } from '../../components/Settings/SettingsSubNavLayout';
 import { usePlatform } from '../../hooks/usePlatform';
@@ -126,6 +128,28 @@ export const APISettings = () => {
         { name: 'query', type: 'string', required: true, description: 'Semantic search query string.' },
         { name: 'category', type: 'string', required: false, description: 'Limit search scope to specific article category.' }
       ]
+    },
+    {
+      id: 'openapi-docs',
+      name: 'Dynamic OpenAPI 3.1 Spec',
+      slug: 'openapi-docs',
+      method: 'GET',
+      endpoint: '/api/docs/openapi.json',
+      icon: Database,
+      description: 'Auto-generated OpenAPI 3.1 REST API specification tailored dynamically to your custom modules, fields, workflows, and commerce endpoints.',
+      scopes: ['read:docs'],
+      parameters: []
+    },
+    {
+      id: 'sso-config',
+      name: 'Enterprise Single Sign-On (SAML/OIDC)',
+      slug: 'sso-config',
+      method: 'GET',
+      endpoint: '/api/sso/config',
+      icon: ShieldCheck,
+      description: 'Enterprise corporate Identity Provider configuration (Okta, Microsoft Entra ID / Azure AD, Google Workspace) and domain discovery.',
+      scopes: ['admin:sso'],
+      parameters: []
     }
   ];
 
@@ -154,15 +178,23 @@ export const APISettings = () => {
   };
 
   const runSandbox = async () => {
-    if (!sandboxSelectedSku) return;
     setSandboxRunning(true);
     setSandboxResponse(null);
     
-    await new Promise(resolve => setTimeout(resolve, 800));
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-      const res = await fetch(`${API_BASE_URL}/api/pricing-catalog?code=${sandboxSelectedSku}`, {
+      let targetUrl = `${API_BASE_URL}/api/pricing-catalog?code=${sandboxSelectedSku || ''}`;
+      if (selectedApiId === 'openapi-docs') {
+        targetUrl = `${API_BASE_URL}/api/docs/openapi.json`;
+      } else if (selectedApiId === 'sso-config') {
+        targetUrl = `${API_BASE_URL}/api/sso/config`;
+      } else if (selectedApiId === 'knowledge-base') {
+        targetUrl = `${API_BASE_URL}/api/data/knowledge`;
+      }
+
+      const res = await fetch(targetUrl, {
         headers: { 
           'Authorization': `Bearer ${token}`,
           'x-tenant-id': tenant?.id || ''
@@ -170,9 +202,8 @@ export const APISettings = () => {
       });
       const data = await res.json();
       if (res.ok) {
-        // Return single object or list
-        setSandboxResponse(data.length > 0 ? data[0] : data);
-        toast.success('Sandbox API request successful!');
+        setSandboxResponse(Array.isArray(data) && data.length > 0 ? (selectedApiId === 'pricing-catalog' ? data[0] : data) : data);
+        toast.success('Live API request successful!');
       } else {
         setSandboxResponse({ error: data.error || 'Failed' });
         toast.error('Sandbox API call failed');

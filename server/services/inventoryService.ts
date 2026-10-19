@@ -1,5 +1,4 @@
 import { globalPrisma } from '../lib/prisma';
-import { recordAudit } from '../lib/audit';
 import { AccountingService } from './accountingService';
 
 export interface MovementInput {

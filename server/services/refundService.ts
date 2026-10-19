@@ -205,13 +205,12 @@ export class RefundService {
     const refundNumber = await this.generateRefundNumber(tenantId, db);
 
     // 6. Post Journal Entry
-    const journal = await AccountingService.createJournalEntry({
-      tenantId,
+    const journal = await AccountingService.postJournalEntry(tenantId, {
       date: new Date().toISOString(),
       sourceModule: 'REFUND',
       sourceReferenceId: refundNumber,
       narration: `POS Order Refund ${refundNumber} for #${order.orderNumber} ($${totalGross.toFixed(2)})`,
-      createdByUserId,
+      createdByUserId: processedByUserId || null,
       lines: journalLines
     }, db);
 
@@ -382,13 +381,12 @@ export class RefundService {
     const netRevenueDebit = Math.round((totalGross - totalTax) * 100) / 100;
     const refundNumber = await this.generateRefundNumber(tenantId, db);
 
-    const journal = await AccountingService.createJournalEntry({
-      tenantId,
+    const journal = await AccountingService.postJournalEntry(tenantId, {
       date: new Date().toISOString(),
       sourceModule: 'REFUND',
       sourceReferenceId: refundNumber,
       narration: `Blind Refund ${refundNumber} (${reason}) via ${refundMethod} ($${totalGross.toFixed(2)})`,
-      createdByUserId,
+      createdByUserId: processedByUserId || null,
       lines: [
         {
           accountId: revenueAcc.id,
@@ -550,13 +548,12 @@ export class RefundService {
 
     const refundNumber = await this.generateRefundNumber(tenantId, db);
 
-    const journal = await AccountingService.createJournalEntry({
-      tenantId,
+    const journal = await AccountingService.postJournalEntry(tenantId, {
       date: new Date().toISOString(),
       sourceModule: 'REFUND',
       sourceReferenceId: refundNumber,
       narration: `Invoice Credit/Refund ${refundNumber} for #${invoice.invoiceNumber} ($${refundAmount.toFixed(2)})`,
-      createdByUserId,
+      createdByUserId: processedByUserId || null,
       lines: [
         {
           accountId: revenueAcc.id,

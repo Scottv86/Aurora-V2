@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { TenantRequest } from '../middleware/tenantMiddleware';
-import { GoogleGenAI, Type } from '@google/genai';
+import { Type } from '@google/genai';
 import { resolveTenantAIClient, executeAICompletion } from '../services/aiProviderService';
 import { checkAIFeatureOrThrow } from '../lib/aiPermissions';
 import dotenv from 'dotenv';

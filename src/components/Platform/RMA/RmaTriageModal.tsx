@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { RotateCcw, X, CheckCircle2, AlertCircle, Package, ArrowRight, ShieldCheck, Check, Ban, DollarSign } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { X, CheckCircle2, ShieldCheck, Check, Ban, DollarSign } from 'lucide-react';
 import { Button } from '../../UI/Primitives';
 import { AuroraModal } from '../../UI/AuroraModal';
 import { RmaClientService, ReturnRequest } from '../../../services/rmaService';
@@ -23,7 +22,6 @@ export const RmaTriageModal: React.FC<RmaTriageModalProps> = ({
 }) => {
   if (!isOpen || !rma) return null;
 
-  const [triageAction, setTriageAction] = useState<'REVIEW' | 'REFUND'>('REVIEW');
   const [rejectionReason, setRejectionReason] = useState('');
   const [internalNotes, setInternalNotes] = useState('');
   const [refundMethod, setRefundMethod] = useState<'STORE_CREDIT' | 'CASH' | 'CARD' | 'ORIGINAL_TENDER'>('STORE_CREDIT');

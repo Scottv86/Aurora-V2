@@ -9,6 +9,7 @@ import { ValidationBuilder } from '../../components/Builders/ValidationBuilder/V
 import { toast } from 'sonner';
 import { API_BASE_URL } from '../../config';
 import { usePlatform } from '../../hooks/usePlatform';
+import { useAuth } from '../../hooks/useAuth';
 import { motion } from 'motion/react';
 import { TrashService } from '../../services/trashService';
 import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
@@ -17,7 +18,9 @@ import { EmptyState } from '../../components/UI/EmptyState';
 import { builderCache } from '../../utils/builderCache';
 
 export const ValidationsLibraryPage: React.FC = () => {
-  const { tenant, modules } = usePlatform();
+  const { tenant } = usePlatform();
+  const { session } = useAuth();
+  const token = session?.access_token;
   const cacheKey = `validations_${tenant?.id || 'default'}`;
   const [rulesets, setRulesets] = useState<ValidationRulesetEntity[]>(() => builderCache.get<ValidationRulesetEntity[]>(cacheKey) || []);
   const [loading, setLoading] = useState(() => !builderCache.has(cacheKey));
@@ -33,7 +36,10 @@ export const ValidationsLibraryPage: React.FC = () => {
     }
     try {
       const res = await fetch(`${API_BASE_URL}/api/validations`, {
-        headers: { 'x-tenant-id': tenant?.id || '' }
+        headers: {
+          'x-tenant-id': tenant?.id || '',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
       });
       if (res.ok) {
         const data = await res.json();
@@ -41,21 +47,11 @@ export const ValidationsLibraryPage: React.FC = () => {
         setRulesets(next);
         builderCache.set(cacheKey, next);
       } else {
-        setRulesets([
-          {
-            id: 'val_email_tax',
-            tenantId: tenant?.id || 't1',
-            name: 'Corporate Tax ID & Email Format Ruleset',
-            description: 'Validates standard tax ID formats and corporate email domains.',
-            scope: 'GLOBAL',
-            rules: [
-              { id: 'r1', name: 'Tax ID Format Check', expression: 'REGEX_MATCH(tax_id, "^[0-9]{9}$")', errorMessage: 'Tax ID must be 9 digits' }
-            ]
-          }
-        ]);
+        if (!builderCache.has(cacheKey)) setRulesets([]);
       }
     } catch (err) {
       console.error('Failed to fetch validation rulesets:', err);
+      if (!builderCache.has(cacheKey)) setRulesets([]);
     } finally {
       setLoading(false);
     }
@@ -63,7 +59,7 @@ export const ValidationsLibraryPage: React.FC = () => {
 
   useEffect(() => {
     fetchRulesets();
-  }, [tenant?.id]);
+  }, [tenant?.id, token]);
 
   const [rulesetToDelete, setRulesetToDelete] = useState<ValidationRulesetEntity | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -90,7 +86,10 @@ export const ValidationsLibraryPage: React.FC = () => {
       }
       await fetch(`${API_BASE_URL}/api/validations/${ruleset.id}`, {
         method: 'DELETE',
-        headers: { 'x-tenant-id': tenant?.id || '' }
+        headers: {
+          'x-tenant-id': tenant?.id || '',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
       }).catch(() => {});
       toast.success('Validation ruleset moved to Recycling Bin');
       setRulesets(prev => {
@@ -106,36 +105,12 @@ export const ValidationsLibraryPage: React.FC = () => {
     }
   };
 
-  // Extract validation rulesets defined on custom modules
-  const allRulesets = React.useMemo(() => {
-    const moduleRulesets: ValidationRulesetEntity[] = (modules || []).flatMap((mod: any) => {
-      const items: ValidationRulesetEntity[] = [];
-      const modValidations = mod.validations || mod.validationRules || mod.config?.validations;
-      if (Array.isArray(modValidations) && modValidations.length > 0) {
-        items.push({
-          id: `mod_val_${mod.id}`,
-          tenantId: tenant?.id || 't1',
-          name: `${mod.name} Module Validations`,
-          description: `Field & record integrity rules enforced on ${mod.name} module.`,
-          scope: 'MODULE',
-          rules: modValidations.map((v: any, idx: number) => ({
-            id: v.id || `r_${idx}`,
-            name: v.name || `${mod.name} Rule #${idx + 1}`,
-            expression: v.expression || v.formula || 'true',
-            errorMessage: v.errorMessage || 'Validation check failed'
-          }))
-        });
-      }
-      return items;
-    });
-    return [...rulesets, ...moduleRulesets];
-  }, [rulesets, modules, tenant?.id]);
-
   const [filterTab, setFilterTab] = useState<'all' | 'global' | 'module'>('all');
 
-  const filteredRulesets = allRulesets.filter(r => {
+  const filteredRulesets = rulesets.filter(r => {
     const matchesSearch = r.name.toLowerCase().includes(search.toLowerCase()) || 
-                          (r.description && r.description.toLowerCase().includes(search.toLowerCase()));
+                          (r.description && r.description.toLowerCase().includes(search.toLowerCase())) ||
+                          (r.moduleName && r.moduleName.toLowerCase().includes(search.toLowerCase()));
     if (!matchesSearch) return false;
     if (filterTab === 'global') return r.scope === 'GLOBAL';
     if (filterTab === 'module') return r.scope !== 'GLOBAL';
@@ -241,8 +216,12 @@ export const ValidationsLibraryPage: React.FC = () => {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border bg-indigo-500/10 text-indigo-500 border-indigo-500/20">
-                          {ruleset.scope || 'GLOBAL'}
+                        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border ${
+                          ruleset.scope === 'GLOBAL'
+                            ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                            : 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20'
+                        }`}>
+                          {ruleset.scope === 'GLOBAL' ? 'Global' : (ruleset.moduleName || ruleset.scope || 'Module-Bound')}
                         </span>
 
                         <button
@@ -322,6 +301,7 @@ export const ValidationsLibraryPage: React.FC = () => {
         builderContext={{ mode: 'global' }}
       >
         <ValidationBuilder
+          initialRuleset={selectedRuleset || undefined}
           onDirtyChange={setIsValidationDirty}
           builderContext={{
             mode: 'global',

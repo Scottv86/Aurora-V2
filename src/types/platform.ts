@@ -80,6 +80,12 @@ export interface Tenant {
     archivingPolicyDays?: number;
     homePageId?: string | null;
     notifications?: NotificationSettings;
+    recordsManagement?: any;
+    triageAutoDistributionPaused?: boolean;
+    formulaSnippets?: any[];
+    paymentChannels?: any;
+    knowledgeBaseArticles?: any[];
+    [key: string]: any;
   };
   menuConfig?: any;
 }
@@ -593,6 +599,7 @@ export interface StandaloneBuilderContext {
   mode: BuilderMode;
   hostType?: 'site' | 'module' | 'workspace' | 'portal';
   hostId?: string;
+  parentModuleId?: string;
   onSaveSuccess?: (entityId: string, entityData?: any) => void;
   onCancel?: () => void;
 }

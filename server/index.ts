@@ -69,6 +69,11 @@ import reconciliationRoutes from './routes/reconciliationRoutes';
 import transactionRoutes from './routes/transactionRoutes';
 import rmaRoutes from './routes/rmaRoutes';
 import paymentGatewayRoutes from './routes/paymentGatewayRoutes';
+import approvalRoutes from './routes/approvalRoutes';
+import openApiRoutes from './routes/openApiRoutes';
+import ssoRoutes from './routes/ssoRoutes';
+import notesRoutes from './routes/notesRoutes';
+import remindersRoutes from './routes/remindersRoutes';
 
 
 
@@ -188,7 +193,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Request Logger
-app.use((req, res, next) => {
+app.use((req, _res, next) => {
   console.log(`[Server] ${req.method} ${req.url}`);
   next();
 });
@@ -197,7 +202,7 @@ app.use((req, res, next) => {
 initSocket(httpServer);
 
 // Public Health Check
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.json({ 
     status: 'ok', 
     server: 'Aurora Platform API',
@@ -225,6 +230,9 @@ app.use('/api/permissions', authenticate, requireTenantAccess, permissionRoutes)
 app.use('/api/audit', authenticate, requireTenantAccess, auditRoutes);
 app.use('/api/billing', authenticate, requireTenantAccess, billingRoutes);
 app.use('/api/people-organisations', authenticate, requireTenantAccess, peopleOrgRoutes);
+app.use('/api/approvals', authenticate, requireTenantAccess, approvalRoutes);
+app.use('/api/docs', openApiRoutes);
+app.use('/api/sso', ssoRoutes);
 app.use('/api/taxonomies', authenticate, requireTenantAccess, taxonomyRoutes);
 app.use('/api/tenants', tenantRoutes);
 app.use('/api/architect', authenticate, requireTenantAccess, architectRoutes);
@@ -253,6 +261,8 @@ app.use('/api/chat', authenticate, requireTenantAccess, chatRoutes);
 app.use('/api/brand-kits', authenticate, requireTenantAccess, brandKitRoutes);
 app.use('/api/templates', authenticate, requireTenantAccess, templateRoutes);
 app.use('/api/documents', documentRoutes);
+app.use('/api/notes', authenticate, requireTenantAccess, notesRoutes);
+app.use('/api/reminders', authenticate, requireTenantAccess, remindersRoutes);
 
 // Commerce & Financial Suite Routes
 app.use('/api/finance', authenticate, requireTenantAccess, financeRoutes);
@@ -283,7 +293,7 @@ app.use((req, res) => {
 /**
  * Global Error Handler with Incident ID generation and Production Error Masking
  */
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const incidentId = crypto.randomUUID();
   console.error(`[Global Error] [Incident: ${incidentId}] ${req.method} ${req.originalUrl}:`, err);
 

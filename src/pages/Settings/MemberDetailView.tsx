@@ -96,7 +96,7 @@ export const MemberDetailView = () => {
   const [searchParams] = useSearchParams();
   const { member, loading, updateMember, deleteMember } = useMember(id);
   const { refreshBilling, setBreadcrumbOverride, tenant } = usePlatform();
-  const { user: authUser } = useAuth();
+  const { user: authUser, session: authSession } = useAuth();
   const { teams } = useTeams();
   const { positions } = usePositions();
   const { cloneMember } = useUsers();
@@ -118,6 +118,43 @@ export const MemberDetailView = () => {
   const [showContractModal, setShowContractModal] = useState(false);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+
+  // Real HR Data from Database
+  const [hrData, setHrData] = useState<{
+    contracts: any[];
+    leaveBalances: any[];
+    leaveRequests: any[];
+    timesheets: any[];
+  }>({ contracts: [], leaveBalances: [], leaveRequests: [], timesheets: [] });
+  const [_loadingHr, setLoadingHr] = useState(false);
+
+  const loadHrData = async () => {
+    if (!id || !tenant?.id) return;
+    setLoadingHr(true);
+    try {
+      const token = authSession?.access_token || (import.meta as any).env?.VITE_DEV_TOKEN || localStorage.getItem('aurora_token') || '';
+      const res = await fetch(`http://127.0.0.1:3001/api/members/${id}/hr`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHrData(data);
+      }
+    } catch (e) {
+      console.error('Failed to load HR data:', e);
+    } finally {
+      setLoadingHr(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (id && tenant?.id) {
+      loadHrData();
+    }
+  }, [id, tenant?.id]);
 
   // Workforce Hub Enhancements
   const [avatarUrl, setAvatarUrl] = useState('');
@@ -1070,130 +1107,238 @@ export const MemberDetailView = () => {
                     </Button>
                   </div>
                   
-                  <div className="flex flex-col items-center justify-center py-24 bg-zinc-50/50 dark:bg-black/20 rounded-[2.5rem] border border-dashed border-zinc-200 dark:border-zinc-800 relative">
-                    <div className="h-24 w-24 rounded-[2rem] bg-white dark:bg-zinc-800 shadow-2xl flex items-center justify-center text-zinc-400 mb-8 rotate-3 transition-transform hover:rotate-0">
-                      <FileBadge size={48} />
+                  {hrData.contracts.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-24 bg-zinc-50/50 dark:bg-black/20 rounded-[2.5rem] border border-dashed border-zinc-200 dark:border-zinc-800 relative">
+                      <div className="h-24 w-24 rounded-[2rem] bg-white dark:bg-zinc-800 shadow-2xl flex items-center justify-center text-zinc-400 mb-8 rotate-3 transition-transform hover:rotate-0">
+                        <FileBadge size={48} />
+                      </div>
+                      <p className="text-lg font-black text-zinc-900 dark:text-zinc-100 mb-2">No Contracts Found</p>
+                      <p className="text-[10px] text-zinc-500 uppercase tracking-[0.15em] font-black max-w-[320px] text-center leading-relaxed">Add a contract to confirm this member's employment details.</p>
                     </div>
-                    <p className="text-lg font-black text-zinc-900 dark:text-zinc-100 mb-2">No Contracts Found</p>
-                    <p className="text-[10px] text-zinc-500 uppercase tracking-[0.15em] font-black max-w-[320px] text-center leading-relaxed">Add a contract to confirm this member's employment details.</p>
-                  </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {hrData.contracts.map((c: any) => {
+                        const rem = c.remuneration?.[0];
+                        return (
+                          <div key={c.id} className="p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/20 space-y-4">
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-base text-zinc-900 dark:text-white">{c.type} Contract</span>
+                              <Badge variant={c.status === 'Active' ? 'green' : 'zinc'} className="text-[10px] uppercase font-bold">
+                                {c.status}
+                              </Badge>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4 text-xs">
+                              <div>
+                                <span className="text-zinc-400 block text-[10px] uppercase tracking-wider font-bold">Start Date</span>
+                                <span className="font-semibold">{new Date(c.startDate).toLocaleDateString()}</span>
+                              </div>
+                              <div>
+                                <span className="text-zinc-400 block text-[10px] uppercase tracking-wider font-bold">End Date</span>
+                                <span className="font-semibold">{c.endDate ? new Date(c.endDate).toLocaleDateString() : 'Ongoing'}</span>
+                              </div>
+                            </div>
+                            {rem && (
+                              <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800 flex items-baseline justify-between">
+                                <span className="text-[10px] uppercase tracking-wider font-bold text-zinc-400">Remuneration</span>
+                                <span className="text-base font-black text-emerald-600 dark:text-emerald-400">
+                                  ${Number(rem.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })} {rem.currency}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
-                <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-10 space-y-10 shadow-sm">
-                  <div className="flex items-center justify-between pb-8 border-b border-zinc-100 dark:border-zinc-800">
-                    <h3 className="font-black flex items-center gap-3 text-xl">
-                      <Briefcase size={24} className="text-emerald-500" /> Salary & Pay
-                    </h3>
-                    <Badge variant="zinc" className="text-emerald-500 border-emerald-500/20 bg-emerald-50/50 dark:bg-emerald-500/5 font-black text-[10px] tracking-widest px-4 py-1">NOT SET</Badge>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-16">
-                    <div className="space-y-4">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block border-l-4 border-emerald-500 pl-4">Base Salary</label>
-                      <div className="flex items-baseline gap-4 mt-4">
-                        <span className="text-5xl font-black text-zinc-900 dark:text-white tracking-tighter">$0.00</span>
-                        <Badge className="bg-zinc-100 text-zinc-400 dark:bg-zinc-800 border-none font-black text-[10px] tracking-widest">USD</Badge>
+                {(() => {
+                  const activeContract = hrData.contracts.find((c: any) => c.status === 'Active') || hrData.contracts[0];
+                  const primaryRem = activeContract?.remuneration?.[0];
+                  return (
+                    <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-10 space-y-10 shadow-sm">
+                      <div className="flex items-center justify-between pb-8 border-b border-zinc-100 dark:border-zinc-800">
+                        <h3 className="font-black flex items-center gap-3 text-xl">
+                          <Briefcase size={24} className="text-emerald-500" /> Salary & Pay
+                        </h3>
+                        <Badge variant="zinc" className={cn("font-black text-[10px] tracking-widest px-4 py-1", primaryRem ? "text-emerald-500 border-emerald-500/20 bg-emerald-50/50 dark:bg-emerald-500/5" : "text-zinc-400")}>
+                          {activeContract?.status || 'NOT SET'}
+                        </Badge>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-16">
+                        <div className="space-y-4">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block border-l-4 border-emerald-500 pl-4">Base Salary</label>
+                          <div className="flex items-baseline gap-4 mt-4">
+                            <span className="text-5xl font-black text-zinc-900 dark:text-white tracking-tighter">
+                              {primaryRem ? `$${Number(primaryRem.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '$0.00'}
+                            </span>
+                            <Badge className="bg-zinc-100 text-zinc-400 dark:bg-zinc-800 border-none font-black text-[10px] tracking-widest">
+                              {primaryRem?.currency || 'AUD'}
+                            </Badge>
+                          </div>
+                        </div>
+                        <div className="space-y-4">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block border-l-4 border-indigo-500 pl-4">Contract Type</label>
+                          <p className="text-sm font-black text-zinc-700 dark:text-zinc-300 mt-6 uppercase tracking-widest">
+                            {activeContract?.type || 'Not set'}
+                          </p>
+                        </div>
+                        <div className="space-y-4">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block border-l-4 border-purple-500 pl-4">Effective Date</label>
+                          <p className="text-sm font-black text-zinc-800 dark:text-zinc-200 mt-6 tracking-tight">
+                            {activeContract?.startDate ? new Date(activeContract.startDate).toLocaleDateString() : 'Initial pay details not set.'}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                    <div className="space-y-4">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block border-l-4 border-indigo-500 pl-4">Bonus / Incentives</label>
-                      <p className="text-sm font-black text-zinc-400 italic mt-6 uppercase tracking-widest">Not set</p>
-                    </div>
-                    <div className="space-y-4">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block border-l-4 border-purple-500 pl-4">Status</label>
-                      <p className="text-sm font-black text-zinc-800 dark:text-zinc-200 mt-6 tracking-tight">Initial pay details not set.</p>
-                    </div>
-                  </div>
-                </div>
+                  );
+                })()}
             </motion.div>
           )}
 
-          {activeTab === 'leave' && (
-            <div className="space-y-8">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                  {[
-                    { label: 'Annual Leave', balance: '12.4 Days', color: 'blue' },
-                    { label: 'Sick Leave', balance: '5.0 Days', color: 'red' },
-                    { label: 'Unpaid Leave', balance: '0.0 Days', color: 'zinc' },
-                    { label: 'Banked Overtime', balance: '2.5 Hrs', color: 'green' }
-                  ].map((l, i) => (
-                    <div key={i} className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-8 shadow-sm relative overflow-hidden group hover:scale-[1.03] transition-all hover:shadow-xl">
-                      <div className={cn(
-                        "absolute top-0 right-0 w-32 h-32 -mr-12 -mt-12 rounded-full opacity-5 group-hover:opacity-15 transition-opacity",
-                        l.color === 'blue' ? 'bg-blue-500' : 
-                        l.color === 'red' ? 'bg-red-500' : 
-                        l.color === 'green' ? 'bg-emerald-500' : 'bg-zinc-500'
-                      )} />
-                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 mb-2">{l.label}</p>
-                      <p className="text-4xl font-black text-zinc-900 dark:text-white tracking-tighter">{l.balance}</p>
-                    </div>
-                  ))}
-                </div>
+          {activeTab === 'leave' && (() => {
+            const annualBal = hrData.leaveBalances.find((b: any) => b.type === 'Annual Leave');
+            const sickBal = hrData.leaveBalances.find((b: any) => b.type === 'Sick Leave');
+            const unpaidBal = hrData.leaveBalances.find((b: any) => b.type === 'Unpaid Leave');
+            const overtimeBal = hrData.leaveBalances.find((b: any) => b.type === 'Banked Overtime');
 
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-                  <div className="lg:col-span-3">
-                    <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] p-10 space-y-10 shadow-sm relative overflow-hidden">
-                      <div className="absolute bottom-0 right-0 w-64 h-64 -mr-16 -mb-16 bg-orange-500/5 rounded-full" />
-                      <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-8 relative">
-                        <div className="flex items-center gap-6">
-                          <div className="h-16 w-16 rounded-3xl bg-orange-500/10 flex items-center justify-center text-orange-500 shadow-lg shadow-orange-500/10">
-                            <Clock size={32} />
+            const annualDays = ((annualBal?.accrued ?? 20) - (annualBal?.used ?? 0)).toFixed(1);
+            const sickDays = ((sickBal?.accrued ?? 10) - (sickBal?.used ?? 0)).toFixed(1);
+            const unpaidDays = (unpaidBal?.used ?? 0).toFixed(1);
+            const overtimeHrs = (overtimeBal?.accrued ?? 0).toFixed(1);
+
+            return (
+              <div className="space-y-8">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                    {[
+                      { label: 'Annual Leave', balance: `${annualDays} Days`, color: 'blue' },
+                      { label: 'Sick Leave', balance: `${sickDays} Days`, color: 'red' },
+                      { label: 'Unpaid Leave', balance: `${unpaidDays} Days`, color: 'zinc' },
+                      { label: 'Banked Overtime', balance: `${overtimeHrs} Hrs`, color: 'green' }
+                    ].map((l, i) => (
+                      <div key={i} className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-8 shadow-sm relative overflow-hidden group hover:scale-[1.03] transition-all hover:shadow-xl">
+                        <div className={cn(
+                          "absolute top-0 right-0 w-32 h-32 -mr-12 -mt-12 rounded-full opacity-5 group-hover:opacity-15 transition-opacity",
+                          l.color === 'blue' ? 'bg-blue-500' : 
+                          l.color === 'red' ? 'bg-red-500' : 
+                          l.color === 'green' ? 'bg-emerald-500' : 'bg-zinc-500'
+                        )} />
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 mb-2">{l.label}</p>
+                        <p className="text-4xl font-black text-zinc-900 dark:text-white tracking-tighter">{l.balance}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Recent Leave Requests */}
+                  {hrData.leaveRequests.length > 0 && (
+                    <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-3xl p-8 space-y-4">
+                      <h4 className="font-bold text-sm text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                        <Calendar size={16} className="text-indigo-500" /> Recent Leave Requests
+                      </h4>
+                      <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                        {hrData.leaveRequests.map((req: any) => (
+                          <div key={req.id} className="py-3 flex items-center justify-between text-xs">
+                            <div className="space-y-0.5">
+                              <span className="font-bold text-zinc-900 dark:text-white">{req.type}</span>
+                              <span className="text-zinc-500 block">
+                                {new Date(req.startDate).toLocaleDateString()} - {new Date(req.endDate).toLocaleDateString()}
+                                {req.reason && ` • "${req.reason}"`}
+                              </span>
+                            </div>
+                            <Badge variant={req.status === 'Approved' ? 'green' : req.status === 'Pending' ? 'amber' : 'red'} className="text-[10px]">
+                              {req.status}
+                            </Badge>
                           </div>
-                          <div>
-                            <h3 className="font-black text-2xl tracking-tighter">Time Tracking</h3>
-                            <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mt-2">Monitor active shifts and availability.</p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                    <div className="lg:col-span-3">
+                      <div className="bg-white dark:bg-zinc-900/40 dark:backdrop-blur-xl border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] p-10 space-y-10 shadow-sm relative overflow-hidden">
+                        <div className="absolute bottom-0 right-0 w-64 h-64 -mr-16 -mb-16 bg-orange-500/5 rounded-full" />
+                        <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-8 relative">
+                          <div className="flex items-center gap-6">
+                            <div className="h-16 w-16 rounded-3xl bg-orange-500/10 flex items-center justify-center text-orange-500 shadow-lg shadow-orange-500/10">
+                              <Clock size={32} />
+                            </div>
+                            <div>
+                              <h3 className="font-black text-2xl tracking-tighter">Time Tracking</h3>
+                              <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mt-2">Monitor active shifts and availability.</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <Button 
+                              variant="primary" 
+                              size="sm" 
+                              className="bg-orange-600 hover:bg-orange-700 font-black px-10 border-none shadow-2xl shadow-orange-500/30 text-[10px] tracking-widest h-11"
+                              onClick={() => setShowLeaveModal(true)}
+                            >
+                              Request Time Off
+                            </Button>
                           </div>
                         </div>
-                        <div className="flex items-center gap-4">
-                          <Button variant="ghost" size="sm" className="text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-zinc-900 px-6">
-                            History
-                          </Button>
-                          <Button 
-                            variant="primary" 
-                            size="sm" 
-                            className="bg-orange-600 hover:bg-orange-700 font-black px-10 border-none shadow-2xl shadow-orange-500/30 text-[10px] tracking-widest h-11"
-                            onClick={() => setShowLeaveModal(true)}
-                          >
-                            Add Entry
-                          </Button>
+
+                        <div className="space-y-6 relative">
+                          <div className="flex items-center justify-between text-[10px] font-black text-zinc-400 uppercase tracking-[0.15em] px-6">
+                            <span>Pay Period</span>
+                            <span>Total Hours</span>
+                            <span>Status</span>
+                          </div>
+                          {hrData.timesheets.length > 0 ? (
+                            hrData.timesheets.map((ts: any) => (
+                              <div key={ts.id} className="p-8 flex items-center justify-between bg-zinc-50 dark:bg-black/20 rounded-3xl border border-zinc-100 dark:border-zinc-800 group hover:border-orange-500/30 transition-all hover:bg-white dark:hover:bg-zinc-900 hover:shadow-xl">
+                                <div className="flex flex-col gap-2">
+                                  <span className="text-lg font-black tracking-tight">
+                                    {new Date(ts.periodStart).toLocaleDateString()} - {new Date(ts.periodEnd).toLocaleDateString()}
+                                  </span>
+                                  <span className="text-[10px] text-zinc-400 font-black uppercase tracking-widest border-l-2 border-orange-500 pl-3">Logged Timesheet</span>
+                                </div>
+                                <div className="text-center">
+                                  <span className="text-4xl font-black tracking-tighter text-zinc-900 dark:text-zinc-100">
+                                    {ts.entries?.reduce((acc: number, e: any) => acc + (Number(e.hours) || 0), 0) || 0}
+                                  </span>
+                                  <span className="text-sm font-black text-zinc-400 ml-2">HRS</span>
+                                </div>
+                                <Badge className="bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 border-none px-6 py-2 font-black text-[10px] tracking-[0.1em] shadow-sm uppercase">
+                                  {ts.status}
+                                </Badge>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="p-8 flex items-center justify-between bg-zinc-50 dark:bg-black/20 rounded-3xl border border-zinc-100 dark:border-zinc-800 group hover:border-orange-500/30 transition-all hover:bg-white dark:hover:bg-zinc-900 hover:shadow-xl">
+                              <div className="flex flex-col gap-2">
+                                <span className="text-lg font-black tracking-tight">Current Pay Period</span>
+                                <span className="text-[10px] text-zinc-400 font-black uppercase tracking-widest border-l-2 border-orange-500 pl-3">Active</span>
+                              </div>
+                              <div className="text-center">
+                                <span className="text-4xl font-black tracking-tighter text-zinc-900 dark:text-zinc-100">76.0</span>
+                                <span className="text-sm font-black text-zinc-400 ml-2">HRS</span>
+                              </div>
+                              <Badge className="bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 border-none px-6 py-2 font-black text-[10px] tracking-[0.1em] shadow-sm">SCHEDULED</Badge>
+                            </div>
+                          )}
                         </div>
                       </div>
+                    </div>
 
-                      <div className="space-y-6 relative">
-                        <div className="flex items-center justify-between text-[10px] font-black text-zinc-400 uppercase tracking-[0.15em] px-6">
-                          <span>Pay Period</span>
-                          <span>Total Hours</span>
-                          <span>Status</span>
-                        </div>
-                        <div className="p-8 flex items-center justify-between bg-zinc-50 dark:bg-black/20 rounded-3xl border border-zinc-100 dark:border-zinc-800 group hover:border-orange-500/30 transition-all hover:bg-white dark:hover:bg-zinc-900 hover:shadow-xl">
-                          <div className="flex flex-col gap-2">
-                            <span className="text-lg font-black tracking-tight">1 Apr - 15 Apr 2026</span>
-                            <span className="text-[10px] text-zinc-400 font-black uppercase tracking-widest border-l-2 border-orange-500 pl-3">Current Period</span>
+                    <div className="lg:col-span-1">
+                      <div className="bg-indigo-600 rounded-[2.5rem] p-10 text-white relative overflow-hidden shadow-[0_20px_50px_rgba(79,70,229,0.3)] h-full flex flex-col justify-between group">
+                          <Zap size={140} className="absolute -right-8 -bottom-8 text-white/10 rotate-12 transition-transform group-hover:rotate-0 duration-700" />
+                          <div className="relative">
+                            <h4 className="font-black text-3xl mb-4 tracking-tighter leading-none">Plan Your Time Off</h4>
+                            <p className="text-indigo-100/90 text-[11px] font-bold leading-relaxed uppercase tracking-wider">Submit a request for future leave or time away.</p>
                           </div>
-                          <div className="text-center">
-                            <span className="text-4xl font-black tracking-tighter text-zinc-900 dark:text-zinc-100">72.5</span>
-                            <span className="text-sm font-black text-zinc-400 ml-2">/ 76.0 HRS</span>
-                          </div>
-                          <Badge className="bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 border-none px-6 py-2 font-black text-[10px] tracking-[0.1em] shadow-sm">ACTIVE</Badge>
-                        </div>
+                          <Button variant="secondary" className="w-full font-black py-8 bg-white text-indigo-600 hover:bg-indigo-50 border-none shadow-2xl text-[10px] uppercase tracking-[0.2em] relative" onClick={() => setShowLeaveModal(true)}>
+                            Request Leave
+                          </Button>
                       </div>
                     </div>
                   </div>
-
-                  <div className="lg:col-span-1">
-                    <div className="bg-indigo-600 rounded-[2.5rem] p-10 text-white relative overflow-hidden shadow-[0_20px_50px_rgba(79,70,229,0.3)] h-full flex flex-col justify-between group">
-                        <Zap size={140} className="absolute -right-8 -bottom-8 text-white/10 rotate-12 transition-transform group-hover:rotate-0 duration-700" />
-                        <div className="relative">
-                          <h4 className="font-black text-3xl mb-4 tracking-tighter leading-none">Plan Your Time Off</h4>
-                          <p className="text-indigo-100/90 text-[11px] font-bold leading-relaxed uppercase tracking-wider">Submit a request for future leave or time away.</p>
-                        </div>
-                        <Button variant="secondary" className="w-full font-black py-8 bg-white text-indigo-600 hover:bg-indigo-50 border-none shadow-2xl text-[10px] uppercase tracking-[0.2em] relative" onClick={() => setShowLeaveModal(true)}>
-                          Request Leave
-                        </Button>
-                    </div>
-                  </div>
-                </div>
-            </div>
-          )}
+              </div>
+            );
+          })()}
 
           {activeTab === 'configuration' && (
             <div className="space-y-8">
@@ -1641,7 +1786,7 @@ export const MemberDetailView = () => {
         memberId={id || ''}
         memberName={fullName || ''}
         onSuccess={() => {
-          // In a real app, refetch data here
+          loadHrData();
         }}
       />
 
@@ -1650,7 +1795,7 @@ export const MemberDetailView = () => {
         onClose={() => setShowLeaveModal(false)}
         memberId={id || ''}
         onSuccess={() => {
-          // In a real app, refetch data here
+          loadHrData();
         }}
       />
       {/* Retrain Modal */}

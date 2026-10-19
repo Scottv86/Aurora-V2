@@ -144,7 +144,7 @@ ${sampleTexts.map((s, i) => `--- Sample ${i+1} ---\n${s}`).join('\n')}
       contents: [{ parts: [{ text: prompt }] }]
     });
 
-    const outputText = response.response?.text() || '';
+    const outputText = response.text || '';
     const cleanJson = outputText.replace(/```json\n?|\n?```/g, '').trim();
     const parsed = JSON.parse(cleanJson);
 
@@ -165,7 +165,7 @@ ${sampleTexts.map((s, i) => `--- Sample ${i+1} ---\n${s}`).join('\n')}
 /**
  * Generate response in User's Voice (Playground or Live Away Delegate)
  */
-export async function generateTwinResponse(userId: string, userPrompt: string, channel: string = 'General Chat'): Promise<{ responseText: string; confidenceScore: number }> {
+export async function generateTwinResponse(userId: string, userPrompt: string, _channel: string = 'General Chat'): Promise<{ responseText: string; confidenceScore: number }> {
   const config = getOrCreateTwinConfig(userId);
   const style = config.writingStyle;
 
@@ -206,7 +206,7 @@ Instructions:
       ]
     });
 
-    const responseText = res.response?.text() || 'I am currently reviewing this item and will follow up shortly.';
+    const responseText = res.text || 'I am currently reviewing this item and will follow up shortly.';
     return { responseText, confidenceScore: 0.91 };
   } catch (err) {
     console.error('Error generating Twin response:', err);

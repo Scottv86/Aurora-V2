@@ -93,7 +93,7 @@ export const DocumentTemplateBuilder: React.FC<DocumentTemplateBuilderProps> = (
   onSave,
   onCancel
 }) => {
-  const { currentTenant: tenant, user, setIsBuilderFullscreen } = usePlatform();
+  const { tenant, user, setIsBuilderFullscreen } = usePlatform();
   const { theme } = useTheme();
 
   // Make the builder fullscreen across the viewport on mount and restore on unmount
@@ -107,7 +107,9 @@ export const DocumentTemplateBuilder: React.FC<DocumentTemplateBuilderProps> = (
   // Primary document state
   const [name, setName] = useState(template?.name || '');
   const [contentType, setContentType] = useState<ContentType>(template?.type || initialType);
-  const [status, setStatus] = useState<'draft' | 'published'>(template?.status || 'draft');
+  const [status, setStatus] = useState<'draft' | 'published'>(
+    template?.status?.toLowerCase() === 'published' ? 'published' : 'draft'
+  );
   const [globalFont, setGlobalFont] = useState<string>(template?.fontFamily || 'Inter');
 
   // Studio tabs & viewports
@@ -573,7 +575,7 @@ Return ONLY the refined HTML, without markdown fences or additional explanation.
         blocks,
         fontFamily: globalFont,
         metadata,
-        status,
+        status: status === 'published' ? 'Published' : 'Draft',
         moduleId,
         createdBy: userId
       });
@@ -1611,7 +1613,7 @@ Rule: ${typeInstructions[contentType]}`;
                 {activeTab === 'preview' && (
                   <div className={cn("text-center pb-4 mb-3 border-b", previewMode === 'dark' ? "border-zinc-800" : "border-zinc-200")}>
                     <div className="w-10 h-10 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center mx-auto mb-1 text-xs">
-                      {sampleData.recipient_name.split(' ').map(n => n[0]).join('') || 'SJ'}
+                      {sampleData.recipient_name.split(' ').map((n: string) => n[0]).join('') || 'SJ'}
                     </div>
                     <p className={cn("text-xs font-bold", previewMode === 'dark' ? "text-zinc-200" : "text-zinc-900")}>
                       {sampleData.recipient_name}

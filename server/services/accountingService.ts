@@ -1,6 +1,8 @@
-import { Decimal } from '@prisma/client/runtime/library';
+import { Prisma } from '@prisma/client';
 import { globalPrisma } from '../lib/prisma';
 import { recordAudit } from '../lib/audit';
+
+type Decimal = Prisma.Decimal;
 
 export interface JournalLineInput {
   accountId: string;
@@ -14,7 +16,7 @@ export interface JournalLineInput {
 
 export interface PostJournalInput {
   date: Date | string;
-  sourceModule: 'POS' | 'INVOICE' | 'BILL' | 'PORTAL_PAYMENT' | 'BANK_RECONCILIATION' | 'INVENTORY_ADJUSTMENT' | 'MANUAL';
+  sourceModule: 'POS' | 'INVOICE' | 'BILL' | 'PORTAL_PAYMENT' | 'BANK_RECONCILIATION' | 'INVENTORY_ADJUSTMENT' | 'REFUND' | 'MANUAL';
   sourceReferenceId?: string | null;
   narration: string;
   createdByUserId?: string | null;

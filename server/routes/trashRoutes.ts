@@ -126,16 +126,21 @@ router.post('/:id/restore', async (req: TenantRequest, res) => {
         emitTenantUpdate(tenantId, 'record_added', { id: item.itemId, ...payload });
       } else if (item.itemType === 'MODULE' || item.itemType === 'PAGE') {
         if (db.module) {
+          let workspaceId = payload.workspaceId;
+          if (!workspaceId) {
+            const ws = await db.workspace.findFirst({ where: { tenantId } });
+            workspaceId = ws?.id || 'default';
+          }
           await db.module.create({
             data: {
               id: item.itemId,
               tenantId,
+              workspaceId,
               name: payload.name || item.title,
-              category: payload.category || (item.itemType === 'PAGE' ? 'Workspace Pages' : 'Custom Modules'),
-              iconName: payload.iconName || 'Folder',
-              type: payload.type || (item.itemType === 'PAGE' ? 'PAGE' : 'CUSTOM'),
+              category: payload.category || (item.itemType === 'PAGE' ? 'Workspace Pages' : 'Custom'),
+              icon: payload.icon || payload.iconName || 'Folder',
+              type: payload.type || (item.itemType === 'PAGE' ? 'PAGE' : 'RECORD'),
               enabled: payload.enabled ?? true,
-              status: payload.status || 'ACTIVE',
               config: payload.config || {}
             }
           });
@@ -181,9 +186,10 @@ router.post('/:id/restore', async (req: TenantRequest, res) => {
               description: payload.description || '',
               domain: payload.domain || '',
               category: payload.category || 'public',
+              type: payload.type || 'Customer Portal',
               status: payload.status || 'draft',
-              theme: payload.theme || {},
-              pages: payload.pages || []
+              branding: payload.branding || payload.theme || {},
+              pagesConfig: payload.pagesConfig || payload.pages || []
             }
           });
         }

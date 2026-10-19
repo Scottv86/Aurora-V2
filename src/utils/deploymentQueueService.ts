@@ -1,6 +1,9 @@
 import { ScheduledDeployment } from '../types/deployments';
+import { API_BASE_URL } from '../config';
+import { supabase } from '../lib/supabase';
 
 const STORAGE_KEY = 'aurora_scheduled_deployments';
+let hasHydratedDeployments = false;
 
 type Listener = (deployments: ScheduledDeployment[]) => void;
 const listeners = new Set<Listener>();
@@ -15,8 +18,59 @@ function notifyListeners(deployments: ScheduledDeployment[]) {
   });
 }
 
+async function resolveAuthHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data?.session?.access_token || (import.meta as any).env?.VITE_DEV_TOKEN || localStorage.getItem('aurora_token') || '';
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const tenantId = localStorage.getItem('aurora_active_tenant_id') || 'tenant_default';
+    headers['x-tenant-id'] = tenantId;
+  } catch (_) {}
+  return headers;
+}
+
+async function hydrateDeploymentsFromBackend(): Promise<void> {
+  if (typeof window === 'undefined' || hasHydratedDeployments) return;
+  hasHydratedDeployments = true;
+  try {
+    const headers = await resolveAuthHeaders();
+    const res = await fetch(`${API_BASE_URL}/api/data/scheduled-deployments`, { headers });
+    if (res.ok) {
+      const serverDeployments: ScheduledDeployment[] = await res.json();
+      if (Array.isArray(serverDeployments) && serverDeployments.length > 0) {
+        const localRaw = localStorage.getItem(STORAGE_KEY);
+        const localDeployments: ScheduledDeployment[] = localRaw ? JSON.parse(localRaw) : [];
+        const mergedMap = new Map<string, ScheduledDeployment>();
+        localDeployments.forEach(d => mergedMap.set(d.id, d));
+        serverDeployments.forEach(d => mergedMap.set(d.id, d));
+        const merged = Array.from(mergedMap.values()).sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+        notifyListeners(merged);
+      }
+    }
+  } catch (_) {}
+}
+
+async function syncDeploymentsToBackend(list: ScheduledDeployment[]): Promise<void> {
+  if (typeof window === 'undefined') return;
+  try {
+    const headers = await resolveAuthHeaders();
+    await fetch(`${API_BASE_URL}/api/data/scheduled-deployments`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ deployments: list })
+    });
+  } catch (err) {
+    console.warn('[deploymentQueueService] Background server sync warning:', err);
+  }
+}
+
 export const deploymentQueueService = {
   getDeployments(moduleId?: string): ScheduledDeployment[] {
+    hydrateDeploymentsFromBackend();
     try {
       const data = localStorage.getItem(STORAGE_KEY);
       if (!data) return [];
@@ -34,6 +88,7 @@ export const deploymentQueueService = {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
       notifyListeners(list);
+      syncDeploymentsToBackend(list);
     } catch (e) {
       console.error('Failed to save scheduled deployments', e);
     }

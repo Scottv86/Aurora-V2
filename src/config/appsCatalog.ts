@@ -13,6 +13,17 @@ export interface AppItem {
 export const AURORA_APPS: AppItem[] = [
   // Core Platform & Active Workspace Suite
   {
+    id: 'approvals',
+    label: 'Approvals Hub',
+    iconName: 'ShieldCheck',
+    description: 'Executive decision queue across invoices, leave, RMAs, workflows and AI proposals',
+    color: 'text-indigo-600',
+    to: '/workspace/approvals',
+    category: 'Commerce & Operations',
+    isCore: true,
+    status: 'active'
+  },
+  {
     id: 'pos',
     label: 'Point of Sale',
     iconName: 'Store',
@@ -118,10 +129,11 @@ export const AURORA_APPS: AppItem[] = [
     label: 'Notes',
     iconName: 'StickyNote',
     description: 'Quick personal thoughts, ideas and markdown scratchpads',
-    color: 'text-yellow-500',
+    color: 'text-amber-500',
     to: '/workspace/apps/notes',
     category: 'Productivity',
-    status: 'coming_soon'
+    isCore: true,
+    status: 'active'
   },
   {
     id: 'reminders',
@@ -131,7 +143,8 @@ export const AURORA_APPS: AppItem[] = [
     color: 'text-purple-500',
     to: '/workspace/apps/reminders',
     category: 'Productivity',
-    status: 'coming_soon'
+    isCore: true,
+    status: 'active'
   },
   {
     id: 'spreadsheet',
@@ -177,17 +190,6 @@ export const AURORA_APPS: AppItem[] = [
   },
 
   // Communication & Scheduling
-  {
-    id: 'chat',
-    label: 'Chat',
-    iconName: 'MessageSquare',
-    description: 'Real-time team messaging channels and direct conversations',
-    color: 'text-emerald-500',
-    to: '/workspace/apps/chat',
-    category: 'Communication',
-    isCore: true,
-    status: 'active'
-  },
   {
     id: 'meet',
     label: 'Meet',

@@ -1,5 +1,6 @@
 import { globalPrisma } from '../lib/prisma';
 import { recordAudit } from '../lib/audit';
+import { encryptSecret, decryptSecret, generateKeyHint } from '../lib/crypto';
 
 export type PaymentProviderType = 
   | 'CYBERSOURCE' 
@@ -106,9 +107,105 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
   }
 ];
 
+const ENCRYPTED_PREFIX = 'enc:v1:';
+
 export class PaymentGatewayService {
+  private static getSecretFieldKeys(provider: PaymentProviderType): Set<string> {
+    const preset = PROVIDER_PRESETS.find(p => p.id === provider);
+    const keys = new Set<string>(['sharedSecret', 'apiPassword', 'secretKey', 'webhookSecret', 'apiKey', 'accessToken', 'authHeader']);
+    if (preset) {
+      for (const f of preset.fields) {
+        if (f.isSecret) keys.add(f.key);
+      }
+    }
+    return keys;
+  }
+
+  private static isMaskedValue(val: string): boolean {
+    return val.includes('••••') || val.includes('****') || /^[a-zA-Z0-9_-]{2,8}\.\.\.[a-zA-Z0-9_-]{2,6}$/.test(val.trim());
+  }
+
   /**
-   * Retrieves all configured payment gateways for a tenant
+   * Encrypts secret fields before persisting to PostgreSQL
+   */
+  static encryptCredentials(
+    provider: PaymentProviderType,
+    incoming: Record<string, any> = {},
+    existingStored: Record<string, any> = {}
+  ): Record<string, any> {
+    const secretKeys = this.getSecretFieldKeys(provider);
+    const output: Record<string, any> = { ...incoming };
+
+    for (const [key, rawVal] of Object.entries(incoming)) {
+      if (!secretKeys.has(key) || typeof rawVal !== 'string' || !rawVal.trim()) {
+        continue;
+      }
+      const val = rawVal.trim();
+      if (val.startsWith(ENCRYPTED_PREFIX)) {
+        output[key] = val;
+      } else if (this.isMaskedValue(val) && typeof existingStored[key] === 'string' && existingStored[key]) {
+        // Preserve existing encrypted value when user saves without modifying masked secret field
+        output[key] = existingStored[key];
+      } else {
+        const { encryptedKey } = encryptSecret(val);
+        output[key] = `${ENCRYPTED_PREFIX}${encryptedKey}`;
+      }
+    }
+
+    return output;
+  }
+
+  /**
+   * Decrypts secret fields for server-side payment/refund execution
+   */
+  static decryptCredentials(provider: PaymentProviderType, stored: Record<string, any> = {}): Record<string, any> {
+    const secretKeys = this.getSecretFieldKeys(provider);
+    const output: Record<string, any> = { ...stored };
+
+    for (const [key, rawVal] of Object.entries(stored)) {
+      if (!secretKeys.has(key) || typeof rawVal !== 'string' || !rawVal) {
+        continue;
+      }
+      if (rawVal.startsWith(ENCRYPTED_PREFIX)) {
+        try {
+          output[key] = decryptSecret(rawVal.slice(ENCRYPTED_PREFIX.length));
+        } catch {
+          output[key] = '';
+        }
+      }
+    }
+
+    return output;
+  }
+
+  /**
+   * Masks secret fields before returning connection objects to the browser
+   */
+  static maskCredentialsForClient(provider: PaymentProviderType, stored: Record<string, any> = {}): Record<string, any> {
+    const secretKeys = this.getSecretFieldKeys(provider);
+    const output: Record<string, any> = { ...stored };
+
+    for (const [key, rawVal] of Object.entries(stored)) {
+      if (!secretKeys.has(key) || typeof rawVal !== 'string' || !rawVal) {
+        continue;
+      }
+      if (rawVal.startsWith(ENCRYPTED_PREFIX)) {
+        try {
+          const plain = decryptSecret(rawVal.slice(ENCRYPTED_PREFIX.length));
+          output[key] = generateKeyHint(plain);
+        } catch {
+          output[key] = '••••••••';
+        }
+      } else {
+        output[key] = generateKeyHint(rawVal);
+      }
+    }
+
+    return output;
+  }
+
+  /**
+   * Retrieves all configured payment gateways for a tenant (with secrets masked for UI safety)
    */
   static async listConnections(tenantId: string, db: any = globalPrisma) {
     let connections = await db.paymentGatewayConnection.findMany({
@@ -136,11 +233,14 @@ export class PaymentGatewayService {
       connections = [sandbox];
     }
 
-    return connections;
+    return connections.map((conn: any) => ({
+      ...conn,
+      credentials: this.maskCredentialsForClient(conn.provider as PaymentProviderType, (conn.credentials as Record<string, any>) || {})
+    }));
   }
 
   /**
-   * Saves or updates a payment gateway configuration
+   * Saves or updates a payment gateway configuration (encrypting secret credentials at rest)
    */
   static async saveConnection(tenantId: string, data: {
     id?: string;
@@ -161,6 +261,18 @@ export class PaymentGatewayService {
       });
     }
 
+    let existingCreds: Record<string, any> = {};
+    if (data.id) {
+      const existing = await db.paymentGatewayConnection.findFirst({
+        where: { id: data.id, tenantId }
+      });
+      if (existing && existing.credentials && typeof existing.credentials === 'object') {
+        existingCreds = existing.credentials as Record<string, any>;
+      }
+    }
+
+    const encryptedCredentials = this.encryptCredentials(data.provider, data.credentials || {}, existingCreds);
+
     let connection;
     if (data.id) {
       connection = await db.paymentGatewayConnection.update({
@@ -173,7 +285,7 @@ export class PaymentGatewayService {
           enableForPos: data.enableForPos !== false,
           enableForInvoice: data.enableForInvoice !== false,
           enableForPortal: data.enableForPortal !== false,
-          credentials: data.credentials,
+          credentials: encryptedCredentials,
           healthStatus: 'HEALTHY'
         }
       });
@@ -189,7 +301,7 @@ export class PaymentGatewayService {
           enableForPos: data.enableForPos !== false,
           enableForInvoice: data.enableForInvoice !== false,
           enableForPortal: data.enableForPortal !== false,
-          credentials: data.credentials,
+          credentials: encryptedCredentials,
           healthStatus: 'HEALTHY'
         }
       });
@@ -207,7 +319,10 @@ export class PaymentGatewayService {
       }
     });
 
-    return connection;
+    return {
+      ...connection,
+      credentials: this.maskCredentialsForClient(data.provider, encryptedCredentials)
+    };
   }
 
   /**
@@ -228,7 +343,8 @@ export class PaymentGatewayService {
     credentials: Record<string, any>;
     isTestMode?: boolean;
   }) {
-    const { provider, credentials, isTestMode = true } = input;
+    const { provider, isTestMode = true } = input;
+    const credentials = this.decryptCredentials(provider, input.credentials || {});
 
     // Sandbox Simulator
     if (provider === 'SANDBOX_SIMULATOR') {

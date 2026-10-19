@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { usePlatform } from '../../../hooks/usePlatform';
 import { Button } from '../../../components/UI/Primitives';
 import { 
   Database, 
@@ -15,6 +16,7 @@ import { toast } from 'sonner';
 import { cn } from '../../../lib/utils';
 
 export const RecordsManagementSettings = () => {
+  const { tenant, updateTenant } = usePlatform();
   const [retentionYears, setRetentionYears] = useState('7');
   const [storageProvider, setStorageProvider] = useState<'local' | 's3' | 'gcp' | 'azure'>('s3');
   const [enableWorm, setEnableWorm] = useState(true);
@@ -23,18 +25,44 @@ export const RecordsManagementSettings = () => {
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('policy');
 
+  useEffect(() => {
+    const rm = (tenant?.workspaceSettings as any)?.recordsManagement;
+    if (rm) {
+      if (rm.retentionYears) setRetentionYears(String(rm.retentionYears));
+      if (rm.storageProvider) setStorageProvider(rm.storageProvider);
+      if (rm.enableWorm !== undefined) setEnableWorm(Boolean(rm.enableWorm));
+      if (rm.auditLevel) setAuditLevel(rm.auditLevel);
+      if (rm.hashAlgo) setHashAlgo(rm.hashAlgo);
+    }
+  }, [tenant?.workspaceSettings]);
+
   const subNavItems: SettingsSubNavItem[] = [
     { id: 'policy', label: 'Retention Policy', icon: Shield, description: 'Compliance & hold schedules' },
     { id: 'storage', label: 'Storage Provider', icon: Cloud, description: 'S3/Azure/Local targets' },
     { id: 'security', label: 'WORM & Auditing', icon: Lock, description: 'Cryptographic immutability' }
   ];
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setSaving(true);
-    setTimeout(() => {
+    try {
+      await updateTenant({
+        workspaceSettings: {
+          ...(tenant?.workspaceSettings as object || {}),
+          recordsManagement: {
+            retentionYears,
+            storageProvider,
+            enableWorm,
+            auditLevel,
+            hashAlgo
+          }
+        }
+      });
+      toast.success('Records Management configuration saved to database.');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save configuration');
+    } finally {
       setSaving(false);
-      toast.success('Records Management configuration saved (Simulated).');
-    }, 800);
+    }
   };
 
   return (

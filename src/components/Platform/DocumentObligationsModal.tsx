@@ -2,12 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { 
   CalendarCheck, 
   X, 
-  Clock, 
-  AlertCircle, 
   CheckCircle2, 
   Plus, 
   Loader2, 
-  Sparkles,
   Quote,
   Calendar
 } from 'lucide-react';

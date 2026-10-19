@@ -11,6 +11,7 @@ import { WorkflowBuilder } from '../../components/Builders/WorkflowBuilder/Workf
 import { toast } from 'sonner';
 import { API_BASE_URL } from '../../config';
 import { usePlatform } from '../../hooks/usePlatform';
+import { useAuth } from '../../hooks/useAuth';
 import { motion } from 'motion/react';
 import { TrashService } from '../../services/trashService';
 import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
@@ -19,7 +20,9 @@ import { EmptyState } from '../../components/UI/EmptyState';
 import { builderCache } from '../../utils/builderCache';
 
 export const WorkflowsLibraryPage: React.FC = () => {
-  const { tenant, modules } = usePlatform();
+  const { tenant } = usePlatform();
+  const { session } = useAuth();
+  const token = session?.access_token;
   const cacheKey = `workflows_${tenant?.id || 'default'}`;
   const [workflows, setWorkflows] = useState<WorkflowEntity[]>(() => builderCache.get<WorkflowEntity[]>(cacheKey) || []);
   const [loading, setLoading] = useState(() => !builderCache.has(cacheKey));
@@ -35,7 +38,10 @@ export const WorkflowsLibraryPage: React.FC = () => {
     }
     try {
       const res = await fetch(`${API_BASE_URL}/api/workflows`, {
-        headers: { 'x-tenant-id': tenant?.id || '' }
+        headers: {
+          'x-tenant-id': tenant?.id || '',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
       });
       if (res.ok) {
         const data = await res.json();
@@ -43,30 +49,11 @@ export const WorkflowsLibraryPage: React.FC = () => {
         setWorkflows(next);
         builderCache.set(cacheKey, next);
       } else {
-        setWorkflows([
-          {
-            id: 'wf_approval',
-            tenantId: tenant?.id || 't1',
-            name: 'Multi-Step Approval Workflow',
-            description: 'Automated manager approval & notification chain.',
-            isGlobal: true,
-            triggerType: 'RECORD_EVENT',
-            version: 1,
-            status: 'PUBLISHED',
-            nodes: [
-              { id: 'start', type: 'START', name: 'Record Submitted', position: { x: 100, y: 150 } },
-              { id: 'approval', type: 'DECISION', name: 'Manager Approval', position: { x: 300, y: 150 } },
-              { id: 'end', type: 'END', name: 'Complete Process', position: { x: 500, y: 150 } }
-            ],
-            edges: [
-              { id: 'e1', source: 'start', target: 'approval' },
-              { id: 'e2', source: 'approval', target: 'end' }
-            ]
-          }
-        ]);
+        if (!builderCache.has(cacheKey)) setWorkflows([]);
       }
     } catch (err) {
       console.error('Failed to fetch workflows:', err);
+      if (!builderCache.has(cacheKey)) setWorkflows([]);
     } finally {
       setLoading(false);
     }
@@ -74,7 +61,7 @@ export const WorkflowsLibraryPage: React.FC = () => {
 
   useEffect(() => {
     fetchWorkflows();
-  }, [tenant?.id]);
+  }, [tenant?.id, token]);
 
   const [workflowToDelete, setWorkflowToDelete] = useState<WorkflowEntity | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -101,7 +88,10 @@ export const WorkflowsLibraryPage: React.FC = () => {
       }
       await fetch(`${API_BASE_URL}/api/workflows/${wf.id}`, {
         method: 'DELETE',
-        headers: { 'x-tenant-id': tenant?.id || '' }
+        headers: {
+          'x-tenant-id': tenant?.id || '',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
       }).catch(() => {});
       toast.success('Workflow moved to Recycling Bin');
       setWorkflows(prev => {
@@ -117,39 +107,12 @@ export const WorkflowsLibraryPage: React.FC = () => {
     }
   };
 
-  // Extract workflows embedded inside custom modules
-  const allWorkflows = React.useMemo(() => {
-    const moduleWorkflows: WorkflowEntity[] = (modules || []).flatMap((mod: any) => {
-      const items: WorkflowEntity[] = [];
-      const modWfs = mod.workflows || mod.config?.workflows;
-      if (Array.isArray(modWfs)) {
-        modWfs.forEach((wf: any, i: number) => {
-          items.push({
-            id: wf.id || `mod_wf_${mod.id}_${i}`,
-            tenantId: tenant?.id || 't1',
-            name: wf.name || `${mod.name} Process Flow`,
-            description: wf.description || `Automated workflow associated with ${mod.name} module.`,
-            isGlobal: false,
-            moduleId: mod.id,
-            moduleName: mod.name,
-            triggerType: wf.triggerType || 'RECORD_EVENT',
-            version: wf.version || 1,
-            status: wf.status || 'PUBLISHED',
-            nodes: wf.nodes || [],
-            edges: wf.edges || []
-          });
-        });
-      }
-      return items;
-    });
-    return [...workflows, ...moduleWorkflows];
-  }, [workflows, modules, tenant?.id]);
-
   const [filterTab, setFilterTab] = useState<'all' | 'global' | 'module'>('all');
 
-  const filteredWorkflows = allWorkflows.filter(w => {
+  const filteredWorkflows = workflows.filter(w => {
     const matchesSearch = w.name.toLowerCase().includes(search.toLowerCase()) || 
-                          (w.description && w.description.toLowerCase().includes(search.toLowerCase()));
+                          (w.description && w.description.toLowerCase().includes(search.toLowerCase())) ||
+                          (w.moduleName && w.moduleName.toLowerCase().includes(search.toLowerCase()));
     if (!matchesSearch) return false;
     if (filterTab === 'global') return w.isGlobal;
     if (filterTab === 'module') return !w.isGlobal;
@@ -251,8 +214,12 @@ export const WorkflowsLibraryPage: React.FC = () => {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border bg-emerald-500/10 text-emerald-500 border-emerald-500/20">
-                          {wf.status || 'PUBLISHED'}
+                        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border ${
+                          wf.isGlobal
+                            ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                            : 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20'
+                        }`}>
+                          {wf.isGlobal ? 'Global' : (wf.moduleName || 'Module-Bound')}
                         </span>
 
                         <button

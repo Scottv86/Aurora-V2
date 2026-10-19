@@ -232,6 +232,17 @@ interface IntrospectedSchema {
   timestamp: number;
 }
 
+const RESTRICTED_SYSTEM_TABLES = [
+  '_prisma_migrations',
+  'users',
+  'tenants',
+  'tenant_ai_keys',
+  'tenant_connector_secrets',
+  'payment_gateway_connections',
+  'inbox_accounts',
+  'webhook_subscriptions'
+];
+
 let cachedSchema: IntrospectedSchema | null = null;
 const SCHEMA_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
@@ -242,19 +253,21 @@ async function getIntrospectedSchema(db: any): Promise<IntrospectedSchema> {
   }
 
   try {
+    const restrictedListSql = RESTRICTED_SYSTEM_TABLES.map(t => `'${t}'`).join(', ');
     const [tables, cols, pks, fks]: [any[], any[], any[], any[]] = await Promise.all([
       db.$queryRawUnsafe(`
         SELECT table_name 
         FROM information_schema.tables 
         WHERE table_schema = 'public' 
           AND table_type = 'BASE TABLE'
-          AND table_name NOT IN ('_prisma_migrations', 'users', 'tenants')
+          AND table_name NOT IN (${restrictedListSql})
         ORDER BY table_name;
       `),
       db.$queryRawUnsafe(`
         SELECT table_name, column_name, data_type, is_nullable
         FROM information_schema.columns
         WHERE table_schema = 'public'
+          AND table_name NOT IN (${restrictedListSql})
         ORDER BY table_name, ordinal_position;
       `),
       db.$queryRawUnsafe(`
@@ -409,8 +422,9 @@ function validateQuerySecurity(
   const forbiddenKeywords = [
     'insert', 'update', 'delete', 'drop', 'alter', 'create', 'truncate',
     'grant', 'revoke', 'reindex', 'vacuum', 'analyze', 'set', 'reset',
-    'copy', 'begin', 'commit', 'rollback', 'users', 'tenants', '_prisma_migrations',
-    'information_schema'
+    'copy', 'begin', 'commit', 'rollback',
+    'information_schema',
+    ...RESTRICTED_SYSTEM_TABLES
   ];
   
   for (const keyword of forbiddenKeywords) {
@@ -544,7 +558,7 @@ router.get('/referenced-record', async (req: TenantRequest, res) => {
     const val = String(value).trim();
 
     // Security check
-    const FORBIDDEN_TABLES = ['users', 'tenants', '_prisma_migrations', 'information_schema'];
+    const FORBIDDEN_TABLES = ['information_schema', ...RESTRICTED_SYSTEM_TABLES];
     if (FORBIDDEN_TABLES.includes(tableName)) {
       return res.status(403).json({ error: 'Access to this table is restricted.' });
     }
@@ -555,6 +569,9 @@ router.get('/referenced-record', async (req: TenantRequest, res) => {
 
     // Get introspected schema to send column metadata for target table
     const introspected = await getIntrospectedSchema(db);
+    if (!introspected.tableWhitelist.includes(tableName) && !PHYSICAL_TABLES_WHITELIST.includes(tableName)) {
+      return res.status(403).json({ error: 'Access to this table is restricted.' });
+    }
     const tableDef = introspected.physicalTables.find(t => t.name === tableName);
 
     // Execute query inside tenant-scoped transaction

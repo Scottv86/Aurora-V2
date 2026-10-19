@@ -1,6 +1,5 @@
 import React from 'react';
-import { Printer, X, RotateCcw, CheckCircle2, ShieldCheck, ArrowDownLeft } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { Printer, X, RotateCcw, CheckCircle2 } from 'lucide-react';
 import { Button } from '../../UI/Primitives';
 
 export interface PosReturnSlipData {

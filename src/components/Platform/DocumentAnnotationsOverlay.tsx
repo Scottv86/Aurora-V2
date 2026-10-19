@@ -1,12 +1,9 @@
 import React, { useState } from 'react';
 import { 
   MessageSquare, 
-  CheckCircle2, 
   Send, 
   X, 
-  Check, 
-  CornerDownRight, 
-  AlertCircle 
+  Check
 } from 'lucide-react';
 import { DocumentAnnotation, UniversalDocument } from '../../types/document';
 import { DocumentClientService } from '../../services/documentClientService';
@@ -23,7 +20,7 @@ export const DocumentAnnotationsOverlay: React.FC<DocumentAnnotationsOverlayProp
   document,
   isAnnotating,
   onAnnotationAdded,
-  scale = 1
+  scale: _scale = 1
 }) => {
   const annotations: DocumentAnnotation[] = (document.aiMetadata as any)?.annotations || [];
   const [activePinId, setActivePinId] = useState<string | null>(null);

@@ -3,6 +3,11 @@ import { GitBranch, Save, Bug } from 'lucide-react';
 import { Workflow, WorkflowEntity, StandaloneBuilderContext } from '../../../types/platform';
 import { WorkflowGraphEditor } from '../../Builder/Workflow/GraphEditor';
 import { Button } from '../../UI/Primitives';
+import { API_BASE_URL } from '../../../config';
+import { usePlatform } from '../../../hooks/usePlatform';
+import { useAuth } from '../../../hooks/useAuth';
+import { PLATFORM_MODULES } from '../../../config/platformModules';
+import { toast } from 'sonner';
 
 export interface WorkflowBuilderProps {
   initialWorkflow?: Partial<WorkflowEntity>;
@@ -19,8 +24,16 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
   onDirtyChange,
   fields = []
 }) => {
+  const { tenant, modules } = usePlatform();
+  const { session } = useAuth();
+  const token = session?.access_token;
   const [name, setName] = useState(initialWorkflow?.name || 'Untitled Workflow');
   const [description, setDescription] = useState(initialWorkflow?.description || '');
+  const [associatedModuleId, setAssociatedModuleId] = useState<string>(
+    initialWorkflow?.moduleId ||
+    builderContext.parentModuleId ||
+    (builderContext.hostType === 'module' ? builderContext.hostId || '' : '')
+  );
   const [currentWorkflow, setCurrentWorkflow] = useState<Workflow>({
     id: initialWorkflow?.id || `wf_${Date.now()}`,
     name: initialWorkflow?.name || 'Untitled Workflow',
@@ -41,40 +54,93 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
   const isInitializedRef = React.useRef(false);
 
   React.useEffect(() => {
+    if (initialWorkflow) {
+      setName(initialWorkflow.name || 'Untitled Workflow');
+      setDescription(initialWorkflow.description || '');
+      setAssociatedModuleId(
+        initialWorkflow.moduleId ||
+        builderContext.parentModuleId ||
+        (builderContext.hostType === 'module' ? builderContext.hostId || '' : '')
+      );
+      if (initialWorkflow.nodes && initialWorkflow.edges) {
+        setCurrentWorkflow({
+          id: initialWorkflow.id || `wf_${Date.now()}`,
+          name: initialWorkflow.name || 'Untitled Workflow',
+          nodes: initialWorkflow.nodes,
+          edges: initialWorkflow.edges
+        });
+      }
+    }
     setTimeout(() => {
       isInitializedRef.current = true;
       onDirtyChange?.(false);
     }, 100);
-  }, [initialWorkflow]);
+  }, [initialWorkflow, builderContext.parentModuleId, builderContext.hostId, builderContext.hostType]);
 
   React.useEffect(() => {
     if (isInitializedRef.current) {
       onDirtyChange?.(true);
     }
-  }, [name, description, currentWorkflow, onDirtyChange]);
+  }, [name, description, associatedModuleId, currentWorkflow, onDirtyChange]);
 
-  const handleSaveWorkflow = () => {
+  const effectiveFields = React.useMemo(() => {
+    if (fields && fields.length > 0) return fields;
+    if (associatedModuleId) {
+      const mod = (modules || []).find(m => m.id === associatedModuleId);
+      if (mod?.layout) return mod.layout;
+    }
+    return [];
+  }, [fields, associatedModuleId, modules]);
+
+  const handleSaveWorkflow = async () => {
     setSaving(true);
-    const workflowEntity: WorkflowEntity = {
-      id: currentWorkflow.id,
-      tenantId: initialWorkflow?.tenantId || 'tenant_default',
-      moduleId: builderContext.hostType === 'module' ? builderContext.hostId : undefined,
-      name,
-      description,
-      isGlobal: builderContext.mode === 'global',
-      triggerType: 'RECORD_EVENT',
-      nodes: currentWorkflow.nodes,
-      edges: currentWorkflow.edges,
-      version: (initialWorkflow?.version || 0) + 1,
-      status: 'PUBLISHED'
-    };
+    try {
+      const effectiveModuleId =
+        associatedModuleId ||
+        builderContext.parentModuleId ||
+        (builderContext.hostType === 'module' ? builderContext.hostId : undefined) ||
+        undefined;
+      const isExistingPersistedId = Boolean(initialWorkflow?.id && !initialWorkflow.id.startsWith('wf_'));
 
-    setTimeout(() => {
+      const workflowEntity: WorkflowEntity = {
+        id: currentWorkflow.id,
+        tenantId: tenant?.id || initialWorkflow?.tenantId || 'tenant_default',
+        moduleId: effectiveModuleId,
+        name,
+        description,
+        isGlobal: !effectiveModuleId,
+        triggerType: initialWorkflow?.triggerType || 'RECORD_EVENT',
+        nodes: currentWorkflow.nodes,
+        edges: currentWorkflow.edges,
+        version: (initialWorkflow?.version || 0) + 1,
+        status: 'PUBLISHED'
+      };
+
+      const res = await fetch(`${API_BASE_URL}/api/workflows${isExistingPersistedId ? `/${initialWorkflow!.id}` : ''}`, {
+        method: isExistingPersistedId ? 'PUT' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': tenant?.id || '',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(workflowEntity)
+      });
+
+      if (res.ok) {
+        const saved = await res.json();
+        onDirtyChange?.(false);
+        if (onSave) onSave(saved);
+        if (builderContext.onSaveSuccess) builderContext.onSaveSuccess(saved.id, saved);
+      } else {
+        onDirtyChange?.(false);
+        if (onSave) onSave(workflowEntity);
+        if (builderContext.onSaveSuccess) builderContext.onSaveSuccess(workflowEntity.id, workflowEntity);
+      }
+    } catch (err) {
+      toast.error('Failed to save workflow');
+    } finally {
       setSaving(false);
-      onDirtyChange?.(false);
-      if (onSave) onSave(workflowEntity);
-      if (builderContext.onSaveSuccess) builderContext.onSaveSuccess(workflowEntity.id, workflowEntity);
-    }, 400);
+    }
   };
 
   return (
@@ -105,6 +171,27 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
+          {builderContext.mode === 'global' && (
+            <select
+              value={associatedModuleId}
+              onChange={(e) => setAssociatedModuleId(e.target.value)}
+              className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              title="Associate Workflow with a Module or keep Global"
+            >
+              <option value="">Global (Cross-Module Flow)</option>
+              <optgroup label="Custom Modules">
+                {(modules || []).filter(m => (m as any).type !== 'PAGE').map(m => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Platform Modules">
+                {PLATFORM_MODULES.map(pm => (
+                  <option key={pm.id} value={pm.id}>{pm.name}</option>
+                ))}
+              </optgroup>
+            </select>
+          )}
+
           <button
             onClick={() => setShowDebugger(!showDebugger)}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-all"
@@ -137,7 +224,7 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
           onEdgeSelect={setSelectedEdgeId}
           rightSidebarTab={rightSidebarTab}
           setRightSidebarTab={setRightSidebarTab}
-          fields={fields}
+          fields={effectiveFields}
         />
       </div>
     </div>

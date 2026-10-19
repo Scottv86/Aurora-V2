@@ -39,6 +39,7 @@ import {
 import { cn } from '../../lib/utils';
 import { Field } from '../ModuleEditor';
 import { useAuth } from '../../hooks/useAuth';
+import { usePlatform } from '../../hooks/usePlatform';
 import { DATA_API_URL } from '../../config';
 import { generateExpression, fixExpression } from '../../services/aiService';
 import { createFormulaContext } from '../../lib/formulaEngine';
@@ -561,6 +562,7 @@ export const CalculatorModal = ({
 
   // History State
   const { user } = useAuth();
+  const { tenant, updateTenant } = usePlatform();
   const [history, setHistory] = useState<Snapshot[]>([]);
   const [isFixing, setIsFixing] = useState(false);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -592,13 +594,22 @@ export const CalculatorModal = ({
   const [aiPrompt, setAiPrompt] = useState('');
   const [isAiGenerating, setIsAiGenerating] = useState(false);
 
-  // Snippets State
+  // Snippets State (PostgreSQL with offline fallback)
   const [snippets, setSnippets] = useState<LogicSnippet[]>(() => {
+    const ws = (tenant?.workspaceSettings as any)?.formulaSnippets;
+    if (Array.isArray(ws) && ws.length > 0) return ws;
     const saved = typeof window !== 'undefined' ? localStorage.getItem('aurora_logic_snippets') : null;
     return saved ? JSON.parse(saved) : [];
   });
   const [showSaveSnippet, setShowSaveSnippet] = useState(false);
   const [newSnippetName, setNewSnippetName] = useState('');
+
+  useEffect(() => {
+    const ws = (tenant?.workspaceSettings as any)?.formulaSnippets;
+    if (Array.isArray(ws) && ws.length > 0) {
+      setSnippets(prev => JSON.stringify(prev) === JSON.stringify(ws) ? prev : ws);
+    }
+  }, [tenant?.workspaceSettings]);
 
   // Cursor Insights
   const [activeInsight, setActiveInsight] = useState<any | null>(null);
@@ -686,10 +697,6 @@ export const CalculatorModal = ({
     fetchMissingLists();
   }, [listNames]); // Only depend on listNames, not the cache itself
 
-  useEffect(() => {
-    localStorage.setItem('aurora_logic_snippets', JSON.stringify(snippets));
-  }, [snippets]);
-
   const handleSaveSnippet = () => {
     if (!newSnippetName.trim() || !logic.trim()) return;
     
@@ -700,13 +707,37 @@ export const CalculatorModal = ({
       timestamp: new Date().toLocaleDateString()
     };
     
-    setSnippets(prev => [newSnippet, ...prev]);
+    setSnippets(prev => {
+      const next = [newSnippet, ...prev];
+      localStorage.setItem('aurora_logic_snippets', JSON.stringify(next));
+      if (updateTenant && tenant) {
+        updateTenant({
+          workspaceSettings: {
+            ...(tenant.workspaceSettings as object || {}),
+            formulaSnippets: next
+          }
+        }, { silent: true }).catch(() => {});
+      }
+      return next;
+    });
     setNewSnippetName('');
     setShowSaveSnippet(false);
   };
 
   const deleteSnippet = (id: string) => {
-    setSnippets(prev => prev.filter(s => s.id !== id));
+    setSnippets(prev => {
+      const next = prev.filter(s => s.id !== id);
+      localStorage.setItem('aurora_logic_snippets', JSON.stringify(next));
+      if (updateTenant && tenant) {
+        updateTenant({
+          workspaceSettings: {
+            ...(tenant.workspaceSettings as object || {}),
+            formulaSnippets: next
+          }
+        }, { silent: true }).catch(() => {});
+      }
+      return next;
+    });
   };
 
   useEffect(() => {

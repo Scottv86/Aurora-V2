@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "server": "tsx --use-system-ca watch server/index.ts",
+    "server": "tsx watch server/index.ts",
     "test:security": "tsx --use-system-ca tests/security.test.ts",
     "test:workflow": "tsx --use-system-ca test_workflow_conditions.ts",
     "test:workflow:integration": "tsx --use-system-ca test_workflow.ts"

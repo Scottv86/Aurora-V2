@@ -13,7 +13,7 @@ router.use(requireTenantAccess);
 /**
  * Seed initial channels for a tenant if none exist in the database
  */
-async function seedDefaultChannelsIfEmpty(tenantId: string, currentUserId: string, currentUserName: string) {
+async function seedDefaultChannelsIfEmpty(tenantId: string, currentUserId: string, _currentUserName: string) {
   const existingCount = await globalPrisma.chatChannel.count({
     where: { tenantId }
   });
@@ -22,7 +22,7 @@ async function seedDefaultChannelsIfEmpty(tenantId: string, currentUserId: strin
     console.log(`[Chat DB] Seeding default channels for tenant: ${tenantId}`);
 
     // 1. General Channel
-    const genChannel = await globalPrisma.chatChannel.create({
+    await globalPrisma.chatChannel.create({
       data: {
         tenantId,
         name: 'general',
@@ -421,7 +421,7 @@ router.post('/channels/:channelId/messages', async (req: any, res) => {
     // Try to resolve member profile details from tenantMember table if available
     let resolvedName = senderName || userName;
     let resolvedAvatar = senderAvatar || null;
-    let resolvedRole = senderRole || userRole;
+    let resolvedRole = senderRole || 'MEMBER';
 
     try {
       const member = await globalPrisma.tenantMember.findFirst({

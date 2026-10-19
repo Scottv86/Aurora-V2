@@ -18,6 +18,8 @@ import { toast } from 'sonner';
 import { Button } from '../../components/UI/Primitives';
 import { SettingsSubNavLayout, SettingsSubNavItem } from '../../components/Settings/SettingsSubNavLayout';
 import { cn } from '../../lib/utils';
+import { useAuth } from '../../hooks/useAuth';
+import { usePlatform } from '../../hooks/usePlatform';
 
 interface TestSuite {
   id: string;
@@ -90,12 +92,14 @@ const INITIAL_TEST_SUITES: TestSuite[] = [
 ];
 
 export const TestingPage: React.FC = () => {
+  const { session } = useAuth();
+  const { tenant } = usePlatform();
   const [activeTab, setActiveTab] = useState('suites');
   const [isRunningAll, setIsRunningAll] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [selectedSuite, setSelectedSuite] = useState<TestSuite | null>(INITIAL_TEST_SUITES[0]);
-  const [testSuites] = useState<TestSuite[]>(INITIAL_TEST_SUITES);
+  const [testSuites, setTestSuites] = useState<TestSuite[]>(INITIAL_TEST_SUITES);
 
   const subNavItems: SettingsSubNavItem[] = [
     { id: 'suites', label: 'Test Suites', icon: FlaskConical, description: 'Automated test suite registry', badge: testSuites.length },
@@ -104,13 +108,35 @@ export const TestingPage: React.FC = () => {
     { id: 'history', label: 'Execution Logs', icon: Clock, description: 'Recent test run traces' },
   ];
 
-  const handleRunAllTests = () => {
+  const handleRunAllTests = async () => {
     setIsRunningAll(true);
-    toast.info('Initiating platform test runner...');
-    setTimeout(() => {
+    toast.info('Initiating live platform test runner against PostgreSQL...');
+    try {
+      const token = session?.access_token || (import.meta as any).env?.VITE_DEV_TOKEN || localStorage.getItem('aurora_token') || '';
+      const tenantId = tenant?.id || localStorage.getItem('aurora_tenant_id') || '';
+      const res = await fetch(`http://127.0.0.1:3001/api/platform/diagnostics/run`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenantId
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.suites && Array.isArray(data.suites)) {
+          setTestSuites(data.suites);
+          setSelectedSuite(data.suites[0]);
+          toast.success(`All ${data.summary.testsCount} automated test cases executed in ${data.summary.duration} (${data.summary.passingCount} passing)`);
+          return;
+        }
+      }
+      throw new Error('Diagnostics runner failed');
+    } catch (e: any) {
+      toast.error(e.message || 'Error executing diagnostic runner');
+    } finally {
       setIsRunningAll(false);
-      toast.success('All 101 automated test cases executed successfully (100% passing)');
-    }, 1800);
+    }
   };
 
   const filteredSuites = testSuites.filter(suite => {

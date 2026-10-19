@@ -16,15 +16,11 @@ import {
   Edit3,
   Trash2,
   Search,
-  ShieldCheck,
-  Tag,
   AlertCircle,
-  Archive,
   Info,
   Store,
   RotateCcw
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../config';

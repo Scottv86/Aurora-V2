@@ -1,5 +1,10 @@
 import { Router, Response } from 'express';
 import { TenantRequest } from '../middleware/tenantMiddleware';
+import {
+  ensureTenantBuilderEntitiesMigrated,
+  resolveModuleName,
+  syncStandaloneToModuleConfig,
+} from '../services/builderSyncService';
 
 const router = Router();
 
@@ -9,6 +14,8 @@ router.get('/', async (req: TenantRequest, res: Response) => {
     const db = req.db!;
     const tenantId = req.tenantId!;
     const { moduleId } = req.query;
+
+    const modulesMap = await ensureTenantBuilderEntitiesMigrated(db, tenantId);
 
     const where: any = { tenantId };
     if (moduleId) {
@@ -20,7 +27,12 @@ router.get('/', async (req: TenantRequest, res: Response) => {
       orderBy: { updatedAt: 'desc' }
     });
 
-    res.json(forms);
+    const enriched = forms.map((f: any) => ({
+      ...f,
+      moduleName: resolveModuleName(f.moduleId, modulesMap),
+    }));
+
+    res.json(enriched);
   } catch (err: any) {
     console.error('[FormsAPI] GET / Error:', err);
     res.status(500).json({ error: err.message || 'Failed to fetch forms' });
@@ -34,6 +46,8 @@ router.get('/:id', async (req: TenantRequest, res: Response) => {
     const tenantId = req.tenantId!;
     const { id } = req.params;
 
+    const modulesMap = await ensureTenantBuilderEntitiesMigrated(db, tenantId);
+
     const form = await db.form.findFirst({
       where: { id, tenantId }
     });
@@ -42,7 +56,10 @@ router.get('/:id', async (req: TenantRequest, res: Response) => {
       return res.status(404).json({ error: 'Form not found' });
     }
 
-    res.json(form);
+    res.json({
+      ...form,
+      moduleName: resolveModuleName(form.moduleId, modulesMap),
+    });
   } catch (err: any) {
     console.error('[FormsAPI] GET /:id Error:', err);
     res.status(500).json({ error: err.message || 'Failed to fetch form' });
@@ -60,18 +77,25 @@ router.post('/', async (req: TenantRequest, res: Response) => {
       return res.status(400).json({ error: 'Form name is required' });
     }
 
+    const resolvedModuleId = moduleId || null;
+    const resolvedIsGlobal = isGlobal !== undefined ? Boolean(isGlobal) : !resolvedModuleId;
+
     const form = await db.form.create({
       data: {
         tenantId,
         name,
         description: description || '',
-        moduleId: moduleId || null,
+        moduleId: resolvedModuleId,
         schema: schema || {},
-        isGlobal: isGlobal !== undefined ? Boolean(isGlobal) : true,
+        isGlobal: resolvedIsGlobal,
         status: status || 'PUBLISHED',
         version: 1
       }
     });
+
+    if (resolvedModuleId) {
+      await syncStandaloneToModuleConfig(db, tenantId, resolvedModuleId);
+    }
 
     res.status(201).json(form);
   } catch (err: any) {
@@ -86,7 +110,7 @@ router.put('/:id', async (req: TenantRequest, res: Response) => {
     const db = req.db!;
     const tenantId = req.tenantId!;
     const { id } = req.params;
-    const { name, description, schema, isGlobal, status } = req.body;
+    const { name, description, moduleId, schema, isGlobal, status } = req.body;
 
     const existing = await db.form.findFirst({
       where: { id, tenantId }
@@ -96,17 +120,28 @@ router.put('/:id', async (req: TenantRequest, res: Response) => {
       return res.status(404).json({ error: 'Form not found' });
     }
 
+    const nextModuleId = moduleId !== undefined ? (moduleId || null) : existing.moduleId;
+    const nextIsGlobal = isGlobal !== undefined ? Boolean(isGlobal) : !nextModuleId;
+
     const updated = await db.form.update({
       where: { id },
       data: {
         name: name || existing.name,
         description: description !== undefined ? description : existing.description,
+        moduleId: nextModuleId,
         schema: schema !== undefined ? schema : existing.schema,
-        isGlobal: isGlobal !== undefined ? Boolean(isGlobal) : existing.isGlobal,
+        isGlobal: nextIsGlobal,
         status: status || existing.status,
         version: existing.version + 1
       }
     });
+
+    if (existing.moduleId && existing.moduleId !== nextModuleId) {
+      await syncStandaloneToModuleConfig(db, tenantId, existing.moduleId);
+    }
+    if (nextModuleId) {
+      await syncStandaloneToModuleConfig(db, tenantId, nextModuleId);
+    }
 
     res.json(updated);
   } catch (err: any) {
@@ -134,6 +169,10 @@ router.delete('/:id', async (req: TenantRequest, res: Response) => {
       where: { id }
     });
 
+    if (existing.moduleId) {
+      await syncStandaloneToModuleConfig(db, tenantId, existing.moduleId);
+    }
+
     res.json({ success: true, message: 'Form deleted' });
   } catch (err: any) {
     console.error('[FormsAPI] DELETE /:id Error:', err);
@@ -142,3 +181,4 @@ router.delete('/:id', async (req: TenantRequest, res: Response) => {
 });
 
 export default router;
+

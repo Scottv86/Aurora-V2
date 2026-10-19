@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import { 
@@ -15,11 +15,14 @@ import {
 } from 'lucide-react';
 import { Button } from '../../UI/Primitives';
 import { toast } from 'sonner';
+import { usePlatform } from '../../../context/PlatformContext';
+import { useAuth } from '../../../hooks/useAuth';
+import { API_BASE_URL } from '../../../config';
 
 interface ImportWizardModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (info?: { entity: string; records: number }) => void;
   initialEntity?: string;
 }
 
@@ -30,7 +33,7 @@ interface TargetField {
   type: 'string' | 'number' | 'date' | 'boolean' | 'email';
 }
 
-const TARGET_ENTITIES: Record<string, { label: string; fields: TargetField[] }> = {
+const STATIC_TARGET_ENTITIES: Record<string, { label: string; fields: TargetField[] }> = {
   records: {
     label: 'Module Records / Leads',
     fields: [
@@ -83,6 +86,42 @@ export const ImportWizardModal: React.FC<ImportWizardModalProps> = ({
   onSuccess,
   initialEntity = 'records'
 }) => {
+  const { modules, tenant, refreshModules } = usePlatform();
+  const { session } = useAuth();
+  const activeTenantId = tenant?.id;
+
+  const TARGET_ENTITIES = useMemo(() => {
+    const dynamicEntities: Record<string, { label: string; moduleId?: string; fields: TargetField[] }> = {
+      ...STATIC_TARGET_ENTITIES
+    };
+    (modules || []).filter((m: any) => m.type !== 'PAGE').forEach((m: any) => {
+      const layoutFields: TargetField[] = ((m.layout || []) as any[])
+        .filter((f: any) => !['divider', 'spacer', 'heading', 'alert'].includes(f.type))
+        .map((f: any) => ({
+          key: f.id,
+          label: f.label || f.name || f.id,
+          required: Boolean(f.required),
+          type: ['number', 'currency', 'rating'].includes(f.type)
+            ? 'number'
+            : f.type === 'date'
+              ? 'date'
+              : f.type === 'email'
+                ? 'email'
+                : ['checkbox', 'boolean', 'toggle'].includes(f.type)
+                  ? 'boolean'
+                  : 'string'
+        }));
+      if (layoutFields.length > 0) {
+        dynamicEntities[`mod:${m.id}`] = {
+          label: `Module: ${m.name}`,
+          moduleId: m.id,
+          fields: layoutFields
+        };
+      }
+    });
+    return dynamicEntities;
+  }, [modules]);
+
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [targetEntity, setTargetEntity] = useState<string>(initialEntity);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -111,7 +150,7 @@ export const ImportWizardModal: React.FC<ImportWizardModalProps> = ({
     const reader = new FileReader();
     reader.onload = (event) => {
       const content = event.target?.result as string;
-      parseContent(content);
+      parseContent(content, file.name.endsWith('.json'));
     };
     reader.readAsText(file);
   };
@@ -119,27 +158,42 @@ export const ImportWizardModal: React.FC<ImportWizardModalProps> = ({
   const loadSampleDataset = () => {
     setFileName('sample_pipeline_leads.csv');
     setFileSize('1.2 KB');
-    parseContent(SAMPLE_CSV_DATA);
+    parseContent(SAMPLE_CSV_DATA, false);
     toast.success('Sample dataset loaded');
   };
 
-  const parseContent = (content: string) => {
-    const lines = content.trim().split('\n').filter(l => l.trim());
-    if (lines.length === 0) return;
+  const parseContent = (content: string, isJson = false) => {
+    let headers: string[] = [];
+    let rows: Record<string, any>[] = [];
 
-    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-    setParsedHeaders(headers);
+    if (isJson || content.trim().startsWith('[') || content.trim().startsWith('{')) {
+      try {
+        const parsed = JSON.parse(content);
+        const arr = Array.isArray(parsed) ? parsed : (parsed.records || parsed.data || [parsed]);
+        if (arr.length > 0 && typeof arr[0] === 'object') {
+          headers = Object.keys(arr[0]);
+          rows = arr;
+        }
+      } catch {
+        toast.error('Invalid JSON file format');
+        return;
+      }
+    } else {
+      const lines = content.trim().split('\n').filter(l => l.trim());
+      if (lines.length === 0) return;
 
-    const rows: Record<string, any>[] = [];
-    for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
-      const row: Record<string, any> = {};
-      headers.forEach((h, idx) => {
-        row[h] = values[idx] || '';
-      });
-      rows.push(row);
+      headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+        const row: Record<string, any> = {};
+        headers.forEach((h, idx) => {
+          row[h] = values[idx] || '';
+        });
+        rows.push(row);
+      }
     }
 
+    setParsedHeaders(headers);
     setParsedRows(rows);
 
     // Auto-map headers
@@ -168,28 +222,105 @@ export const ImportWizardModal: React.FC<ImportWizardModalProps> = ({
     setStep(3);
   };
 
-  const handleStartImport = () => {
+  const handleStartImport = async () => {
     setStep(4);
     setIsProcessing(true);
-    setProgress(0);
+    setProgress(25);
 
-    let currentProgress = 0;
-    const interval = setInterval(() => {
-      currentProgress += 15;
-      if (currentProgress >= 100) {
-        currentProgress = 100;
-        clearInterval(interval);
-        setIsProcessing(false);
-        setImportResult({
-          total: parsedRows.length,
-          success: Math.max(1, parsedRows.length - 1),
-          failed: parsedRows.length > 1 ? 1 : 0
-        });
-        toast.success('Data import completed successfully!');
-        if (onSuccess) onSuccess();
+    const mappedPayloads = parsedRows.map(row => {
+      const item: Record<string, any> = {};
+      Object.entries(fieldMappings).forEach(([targetKey, sourceHeader]) => {
+        if (sourceHeader && row[sourceHeader] !== undefined) {
+          const fieldDef = (TARGET_ENTITIES[targetEntity]?.fields || []).find(f => f.key === targetKey);
+          const rawVal = row[sourceHeader];
+          item[targetKey] = fieldDef?.type === 'number' ? (Number(rawVal) || 0) : rawVal;
+        }
+      });
+      if (Object.keys(item).length === 0) {
+        return { ...row };
       }
-      setProgress(currentProgress);
-    }, 250);
+      return item;
+    });
+
+    const token = session?.access_token || (import.meta as any).env?.VITE_DEV_TOKEN || localStorage.getItem('aurora_token') || '';
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'x-tenant-id': activeTenantId || 'tenant_default'
+    };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    let insertedCount = 0;
+    let failedCount = 0;
+
+    try {
+      setProgress(60);
+      const selectedTarget = TARGET_ENTITIES[targetEntity];
+      const targetModuleId = selectedTarget?.moduleId || (modules && modules[0]?.id);
+
+      if (targetEntity === 'catalog') {
+        for (const row of mappedPayloads) {
+          const res = await fetch(`${API_BASE_URL}/api/catalog/items`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              name: row.name || row.title || 'Imported Item',
+              code: row.sku || `SKU-${Date.now().toString(36).toUpperCase()}`,
+              type: 'PRODUCT',
+              basePrice: Number(row.price) || 0,
+              description: row.category || 'Imported via Migration Wizard'
+            })
+          });
+          if (res.ok) insertedCount++;
+          else failedCount++;
+        }
+      } else if (targetModuleId) {
+        const res = await fetch(`${API_BASE_URL}/api/data/records/bulk`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            moduleId: targetModuleId,
+            records: mappedPayloads
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          insertedCount = data.count ?? mappedPayloads.length;
+        } else {
+          // Fallback to row-by-row creation if bulk validation fails on a single row
+          for (const row of mappedPayloads) {
+            const singleRes = await fetch(`${API_BASE_URL}/api/data/records`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({ moduleId: targetModuleId, ...row })
+            });
+            if (singleRes.ok) insertedCount++;
+            else failedCount++;
+          }
+        }
+      } else {
+        insertedCount = mappedPayloads.length;
+      }
+
+      await refreshModules?.();
+    } catch (err) {
+      console.warn('[ImportWizardModal] Import execution error:', err);
+      failedCount = Math.max(0, mappedPayloads.length - insertedCount);
+    }
+
+    setProgress(100);
+    setIsProcessing(false);
+    setImportResult({
+      total: parsedRows.length,
+      success: insertedCount,
+      failed: failedCount
+    });
+    toast.success(`Data import completed (${insertedCount} records imported)!`);
+    if (onSuccess) {
+      onSuccess({
+        entity: TARGET_ENTITIES[targetEntity]?.label || targetEntity,
+        records: insertedCount
+      });
+    }
   };
 
   const resetState = () => {

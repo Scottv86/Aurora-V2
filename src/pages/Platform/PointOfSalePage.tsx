@@ -2817,7 +2817,7 @@ export const PointOfSalePage = () => {
           tenantId={tenant?.id || ''}
           onRefundSuccess={(refundResult) => {
             fetchOrders(historyScope);
-            fetchSessionData();
+            fetchSession();
             if (refundResult) {
               setActiveReturnSlip({
                 ...refundResult,

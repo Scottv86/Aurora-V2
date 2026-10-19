@@ -6,25 +6,16 @@ import {
   FileText, 
   RotateCcw, 
   CheckCircle2, 
-  GitCommit, 
-  GitBranch, 
   FileCode, 
   Copy, 
   Plus, 
   Trash2, 
-  ChevronRight, 
-  ChevronDown, 
   AlertTriangle, 
-  Sparkles, 
   Layers, 
   Tag, 
   Clock, 
   User, 
-  Terminal,
-  ShieldAlert,
-  ArrowRight,
-  Check,
-  Eye
+  Terminal
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';

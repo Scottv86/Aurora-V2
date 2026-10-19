@@ -331,8 +331,9 @@ export async function executeAICompletion(
     contents: any[];
     systemInstruction?: string;
     tools?: any[];
+    config?: Record<string, any>;
   }
-): Promise<{ candidates: any[] }> {
+): Promise<{ candidates: any[]; text?: string; usageMetadata?: any }> {
   // If provider is Google or key is a Google AI Studio key (AIzaSy...)
   if (client.provider === 'google' || !client.provider || (client.apiKey && client.apiKey.startsWith('AIzaSy'))) {
     const ai = new GoogleGenAI({ apiKey: client.apiKey });
@@ -345,8 +346,9 @@ export async function executeAICompletion(
           model: apiModel,
           contents: params.contents,
           config: {
-            systemInstruction: params.systemInstruction,
-            tools: params.tools
+            ...(params.config || {}),
+            systemInstruction: params.systemInstruction ?? params.config?.systemInstruction,
+            tools: params.tools ?? params.config?.tools
           }
         });
         return response as any;

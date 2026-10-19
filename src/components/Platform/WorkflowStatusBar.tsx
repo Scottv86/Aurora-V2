@@ -443,18 +443,21 @@ export const WorkflowStatusBar: React.FC<WorkflowStatusBarProps> = ({
         />
       )}
 
-      {/* Schedule Activity Modal */}
+      {/* Schedule Activity Drawer */}
       {showScheduleModal && onScheduleActivity && (
         <ScheduleActivityModal
           isOpen={showScheduleModal}
           onClose={() => setShowScheduleModal(false)}
-          recordTitle={record?.name || record?.title || record?.key || record?.id}
+          recordKey={record?._record_key || record?.key}
+          recordTitle={record?.premises_name || record?.name || record?.title || record?._record_key || record?.id}
+          activities={record?._activities || record?.data?._activities || []}
           currentUserName={currentUserName}
           currentUserId={currentUserId}
           onSchedule={async (act) => {
             await onScheduleActivity(act);
             setShowScheduleModal(false);
           }}
+          onCompleteActivity={onCompleteActivity}
         />
       )}
     </>

@@ -343,16 +343,7 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
           badgeLabel: 'PORTAL',
           categoryLabel: 'Sites & Portal Builder'
         };
-      case 'TEMPLATE':
-        return {
-          bg: 'bg-purple-500/10 dark:bg-purple-500/15',
-          border: 'border-purple-500/30 hover:border-purple-500/60',
-          text: 'text-purple-600 dark:text-purple-400',
-          badge: 'bg-purple-500/20 text-purple-500',
-          icon: FileText,
-          badgeLabel: 'TEMPLATE',
-          categoryLabel: 'Document Templates Builder'
-        };
+
       case 'GLOBAL_LIST':
         return {
           bg: 'bg-amber-500/10 dark:bg-amber-500/15',

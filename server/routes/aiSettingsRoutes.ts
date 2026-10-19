@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { TenantRequest, requireTenantAdmin } from '../middleware/tenantMiddleware';
 import { globalPrisma } from '../lib/prisma';
-import { encryptSecret, decryptSecret, generateKeyHint } from '../lib/crypto';
-import { PROVIDER_PRICING, calculateEstimatedCost, resolveTenantAIClient, executeAICompletion, logAIUsageMetric } from '../services/aiProviderService';
+import { encryptSecret, decryptSecret } from '../lib/crypto';
+import { PROVIDER_PRICING, resolveTenantAIClient, executeAICompletion, logAIUsageMetric } from '../services/aiProviderService';
 import { resolveAIFeatureAccess, getAllUserEffectiveAIPolicies } from '../lib/aiPermissions';
 import { GoogleGenAI } from '@google/genai';
 

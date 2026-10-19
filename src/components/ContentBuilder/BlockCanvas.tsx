@@ -18,7 +18,6 @@ import { ContentBlock, ContentBlockType, ContentType } from '../../types/platfor
 import { BlockItem } from './BlockItem';
 import { BlockInserter } from './BlockInserter';
 import { Plus, Sparkles } from 'lucide-react';
-import { cn } from '../../lib/utils';
 
 interface BlockCanvasProps {
   blocks: ContentBlock[];
@@ -40,7 +39,7 @@ interface BlockCanvasProps {
 export const BlockCanvas: React.FC<BlockCanvasProps> = ({
   blocks,
   selectedBlockId,
-  contentType,
+  contentType: _contentType,
   isDarkCanvas,
   globalFont,
   onSelectBlock,

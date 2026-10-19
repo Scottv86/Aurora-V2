@@ -160,8 +160,7 @@ async function executeKpiEvaluation(tenantId: string, kpi: any): Promise<any> {
       const records = await (globalPrisma as any).record?.findMany({
         where: {
           tenantId,
-          moduleId: targetModule.id,
-          isDeleted: false
+          moduleId: targetModule.id
         }
       }) || [];
 

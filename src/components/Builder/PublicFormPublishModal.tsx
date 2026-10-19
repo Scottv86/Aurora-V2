@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { 
   X, 
   Globe, 
@@ -9,12 +9,8 @@ import {
   Check, 
   ExternalLink, 
   ShieldCheck, 
-  Lock, 
-  Sparkles, 
   Palette, 
-  Sliders, 
   Share2,
-  Eye,
   CheckCircle2
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -33,7 +29,7 @@ export const PublicFormPublishModal: React.FC<PublicFormPublishModalProps> = ({
   isOpen,
   onClose,
   moduleId,
-  moduleName,
+  moduleName: _moduleName,
   formId,
   formName = 'Standard Intake Form'
 }) => {

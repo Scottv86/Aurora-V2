@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import crypto from 'crypto';
 import { globalPrisma } from '../lib/prisma';
 import { spawnTenant } from '../services/provisioner';
 
@@ -8,7 +9,7 @@ const router = Router();
  * GET /api/admin/tenants
  * Lists all businesses from the Global Registry.
  */
-router.get('/tenants', async (req, res) => {
+router.get('/tenants', async (_req, res) => {
   try {
     const tenants = await globalPrisma.tenant.findMany({
       orderBy: { createdAt: 'desc' },
@@ -131,7 +132,7 @@ router.post('/impersonate', async (req, res) => {
  * GET /api/admin/users
  * Global Directory of all users across tenants.
  */
-router.get('/users', async (req, res) => {
+router.get('/users', async (_req, res) => {
   try {
     const users = await globalPrisma.user.findMany({
       orderBy: { createdAt: 'desc' },
@@ -170,6 +171,7 @@ router.post('/users', async (req, res) => {
 
     const newUser = await globalPrisma.user.create({
       data: {
+        id: crypto.randomUUID(),
         email: email.toLowerCase().trim(),
         isSuperAdmin: !!isSuperAdmin,
       }
@@ -214,7 +216,7 @@ router.patch('/users/:id', async (req, res) => {
   const { id } = req.params;
   const { isSuperAdmin, email, firstName, lastName, tenantId, roleId, licenceType } = req.body;
   try {
-    const updated = await globalPrisma.user.update({
+    await globalPrisma.user.update({
       where: { id },
       data: {
         ...(typeof isSuperAdmin === 'boolean' && { isSuperAdmin }),
@@ -330,7 +332,7 @@ router.get('/tenancy/:id', async (req, res) => {
  * GET /api/admin/subscriptions
  * License seat counts and subscription plans breakdown.
  */
-router.get('/subscriptions', async (req, res) => {
+router.get('/subscriptions', async (_req, res) => {
   try {
     const tenants = await globalPrisma.tenant.findMany({
       include: {
@@ -374,7 +376,7 @@ router.get('/subscriptions', async (req, res) => {
  * GET /api/admin/revenue
  * Financial analytics & usage billables.
  */
-router.get('/revenue', async (req, res) => {
+router.get('/revenue', async (_req, res) => {
   try {
     const tenants = await globalPrisma.tenant.findMany();
     const TIER_PRICES: Record<string, number> = {
@@ -424,7 +426,7 @@ router.get('/revenue', async (req, res) => {
  * GET /api/admin/logs
  * Audit and system logs query.
  */
-router.get('/logs', async (req, res) => {
+router.get('/logs', async (_req, res) => {
   try {
     const auditLogs = await globalPrisma.auditLog.findMany({
       take: 50,
@@ -454,7 +456,7 @@ router.get('/logs', async (req, res) => {
  * GET /api/admin/storage
  * Platform storage utilization by tenant.
  */
-router.get('/storage', async (req, res) => {
+router.get('/storage', async (_req, res) => {
   try {
     const tenants = await globalPrisma.tenant.findMany({
       include: {
@@ -486,7 +488,7 @@ router.get('/storage', async (req, res) => {
 /**
  * GET /api/admin/nodes
  */
-router.get('/nodes', async (req, res) => {
+router.get('/nodes', async (_req, res) => {
   try {
     const health = {
       registrySync: '100%',
@@ -510,7 +512,7 @@ router.get('/nodes', async (req, res) => {
 /**
  * GET /api/admin/versions
  */
-router.get('/versions', async (req, res) => {
+router.get('/versions', async (_req, res) => {
   try {
     const modules = await globalPrisma.module.findMany();
     const distribution = modules.reduce((acc: any, mod) => {
@@ -534,7 +536,7 @@ router.get('/versions', async (req, res) => {
 /**
  * GET /api/admin/stats
  */
-router.get('/stats', async (req, res) => {
+router.get('/stats', async (_req, res) => {
   try {
     const totalTenants = await globalPrisma.tenant.count();
     const activeTenants = await globalPrisma.tenant.count({ where: { status: 'active' } });
@@ -584,7 +586,7 @@ router.get('/stats', async (req, res) => {
 /**
  * GET /api/admin/compute
  */
-router.get('/compute', async (req, res) => {
+router.get('/compute', async (_req, res) => {
   try {
     res.json({
       nodes: [

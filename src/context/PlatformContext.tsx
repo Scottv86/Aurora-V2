@@ -54,7 +54,7 @@ interface PlatformContextType {
   billingUsage: BillingUsage | null;
   billingLoading: boolean;
   refreshBilling: () => Promise<void>;
-  updateTenant: (updates: Partial<Tenant>) => Promise<void>;
+  updateTenant: (updates: Partial<Tenant>, options?: { silent?: boolean }) => Promise<void>;
   isAIAssistantOpen: boolean;
   setIsAIAssistantOpen: (open: boolean) => void;
   isChatOpen: boolean;
@@ -689,7 +689,7 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const updateTenant = async (updates: Partial<Tenant>) => {
+  const updateTenant = async (updates: Partial<Tenant>, options?: { silent?: boolean }) => {
     if (!tenant?.id) return;
 
     try {
@@ -709,7 +709,9 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
         const data = await res.json();
         console.log('[PlatformContext] Update response:', data);
         setTenant(prev => prev ? { ...prev, ...data.tenant } : data.tenant);
-        toast.success('Organization settings updated.');
+        if (!options?.silent) {
+          toast.success('Organization settings updated.');
+        }
       } else {
         const error = await res.json();
         console.log('[PlatformContext] Update error:', error);
@@ -717,7 +719,9 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       }
     } catch (err: any) {
       console.error('[PlatformContext] Failed to update tenant:', err);
-      toast.error(err.message);
+      if (!options?.silent) {
+        toast.error(err.message);
+      }
     }
   };
 

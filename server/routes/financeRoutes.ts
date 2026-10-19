@@ -342,6 +342,7 @@ router.post('/journals', async (req: TenantRequest, res) => {
 
     const journal = await AccountingService.postJournalEntry(tenantId, {
       ...validated,
+      date: validated.date || new Date(),
       createdByUserId: req.user?.uid
     }, db);
 

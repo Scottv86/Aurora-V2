@@ -14,6 +14,8 @@ import { cn } from '../../../lib/utils';
 import { toast } from 'sonner';
 import { API_BASE_URL } from '../../../config';
 import { usePlatform } from '../../../hooks/usePlatform';
+import { useAuth } from '../../../hooks/useAuth';
+import { PLATFORM_MODULES } from '../../../config/platformModules';
 
 export interface FormBuilderProps {
   initialForm?: Partial<FormEntity>;
@@ -28,9 +30,14 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
   onSave,
   onDirtyChange
 }) => {
-  const { tenant } = usePlatform();
+  const { tenant, modules } = usePlatform();
+  const { session } = useAuth();
+  const token = session?.access_token;
   const [name, setName] = useState(initialForm?.name || 'Untitled Form');
   const [description, setDescription] = useState(initialForm?.description || '');
+  const [associatedModuleId, setAssociatedModuleId] = useState<string>(
+    initialForm?.moduleId || builderContext.parentModuleId || ''
+  );
   const [fields, setFields] = useState<ModuleField[]>(
     initialForm?.schema?.layout !== undefined
       ? initialForm.schema.layout
@@ -54,6 +61,7 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
     if (initialForm) {
       setName(initialForm.name || 'Untitled Form');
       setDescription(initialForm.description || '');
+      setAssociatedModuleId(initialForm.moduleId || builderContext.parentModuleId || '');
       if (initialForm.schema?.layout !== undefined) {
         setFields(initialForm.schema.layout);
         setSelectedFieldId(initialForm.schema.layout[0]?.id || null);
@@ -63,13 +71,13 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
       isInitializedRef.current = true;
       onDirtyChange?.(false);
     }, 100);
-  }, [initialForm]);
+  }, [initialForm, builderContext.parentModuleId]);
 
   React.useEffect(() => {
     if (isInitializedRef.current) {
       onDirtyChange?.(true);
     }
-  }, [name, description, fields, tabs, onDirtyChange]);
+  }, [name, description, associatedModuleId, fields, tabs, onDirtyChange]);
 
   // Sub-Modals & Drawers from ModuleBuilder Engine
   const [showFieldSelector, setShowFieldSelector] = useState(false);
@@ -107,12 +115,15 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
   const handleSaveForm = async () => {
     setSaving(true);
     try {
+      const effectiveModuleId = associatedModuleId || builderContext.parentModuleId || undefined;
+      const isExistingPersistedId = Boolean(initialForm?.id && !initialForm.id.startsWith('form_'));
       const formPayload: FormEntity = {
         id: initialForm?.id || `form_${Date.now()}`,
         tenantId: tenant?.id || 't1',
         name,
         description,
-        isGlobal: builderContext.mode === 'global',
+        isGlobal: !effectiveModuleId,
+        moduleId: effectiveModuleId,
         version: (initialForm?.version || 1) + 1,
         status: 'PUBLISHED',
         schema: {
@@ -121,27 +132,21 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
         }
       };
 
-      if (builderContext.mode === 'global') {
-        const res = await fetch(`${API_BASE_URL}/api/forms${initialForm?.id ? `/${initialForm.id}` : ''}`, {
-          method: initialForm?.id ? 'PUT' : 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-tenant-id': tenant?.id || ''
-          },
-          body: JSON.stringify(formPayload)
-        });
-        if (res.ok) {
-          const saved = await res.json();
-          toast.success(`Form "${name}" saved!`);
-          if (builderContext.onSaveSuccess) builderContext.onSaveSuccess(saved.id, saved);
-          if (onSave) onSave(saved);
-        } else {
-          toast.success(`Form "${name}" saved!`);
-          if (builderContext.onSaveSuccess) builderContext.onSaveSuccess(formPayload.id, formPayload);
-          if (onSave) onSave(formPayload);
-        }
+      const res = await fetch(`${API_BASE_URL}/api/forms${isExistingPersistedId ? `/${initialForm!.id}` : ''}`, {
+        method: isExistingPersistedId ? 'PUT' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': tenant?.id || '',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(formPayload)
+      });
+
+      if (res.ok) {
+        const saved = await res.json();
+        if (builderContext.onSaveSuccess) builderContext.onSaveSuccess(saved.id, saved);
+        if (onSave) onSave(saved);
       } else {
-        toast.success(`Form "${name}" saved in-context!`);
         if (builderContext.onSaveSuccess) builderContext.onSaveSuccess(formPayload.id, formPayload);
         if (onSave) onSave(formPayload);
       }
@@ -181,6 +186,28 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Module Association Selector */}
+          {builderContext.mode === 'global' && (
+            <select
+              value={associatedModuleId}
+              onChange={(e) => setAssociatedModuleId(e.target.value)}
+              className="px-3 py-1.5 text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-700 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              title="Associate Form with a Module or keep Global"
+            >
+              <option value="">Global (Standalone Form)</option>
+              <optgroup label="Custom Modules">
+                {(modules || []).filter(m => (m as any).type !== 'PAGE').map(m => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Platform Modules">
+                {PLATFORM_MODULES.map(pm => (
+                  <option key={pm.id} value={pm.id}>{pm.name}</option>
+                ))}
+              </optgroup>
+            </select>
+          )}
+
           {/* Mode Switcher */}
           <div className="flex items-center bg-zinc-100 dark:bg-zinc-800 p-1 rounded-xl">
             <button
@@ -413,7 +440,12 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
           onClose={() => setShowCalculatorModal(false)}
           availableFields={fields as any}
           targetLabel={selectedField?.label || 'Form Field'}
-          onSave={(_logic, _triggers) => {
+          initialLogic={selectedField?.calculationLogic}
+          initialTriggers={selectedField?.calculationTriggers}
+          onSave={(logic, triggers) => {
+            if (selectedField) {
+              handleUpdateField(selectedField.id, { calculationLogic: logic, calculationTriggers: triggers });
+            }
             toast.success('Calculation rule saved!');
             setShowCalculatorModal(false);
           }}
@@ -427,7 +459,11 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
           availableFields={fields as any}
           tabs={tabs as any}
           targetLabel={selectedField?.label || 'Form Field'}
-          onSave={(_rule) => {
+          initialRule={selectedField?.visibilityRule}
+          onSave={(rule) => {
+            if (selectedField) {
+              handleUpdateField(selectedField.id, { visibilityRule: rule });
+            }
             toast.success('Field condition rule saved!');
             setShowConditionModal(false);
           }}

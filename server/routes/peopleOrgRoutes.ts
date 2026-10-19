@@ -36,7 +36,7 @@ const PeopleOrgCreateSchema = z.object({
 router.get('/', async (req: TenantRequest, res) => {
   try {
     const db = req.db || globalPrisma;
-    const { search, status, page = '1', limit = '50' } = req.query;
+    const { search: _search, status, page = '1', limit = '50' } = req.query;
     const p = parseInt(page as string);
     const l = parseInt(limit as string);
     const skip = (p - 1) * l;
@@ -71,6 +71,26 @@ router.get('/', async (req: TenantRequest, res) => {
       limit: l,
       totalPages: Math.ceil(total / l)
     });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET Pending Approvals
+router.get('/approvals', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db || globalPrisma;
+    const pending = await db.party.findMany({
+      where: {
+        tenantId: req.tenantId,
+        status: 'PENDING_REVIEW'
+      },
+      include: {
+        person: true,
+        organization: true
+      }
+    });
+    res.json(pending);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -189,28 +209,8 @@ router.post('/', async (req: TenantRequest, res) => {
     res.status(201).json(newParty);
   } catch (err: any) {
     if (err instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Validation failed', details: err.errors });
+      return res.status(400).json({ error: 'Validation failed', details: err.issues });
     }
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// GET Pending Approvals
-router.get('/approvals', async (req: TenantRequest, res) => {
-  try {
-    const db = req.db || globalPrisma;
-    const pending = await db.party.findMany({
-      where: {
-        tenantId: req.tenantId,
-        status: 'PENDING_REVIEW'
-      },
-      include: {
-        person: true,
-        organization: true
-      }
-    });
-    res.json(pending);
-  } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
@@ -321,7 +321,7 @@ router.put('/:id', async (req: TenantRequest, res) => {
     res.json(updated);
   } catch (err: any) {
     if (err instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Validation failed', details: err.errors });
+      return res.status(400).json({ error: 'Validation failed', details: err.issues });
     }
     res.status(500).json({ error: err.message });
   }
@@ -380,16 +380,22 @@ router.post('/:id/relationships', async (req: TenantRequest, res) => {
       }
     });
 
-    await recordAudit(req, 'CREATE_RELATIONSHIP', 'PARTY', relationship.id, { 
-      sourcePartyId, 
-      targetPartyId: body.targetPartyId,
-      relationshipType: body.relationshipType
+    await recordAudit({
+      tenantId: req.tenantId!,
+      actorId: req.user?.uid || 'SYSTEM',
+      action: 'CREATE_RELATIONSHIP',
+      resourceId: relationship.id,
+      newValue: {
+        sourcePartyId,
+        targetPartyId: body.targetPartyId,
+        relationshipType: body.relationshipType
+      }
     });
 
     res.status(201).json(relationship);
   } catch (err: any) {
     if (err instanceof z.ZodError) {
-      return res.status(400).json({ error: 'Invalid data', details: err.errors });
+      return res.status(400).json({ error: 'Invalid data', details: err.issues });
     }
     res.status(500).json({ error: err.message });
   }

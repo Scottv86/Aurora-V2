@@ -1,7 +1,7 @@
 import React from 'react';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { PaymentGatewaysTab } from '../../../components/Platform/Payments/PaymentGatewaysTab';
-import { CreditCard, ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../../../components/UI/PageHeader';
 import { Button } from '../../../components/UI/Primitives';
