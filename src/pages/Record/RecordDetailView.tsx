@@ -3536,6 +3536,7 @@ export const RecordDetailView = ({
         recordKey={record?._record_key}
         recordTitle={record?.premises_name || record?.name || record?.title}
         moduleName={moduleData?.name}
+        moduleData={moduleData}
         activities={record?._activities || record?.data?._activities || []}
         currentUserName={platformUser?.name || session?.user?.email}
         currentUserId={session?.user?.id}

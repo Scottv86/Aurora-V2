@@ -1,4 +1,4 @@
-﻿import { AgentBlueprint, AgentToolBinding, AgentSandboxMessage, AgentTraceStep, AgentMemoryEntry } from '../types/agent';
+import { AgentBlueprint, AgentToolBinding, AgentSandboxMessage, AgentTraceStep, AgentMemoryEntry } from '../types/agent';
 import { ContextSource } from '../types/solutions';
 import { API_BASE_URL } from '../config';
 
@@ -17,6 +17,15 @@ export const DEFAULT_AGENT_TOOLS: AgentToolBinding[] = [
     name: 'Document & OCR Parser',
     type: 'FILE_PARSER',
     description: 'Extract structured tables, key-value pairs, and text summaries from uploaded PDFs and images.',
+    enabled: true,
+    requiresApproval: false,
+    icon: 'FileText'
+  },
+  {
+    id: 'tool_generate_document',
+    name: 'Document & Content Generator',
+    type: 'DOCUMENT_GENERATOR',
+    description: 'Render and generate PDF/HTML templates, letters, and automated client notifications.',
     enabled: true,
     requiresApproval: false,
     icon: 'FileText'

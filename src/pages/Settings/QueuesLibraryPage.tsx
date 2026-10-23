@@ -22,10 +22,12 @@ import { useAuth } from '../../hooks/useAuth';
 import { TrashService } from '../../services/trashService';
 import { slugify } from '../../lib/utils';
 import { builderCache } from '../../utils/builderCache';
+import { useLocation } from 'react-router-dom';
 
 export const QueuesLibraryPage: React.FC = () => {
   const { tenant, modules, menuConfig, updateMenuConfig } = usePlatform();
   const { session } = useAuth();
+  const location = useLocation();
   const cacheKey = `queues_${tenant?.id || 'default'}`;
   const [queues, setQueues] = useState<QueueEntity[]>(() => builderCache.get<QueueEntity[]>(cacheKey) || []);
   const [loading, setLoading] = useState(() => !builderCache.has(cacheKey));
@@ -39,6 +41,35 @@ export const QueuesLibraryPage: React.FC = () => {
   const [depQueue, setDepQueue] = useState<QueueEntity | null>(null);
   const [queueToDelete, setQueueToDelete] = useState<QueueEntity | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    const draftArtifact = (location.state as any)?.draftArtifact;
+    if (draftArtifact) {
+      const content = draftArtifact.content || {};
+      const newQueue: QueueEntity = {
+        id: `queue-${Date.now()}`,
+        tenantId: tenant?.id || 'default',
+        name: draftArtifact.name || 'New Queue',
+        slug: slugify(draftArtifact.name || 'new-queue'),
+        description: draftArtifact.description || content.description || 'Imported from Solution Blueprint',
+        moduleId: content.moduleId || modules[0]?.id || 'mod-tickets',
+        isGlobal: true,
+        isUnifiedQueue: Boolean(content.isUnifiedQueue || content.isUnified),
+        status: 'DRAFT',
+        queueConfig: {
+          conditions: content.conditions || content.criteria || [],
+          columns: content.columns || ['id', 'status', 'title', 'createdAt'],
+          slaMinutes: content.slaMinutes || (content.slaHours ? content.slaHours * 60 : 1440),
+          listLayout: content.listLayout || 'table'
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      setSelectedQueue(newQueue);
+      setIsBuilderOpen(true);
+      toast.success(`Loaded draft Queue from Solution: "${draftArtifact.name}"`);
+    }
+  }, [location.state, tenant?.id, modules]);
 
   const fetchQueues = async () => {
     if (!builderCache.has(cacheKey)) {

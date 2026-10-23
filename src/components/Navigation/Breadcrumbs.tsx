@@ -59,6 +59,8 @@ const PATH_MAP: Record<string, string> = {
   finance: 'Finance',
   intake: 'Work Distribution',
   'work-distribution': 'Work Distribution',
+  scheduling: 'Bookings & Scheduling',
+  bookings: 'Bookings & Scheduling',
   'people-organisations': 'People & Organisations',
   migration: 'Migration',
   connectors: 'Integrations',

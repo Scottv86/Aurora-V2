@@ -17,11 +17,12 @@ import {
   Tablet, 
   Smartphone, 
   Search, 
+  CalendarClock,
   Activity, 
   Send, 
   BookOpen, 
-  Radio,
-  FileCode,
+  Radio, 
+  FileCode, 
   Layers,
   X,
   ChevronRight,
@@ -85,6 +86,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { SearchRenderer } from '../../components/Search/SearchRenderer';
 import { fetchSavedSearches } from '../../services/searchService';
 import { SavedSearchEntity } from '../../types/searchBuilder';
+import { useBrandKits } from '../../hooks/useBrandKits';
 
 
 
@@ -105,6 +107,7 @@ export const SiteBuilderPage: React.FC = () => {
   const { theme } = useTheme();
   const isLight = theme === 'light';
   const { session } = useAuth();
+  const { brandKits, defaultBrandKit } = useBrandKits();
 
   const [site, setSite] = useState<Site | null>(null);
   const [loading, setLoading] = useState(true);
@@ -209,6 +212,28 @@ export const SiteBuilderPage: React.FC = () => {
     setFontFamily(preset.fontFamily);
     if (preset.navLinkStyle) setNavLinkStyle(preset.navLinkStyle);
     toast.success(`Preset Theme "${preset.name}" applied!`);
+  };
+
+  const handleApplyBrandKit = (b: any) => {
+    if (!b) return;
+    const color = b.colors?.primary || b.colors?.accent || '#6366f1';
+    setAccentColor(color);
+    if (b.assets?.logoLight) setLogoUrl(b.assets.logoLight);
+    if (b.styling?.borderRadius) {
+      const r = b.styling.borderRadius;
+      if (r === '0px' || r === 'none') setThemeRadius('none');
+      else if (r.includes('8px')) setThemeRadius('md');
+      else if (r.includes('16px')) setThemeRadius('xl');
+      else if (r.includes('24px')) setThemeRadius('2xl');
+      else if (r.includes('9999px') || r === 'full') setThemeRadius('full');
+      else setThemeRadius('xl');
+    }
+    if (b.typography?.headingFont) {
+      const match = ENTERPRISE_FONTS.find(f => f.name.toLowerCase().includes(b.typography.headingFont.toLowerCase()) || f.id === b.typography.headingFont);
+      if (match) setThemeFont(match.id);
+    }
+    setSite(prev => prev ? { ...prev, brandId: b.id } : null);
+    toast.success(`Synchronized with "${b.name}" Brand Profile!`);
   };
 
   const getNavLinkStyleClass = (isActive: boolean) => {
@@ -845,6 +870,7 @@ export const SiteBuilderPage: React.FC = () => {
       file_vault: 'Document & File Vault',
       kpi_stat_group: 'KPI Stat Counters',
       custom_form: 'Dynamic Form Builder',
+      booking_widget: 'Bookings & Slot Scheduler',
       form_wizard: 'Multi-Step Form Wizard',
       feedback_survey: 'NPS & Rating Survey',
       calculator_widget: 'Pricing & Cost Calculator',
@@ -1589,6 +1615,50 @@ export const SiteBuilderPage: React.FC = () => {
             {/* TAB 2: BRANDING & THEME STUDIO */}
             {activeTab === 'branding' && (
               <div className="space-y-5">
+                {/* Brand Profiles Sync Card */}
+                {brandKits.length > 0 && (
+                  <div className={`p-4 rounded-2xl border ${isLight ? 'bg-indigo-50/50 border-indigo-200' : 'bg-indigo-950/20 border-indigo-500/30'} space-y-3`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Sparkles size={14} className="text-indigo-400" />
+                        <span className={`text-xs font-bold ${isLight ? 'text-indigo-900' : 'text-indigo-200'}`}>Brand Kit Sync</span>
+                      </div>
+                      <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-400 font-bold">1-Click Cascade</span>
+                    </div>
+                    <p className={`text-[11px] leading-relaxed ${isLight ? 'text-indigo-700/80' : 'text-zinc-400'}`}>
+                      Inherit typography, enterprise color palettes, logos, and border styles from your centralized Brand Builder.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <select
+                        onChange={(e) => {
+                          const kit = brandKits.find(k => k.id === e.target.value);
+                          if (kit) handleApplyBrandKit(kit);
+                        }}
+                        defaultValue={site?.brandId || defaultBrandKit?.id || ''}
+                        className={`text-xs px-2.5 py-1.5 rounded-xl border flex-1 ${
+                          isLight ? 'bg-white border-zinc-300 text-zinc-800' : 'bg-zinc-900 border-zinc-800 text-zinc-200'
+                        }`}
+                      >
+                        <option value="" disabled>Select Brand Kit...</option>
+                        {brandKits.map(kit => (
+                          <option key={kit.id} value={kit.id}>
+                            {kit.name} {kit.isDefault ? '(Default)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                      {defaultBrandKit && (
+                        <button
+                          type="button"
+                          onClick={() => handleApplyBrandKit(defaultBrandKit)}
+                          className="px-3 py-1.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm cursor-pointer whitespace-nowrap"
+                        >
+                          Sync Default
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Segment Switcher */}
                 <div className={`flex p-1 rounded-xl border ${isLight ? 'bg-zinc-100 border-zinc-200' : 'bg-zinc-950 border-zinc-800'}`}>
                   <button
@@ -1845,6 +1915,7 @@ export const SiteBuilderPage: React.FC = () => {
                       { type: 'kpi_stat_group', title: 'KPI Stat Counters', desc: 'Dashboard stat counter cards with delta indicators.', icon: Activity, color: 'text-emerald-400 bg-emerald-500/10' },
                     ]},
                     { category: '📝 Forms, Surveys & Inputs', items: [
+                      { type: 'booking_widget', title: 'Booking & Slot Scheduler', desc: 'Embed 1:1 meeting scheduler, Airbnb stay calendar, or dispatch picker.', icon: CalendarClock, color: 'text-indigo-400 bg-indigo-500/10' },
                       { type: 'custom_form', title: 'Dynamic Form Builder', desc: 'Configurable multi-field intake form.', icon: FormInput, color: 'text-emerald-400 bg-emerald-500/10' },
                       { type: 'form_wizard', title: 'Multi-Step Form Wizard', desc: 'Step-by-step progress intake wizard with step navigation.', icon: Clock, color: 'text-indigo-400 bg-indigo-500/10' },
                       { type: 'feedback_survey', title: 'NPS & Rating Survey', desc: 'Star ratings, emoji satisfaction scale, and NPS score slider.', icon: Star, color: 'text-amber-400 bg-amber-500/10' },
@@ -3487,6 +3558,48 @@ export const SiteBuilderPage: React.FC = () => {
                               <span className="text-[10px] font-bold text-amber-400">Verified Quality</span>
                             </div>
                           </div>
+                        </div>
+                      )}
+
+                      {/* BOOKING & SCHEDULING WIDGET */}
+                      {w.type === 'booking_widget' && (
+                        <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-4 border border-indigo-500/20`}>
+                          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                            <div className="flex items-center gap-2">
+                              <CalendarClock size={18} className="text-indigo-400" />
+                              <h4 className="text-sm font-bold text-white">{w.title || 'Book Appointment or Stay'}</h4>
+                            </div>
+                            <span className="text-[10px] font-bold text-indigo-400 bg-indigo-950/60 border border-indigo-800/40 px-2 py-0.5 rounded-full">
+                              Unified Scheduling Engine
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="p-4 bg-zinc-950/60 border border-zinc-800 rounded-2xl space-y-2">
+                              <span className="text-xs font-bold text-zinc-300">Available Date</span>
+                              <div className="p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white flex items-center justify-between">
+                                <span>Tomorrow (Oct 24, 2026)</span>
+                                <Calendar size={14} className="text-indigo-400" />
+                              </div>
+                              <p className="text-[10px] text-zinc-500">Real-time capacity and blackout buffer synced.</p>
+                            </div>
+
+                            <div className="p-4 bg-zinc-950/60 border border-zinc-800 rounded-2xl space-y-2">
+                              <span className="text-xs font-bold text-zinc-300">Select Time Slot</span>
+                              <div className="grid grid-cols-3 gap-1.5">
+                                {['09:00 AM', '11:00 AM', '02:30 PM'].map((slot, idx) => (
+                                  <div key={idx} className={cn("py-1.5 text-center text-xs font-bold rounded-lg border", idx === 0 ? "bg-indigo-600 text-white border-indigo-600" : "bg-zinc-900 text-zinc-300 border-zinc-800")}>
+                                    {slot}
+                                  </div>
+                                ))}
+                              </div>
+                              <p className="text-[10px] text-emerald-400 font-semibold">Instant confirmation with 10m hold lock</p>
+                            </div>
+                          </div>
+
+                          <button className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition-all shadow-md">
+                            Confirm Booking & Proceed
+                          </button>
                         </div>
                       )}
 

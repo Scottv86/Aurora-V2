@@ -2,7 +2,8 @@ import React from 'react';
 import { 
   Check, Info, AlertTriangle, XCircle, 
   Smile, ArrowRight, Star, Trash2,
-  ChevronDown, Search, ArrowRightLeft
+  ChevronDown, Search, ArrowRightLeft,
+  CalendarClock, Calendar
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, evaluateFormattingRules } from '../lib/utils';
@@ -966,6 +967,59 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
 
   if (type === 'signature_pad') {
     return <SignaturePad value={localValue || ''} onChange={(val) => { updateLocalValue(val); setIsFocused(true); }} onBlur={handleBlur} />;
+  }
+
+  if (type === 'booking_slot' || type === 'booking') {
+    const slots = ['09:00 AM', '10:00 AM', '11:30 AM', '02:00 PM', '03:30 PM'];
+    return (
+      <div className="space-y-2 p-3 bg-zinc-50/70 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 rounded-2xl">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-800 dark:text-zinc-200">
+            <CalendarClock size={15} className="text-indigo-500" />
+            <span>{field.label || 'Select Appointment Slot'}</span>
+          </div>
+          {localValue ? (
+            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/40">
+              Hold Active (10m)
+            </span>
+          ) : (
+            <span className="text-[10px] text-zinc-400 font-medium">Live Slot Pool</span>
+          )}
+        </div>
+
+        {readonly ? (
+          <div className="p-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">
+            {localValue || 'No slot selected'}
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 pt-1">
+            {slots.map(s => {
+              const isSelected = localValue === s;
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => {
+                    if (disabled) return;
+                    updateLocalValue(s);
+                    triggerImmediateChange(s);
+                  }}
+                  className={cn(
+                    "py-1.5 px-2 rounded-xl text-[11px] font-bold border transition-all text-center",
+                    isSelected
+                      ? "bg-indigo-600 border-indigo-600 text-white shadow-xs"
+                      : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:border-indigo-400"
+                  )}
+                >
+                  {s}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
   }
 
   if (type === 'rating') {

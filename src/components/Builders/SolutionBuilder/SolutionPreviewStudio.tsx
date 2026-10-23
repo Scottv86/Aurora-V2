@@ -35,7 +35,9 @@ import {
   SlidersHorizontal,
   Filter,
   Code,
-  Type
+  Type,
+  ListOrdered,
+  Database
 } from 'lucide-react';
 import { SolutionArtifact, SavedNote } from '../../../types/solutions';
 import { DrivePickerModal } from '../../Drive/DrivePickerModal';
@@ -130,56 +132,63 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
 
   const handleOpenDedicatedBuilder = () => {
     if (!activeArtifact) return;
+    const navState = { state: { draftArtifact: activeArtifact } };
     switch (activeArtifact.type) {
       case 'FORM':
-        navigate('/workspace/settings/platform-modules/forms-library');
+        navigate('/workspace/settings/platform-modules/forms-library', navState);
         break;
       case 'WORKFLOW':
-        navigate('/workspace/settings/platform-modules/workflows-library');
+        navigate('/workspace/settings/platform-modules/workflows-library', navState);
         break;
       case 'NAVIGATION':
-        navigate('/workspace/settings/navigation');
+        navigate('/workspace/settings/navigation', navState);
         break;
       case 'MODULE':
-        navigate('/workspace/settings/platform-modules');
+        navigate('/workspace/settings/platform-modules', navState);
         break;
       case 'AUTOMATION':
-        navigate('/workspace/settings/platform-modules/automation-management');
+        navigate('/workspace/settings/platform-modules/automation-management', navState);
         break;
       case 'INTEGRATION':
-        navigate('/workspace/settings/platform-modules/integration-management');
+        navigate('/workspace/settings/platform-modules/integration-management', navState);
         break;
       case 'VALIDATION':
-        navigate('/workspace/settings/platform-modules/validations-library');
+        navigate('/workspace/settings/platform-modules/validations-library', navState);
         break;
       case 'REPORT':
-        navigate('/workspace/settings/platform-modules/report-management');
+        navigate('/workspace/settings/platform-modules/report-management', navState);
         break;
       case 'METRIC':
       case 'KPI' as any:
-        navigate('/workspace/settings/platform-modules/kpi-management');
+        navigate('/workspace/settings/platform-modules/kpi-management', navState);
         break;
       case 'SITE':
-        navigate('/workspace/settings/platform-modules/sites');
+        navigate('/workspace/settings/platform-modules/sites', navState);
         break;
       case 'PAGE':
-        navigate('/workspace/settings/pages');
+        navigate('/workspace/settings/pages', navState);
         break;
       case 'CONTENT':
       case 'TEMPLATE':
-        navigate('/workspace/settings/platform-modules/document-generation');
+        navigate('/workspace/settings/platform-modules/document-generation', navState);
         break;
       case 'PERMISSION':
-        navigate('/workspace/settings/workforce?tab=groups');
+        navigate('/workspace/settings/workforce?tab=groups', navState);
         break;
       case 'AGENT':
-        navigate('/workspace/settings/platform-modules/agents-library');
+        navigate('/workspace/settings/platform-modules/agents-library', navState);
         break;
       case 'BRAND':
-        navigate('/workspace/settings/brand-builder');
+        navigate('/workspace/settings/brand-builder', navState);
         break;
       case 'SEARCH':
-        navigate('/workspace/settings/platform-modules/searches-library');
+        navigate('/workspace/settings/platform-modules/searches-library', navState);
+        break;
+      case 'QUEUE':
+        navigate('/workspace/settings/platform-modules/queues-management', navState);
+        break;
+      case 'QUERY':
+        navigate('/workspace/settings/platform-modules/queries-library', navState);
         break;
       default:
         toast.info(`Opening ${activeArtifact.name} in dedicated builder...`);
@@ -190,6 +199,26 @@ export const SolutionPreviewStudio: React.FC<SolutionPreviewStudioProps> = ({
 
   const getArtifactTileTheme = (art: SolutionArtifact) => {
     switch (art.type) {
+      case 'QUEUE':
+        return {
+          bg: 'bg-amber-500/10 dark:bg-amber-500/15',
+          border: 'border-amber-500/30 hover:border-amber-500/60',
+          text: 'text-amber-600 dark:text-amber-400',
+          badge: 'bg-amber-500/20 text-amber-500',
+          icon: ListOrdered,
+          badgeLabel: 'QUEUE',
+          categoryLabel: 'Work Queues & SLA Routing'
+        };
+      case 'QUERY':
+        return {
+          bg: 'bg-blue-500/10 dark:bg-blue-500/15',
+          border: 'border-blue-500/30 hover:border-blue-500/60',
+          text: 'text-blue-600 dark:text-blue-400',
+          badge: 'bg-blue-500/20 text-blue-500',
+          icon: Database,
+          badgeLabel: 'SQL QUERY',
+          categoryLabel: 'Visual Query & Dataset Studio'
+        };
       case 'BRAND':
         return {
           bg: 'bg-pink-500/10 dark:bg-pink-500/15',

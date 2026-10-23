@@ -30,6 +30,7 @@ import { usePlatform } from '../../../hooks/usePlatform';
 import { useAuth } from '../../../hooks/useAuth';
 import { builderCache } from '../../../utils/builderCache';
 import { API_BASE_URL } from '@/src/config';
+import { getDocumentTemplates } from '../../../services/documentService';
 
 const ACTION_LIBRARY = [
   { id: 'EMAIL', label: 'Send Email', desc: 'Dispatch templated emails to users or customers.', icon: Mail, color: 'indigo' },
@@ -405,21 +406,36 @@ const ActionConfigPanel: React.FC<ActionConfigPanelProps> = ({
         </div>
       );
 
-    case 'PDF':
+    case 'PDF': {
+      const docTemplates = getDocumentTemplates();
       return (
         <div className="space-y-4">
           <div className="space-y-2">
-            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Template ID</label>
-            <input
-              type="text"
-              placeholder="e.g. invoice-template"
+            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-1">Document Template</label>
+            <select
               value={config.templateId || ''}
               onChange={(e) => updateNodeConfig(nodeId, { templateId: e.target.value })}
-              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all font-semibold"
+            >
+              <option value="">-- Choose Template --</option>
+              {docTemplates.map(t => (
+                <option key={t.id} value={t.id}>{t.name} ({t.type})</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider px-1">Or Direct Template ID</label>
+            <input
+              type="text"
+              placeholder="e.g. tmpl_nda_standard"
+              value={config.templateId || ''}
+              onChange={(e) => updateNodeConfig(nodeId, { templateId: e.target.value })}
+              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all font-mono"
             />
           </div>
         </div>
       );
+    }
 
     case 'WEBHOOK':
       return (

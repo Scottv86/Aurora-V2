@@ -98,10 +98,11 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
               key={tab.id}
               type="button"
               onClick={() => setActiveTabId(tab.id)}
+              style={activeTabId === tab.id ? { borderColor: 'var(--brand-primary, #4f46e5)', color: 'var(--brand-primary, #4f46e5)' } : {}}
               className={cn(
                 "px-4 py-2 text-xs font-semibold rounded-t-lg transition-colors border-b-2 whitespace-nowrap",
                 activeTabId === tab.id
-                  ? "border-indigo-600 text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/30"
+                  ? "border-current bg-indigo-50/50 dark:bg-indigo-950/30"
                   : "border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
               )}
             >
@@ -142,7 +143,11 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
           <Button
             type="submit"
             disabled={submitting}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm px-6 py-2.5 rounded-xl shadow-md transition-all"
+            style={{ 
+              backgroundColor: 'var(--brand-primary, #4f46e5)',
+              borderRadius: 'var(--brand-radius, 0.75rem)'
+            }}
+            className="flex items-center gap-2 text-white font-medium text-sm px-6 py-2.5 shadow-md transition-all hover:brightness-110 cursor-pointer"
           >
             <Send size={16} />
             <span>{submitting ? 'Submitting...' : submitButtonText}</span>

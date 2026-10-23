@@ -21,6 +21,8 @@ export type SolutionArtifactType =
   | 'PERMISSION'
   | 'API' 
   | 'AGENT'
+  | 'QUEUE'
+  | 'QUERY'
   | 'RECORDS';
 
 export interface ContextSource {

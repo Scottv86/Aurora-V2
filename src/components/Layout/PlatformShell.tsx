@@ -528,6 +528,9 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       if (feature === 'records-management') {
         return renderConfigureButton('Configure Records', () => navigateWithReturn('/workspace/settings/platform-modules/records-management'), 'Archive');
       }
+      if (feature === 'scheduling' || feature === 'bookings') {
+        return renderConfigureButton('Configure Bookings & Scheduling', () => navigateWithReturn('/workspace/settings/platform-modules/scheduling'), 'CalendarClock');
+      }
     }
 
     // 5. Utility Apps: /workspace/apps/*
@@ -541,6 +544,9 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       }
       if (appName === 'pos') {
         return renderConfigureButton('Configure POS & Terminals', () => navigateWithReturn('/workspace/settings/platform-modules/payment-gateways?tab=pos'), 'Store');
+      }
+      if (appName === 'calendar' || appName === 'scheduling') {
+        return renderConfigureButton('Configure Bookings & Scheduling', () => navigateWithReturn('/workspace/settings/platform-modules/scheduling'), 'CalendarClock');
       }
     }
 
@@ -611,6 +617,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       category: 'Configure',
       icon: LucideIcons.Sliders,
       items: [
+        { label: 'Bookings & Scheduling', icon: LucideIcons.CalendarClock, to: '/workspace/settings/platform-modules/scheduling' },
         { label: 'Work Distribution', icon: LucideIcons.Inbox, to: '/workspace/settings/platform-modules/work-distribution' },
         { label: 'Transactions', icon: LucideIcons.ArrowLeftRight, to: '/workspace/settings/platform-modules/transactions' },
         { label: 'Payment Gateways & Hardware', icon: LucideIcons.CreditCard, to: '/workspace/settings/platform-modules/payment-gateways' },

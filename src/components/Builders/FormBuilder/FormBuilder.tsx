@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Plus, Trash2, Settings, Eye, GripVertical, FileText, Save, 
-  Calculator, Sliders
+  Calculator, Sliders, RefreshCw, Lock
 } from 'lucide-react';
 
 import { ModuleField, Tab, StandaloneBuilderContext, FormEntity } from '../../../types/platform';
@@ -110,6 +110,26 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
     if (selectedFieldId === id) {
       setSelectedFieldId(nextFields[0]?.id || null);
     }
+  };
+
+  const effectiveModuleId = associatedModuleId || builderContext.parentModuleId;
+  const currentAssociatedModule = modules?.find(m => m.id === effectiveModuleId);
+
+  const handleSyncModuleFields = () => {
+    if (!currentAssociatedModule) return;
+    const moduleFields = currentAssociatedModule.layout || currentAssociatedModule.fields || [];
+    if (moduleFields.length === 0) {
+      toast.info('No fields configured on associated module layout.');
+      return;
+    }
+    const existingIds = new Set(fields.map(f => f.id));
+    const missing = moduleFields.filter(mf => !existingIds.has(mf.id));
+    if (missing.length === 0) {
+      toast.info('All module fields are already present on this form.');
+      return;
+    }
+    setFields([...fields, ...missing]);
+    toast.success(`Imported ${missing.length} missing fields from ${currentAssociatedModule.name}`);
   };
 
   const handleSaveForm = async () => {
@@ -283,6 +303,17 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
                   <Sliders size={14} className="text-purple-500" />
                   <span>Field Conditions</span>
                 </button>
+
+                {currentAssociatedModule && (
+                  <button
+                    onClick={handleSyncModuleFields}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 rounded-xl transition-colors cursor-pointer"
+                    title={`Import missing fields from ${currentAssociatedModule.name}`}
+                  >
+                    <RefreshCw size={13} className="text-emerald-500" />
+                    <span>Sync Module Fields</span>
+                  </button>
+                )}
               </div>
 
               <span className="text-[11px] font-mono text-zinc-400">{fields.length} Fields Configured</span>
@@ -291,46 +322,54 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
             {/* 12-Column Layout Grid Canvas */}
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm min-h-[400px]">
               <div className="grid grid-cols-12 gap-4">
-                {fields.map((field) => (
-                  <div
-                    key={field.id}
-                    onClick={() => setSelectedFieldId(field.id)}
-                    style={{ gridColumn: `span ${field.colSpan || 12}` }}
-                    className={cn(
-                      "group relative p-4 rounded-2xl border transition-all cursor-pointer select-none",
-                      selectedFieldId === field.id
-                        ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20 shadow-md ring-2 ring-indigo-500/20"
-                        : "border-zinc-200 dark:border-zinc-800 hover:border-indigo-300 bg-zinc-50/50 dark:bg-zinc-800/40"
-                    )}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <GripVertical size={14} className="text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        <span className="text-xs font-bold text-zinc-900 dark:text-white">{field.label || (field as any).name || 'Untitled Field'}</span>
-                        {field.required && <span className="text-red-500 font-bold">*</span>}
+                {fields.map((field) => {
+                  const isInherited = Boolean(currentAssociatedModule && (currentAssociatedModule.layout || currentAssociatedModule.fields || []).some(f => f.id === field.id));
+                  return (
+                    <div
+                      key={field.id}
+                      onClick={() => setSelectedFieldId(field.id)}
+                      style={{ gridColumn: `span ${field.colSpan || 12}` }}
+                      className={cn(
+                        "group relative p-4 rounded-2xl border transition-all cursor-pointer select-none",
+                        selectedFieldId === field.id
+                          ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20 shadow-md ring-2 ring-indigo-500/20"
+                          : "border-zinc-200 dark:border-zinc-800 hover:border-indigo-300 bg-zinc-50/50 dark:bg-zinc-800/40"
+                      )}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <GripVertical size={14} className="text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          <span className="text-xs font-bold text-zinc-900 dark:text-white">{field.label || (field as any).name || 'Untitled Field'}</span>
+                          {field.required && <span className="text-red-500 font-bold">*</span>}
+                          {isInherited && (
+                            <span title={`Inherited from ${currentAssociatedModule?.name} Schema`}>
+                              <Lock size={11} className="text-indigo-500" />
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 uppercase">
+                            {field.type}
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteField(field.id);
+                            }}
+                            className="p-1 text-zinc-400 hover:text-red-500 rounded-md transition-colors"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-1">
-                        <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 uppercase">
-                          {field.type}
-                        </span>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteField(field.id);
-                          }}
-                          className="p-1 text-zinc-400 hover:text-red-500 rounded-md transition-colors"
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                      <div className="h-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 flex items-center text-xs text-zinc-400 pointer-events-none">
+                        {field.placeholder || `Enter ${(field.label || (field as any).name || 'value').toLowerCase()}...`}
                       </div>
                     </div>
-
-                    <div className="h-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 flex items-center text-xs text-zinc-400 pointer-events-none">
-                      {field.placeholder || `Enter ${(field.label || (field as any).name || 'value').toLowerCase()}...`}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -341,6 +380,12 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
 
             {selectedField ? (
               <div className="space-y-4">
+                {Boolean(currentAssociatedModule && (currentAssociatedModule.layout || currentAssociatedModule.fields || []).some(f => f.id === selectedField.id)) && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300">
+                    <Lock size={13} className="text-indigo-500 shrink-0" />
+                    <span>Inherited from {currentAssociatedModule?.name} Schema</span>
+                  </div>
+                )}
                 <div>
                   <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">Field Label</label>
                   <input

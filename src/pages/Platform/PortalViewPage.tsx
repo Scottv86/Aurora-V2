@@ -49,10 +49,12 @@ import { Site, SiteService, SitePage, ENTERPRISE_FONTS } from '../../services/si
 import { toast } from 'sonner';
 import { SearchRenderer } from '../../components/Search/SearchRenderer';
 import { API_BASE_URL } from '../../config';
+import { useBrandKits } from '../../hooks/useBrandKits';
 
 export const PortalViewPage = () => {
   const { siteId } = useParams<{ siteId: string }>();
   const navigate = useNavigate();
+  const { defaultBrandKit } = useBrandKits();
   const [site, setSite] = useState<Site | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -448,8 +450,9 @@ export const PortalViewPage = () => {
     );
   }
 
-  const brand = (site as any).brand;
-  const accentColor = site.branding?.accentColor || brand?.colors?.accent || brand?.colors?.primary || '#6366f1';
+  const brand = (site as any).brand || defaultBrandKit;
+  const accentColor = site.branding?.accentColor || brand?.colors?.accent || brand?.colors?.primary || defaultBrandKit?.colors?.accent || defaultBrandKit?.colors?.primary || '#6366f1';
+  const logoUrl = site.branding?.logoUrl || brand?.assets?.logoLight || defaultBrandKit?.assets?.logoLight || '';
   const headerTitle = site.branding?.headerTitle || site.name;
   const footerText = site.branding?.footerText || (brand?.name ? `Powered by ${brand.name}` : 'Powered by Aurora Platform');
   const headerLayout = site.branding?.headerLayout || site.branding?.themeConfig?.headerLayout || brand?.styling?.headerLayout || 'top_right';
@@ -610,8 +613,8 @@ export const PortalViewPage = () => {
                 className="h-8 w-8 rounded-xl flex items-center justify-center font-extrabold text-white text-xs shadow-md shrink-0"
                 style={{ backgroundColor: accentColor }}
               >
-                {site.branding?.logoUrl ? (
-                  <img src={site.branding.logoUrl} alt="Logo" className="h-5 w-5 object-contain" />
+                {logoUrl ? (
+                  <img src={logoUrl} alt="Logo" className="h-5 w-5 object-contain" />
                 ) : (
                   headerTitle ? headerTitle.charAt(0) : 'S'
                 )}

@@ -1,10 +1,22 @@
 import React, { useState } from 'react';
-import { Search, Plus, Check, FileText, GitBranch, Zap, ShieldCheck, BarChart3, Radio, Layers } from 'lucide-react';
+import { Search, Plus, Check, FileText, GitBranch, Zap, ShieldCheck, BarChart3, Radio, Layers, Inbox, Database, TrendingUp, FileCode, Bot } from 'lucide-react';
 import { Modal } from '../../UI/TabsAndModal';
 import { Button } from '../../UI/Primitives';
 import { cn } from '../../../lib/utils';
 
-export type ComponentType = 'form' | 'workflow' | 'automation' | 'validation' | 'report' | 'connector';
+export type ComponentType = 
+  | 'form' 
+  | 'workflow' 
+  | 'automation' 
+  | 'validation' 
+  | 'report' 
+  | 'connector'
+  | 'queue'
+  | 'query'
+  | 'search'
+  | 'metric'
+  | 'content'
+  | 'agent';
 
 export interface ComponentOption {
   id: string;
@@ -47,6 +59,12 @@ export const ComponentPickerModal: React.FC<ComponentPickerModalProps> = ({
       case 'validation': return ShieldCheck;
       case 'report': return BarChart3;
       case 'connector': return Radio;
+      case 'queue': return Inbox;
+      case 'query': return Database;
+      case 'search': return Search;
+      case 'metric': return TrendingUp;
+      case 'content': return FileCode;
+      case 'agent': return Bot;
       default: return Layers;
     }
   };

@@ -89,6 +89,9 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
   const [detailLayoutType, setDetailLayoutType] = useState<'tabs' | 'split' | 'sidebar' | 'process' | 'accordion'>(
     initialQueue?.queueConfig?.detailLayoutType || 'tabs'
   );
+  const [showKpis, setShowKpis] = useState<boolean>(
+    Boolean((initialQueue?.queueConfig as any)?.showKpis)
+  );
 
   // Auto-sync initial moduleId when custom modules finish loading
   React.useEffect(() => {
@@ -263,7 +266,8 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
           density: tableDensity
         },
         detailViewMode,
-        detailLayoutType
+        detailLayoutType,
+        showKpis
       },
       version: (initialQueue?.version || 0) + 1,
       status: 'PUBLISHED',
@@ -301,10 +305,11 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
         density: tableDensity
       },
       detailViewMode,
-      detailLayoutType
+      detailLayoutType,
+      showKpis
     },
     status: 'PUBLISHED'
-  }), [initialQueue, tenant?.id, name, description, iconName, isUnifiedQueue, moduleId, currentTargetModuleIds, rules, selectedColumns, defaultSortKey, defaultSortDir, formattingRules, listLayout, kanbanGroupBy, cardFields, tableDensity, detailViewMode, detailLayoutType]);
+  }), [initialQueue, tenant?.id, name, description, iconName, isUnifiedQueue, moduleId, currentTargetModuleIds, rules, selectedColumns, defaultSortKey, defaultSortDir, formattingRules, listLayout, kanbanGroupBy, cardFields, tableDensity, detailViewMode, detailLayoutType, showKpis]);
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white select-none">
@@ -993,6 +998,29 @@ export const QueueBuilder: React.FC<QueueBuilderProps> = ({
                     </button>
                   );
                 })}
+              </div>
+            </div>
+
+            {/* Section 4: Analytics & KPI Summary Ribbon */}
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-2">
+                    <Sparkles size={14} className="text-indigo-500" /> 4. Analytics & KPI Summary Ribbon
+                  </h3>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                    Display top summary metric cards (Queue Total, High Priority, SLA Target, Assigned) above the records list.
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={showKpis}
+                    onChange={(e) => setShowKpis(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-zinc-200 peer-focus:outline-none rounded-full peer dark:bg-zinc-800 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-zinc-600 peer-checked:bg-indigo-600"></div>
+                </label>
               </div>
             </div>
 

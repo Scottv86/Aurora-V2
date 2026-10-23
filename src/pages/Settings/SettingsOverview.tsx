@@ -192,7 +192,7 @@ const SETTINGS_ITEMS: SettingItem[] = [
     label: 'Agents',
     description: 'Configure autonomous AI agents, digital coworkers, skill definitions, and worker seats.',
     icon: 'Bot',
-    to: '/workspace/settings/platform-modules/workforce-management?tab=agents',
+    to: '/workspace/settings/platform-modules/agents-library',
     category: 'Build & Customize',
     tags: ['agents', 'ai', 'digital coworkers', 'bots', 'synthetic', 'autonomous']
   },
@@ -282,6 +282,15 @@ const SETTINGS_ITEMS: SettingItem[] = [
 
 
   // Configure
+  {
+    id: 'scheduling-settings',
+    label: 'Bookings & Scheduling',
+    description: 'Manage bookable resources, appointment rules, rental date policies, availability, and capacity.',
+    icon: 'CalendarClock',
+    to: '/workspace/settings/platform-modules/scheduling',
+    category: 'Configure',
+    tags: ['scheduling', 'bookings', 'calendar', 'appointments', 'rentals', 'airbnb', 'field service', 'dispatch', 'capacity']
+  },
   {
     id: 'work-distribution',
     label: 'Work Distribution',

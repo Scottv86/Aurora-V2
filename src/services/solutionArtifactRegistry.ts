@@ -216,6 +216,26 @@ class SolutionArtifactRegistryManager {
       targetBuilderRoute: '/workspace/settings/platform-modules/kpi-management',
       renderPreview: (_artifact) => null
     });
+
+    // 17. QUEUE (Work Queues & Triage)
+    this.registerPlugin({
+      type: 'QUEUE',
+      label: 'Work Queue & Triage',
+      description: 'Dynamic work item queues, priority routing, SLA tracking, and team assignment',
+      iconName: 'ListOrdered',
+      targetBuilderRoute: '/workspace/settings/platform-modules/queues-management',
+      renderPreview: (_artifact) => null
+    });
+
+    // 18. QUERY (Database Queries & Analytics)
+    this.registerPlugin({
+      type: 'QUERY',
+      label: 'Database Query & Dataset',
+      description: 'Visual SQL queries, aggregations, relational joins, and reusable analytical datasets',
+      iconName: 'Database',
+      targetBuilderRoute: '/workspace/settings/platform-modules/queries-library',
+      renderPreview: (_artifact) => null
+    });
   }
 }
 

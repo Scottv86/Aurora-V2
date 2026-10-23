@@ -7,6 +7,7 @@ import {
   Type, 
   Hash, 
   Calendar, 
+  CalendarClock,
   CheckSquare, 
   Database, 
   AlignLeft,
@@ -51,6 +52,8 @@ const getFieldIcon = (type: FieldType) => {
     case 'text': return Type;
     case 'number': return Hash;
     case 'date': return Calendar;
+    case 'booking':
+    case 'booking_slot': return CalendarClock;
     case 'checkbox': return CheckSquare;
     case 'lookup': return Database;
     case 'user': return Users;

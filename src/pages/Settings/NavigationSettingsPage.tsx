@@ -24,6 +24,7 @@ import {
   PanelLeft,
   PanelLeftClose,
   PanelTop,
+  BarChart3,
   X
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
@@ -145,11 +146,36 @@ export const NavigationSettingsPage = () => {
     }
   }, [activeScope, menuConfigState, teams, positions, members]);
 
-  const [activeAddTool, setActiveAddTool] = useState<'link' | 'subtitle' | 'queue' | 'page' | 'system' | 'custom' | 'app' | 'site' | 'search' | null>(null);
+  const [activeAddTool, setActiveAddTool] = useState<'link' | 'subtitle' | 'queue' | 'page' | 'system' | 'custom' | 'app' | 'site' | 'search' | 'report' | null>(null);
   const [appSearchQuery, setAppSearchQuery] = useState('');
   const [appCategoryFilter, setAppCategoryFilter] = useState<string>('All');
   const [siteSearchQuery, setSiteSearchQuery] = useState('');
   const [searchFilterQuery, setSearchFilterQuery] = useState('');
+  const [reportFilterQuery, setReportFilterQuery] = useState('');
+
+  // Reports state for Navigation
+  const [reportsList, setReportsList] = useState<any[]>([]);
+  const [loadingReports, setLoadingReports] = useState(false);
+
+  const fetchReports = async () => {
+    try {
+      setLoadingReports(true);
+      const res = await fetch(`${API_BASE_URL}/api/reports`, {
+        headers: {
+          'x-tenant-id': tenant?.id || 't1',
+          ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {})
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setReportsList(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.error('Failed to fetch reports for navigation', e);
+    } finally {
+      setLoadingReports(false);
+    }
+  };
 
   // Saved Searches state
   const [savedSearches, setSavedSearches] = useState<SavedSearchEntity[]>([]);
@@ -183,6 +209,15 @@ export const NavigationSettingsPage = () => {
       (s.category || '').toLowerCase().includes(q)
     );
   }, [savedSearches, searchFilterQuery]);
+
+  const filteredReports = useMemo(() => {
+    if (!reportFilterQuery.trim()) return reportsList;
+    const q = reportFilterQuery.toLowerCase();
+    return reportsList.filter(r => 
+      r.name?.toLowerCase().includes(q) || 
+      (r.description || '').toLowerCase().includes(q)
+    );
+  }, [reportsList, reportFilterQuery]);
 
   // Sites state
   const [sites, setSites] = useState<Site[]>([]);
@@ -400,6 +435,11 @@ export const NavigationSettingsPage = () => {
         setActiveAddTool('search');
         return;
       }
+    } else if (toolType === 'report') {
+      setSelectedSectionId(sectionId);
+      setActiveAddTool('report');
+      if (reportsList.length === 0) fetchReports();
+      return;
     }
 
     if (newItem) {
@@ -1202,6 +1242,27 @@ export const NavigationSettingsPage = () => {
               <div>
                 <h4 className="font-bold text-zinc-850 dark:text-white">Saved Searches</h4>
                 <p className="text-[10px] text-zinc-450 dark:text-zinc-550 leading-normal mt-0.5">Pin federated cross-module searches from library.</p>
+              </div>
+            </button>
+
+            {/* Reports & Dashboards */}
+            <button
+              draggable={true}
+              onDragStart={(e) => {
+                e.dataTransfer.setData('application/json', JSON.stringify({ toolType: 'report' }));
+              }}
+              onClick={() => {
+                setActiveAddTool('report');
+                if (reportsList.length === 0) fetchReports();
+              }}
+              className="flex items-start gap-3 p-3 rounded-2xl border border-zinc-200 dark:border-white/5 bg-white/40 dark:bg-white/[0.01] hover:border-indigo-500/40 hover:bg-indigo-500/[0.01] transition-all text-left group cursor-grab active:cursor-grabbing"
+            >
+              <div className="p-2.5 rounded-xl bg-zinc-100 dark:bg-white/5 text-zinc-400 group-hover:text-amber-500 group-hover:scale-105 transition-all">
+                <BarChart3 size={16} />
+              </div>
+              <div>
+                <h4 className="font-bold text-zinc-850 dark:text-white">Reports & Dashboards</h4>
+                <p className="text-[10px] text-zinc-450 dark:text-zinc-550 leading-normal mt-0.5">Pin BI charts and analytics dashboards.</p>
               </div>
             </button>
 
@@ -2229,6 +2290,107 @@ export const NavigationSettingsPage = () => {
 
             <div className="flex justify-end pt-2 border-t border-zinc-100 dark:border-zinc-800">
               <Button variant="ghost" onClick={() => { setActiveAddTool(null); setSearchFilterQuery(''); }}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Select Report Modal */}
+      {activeAddTool === 'report' && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                  <BarChart3 size={18} className="text-amber-500" /> Select Report / Dashboard
+                </h3>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  Pin BI charts, operational reports, or cross-module KPI dashboards to your menu.
+                </p>
+              </div>
+              <button onClick={() => { setActiveAddTool(null); setReportFilterQuery(''); }} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 rounded-lg">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" size={15} />
+              <input
+                type="text"
+                placeholder="Search across reports..."
+                value={reportFilterQuery}
+                onChange={(e) => setReportFilterQuery(e.target.value)}
+                autoFocus
+                className="w-full pl-9 pr-4 py-2 bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700/60 rounded-xl text-xs font-medium outline-none focus:border-indigo-500 transition-colors text-zinc-900 dark:text-white"
+              />
+            </div>
+
+            <div className="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-1">
+              {loadingReports ? (
+                <div className="py-8 flex flex-col items-center justify-center gap-2 text-zinc-400 text-xs">
+                  <Loader2 className="w-5 h-5 animate-spin text-amber-500" />
+                  <span>Loading reports...</span>
+                </div>
+              ) : filteredReports.length === 0 ? (
+                <div className="py-8 text-center text-xs text-zinc-400 space-y-2">
+                  <p>No reports found matching "{reportFilterQuery}"</p>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setActiveAddTool(null);
+                      navigate('/workspace/settings/platform-modules/reports-management');
+                    }}
+                    className="gap-1.5 text-xs font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                  >
+                    <Plus size={13} /> Open Report Builder
+                  </Button>
+                </div>
+              ) : (
+                filteredReports.map((report) => (
+                  <button
+                    key={report.id}
+                    onClick={() => {
+                      addItemToActiveSection({
+                        id: `report:${report.id}-${Date.now()}`,
+                        label: report.name,
+                        iconName: 'BarChart2',
+                        description: report.description,
+                        to: `/workspace/settings/platform-modules/reports-management?reportId=${report.id}`,
+                        isVisible: true
+                      });
+                      setActiveAddTool(null);
+                      setReportFilterQuery('');
+                      toast.success(`Added "${report.name}" to navigation`);
+                    }}
+                    className="w-full flex items-center justify-between p-3.5 rounded-2xl border border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/40 hover:border-amber-500 hover:bg-amber-500/5 text-left transition-all group"
+                  >
+                    <div className="flex items-start gap-3 min-w-0 flex-1">
+                      <div className="p-2 rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-700/50 text-amber-500 shrink-0 group-hover:bg-amber-500 group-hover:text-white transition-colors mt-0.5">
+                        <BarChart3 size={16} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-xs text-zinc-800 dark:text-zinc-200 truncate">{report.name}</span>
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-600 border border-amber-500/20 uppercase tracking-wider">
+                            {report.status || 'Report'}
+                          </span>
+                        </div>
+                        {report.description && (
+                          <p className="text-[11px] text-zinc-500 dark:text-zinc-400 line-clamp-1 mt-0.5">{report.description}</p>
+                        )}
+                        <p className="text-[10px] font-mono text-zinc-400 dark:text-zinc-500 mt-1">
+                          {report.config?.widgets?.length || 0} Widgets
+                        </p>
+                      </div>
+                    </div>
+                    <Plus size={16} className="text-zinc-400 group-hover:text-amber-500 shrink-0 ml-2" />
+                  </button>
+                ))
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-zinc-100 dark:border-zinc-800">
+              <Button variant="ghost" onClick={() => { setActiveAddTool(null); setReportFilterQuery(''); }}>Close</Button>
             </div>
           </div>
         </div>

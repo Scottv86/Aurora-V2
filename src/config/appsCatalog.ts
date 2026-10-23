@@ -208,7 +208,8 @@ export const AURORA_APPS: AppItem[] = [
     color: 'text-blue-600',
     to: '/workspace/apps/calendar',
     category: 'Communication',
-    status: 'coming_soon'
+    isCore: true,
+    status: 'active'
   },
   {
     id: 'feed',

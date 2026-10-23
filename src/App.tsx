@@ -33,6 +33,7 @@ import { PlatformShell } from './components/Layout/PlatformShell';
 import { ProtectedRoute } from './components/Auth/ProtectedRoute';
 import { Login } from './components/Auth/Login';
 import { LicenseGate, LicenseRestrictedPlaceholder } from './components/Auth/LicenseGate';
+import { BrandTokenApplier } from './components/Common/BrandTokenApplier';
 
 // Lazy-loaded Pages & Heavy Builders
 const AIBuilder = lazy(() => import('./components/AIBuilder').then(m => ({ default: m.AIBuilder })));
@@ -56,6 +57,8 @@ const PointOfSalePage = lazy(() => import('./pages/Platform/PointOfSalePage').th
 const FinancialManagementPage = lazy(() => import('./pages/Platform/FinancialManagementPage').then(m => ({ default: m.FinancialManagementPage })));
 const TransactionsPage = lazy(() => import('./pages/Settings/PlatformModules/TransactionsPage').then(m => ({ default: m.TransactionsPage })));
 const PaymentGatewaysPage = lazy(() => import('./pages/Settings/PlatformModules/PaymentGatewaysPage').then(m => ({ default: m.PaymentGatewaysPage })));
+const SchedulingSettings = lazy(() => import('./pages/Settings/PlatformModules/SchedulingSettings').then(m => ({ default: m.SchedulingSettings })));
+const SchedulingPage = lazy(() => import('./pages/Platform/SchedulingPage').then(m => ({ default: m.SchedulingPage })));
 const HealthMonitor = lazy(() => import('./components/HealthMonitor').then(m => ({ default: m.HealthMonitor })));
 const FleetManager = lazy(() => import('./components/FleetManager').then(m => ({ default: m.FleetManager })));
 const ComputeMatrix = lazy(() => import('./components/ComputeMatrix').then(m => ({ default: m.ComputeMatrix })));
@@ -125,6 +128,7 @@ const RecordsManagement = lazy(() => import('./pages/Platform/RecordsManagement'
 const RecordsManagementSettings = lazy(() => import('./pages/Settings/PlatformModules/RecordsManagementSettings').then(m => ({ default: m.RecordsManagementSettings })));
 const ReportManagementSettings = lazy(() => import('./pages/Settings/PlatformModules/ReportManagementSettings').then(m => ({ default: m.ReportManagementSettings })));
 const SolutionsPage = lazy(() => import('./pages/Settings/SolutionsPage').then(m => ({ default: m.SolutionsPage })));
+const CalendarApp = lazy(() => import('./pages/Apps/CalendarApp').then(m => ({ default: m.CalendarApp })));
 const DriveApp = lazy(() => import('./pages/Apps/DriveApp').then(m => ({ default: m.DriveApp })));
 
 const DocsApp = lazy(() => import('./pages/Apps/DocsApp').then(m => ({ default: m.DocsApp })));
@@ -251,6 +255,7 @@ const App = () => {
         <AuthProvider>
           <AIContextProvider>
             <PlatformProvider>
+              <BrandTokenApplier />
               <DigitalTwinProvider>
                 <ModalStackProvider>
                   <NewModuleModalProvider>
@@ -345,6 +350,8 @@ const App = () => {
                 <Route path="platform/accounting" element={<FinancialManagementPage />} />
                 <Route path="platform/transactions" element={<TransactionsPage />} />
                 <Route path="platform/records-management" element={<RecordsManagement />} />
+                <Route path="platform/scheduling" element={<SchedulingPage />} />
+                <Route path="platform/bookings" element={<Navigate to="/workspace/platform/scheduling" replace />} />
                 
                 {/* Dynamic Module Routes */}
                 <Route path="modules/:moduleId" element={<ModuleView />} />
@@ -373,6 +380,8 @@ const App = () => {
                 <Route path="notes" element={<Navigate to="/workspace/apps/notes" replace />} />
                 <Route path="apps/reminders" element={<RemindersApp />} />
                 <Route path="reminders" element={<Navigate to="/workspace/apps/reminders" replace />} />
+                <Route path="apps/calendar" element={<CalendarApp />} />
+                <Route path="calendar" element={<Navigate to="/workspace/apps/calendar" replace />} />
                 <Route path="apps/query" element={<QueryExplorer />} />
                 <Route path="apps/pos" element={<PointOfSalePage />} />
                 <Route path="pos" element={<Navigate to="/workspace/apps/pos" replace />} />
@@ -463,6 +472,8 @@ const App = () => {
                    <Route path="kpi-management" element={<KpiLibraryPage />} />
                    <Route path="kpi-library" element={<KpiLibraryPage />} />
                    <Route path="records-management" element={<RecordsManagementSettings />} />
+                   <Route path="scheduling" element={<SchedulingSettings />} />
+                   <Route path="bookings" element={<Navigate to="scheduling" replace />} />
                    <Route path="agents" element={<AgentsLibraryPage />} />
                    <Route path="agents-library" element={<AgentsLibraryPage />} />
                    <Route path="email-connections" element={<MailboxSettingsPage />} />
@@ -492,6 +503,8 @@ const App = () => {
                  <Route path="records-management" element={<Navigate to="/workspace/settings/platform-modules/records-management" replace />} />
                  <Route path="work-distribution" element={<NavigateWithSearch to="/workspace/settings/platform-modules/work-distribution" replace />} />
                  <Route path="intake" element={<NavigateWithSearch to="/workspace/settings/platform-modules/work-distribution" replace />} />
+                 <Route path="scheduling" element={<NavigateWithSearch to="/workspace/settings/platform-modules/scheduling" replace />} />
+                 <Route path="bookings" element={<NavigateWithSearch to="/workspace/settings/platform-modules/scheduling" replace />} />
                  <Route path="migration" element={<MigrationPage />} />
                  <Route path="integrations" element={<Navigate to="/workspace/settings/platform-modules/integration-management" replace />} />
                  <Route path="integrations/:id" element={<NavigateWithParams to="/workspace/settings/platform-modules/integration-management/:id" replace />} />

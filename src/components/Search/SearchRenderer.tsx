@@ -6,7 +6,7 @@ import {
   ChevronLeft, ChevronRight, ExternalLink,
   Loader2, ArrowUp, ArrowDown, ArrowUpDown, X, Maximize2,
   CheckSquare, Square, MinusSquare, Sparkles,
-  Bookmark, Plus, Check, RefreshCw
+  Bookmark, Plus, Check, RefreshCw, BarChart2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../UI/Primitives';
@@ -302,6 +302,20 @@ export const SearchRenderer: React.FC<SearchRendererProps> = ({
     toast.success(`Exported ${dataset.length} records`);
   };
 
+  const handleExportToReport = () => {
+    const searchName = effectiveSearchDef?.name || title || 'Search Query';
+    const sql = effectiveSearchDef?.sql || `SELECT * FROM records WHERE status = '${parameters.status || 'Active'}' LIMIT 100;`;
+    navigate('/workspace/settings/platform-modules/report-management?mode=builder', {
+      state: {
+        fromSearch: true,
+        sql,
+        searchName,
+        reportTitle: `${searchName} Analytics Report`
+      }
+    });
+    toast.success('Transferring query to Visual Report Builder...');
+  };
+
   // Bulk Status Update Handler
   const handleBulkUpdateStatus = async () => {
     if (!selectedRowIds.size || !bulkTargetStatus) {
@@ -585,10 +599,19 @@ export const SearchRenderer: React.FC<SearchRendererProps> = ({
                     <button
                       onClick={() => handleExportCSV(false)}
                       disabled={!results.length}
-                      className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg transition-colors"
+                      className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg transition-colors cursor-pointer"
                       title="Export to CSV"
                     >
                       <Download size={14} />
+                    </button>
+                    <button
+                      onClick={handleExportToReport}
+                      disabled={!results.length}
+                      className="px-2 py-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-lg transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                      title="Create Report from this Search Query"
+                    >
+                      <BarChart2 size={13} />
+                      <span className="hidden sm:inline">Export to Report</span>
                     </button>
                   </>
                 )}

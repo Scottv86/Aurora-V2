@@ -305,6 +305,19 @@ export interface Module {
   forms?: any[];
   interfaceSettings?: any;
   formattingRules?: any;
+  schedulingRole?: 'NONE' | 'RESOURCE_POOL' | 'BOOKING_EVENT';
+  schedulingConfig?: {
+    archetype?: 'APPOINTMENT' | 'RENTAL' | 'FIELD_SERVICE' | 'CAPACITY';
+    resourceType?: string;
+    startDateFieldId?: string;
+    endDateFieldId?: string;
+    resourceRefFieldId?: string;
+    customerRefFieldId?: string;
+    statusFieldId?: string;
+    priceFieldId?: string;
+    defaultDurationMinutes?: number;
+    bufferMinutes?: number;
+  };
 }
 
 

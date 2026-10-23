@@ -197,5 +197,14 @@ export const PLATFORM_MODULES: PlatformModule[] = [
     isCore: true,
     description: 'Define semantic metrics, calculation formulas, targets, and alert thresholds.',
     path: '/workspace/settings/platform-modules/kpi-management'
+  },
+  {
+    id: 'scheduling',
+    name: 'Bookings & Scheduling',
+    slug: 'scheduling',
+    iconName: 'CalendarClock',
+    isCore: true,
+    description: 'Manage bookable resources, appointment rules, rental date policies, availability, and capacity.',
+    path: '/workspace/platform/scheduling'
   }
 ];

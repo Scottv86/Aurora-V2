@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Settings2 } from 'lucide-react';
+import { ArrowLeft, Settings2, BarChart2 } from 'lucide-react';
 import { SearchRenderer } from '../../components/Search/SearchRenderer';
 import { SearchBuilder } from '../../components/Builders/SearchBuilder/SearchBuilder';
 import { Button } from '../../components/UI/Primitives';
@@ -79,6 +79,27 @@ export const SearchRunnerPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              navigate('/workspace/settings/platform-modules/reports-management', {
+                state: {
+                  fromSearch: {
+                    id: targetId,
+                    name: searchDef?.name || 'Search Report',
+                    sql: searchDef?.sql || `SELECT * FROM data_records WHERE tenant_id = '${tenantId}' LIMIT 100;`
+                  }
+                }
+              });
+            }}
+            className="gap-1.5 text-xs text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+            title="Create and pre-wire a BI Report from this search"
+          >
+            <BarChart2 size={13} />
+            <span>Export to Report</span>
+          </Button>
+
           <Button
             size="sm"
             variant="secondary"

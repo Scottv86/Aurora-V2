@@ -262,6 +262,7 @@ export interface QueueRendererProps {
   searchValue?: string;
   onSearchChange?: (val: string) => void;
   density?: 'compact' | 'standard' | 'spacious';
+  showKpis?: boolean;
 }
 
 export const QueueRenderer: React.FC<QueueRendererProps> = ({
@@ -281,7 +282,8 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
   searchable = true,
   searchValue: controlledSearchValue,
   onSearchChange: controlledOnSearchChange,
-  density = 'standard'
+  density = 'standard',
+  showKpis: propShowKpis
 }) => {
   const navigate = useNavigate();
   const { session } = useAuth();
@@ -1985,8 +1987,41 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
     />
   );
 
+  const isKpiRibbonVisible = propShowKpis ?? (activeQueue?.queueConfig as any)?.showKpis ?? false;
+
   return (
     <div className={cn("w-full h-full flex flex-col min-h-0 relative", className)}>
+      {isKpiRibbonVisible && (
+        <div className="px-6 pt-4 pb-2 shrink-0">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xs">
+              <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Queue Total</div>
+              <div className="text-xl font-black text-zinc-900 dark:text-white mt-0.5">{filteredRecords.length}</div>
+            </div>
+            <div className="p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xs">
+              <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">High Priority</div>
+              <div className="text-xl font-black text-rose-600 dark:text-rose-400 mt-0.5">
+                {filteredRecords.filter(r => {
+                  const p = (r.priority || r.data?.priority || '').toLowerCase();
+                  return p === 'high' || p === 'urgent';
+                }).length}
+              </div>
+            </div>
+            <div className="p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xs">
+              <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">SLA Target</div>
+              <div className="text-xl font-black text-amber-600 dark:text-amber-400 mt-0.5">
+                {activeQueue?.queueConfig?.slaMinutes ? `${Math.round(activeQueue.queueConfig.slaMinutes / 60)}h` : '24h'}
+              </div>
+            </div>
+            <div className="p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xs">
+              <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Assigned</div>
+              <div className="text-xl font-black text-indigo-600 dark:text-indigo-400 mt-0.5">
+                {filteredRecords.filter(r => Boolean(r.assigneeId || r.assignee_id || r.data?.assigneeId)).length}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {currentListLayout === 'split' ? (
         renderSplitView()
       ) : currentListLayout === 'kanban' ? (

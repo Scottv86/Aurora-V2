@@ -17,6 +17,7 @@ import {
 import ReactGridLayout, { useContainerWidth } from 'react-grid-layout';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { useAuth } from '../../../hooks/useAuth';
+import { useBrandKits } from '../../../hooks/useBrandKits';
 import { Button } from '../../../components/UI/Primitives';
 import { PageHeader } from '../../../components/UI/PageHeader';
 import { EmptyState } from '../../../components/UI/EmptyState';
@@ -75,8 +76,10 @@ export interface CalculatedField {
 
 export interface ReportConfig {
   dataSource: {
-    type: 'local' | 'external';
+    type: 'local' | 'external' | 'saved_query';
     connectorId?: string;
+    queryId?: string;
+    querySql?: string;
     tables: string[];
     relationships?: TableRelationship[];
   };
@@ -483,6 +486,37 @@ const DEFAULT_REPORTS: Report[] = [];
 export const ReportManagementSettings: React.FC = () => {
   const { tenant, modules, setBreadcrumbOverride, isBuilderFullscreen, setIsBuilderFullscreen } = usePlatform();
   const { session, user } = useAuth();
+  const { defaultBrandKit } = useBrandKits();
+
+  const brandChartColors = useMemo(() => {
+    if (defaultBrandKit?.colors?.chartPalette && defaultBrandKit.colors.chartPalette.length > 0) {
+      return defaultBrandKit.colors.chartPalette;
+    }
+    return COLORS;
+  }, [defaultBrandKit]);
+
+  const [savedQueries, setSavedQueries] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchQueries = async () => {
+      try {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const res = await fetch(`${API_BASE_URL}/api/queries`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant?.id || 'default'
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setSavedQueries(Array.isArray(data) ? data : []);
+        }
+      } catch {
+        // ignore
+      }
+    };
+    if (tenant?.id) fetchQueries();
+  }, [tenant?.id, session?.access_token]);
 
   useEffect(() => {
     return () => {
@@ -684,6 +718,51 @@ export const ReportManagementSettings: React.FC = () => {
     fetchReports();
     fetchDataSources();
   }, [tenant?.id]);
+
+  useEffect(() => {
+    const state = location.state as any;
+    if (state?.fromSearch && state?.sql) {
+      const draftReport: Report = {
+        id: `draft_${Date.now()}`,
+        tenantId: tenant?.id || 'default',
+        name: state.reportTitle || `${state.searchName || 'Search'} Report`,
+        description: `Visual report generated from Saved Search query: ${state.searchName || ''}`,
+        status: 'Draft',
+        config: {
+          dataSource: {
+            type: 'saved_query',
+            querySql: state.sql,
+            tables: ['records']
+          },
+          widgets: [
+            {
+              id: `widget-${Date.now()}-1`,
+              type: 'kpi',
+              title: 'Total Matches',
+              w: 4,
+              properties: { xAxisKey: 'id', yAxisKey: 'id', aggregate: 'count', color: brandChartColors[0] }
+            },
+            {
+              id: `widget-${Date.now()}-2`,
+              type: 'table',
+              title: state.searchName ? `${state.searchName} Records` : 'Search Query Records',
+              w: 8,
+              properties: { xAxisKey: 'id', yAxisKey: 'id', aggregate: 'count', color: brandChartColors[1] }
+            }
+          ]
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdBy: user?.email || 'Admin'
+      };
+      setCurrentReport(draftReport);
+      setSelectedWidgetId(null);
+      setIsPreview(false);
+      setIsReportDirty(true);
+      navigate('?mode=builder', { replace: true });
+      toast.success('Generated report draft from Search!');
+    }
+  }, [location.state, tenant?.id, user?.email, brandChartColors]);
 
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -1887,15 +1966,21 @@ export const ReportManagementSettings: React.FC = () => {
                       <select
                         value={currentReport.config.dataSource.type}
                         onChange={(e) => {
-                          const typeVal = e.target.value as 'local' | 'external';
-                          const defaultTable = typeVal === 'local' ? ['records'] : ['leads'];
+                          const typeVal = e.target.value as 'local' | 'external' | 'saved_query';
+                          const defaultTable = typeVal === 'external' ? ['leads'] : ['records'];
                           setCurrentReport(prev => {
                             if (!prev) return null;
                             return {
                               ...prev,
                               config: {
                                 ...prev.config,
-                                dataSource: { type: typeVal, tables: defaultTable, relationships: [] }
+                                dataSource: { 
+                                  type: typeVal, 
+                                  tables: defaultTable, 
+                                  relationships: [],
+                                  queryId: typeVal === 'saved_query' ? savedQueries[0]?.id : undefined,
+                                  querySql: typeVal === 'saved_query' ? savedQueries[0]?.sql : undefined
+                                }
                               }
                             };
                           });
@@ -1906,11 +1991,14 @@ export const ReportManagementSettings: React.FC = () => {
                       >
                         <option value="local">Local Tenant Tables</option>
                         <option value="external">External Connector API</option>
+                        <option value="saved_query">Saved SQL Query</option>
                       </select>
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">Source Database Table</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 block">
+                        {currentReport.config.dataSource.type === 'saved_query' ? 'Select Published Query' : 'Source Database Table'}
+                      </label>
                       {currentReport.config.dataSource.type === 'local' ? (
                         <select
                           value={currentReport.config.dataSource.tables[0] || 'records'}
@@ -1946,6 +2034,41 @@ export const ReportManagementSettings: React.FC = () => {
                               ))}
                           </optgroup>
                         </select>
+                      ) : currentReport.config.dataSource.type === 'saved_query' ? (
+                        <div className="space-y-2">
+                          <select
+                            value={currentReport.config.dataSource.queryId || ''}
+                            onChange={(e) => {
+                              const q = savedQueries.find(item => item.id === e.target.value);
+                              setCurrentReport(prev => {
+                                if (!prev) return null;
+                                return {
+                                  ...prev,
+                                  config: {
+                                    ...prev.config,
+                                    dataSource: {
+                                      ...prev.config.dataSource,
+                                      queryId: e.target.value,
+                                      querySql: q?.sql || prev.config.dataSource.querySql || '',
+                                      tables: ['records']
+                                    }
+                                  }
+                                };
+                              });
+                            }}
+                            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none"
+                          >
+                            <option value="">Select a Saved Query...</option>
+                            {savedQueries.map(q => (
+                              <option key={q.id} value={q.id}>{q.name} ({q.folder || 'Default'})</option>
+                            ))}
+                          </select>
+                          {currentReport.config.dataSource.querySql && (
+                            <div className="p-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 font-mono text-[10px] text-zinc-600 dark:text-zinc-400 break-all max-h-24 overflow-y-auto">
+                              {currentReport.config.dataSource.querySql}
+                            </div>
+                          )}
+                        </div>
                       ) : (
                         <select
                           value={currentReport.config.dataSource.connectorId || 'salesforce'}
@@ -2371,7 +2494,7 @@ export const ReportManagementSettings: React.FC = () => {
                     handleLayoutChange={handleLayoutChange}
                     getAggregatedData={getAggregatedData}
                     handleDeleteWidget={handleDeleteWidget}
-                    COLORS={COLORS}
+                    COLORS={brandChartColors}
                     handleChartElementClick={handleChartElementClick}
                     activeFilters={activeFilters}
                     handleSlicerChange={handleSlicerChange}

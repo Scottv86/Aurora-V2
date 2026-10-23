@@ -1912,6 +1912,17 @@ export const ModuleEditor = () => {
     customerRefPrefix: '',
     customerRefSuffix: '',
     customerRefNextNumber: 10001,
+    schedulingRole: 'NONE' as 'NONE' | 'RESOURCE_POOL' | 'BOOKING_EVENT',
+    schedulingArchetype: 'APPOINTMENT' as 'APPOINTMENT' | 'RENTAL' | 'FIELD_SERVICE' | 'CAPACITY',
+    schedulingResourceType: 'ROOM',
+    schedulingStartDateFieldId: '',
+    schedulingEndDateFieldId: '',
+    schedulingResourceRefFieldId: '',
+    schedulingCustomerRefFieldId: '',
+    schedulingStatusFieldId: '',
+    schedulingPriceFieldId: '',
+    schedulingDurationMinutes: 60,
+    schedulingBufferMinutes: 30,
   });
   const [isFieldSelectorOpen, setIsFieldSelectorOpen] = useState(false);
   const [localAutomations, setLocalAutomations] = useState<any[]>([]);
@@ -1946,6 +1957,11 @@ export const ModuleEditor = () => {
       ganttEndDateFieldId: 'createdAt',
       mapAddressFieldId: '_record_key',
       calendarDateFieldId: 'createdAt',
+      calendarEndDateFieldId: '',
+      calendarEnableBuffers: false,
+      calendarEnableHoldBadges: true,
+      calendarEnableSlotBooking: true,
+      calendarResourceFieldId: '',
       detailViewMode: 'page' as 'page' | 'modal',
       pipelineValueFieldId: '',
       pipelineDateFieldId: '',
@@ -2711,6 +2727,17 @@ export const ModuleEditor = () => {
           customerRefPrefix: data.customerRefPrefix !== undefined ? data.customerRefPrefix : (data.config?.customerRefPrefix !== undefined ? data.config.customerRefPrefix : ''),
           customerRefSuffix: data.customerRefSuffix !== undefined ? data.customerRefSuffix : (data.config?.customerRefSuffix !== undefined ? data.config.customerRefSuffix : ''),
           customerRefNextNumber: data.customerRefNextNumber !== undefined ? Number(data.customerRefNextNumber) : (data.config?.customerRefNextNumber !== undefined ? Number(data.config.customerRefNextNumber) : 10001),
+          schedulingRole: data.schedulingRole || 'NONE',
+          schedulingArchetype: data.schedulingConfig?.archetype || 'APPOINTMENT',
+          schedulingResourceType: data.schedulingConfig?.resourceType || 'ROOM',
+          schedulingStartDateFieldId: data.schedulingConfig?.startDateFieldId || '',
+          schedulingEndDateFieldId: data.schedulingConfig?.endDateFieldId || '',
+          schedulingResourceRefFieldId: data.schedulingConfig?.resourceRefFieldId || '',
+          schedulingCustomerRefFieldId: data.schedulingConfig?.customerRefFieldId || '',
+          schedulingStatusFieldId: data.schedulingConfig?.statusFieldId || '',
+          schedulingPriceFieldId: data.schedulingConfig?.priceFieldId || '',
+          schedulingDurationMinutes: data.schedulingConfig?.defaultDurationMinutes || 60,
+          schedulingBufferMinutes: data.schedulingConfig?.bufferMinutes || 30,
         });
         
         if (data.interfaceSettings) {
@@ -2727,6 +2754,11 @@ export const ModuleEditor = () => {
               ganttEndDateFieldId: data.interfaceSettings.master?.ganttEndDateFieldId || 'createdAt',
               mapAddressFieldId: data.interfaceSettings.master?.mapAddressFieldId || '_record_key',
               calendarDateFieldId: data.interfaceSettings.master?.calendarDateFieldId || 'createdAt',
+              calendarEndDateFieldId: data.interfaceSettings.master?.calendarEndDateFieldId || '',
+              calendarEnableBuffers: !!data.interfaceSettings.master?.calendarEnableBuffers,
+              calendarEnableHoldBadges: data.interfaceSettings.master?.calendarEnableHoldBadges !== false,
+              calendarEnableSlotBooking: data.interfaceSettings.master?.calendarEnableSlotBooking !== false,
+              calendarResourceFieldId: data.interfaceSettings.master?.calendarResourceFieldId || '',
               titleFieldId: data.interfaceSettings.master?.titleFieldId || '',
               subtitleFieldIds: data.interfaceSettings.master?.subtitleFieldIds || [],
               cardFields: data.interfaceSettings.master?.cardFields || [],
@@ -2885,7 +2917,20 @@ export const ModuleEditor = () => {
         workflows: workflow ? [workflow] : [],
         interfaceSettings,
         validationRules,
-        fieldSecurity
+        fieldSecurity,
+        schedulingRole: moduleSettings.schedulingRole,
+        schedulingConfig: {
+          archetype: moduleSettings.schedulingArchetype,
+          resourceType: moduleSettings.schedulingResourceType,
+          startDateFieldId: moduleSettings.schedulingStartDateFieldId,
+          endDateFieldId: moduleSettings.schedulingEndDateFieldId,
+          resourceRefFieldId: moduleSettings.schedulingResourceRefFieldId,
+          customerRefFieldId: moduleSettings.schedulingCustomerRefFieldId,
+          statusFieldId: moduleSettings.schedulingStatusFieldId,
+          priceFieldId: moduleSettings.schedulingPriceFieldId,
+          defaultDurationMinutes: moduleSettings.schedulingDurationMinutes,
+          bufferMinutes: moduleSettings.schedulingBufferMinutes,
+        }
       };
 
       const url = isNew 
@@ -3037,7 +3082,7 @@ export const ModuleEditor = () => {
   
   const [activeTab, setActiveTab] = useState<'details' | 'schema' | 'builder' | 'workflow' | 'validations' | 'connectors' | 'automation' | 'experience' | 'security' | 'localization' | 'map' | 'assets' | 'forms' | 'deployment' | 'preview'>('details');
   const [activeViewMode, setActiveViewMode] = useState<'master' | 'detail'>('detail');
-  const [detailsTab, setDetailsTab] = useState<'general' | 'schema' | 'localization' | 'dependencies' | 'assets'>('general');
+  const [detailsTab, setDetailsTab] = useState<'general' | 'schema' | 'scheduling' | 'localization' | 'dependencies' | 'assets'>('general');
   const [previewView, setPreviewView] = useState<'table' | 'detail' | 'create'>('table');
   const [previewSelectedId, setPreviewSelectedId] = useState<string | null>(null);
   const [previewStepId, setPreviewStepId] = useState<string | null>(null);
@@ -9489,6 +9534,7 @@ export const ModuleEditor = () => {
                 {[
                   { id: 'general', label: 'General Properties', icon: Settings2 },
                   { id: 'schema', label: 'Schema', icon: Database },
+                  { id: 'scheduling', label: 'Scheduling & Bookings', icon: Calendar },
                   { id: 'localization', label: 'Localization', icon: Globe },
                   { id: 'dependencies', label: 'Dependencies', icon: MapPin },
                   { id: 'assets', label: 'Assets', icon: Image }
@@ -9735,6 +9781,309 @@ export const ModuleEditor = () => {
                 </div>
               </div>
             </div>
+                  </div>
+                )}
+                {detailsTab === 'scheduling' && (
+                  <div className="flex-1 overflow-y-auto p-6 lg:p-8 custom-scrollbar">
+                    <div className="max-w-5xl mx-auto space-y-6 pb-16">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2.5">
+                          <h2 className="text-xl font-bold text-zinc-950 dark:text-white tracking-tight">Scheduling & Bookings</h2>
+                          <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+                            Unified Platform Engine
+                          </span>
+                        </div>
+                        <p className="text-zinc-500 text-xs">Configure how records in this module participate in centralized resource pools, atomic slot reservation holds, and calendar bookings.</p>
+                      </div>
+
+                      {/* Scheduling Role Selector Cards */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {[
+                          {
+                            id: 'NONE',
+                            title: 'Standard Data',
+                            subtitle: 'Disabled',
+                            desc: 'General-purpose records without scheduling ledger awareness.',
+                            icon: Database,
+                            color: 'text-zinc-500',
+                            border: 'border-zinc-200 dark:border-zinc-800'
+                          },
+                          {
+                            id: 'RESOURCE_POOL',
+                            title: 'Bookable Resource',
+                            subtitle: 'Inventory Asset',
+                            desc: 'Records represent rooms, rental properties, vehicles, or staff members that can be booked.',
+                            icon: Users,
+                            color: 'text-emerald-500',
+                            border: 'border-emerald-500/30'
+                          },
+                          {
+                            id: 'BOOKING_EVENT',
+                            title: 'Reservation Event',
+                            subtitle: 'Booking Transaction',
+                            desc: 'Records represent booked appointments, stays, or service calls mapped to time slots & resources.',
+                            icon: Calendar,
+                            color: 'text-indigo-500',
+                            border: 'border-indigo-500/30'
+                          }
+                        ].map((role) => (
+                          <div
+                            key={role.id}
+                            onClick={() => setModuleSettings(prev => ({ ...prev, schedulingRole: role.id as any }))}
+                            className={cn(
+                              "p-5 rounded-3xl border text-left cursor-pointer transition-all relative overflow-hidden flex flex-col justify-between group",
+                              moduleSettings.schedulingRole === role.id
+                                ? "bg-white dark:bg-zinc-900 border-indigo-500 shadow-md ring-2 ring-indigo-500/20"
+                                : "bg-white/60 dark:bg-zinc-900/60 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
+                            )}
+                          >
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <div className={cn("w-9 h-9 rounded-2xl flex items-center justify-center bg-zinc-100 dark:bg-zinc-800", role.color)}>
+                                  <role.icon size={18} />
+                                </div>
+                                {moduleSettings.schedulingRole === role.id && (
+                                  <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-pulse" />
+                                )}
+                              </div>
+                              <div>
+                                <div className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{role.subtitle}</div>
+                                <h4 className="text-sm font-bold text-zinc-900 dark:text-white mt-0.5">{role.title}</h4>
+                                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">{role.desc}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Resource Pool Configuration Panel */}
+                      {moduleSettings.schedulingRole === 'RESOURCE_POOL' && (
+                        <section className="p-6 bg-white/70 dark:bg-zinc-900/70 border border-emerald-500/20 rounded-3xl space-y-6 shadow-sm backdrop-blur-xl animate-in fade-in duration-200">
+                          <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4">
+                            <div>
+                              <h3 className="text-xs font-bold text-zinc-950 dark:text-white uppercase tracking-wider">Bookable Resource Pool Settings</h3>
+                              <p className="text-[10px] text-zinc-400">Configure how records in this module are classified in the central resource ledger</p>
+                            </div>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                              Active Resource Pool
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Resource Category</label>
+                              <select
+                                value={moduleSettings.schedulingResourceType || 'ROOM'}
+                                onChange={(e) => setModuleSettings(prev => ({ ...prev, schedulingResourceType: e.target.value }))}
+                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold text-zinc-900 dark:text-white focus:outline-none"
+                              >
+                                <option value="ROOM">Space / Meeting Room / Property</option>
+                                <option value="VEHICLE">Fleet Vehicle / Service Van</option>
+                                <option value="STAFF">Technician / Specialist / Host</option>
+                                <option value="EQUIPMENT">Hardware / Rental Gear</option>
+                              </select>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Default Slot Duration (Minutes)</label>
+                              <input
+                                type="number"
+                                min={15}
+                                step={15}
+                                value={moduleSettings.schedulingDurationMinutes || 60}
+                                onChange={(e) => setModuleSettings(prev => ({ ...prev, schedulingDurationMinutes: Number(e.target.value) }))}
+                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold text-zinc-900 dark:text-white focus:outline-none"
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Turnover Buffer / Cleaning (Minutes)</label>
+                              <input
+                                type="number"
+                                min={0}
+                                step={15}
+                                value={moduleSettings.schedulingBufferMinutes || 30}
+                                onChange={(e) => setModuleSettings(prev => ({ ...prev, schedulingBufferMinutes: Number(e.target.value) }))}
+                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold text-zinc-900 dark:text-white focus:outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/10 flex items-start gap-3">
+                            <Sparkles size={16} className="text-emerald-500 shrink-0 mt-0.5" />
+                            <div className="text-[11px] text-emerald-800 dark:text-emerald-300 leading-relaxed">
+                              Records created in this module will automatically be selectable as targets in <strong>Platform Bookings</strong>, the <strong>Worksuite Calendar App</strong>, and embeddable booking widgets across Workspace pages and Sites.
+                            </div>
+                          </div>
+                        </section>
+                      )}
+
+                      {/* Booking Event Configuration Panel */}
+                      {moduleSettings.schedulingRole === 'BOOKING_EVENT' && (
+                        <section className="p-6 bg-white/70 dark:bg-zinc-900/70 border border-indigo-500/20 rounded-3xl space-y-6 shadow-sm backdrop-blur-xl animate-in fade-in duration-200">
+                          <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4">
+                            <div>
+                              <h3 className="text-xs font-bold text-zinc-950 dark:text-white uppercase tracking-wider">Booking Event Schema Mapping</h3>
+                              <p className="text-[10px] text-zinc-400">Map module fields to the unified Aurora reservation ledger schema</p>
+                            </div>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                              Active Event Mapping
+                            </span>
+                          </div>
+
+                          {/* Archetype Selector */}
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Booking Archetype</label>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                              {[
+                                { id: 'APPOINTMENT', label: '1:1 Appointment', desc: 'Consultations, client meetings' },
+                                { id: 'RENTAL', label: 'Stays & Rentals', desc: 'Multi-night stays, turnover buffer' },
+                                { id: 'FIELD_SERVICE', label: 'Field Service', desc: 'Technician dispatch, travel buffer' },
+                                { id: 'CAPACITY', label: 'Capacity / Pass', desc: 'Events, classes, multi-ticket' }
+                              ].map((arch) => (
+                                <button
+                                  key={arch.id}
+                                  type="button"
+                                  onClick={() => setModuleSettings(prev => ({ ...prev, schedulingArchetype: arch.id as any }))}
+                                  className={cn(
+                                    "p-3 rounded-2xl border text-left transition-all cursor-pointer",
+                                    moduleSettings.schedulingArchetype === arch.id
+                                      ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                                      : "bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300"
+                                  )}
+                                >
+                                  <div className="text-[11px] font-bold">{arch.label}</div>
+                                  <div className={cn("text-[9px] mt-0.5", moduleSettings.schedulingArchetype === arch.id ? "text-indigo-100" : "text-zinc-400")}>
+                                    {arch.desc}
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Field Mapping Grid */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Start Date / Time Field</label>
+                              <select
+                                value={moduleSettings.schedulingStartDateFieldId || ''}
+                                onChange={(e) => setModuleSettings(prev => ({ ...prev, schedulingStartDateFieldId: e.target.value }))}
+                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold text-zinc-900 dark:text-white focus:outline-none"
+                              >
+                                <option value="">Select Date Field...</option>
+                                <option value="createdAt">Created Date (System)</option>
+                                {displayFields.filter((f: any) => f.type === 'date').map((f: any) => (
+                                  <option key={f.id} value={f.id}>{f.label || f.name}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">End Date / Check-out Field</label>
+                              <select
+                                value={moduleSettings.schedulingEndDateFieldId || ''}
+                                onChange={(e) => setModuleSettings(prev => ({ ...prev, schedulingEndDateFieldId: e.target.value }))}
+                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold text-zinc-900 dark:text-white focus:outline-none"
+                              >
+                                <option value="">None / Single Slot Duration</option>
+                                {displayFields.filter((f: any) => f.type === 'date').map((f: any) => (
+                                  <option key={f.id} value={f.id}>{f.label || f.name}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Assigned Resource Field</label>
+                              <select
+                                value={moduleSettings.schedulingResourceRefFieldId || ''}
+                                onChange={(e) => setModuleSettings(prev => ({ ...prev, schedulingResourceRefFieldId: e.target.value }))}
+                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold text-zinc-900 dark:text-white focus:outline-none"
+                              >
+                                <option value="">Select Resource Field...</option>
+                                {displayFields.map((f: any) => (
+                                  <option key={f.id} value={f.id}>{f.label || f.name}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Customer / Guest Field</label>
+                              <select
+                                value={moduleSettings.schedulingCustomerRefFieldId || ''}
+                                onChange={(e) => setModuleSettings(prev => ({ ...prev, schedulingCustomerRefFieldId: e.target.value }))}
+                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold text-zinc-900 dark:text-white focus:outline-none"
+                              >
+                                <option value="">Select Contact Field...</option>
+                                {displayFields.map((f: any) => (
+                                  <option key={f.id} value={f.id}>{f.label || f.name}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Booking Status Field</label>
+                              <select
+                                value={moduleSettings.schedulingStatusFieldId || ''}
+                                onChange={(e) => setModuleSettings(prev => ({ ...prev, schedulingStatusFieldId: e.target.value }))}
+                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold text-zinc-900 dark:text-white focus:outline-none"
+                              >
+                                <option value="">Default (Status: Confirmed)</option>
+                                {displayFields.map((f: any) => (
+                                  <option key={f.id} value={f.id}>{f.label || f.name}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Total Amount / Rate Field</label>
+                              <select
+                                value={moduleSettings.schedulingPriceFieldId || ''}
+                                onChange={(e) => setModuleSettings(prev => ({ ...prev, schedulingPriceFieldId: e.target.value }))}
+                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold text-zinc-900 dark:text-white focus:outline-none"
+                              >
+                                <option value="">None / Free</option>
+                                {displayFields.filter((f: any) => ['number', 'currency'].includes(f.type)).map((f: any) => (
+                                  <option key={f.id} value={f.id}>{f.label || f.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        </section>
+                      )}
+
+                      {/* Hub Links */}
+                      <div className="flex flex-col sm:flex-row items-center justify-between p-4 rounded-2xl bg-zinc-100 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60 gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-xl bg-indigo-600/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                            <Clock size={16} />
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold text-zinc-900 dark:text-white">Central Scheduling & Calendar Suite</div>
+                            <div className="text-[10px] text-zinc-500">Configure global blackout dates, resource rosters, and view all operational bookings.</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <a
+                            href="/workspace/settings/platform-modules/scheduling"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 flex items-center gap-1.5"
+                          >
+                            <Settings2 size={13} />
+                            Platform Hub
+                          </a>
+                          <a
+                            href="/workspace/apps/calendar"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs"
+                          >
+                            <Calendar size={13} />
+                            Calendar App
+                          </a>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
                 {detailsTab === 'localization' && (
@@ -12076,10 +12425,14 @@ export const ModuleEditor = () => {
 
                       {/* Calendar View specific settings */}
                       {interfaceSettings.master.layoutType === 'calendar' && (
-                        <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-900 animate-in fade-in duration-200">
-                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1 block">Calendar Settings</label>
+                        <div className="space-y-4 pt-6 border-t border-zinc-100 dark:border-zinc-900 animate-in fade-in duration-200">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1 block">Calendar & Bookings</label>
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500">Enhanced</span>
+                          </div>
+                          
                           <div className="space-y-2">
-                            <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Date Field Source</label>
+                            <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Start Date Field</label>
                             <select 
                               value={interfaceSettings.master.calendarDateFieldId || 'createdAt'}
                               onChange={(e) => setInterfaceSettings(prev => ({
@@ -12097,6 +12450,96 @@ export const ModuleEditor = () => {
                                 <option key={f.id} value={f.id}>{f.label || f.name}</option>
                               ))}
                             </select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">End Date / Check-out (Multi-day Spanning)</label>
+                            <select 
+                              value={interfaceSettings.master.calendarEndDateFieldId || ''}
+                              onChange={(e) => setInterfaceSettings(prev => ({
+                                ...prev,
+                                master: {
+                                  ...prev.master,
+                                  calendarEndDateFieldId: e.target.value
+                                }
+                              }))}
+                              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none cursor-pointer"
+                            >
+                              <option value="">None (Single-day point event)</option>
+                              {displayFields.filter((f: any) => f.type === 'date').map((f: any) => (
+                                <option key={f.id} value={f.id}>{f.label || f.name}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Resource Grouping Field</label>
+                            <select 
+                              value={interfaceSettings.master.calendarResourceFieldId || ''}
+                              onChange={(e) => setInterfaceSettings(prev => ({
+                                ...prev,
+                                master: {
+                                  ...prev.master,
+                                  calendarResourceFieldId: e.target.value
+                                }
+                              }))}
+                              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none cursor-pointer"
+                            >
+                              <option value="">Default (Unified / All Resources)</option>
+                              {displayFields.map((f: any) => (
+                                <option key={f.id} value={f.id}>{f.label || f.name}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800/60">
+                            <label className="flex items-center justify-between text-xs cursor-pointer py-1">
+                              <span className="text-[10px] font-medium text-zinc-600 dark:text-zinc-300">Turnover Buffers</span>
+                              <input 
+                                type="checkbox"
+                                checked={!!interfaceSettings.master.calendarEnableBuffers}
+                                onChange={(e) => setInterfaceSettings(prev => ({
+                                  ...prev,
+                                  master: {
+                                    ...prev.master,
+                                    calendarEnableBuffers: e.target.checked
+                                  }
+                                }))}
+                                className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                              />
+                            </label>
+
+                            <label className="flex items-center justify-between text-xs cursor-pointer py-1">
+                              <span className="text-[10px] font-medium text-zinc-600 dark:text-zinc-300">10-Minute Hold Badges</span>
+                              <input 
+                                type="checkbox"
+                                checked={interfaceSettings.master.calendarEnableHoldBadges !== false}
+                                onChange={(e) => setInterfaceSettings(prev => ({
+                                  ...prev,
+                                  master: {
+                                    ...prev.master,
+                                    calendarEnableHoldBadges: e.target.checked
+                                  }
+                                }))}
+                                className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                              />
+                            </label>
+
+                            <label className="flex items-center justify-between text-xs cursor-pointer py-1">
+                              <span className="text-[10px] font-medium text-zinc-600 dark:text-zinc-300">Click-to-Book Direct Slots</span>
+                              <input 
+                                type="checkbox"
+                                checked={interfaceSettings.master.calendarEnableSlotBooking !== false}
+                                onChange={(e) => setInterfaceSettings(prev => ({
+                                  ...prev,
+                                  master: {
+                                    ...prev.master,
+                                    calendarEnableSlotBooking: e.target.checked
+                                  }
+                                }))}
+                                className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                              />
+                            </label>
                           </div>
                         </div>
                       )}

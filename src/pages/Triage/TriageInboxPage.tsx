@@ -915,6 +915,13 @@ export const TriageInboxPage = () => {
         }
       });
 
+      // Target Module Schema Check
+      const targetFields = flattenFields(targetModule.layout || targetModule.fields || []);
+      const missingRequired = targetFields.filter(f => f.required && !dispatchPayload[f.id] && !dispatchPayload[f.name]);
+      if (missingRequired.length > 0) {
+        toast.warning(`Notice: Destination requires "${missingRequired.slice(0, 3).map(f => f.label || f.name).join(', ')}". Dispatching with available mapped data.`);
+      }
+
       // 1. Submit record to destination module
       const createRes = await fetch(`${API_BASE_URL}/api/data/records`, {
         method: 'POST',
@@ -1798,6 +1805,15 @@ export const TriageInboxPage = () => {
                           <span className={`text-[7.5px] px-1.5 py-0.5 rounded border font-semibold ${statusStyles.bg} ${statusStyles.text} ${statusStyles.border}`}>
                             {statusStyles.label}
                           </span>
+                          {rec.validationErrors && rec.validationErrors.length > 0 ? (
+                            <span className="text-[7.5px] px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/30 text-rose-400 font-semibold flex items-center gap-1 shrink-0">
+                              <AlertCircle size={8} /> {rec.validationErrors[0]?.message || 'Validation Notice'}
+                            </span>
+                          ) : (
+                            <span className="text-[7.5px] px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-semibold flex items-center gap-0.5 shrink-0">
+                              <Check size={8} /> Validated
+                            </span>
+                          )}
                         </div>
                         <p className="text-[9px] text-zinc-450 line-clamp-2 leading-relaxed">
                           {displayDesc}

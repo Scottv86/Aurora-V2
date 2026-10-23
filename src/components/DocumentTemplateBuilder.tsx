@@ -63,6 +63,7 @@ import { DocumentService } from '../services/documentService';
 import { executeServerCompletion } from '../services/aiService';
 import { usePlatform } from '../hooks/usePlatform';
 import { useTheme } from '../hooks/useTheme';
+import { useBrandKits } from '../hooks/useBrandKits';
 import { sanitizeHtml } from '../lib/sanitizeHtml';
 import { toast } from 'sonner';
 import { UnsavedChangesModal } from './Common/UnsavedChangesModal';
@@ -95,6 +96,7 @@ export const DocumentTemplateBuilder: React.FC<DocumentTemplateBuilderProps> = (
 }) => {
   const { tenant, user, setIsBuilderFullscreen } = usePlatform();
   const { theme } = useTheme();
+  const { defaultBrandKit } = useBrandKits();
 
   // Make the builder fullscreen across the viewport on mount and restore on unmount
   useEffect(() => {
@@ -1485,12 +1487,19 @@ Rule: ${typeInstructions[contentType]}`;
                         previewMode === 'dark' ? "border-zinc-800" : "border-indigo-600/30"
                       )}>
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center text-white font-black text-lg shadow-md shadow-indigo-500/30">
-                            {tenant?.name?.charAt(0) || 'A'}
+                          <div 
+                            className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center text-white font-black text-lg shadow-md shadow-indigo-500/30 overflow-hidden"
+                            style={defaultBrandKit?.colors?.primary ? { background: `linear-gradient(135deg, ${defaultBrandKit.colors.primary}, ${defaultBrandKit.colors.secondary || defaultBrandKit.colors.primary})` } : undefined}
+                          >
+                            {defaultBrandKit?.assets?.logoLight ? (
+                              <img src={defaultBrandKit.assets.logoLight} alt="Logo" className="w-full h-full object-contain p-1" />
+                            ) : (
+                              (defaultBrandKit?.name || tenant?.name || 'A').charAt(0)
+                            )}
                           </div>
                           <div>
                             <h2 className={cn("font-bold text-base tracking-tight", previewMode === 'dark' ? "text-white" : "text-zinc-900")}>
-                              {tenant?.name || sampleData.tenant_name}
+                              {defaultBrandKit?.name || tenant?.name || sampleData.tenant_name}
                             </h2>
                             <p className={cn("text-xs", previewMode === 'dark' ? "text-zinc-400" : "text-zinc-500")}>
                               Official Corporate Document • Confidential

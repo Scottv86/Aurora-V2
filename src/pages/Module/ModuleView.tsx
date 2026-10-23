@@ -2258,7 +2258,11 @@ export const ModuleView = () => {
   const calendarData = useMemo(() => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
-    const dateFieldId = interfaceSettings.master.calendarDateFieldId || allFields.find(f => f.type === 'date')?.id || 'createdAt';
+    const dateFieldId = interfaceSettings.master.calendarDateFieldId || (moduleData as any)?.schedulingConfig?.startDateFieldId || allFields.find(f => f.type === 'date')?.id || 'createdAt';
+    const endDateFieldId = interfaceSettings.master.calendarEndDateFieldId || (moduleData as any)?.schedulingConfig?.endDateFieldId || allFields.find(f => f.id === 'check_out' || f.id === 'endDate' || f.name === 'endDate')?.id;
+    const enableBuffers = interfaceSettings.master.calendarEnableBuffers ?? ((moduleData as any)?.schedulingConfig?.archetype === 'RENTAL' || (moduleData as any)?.schedulingConfig?.archetype === 'FIELD_SERVICE');
+    const enableHoldBadges = interfaceSettings.master.calendarEnableHoldBadges !== false;
+    const enableSlotBooking = interfaceSettings.master.calendarEnableSlotBooking !== false;
 
     // 1. Month View parameters
     const firstDayIndex = new Date(year, month, 1).getDay();
@@ -2313,6 +2317,12 @@ export const ModuleView = () => {
       const recordMonth = dateObj.getMonth();
       const recordDay = dateObj.getDate();
 
+      // Check multi-day spanning
+      const rawEndDate = endDateFieldId ? record[endDateFieldId] : null;
+      const endDateObj = rawEndDate ? new Date(rawEndDate) : null;
+      const isMultiDay = !!(endDateObj && !isNaN(endDateObj.getTime()) && endDateObj.getTime() > dateObj.getTime());
+      const isHeld = record.status === 'HELD' || record.status === 'tentative';
+
       // Year mapping
       if (recordYear === year) {
         if (!yearRecordsMap[recordMonth][recordDay]) {
@@ -2321,12 +2331,48 @@ export const ModuleView = () => {
         yearRecordsMap[recordMonth][recordDay].push(record);
       }
 
-      // Month mapping
-      if (recordYear === year && recordMonth === month) {
-        if (!monthRecordsMap[recordDay]) {
-          monthRecordsMap[recordDay] = [];
+      // Month mapping (with multi-day spanning)
+      if (isMultiDay && endDateObj) {
+        for (let d = 1; d <= numDays; d++) {
+          const currentCellEnd = new Date(year, month, d, 23, 59, 59);
+          const currentCellStart = new Date(year, month, d, 0, 0, 0);
+          if (currentCellEnd >= dateObj && currentCellStart <= endDateObj) {
+            if (!monthRecordsMap[d]) {
+              monthRecordsMap[d] = [];
+            }
+            const isStart = dateObj.getFullYear() === year && dateObj.getMonth() === month && dateObj.getDate() === d;
+            const isEnd = endDateObj.getFullYear() === year && endDateObj.getMonth() === month && endDateObj.getDate() === d;
+            const isMiddle = !isStart && !isEnd;
+            monthRecordsMap[d].push({
+              ...record,
+              _calendarMeta: {
+                isMultiDay: true,
+                isStart,
+                isEnd,
+                isMiddle,
+                isHeld,
+                hasBuffer: isEnd && enableBuffers
+              }
+            });
+          }
         }
-        monthRecordsMap[recordDay].push(record);
+      } else {
+        if (recordYear === year && recordMonth === month) {
+          if (!monthRecordsMap[recordDay]) {
+            monthRecordsMap[recordDay] = [];
+          }
+          monthRecordsMap[recordDay].push({
+            ...record,
+            _calendarMeta: {
+              isMultiDay: false,
+              isStart: true,
+              isEnd: true,
+              isMiddle: false,
+              isHeld,
+              hasBuffer: false
+            }
+          });
+        }
       }
 
       // Week mapping
@@ -2365,6 +2411,10 @@ export const ModuleView = () => {
       firstDayIndex,
       numDays,
       dateFieldId,
+      endDateFieldId,
+      enableBuffers,
+      enableHoldBadges,
+      enableSlotBooking,
       weekDates,
       yearRecordsMap,
       monthRecordsMap,
@@ -2373,7 +2423,7 @@ export const ModuleView = () => {
       hourlyRecords,
       allDayRecords
     };
-  }, [filteredRecords, allFields, currentDate, interfaceSettings]);
+  }, [filteredRecords, allFields, currentDate, interfaceSettings, moduleData]);
 
   const monthNames = [
     "January", "February", "March", "April", "May", "June", 
@@ -3426,41 +3476,93 @@ export const ModuleView = () => {
                     }
                   }}
                   className={cn(
-                    "min-h-[120px] p-3 flex flex-col space-y-2 transition-colors cursor-pointer hover:bg-zinc-50/50 dark:hover:bg-zinc-800/10",
+                    "min-h-[120px] p-2.5 flex flex-col space-y-2 transition-colors cursor-pointer hover:bg-zinc-50/50 dark:hover:bg-zinc-800/10 group/cell",
                     !day ? "bg-zinc-50/30 dark:bg-zinc-950/10 cursor-default" : "bg-white dark:bg-zinc-900"
                   )}
                 >
                   {day && (
                     <div className="flex items-center justify-between">
-                      <span className={cn(
-                        "text-xs font-bold font-mono",
-                        new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year
-                          ? "w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center font-black"
-                          : "text-zinc-500"
-                      )}>
-                        {day}
-                      </span>
-                      {dayRecordsList.length > 0 && (
-                        <span className="text-[9px] font-black text-indigo-500 bg-indigo-500/10 px-1.5 py-0.5 rounded-full">
-                          {dayRecordsList.length}
+                      <div className="flex items-center gap-1.5">
+                        <span className={cn(
+                          "text-xs font-bold font-mono",
+                          new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year
+                            ? "w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center font-black"
+                            : "text-zinc-500"
+                        )}>
+                          {day}
                         </span>
+                        {dayRecordsList.length > 0 && (
+                          <span className="text-[9px] font-black text-indigo-500 bg-indigo-500/10 px-1.5 py-0.5 rounded-full">
+                            {dayRecordsList.length}
+                          </span>
+                        )}
+                      </div>
+
+                      {enableSlotBooking && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowNewEntryModal(true);
+                          }}
+                          className="opacity-0 group-hover/cell:opacity-100 transition-opacity text-[9px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 px-1.5 py-0.5 rounded-md flex items-center gap-0.5 cursor-pointer shadow-xs"
+                          title="Quick Book on this date"
+                        >
+                          <Plus size={10} />
+                          <span>Book</span>
+                        </button>
                       )}
                     </div>
                   )}
 
-                  <div className="flex-1 space-y-1.5 overflow-y-auto max-h-[80px] custom-scrollbar pr-0.5">
-                    {dayRecordsList.map(record => (
-                      <div 
-                        key={record.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRecordClick(record.id);
-                        }}
-                        className="px-2 py-1 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700 rounded-lg text-[9px] font-bold text-zinc-800 dark:text-zinc-200 truncate cursor-pointer transition-all flex items-center justify-between group"
-                      >
-                        <span className="truncate">{getRecordTitle(record)}</span>
-                      </div>
-                    ))}
+                  <div className="flex-1 space-y-1.5 overflow-y-auto max-h-[90px] custom-scrollbar pr-0.5">
+                    {dayRecordsList.map((record, rIdx) => {
+                      const meta = record._calendarMeta;
+                      const isHeld = meta?.isHeld && enableHoldBadges;
+                      const isMulti = meta?.isMultiDay;
+
+                      return (
+                        <div key={`${record.id}-${rIdx}`} className="space-y-0.5">
+                          <div 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRecordClick(record.id);
+                            }}
+                            className={cn(
+                              "px-2 py-1 text-[9px] font-bold truncate cursor-pointer transition-all flex items-center justify-between group/rec shadow-xs",
+                              isHeld
+                                ? "bg-amber-500/10 border border-amber-500/40 text-amber-800 dark:text-amber-300 rounded-lg animate-pulse"
+                                : isMulti
+                                  ? meta.isStart
+                                    ? "bg-indigo-600 text-white rounded-l-lg rounded-r-xs border border-indigo-700"
+                                    : meta.isEnd
+                                      ? "bg-indigo-700 text-white rounded-r-lg rounded-l-xs border border-indigo-800"
+                                      : "bg-indigo-500/20 text-indigo-800 dark:text-indigo-200 border-y border-indigo-500/30 rounded-none font-medium"
+                                  : "bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-800 dark:text-zinc-200"
+                            )}
+                          >
+                            <span className="truncate flex items-center gap-1">
+                              {isHeld && <span className="text-[8px]">⏳</span>}
+                              {isMulti && meta.isStart && <span className="text-[8px] opacity-75">● In:</span>}
+                              {isMulti && meta.isMiddle && <span className="text-[8px] opacity-75">↔</span>}
+                              {isMulti && meta.isEnd && <span className="text-[8px] opacity-75">⇥ Out:</span>}
+                              {getRecordTitle(record)}
+                            </span>
+                            {isHeld && (
+                              <span className="text-[7px] font-black uppercase tracking-wider bg-amber-500/20 px-1 py-0.2 rounded text-amber-600 dark:text-amber-300">
+                                Hold
+                              </span>
+                            )}
+                          </div>
+
+                          {meta?.hasBuffer && (
+                            <div className="text-[8px] font-bold text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-dashed border-amber-500/30 rounded px-1.5 py-0.5 flex items-center gap-1">
+                              <span>🧹 Turnover Buffer</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );

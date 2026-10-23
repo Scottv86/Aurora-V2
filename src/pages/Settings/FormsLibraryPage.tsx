@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { FileText, Plus, Search, Trash2, Eye, Layers, ArrowRight } from 'lucide-react';
 
 import { FormEntity } from '../../types/platform';
@@ -69,6 +70,25 @@ export const FormsLibraryPage: React.FC = () => {
   useEffect(() => {
     fetchForms();
   }, [tenant?.id, token]);
+
+  const location = useLocation();
+  useEffect(() => {
+    if (location.state?.draftArtifact) {
+      const draft = location.state.draftArtifact;
+      setSelectedForm({
+        id: `form_${Date.now()}`,
+        name: draft.name || 'Draft Form from Solution',
+        description: draft.description || '',
+        schema: draft.schema || draft,
+        tenantId: tenant?.id || 't1',
+        isGlobal: true,
+        status: 'PUBLISHED',
+        version: 1
+      });
+      setIsBuilderOpen(true);
+      toast.info('Loaded form draft from Solution Builder');
+    }
+  }, [location.state]);
 
   // Modal Handlers
   const handleSelectBlank = () => {

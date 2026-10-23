@@ -494,7 +494,206 @@ router.post('/:id/deploy', async (req: TenantRequest, res) => {
       }
     }
 
-    // 9. Update Blueprint Status to PUBLISHED
+    // 9. Provision Saved Queries (SavedQuery Table with isSearchEnabled = false)
+    const queryArtifacts = artifacts.filter((a: any) => a.type === 'QUERY');
+    for (const qArt of queryArtifacts) {
+      try {
+        const qContent = qArt.content || {};
+        const queryModel: any = (db as any).savedQuery || globalPrisma.savedQuery;
+        if (queryModel) {
+          const querySlug = (qArt.name || `query-${qArt.id}`).toLowerCase().replace(/[^a-z0-9]+/g, '-');
+          const queryData = {
+            name: qArt.name,
+            slug: querySlug,
+            description: qArt.description || qContent.description || 'Saved SQL query provisioned by Solution Builder',
+            category: qContent.category || 'Analytics',
+            tags: Array.isArray(qContent.tags) ? qContent.tags : ['solution', 'query'],
+            iconName: qContent.iconName || 'Database',
+            isSearchEnabled: false,
+            scopeType: qContent.scopeType || 'MULTI_MODULE',
+            sql: qContent.sql || `SELECT * FROM data_records WHERE tenant_id = '${tenantId}' LIMIT 50;`,
+            status: 'PUBLISHED',
+            parameters: qContent.parameters || [],
+            columnsConfig: qContent.columnsConfig || []
+          };
+
+          const existing = await queryModel.findFirst({
+            where: { tenantId, OR: [{ id: `query_${qArt.id}` }, { slug: querySlug }] }
+          });
+
+          if (existing) {
+            await queryModel.update({
+              where: { id: existing.id },
+              data: { ...queryData, updatedAt: new Date() }
+            });
+          } else {
+            await queryModel.create({
+              data: { id: `query_${qArt.id}`, tenantId, ...queryData }
+            });
+          }
+          provisionedResources.push(`Saved Query: ${qArt.name}`);
+        }
+      } catch (e) {
+        console.warn(`[SolutionDeployer] Saved Query error for ${qArt.name}:`, e);
+      }
+    }
+
+    // 10. Provision Automations (Automation Table)
+    const automationArtifacts = artifacts.filter((a: any) => a.type === 'AUTOMATION');
+    for (const autArt of automationArtifacts) {
+      try {
+        const autContent = autArt.content || {};
+        const autModel: any = (db as any).automation || globalPrisma.automation;
+        if (autModel) {
+          await autModel.upsert({
+            where: { id: `aut_${autArt.id}` },
+            update: {
+              name: autArt.name,
+              description: autArt.description || autContent.description,
+              actions: autContent.actions || [],
+              triggers: autContent.triggers || [],
+              isActive: true,
+              status: 'PUBLISHED'
+            },
+            create: {
+              id: `aut_${autArt.id}`,
+              tenantId,
+              name: autArt.name,
+              description: autArt.description || autContent.description || 'Automation pipeline provisioned by Solution Builder',
+              actions: autContent.actions || [],
+              triggers: autContent.triggers || [],
+              isActive: true,
+              status: 'PUBLISHED'
+            }
+          });
+          provisionedResources.push(`Automation Pipeline: ${autArt.name}`);
+        }
+      } catch (e) {
+        console.warn(`[SolutionDeployer] Automation error for ${autArt.name}:`, e);
+      }
+    }
+
+    // 11. Provision BI Reports (Report Table)
+    const reportArtifacts = artifacts.filter((a: any) => a.type === 'REPORT');
+    for (const rArt of reportArtifacts) {
+      try {
+        const rContent = rArt.content || {};
+        const reportModel: any = (db as any).report || globalPrisma.report;
+        if (reportModel) {
+          const reportConfig = rContent.config || rContent || { widgets: [], dataSource: { type: 'local', tables: ['records'] } };
+          await reportModel.upsert({
+            where: { id: `rep_${rArt.id}` },
+            update: {
+              name: rArt.name,
+              description: rArt.description || rContent.description,
+              config: reportConfig,
+              status: 'Published'
+            },
+            create: {
+              id: `rep_${rArt.id}`,
+              tenantId,
+              name: rArt.name,
+              description: rArt.description || rContent.description || 'BI Report provisioned by Solution Builder',
+              config: reportConfig,
+              status: 'Published'
+            }
+          });
+          provisionedResources.push(`BI Report: ${rArt.name}`);
+        }
+      } catch (e) {
+        console.warn(`[SolutionDeployer] Report error for ${rArt.name}:`, e);
+      }
+    }
+
+    // 12. Provision Sites & Portals (Site Table)
+    const siteArtifacts = artifacts.filter((a: any) => a.type === 'SITE');
+    for (const sArt of siteArtifacts) {
+      try {
+        const sContent = sArt.content || {};
+        const siteModel: any = (db as any).site || globalPrisma.site;
+        if (siteModel) {
+          const siteDomain = (sContent.domain || `${(sArt.name || 'portal').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.aurora.app`);
+          await siteModel.upsert({
+            where: { id: `site_${sArt.id}` },
+            update: {
+              name: sArt.name,
+              description: sArt.description || sContent.description,
+              domain: siteDomain,
+              category: sContent.category || 'internal',
+              type: sContent.type || 'Customer Portal',
+              status: 'active',
+              access: sContent.access || 'Public'
+            },
+            create: {
+              id: `site_${sArt.id}`,
+              tenantId,
+              name: sArt.name,
+              description: sArt.description || sContent.description || 'Portal provisioned by Solution Builder',
+              domain: siteDomain,
+              category: sContent.category || 'internal',
+              type: sContent.type || 'Customer Portal',
+              status: 'active',
+              access: sContent.access || 'Public',
+              branding: sContent.branding || {}
+            }
+          });
+          provisionedResources.push(`Site / Portal: ${sArt.name}`);
+        }
+      } catch (e) {
+        console.warn(`[SolutionDeployer] Site error for ${sArt.name}:`, e);
+      }
+    }
+
+    // 13. Provision Work Queues (Tenant Workspace Queues)
+    const queueArtifacts = artifacts.filter((a: any) => a.type === 'QUEUE');
+    if (queueArtifacts.length > 0) {
+      try {
+        const tenantRecord = await globalPrisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { workspaceSettings: true }
+        });
+        const currentSettings = (tenantRecord?.workspaceSettings as any) || {};
+        const existingQueues: any[] = Array.isArray(currentSettings.queues) ? [...currentSettings.queues] : [];
+
+        for (const qArt of queueArtifacts) {
+          const qContent = qArt.content || {};
+          const newQueue = {
+            id: `queue_${qArt.id}`,
+            name: qArt.name,
+            description: qArt.description || qContent.description || 'Work queue provisioned by Solution Builder',
+            moduleId: qContent.moduleId || '',
+            moduleIds: qContent.moduleIds || [],
+            isUnifiedQueue: Boolean(qContent.isUnifiedQueue),
+            columns: qContent.columns || [],
+            conditions: qContent.conditions || { rules: [] },
+            slaConfig: qContent.slaConfig || null,
+            createdAt: new Date().toISOString()
+          };
+
+          const qIndex = existingQueues.findIndex(q => q.id === newQueue.id);
+          if (qIndex >= 0) {
+            existingQueues[qIndex] = { ...existingQueues[qIndex], ...newQueue };
+          } else {
+            existingQueues.push(newQueue);
+          }
+          provisionedResources.push(`Work Queue: ${qArt.name}`);
+        }
+
+        await globalPrisma.tenant.update({
+          where: { id: tenantId },
+          data: {
+            workspaceSettings: {
+              ...currentSettings,
+              queues: existingQueues
+            }
+          }
+        });
+      } catch (e) {
+        console.warn(`[SolutionDeployer] Queue provisioning error:`, e);
+      }
+    }
+
+    // 14. Update Blueprint Status to PUBLISHED
     await model.update({
       where: { id },
       data: { status: 'PUBLISHED' }

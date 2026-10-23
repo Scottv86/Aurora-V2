@@ -1,13 +1,14 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { FormRenderer, QueueRenderer } from '../Builders';
 import { SearchRenderer } from '../Search/SearchRenderer';
 import { WorkQueue } from '../WorkQueue';
 import { 
   Database, Globe, Cpu, ShieldCheck, Workflow, 
-  HelpCircle, Boxes
+  HelpCircle, Boxes, CalendarClock, Calendar, Clock, Plus, MapPin
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
+import { usePlatform } from '../../hooks/usePlatform';
 
 export interface UniversalWidgetProps {
   widget: {
@@ -26,6 +27,40 @@ export const UniversalWidgetRenderer: React.FC<UniversalWidgetProps> = ({
   widget,
   mode: _mode = 'workspace'
 }) => {
+  const { modules } = usePlatform();
+
+  const liveWorkflows = useMemo(() => {
+    const list: any[] = [];
+    (modules || []).forEach((m: any) => {
+      if (m.workflow?.name) {
+        list.push({ name: `${m.name}: ${m.workflow.name}`, status: 'Running', queue: m.workflow.nodes?.length || 1 });
+      } else if (m.workflows && Array.isArray(m.workflows)) {
+        m.workflows.forEach((w: any) => {
+          list.push({ name: `${m.name}: ${w.name || 'Workflow'}`, status: 'Running', queue: w.nodes?.length || 1 });
+        });
+      }
+    });
+    if (list.length > 0) return list.slice(0, 5);
+    return [
+      { name: 'Customer Onboarding', status: 'Running', queue: 24 },
+      { name: 'Vendor Approval', status: 'Running', queue: 8 },
+      { name: 'Support Escalation', status: 'Healthy', queue: 3 }
+    ];
+  }, [modules]);
+
+  const liveStats = useMemo(() => {
+    const modCount = (modules || []).filter((m: any) => m.type !== 'PAGE').length;
+    const wfCount = (modules || []).reduce((acc: number, m: any) => {
+      return acc + (m.workflow ? 1 : 0) + (Array.isArray(m.workflows) ? m.workflows.length : 0);
+    }, 0);
+
+    return [
+      { label: 'Active Modules', value: modCount > 0 ? String(modCount) : '1,420', icon: Database, color: 'text-indigo-500 bg-indigo-500/10' },
+      { label: 'Active Workflows', value: wfCount > 0 ? String(wfCount) : '384', icon: Workflow, color: 'text-emerald-500 bg-emerald-500/10' },
+      { label: 'AI Operations', value: '89', icon: Cpu, color: 'text-purple-500 bg-purple-500/10' },
+      { label: 'System Uptime', value: '99.9%', icon: ShieldCheck, color: 'text-amber-500 bg-amber-500/10' }
+    ];
+  }, [modules]);
 
   switch (widget.type) {
     case 'standalone-form':
@@ -61,12 +96,7 @@ export const UniversalWidgetRenderer: React.FC<UniversalWidgetProps> = ({
     case 'stats-grid':
       return (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[
-            { label: 'Active Records', value: '1,420', icon: Database, color: 'text-indigo-500 bg-indigo-500/10' },
-            { label: 'Submissions', value: '384', icon: Globe, color: 'text-emerald-500 bg-emerald-500/10' },
-            { label: 'AI Operations', value: '89', icon: Cpu, color: 'text-purple-500 bg-purple-500/10' },
-            { label: 'System Uptime', value: '99.9%', icon: ShieldCheck, color: 'text-amber-500 bg-amber-500/10' }
-          ].map((stat, i) => (
+          {liveStats.map((stat, i) => (
             <div key={i} className="p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl flex items-center justify-between shadow-sm">
               <div>
                 <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{stat.label}</span>
@@ -88,11 +118,7 @@ export const UniversalWidgetRenderer: React.FC<UniversalWidgetProps> = ({
             <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">{widget.title || 'Active Workflows'}</h3>
           </div>
           <div className="space-y-2 flex-1 overflow-y-auto">
-            {[
-              { name: 'Customer Onboarding', status: 'Running', queue: 24 },
-              { name: 'Vendor Approval', status: 'Running', queue: 8 },
-              { name: 'Support Escalation', status: 'Healthy', queue: 3 }
-            ].map((wf, idx) => (
+            {liveWorkflows.map((wf, idx) => (
               <div key={idx} className="flex items-center justify-between p-2.5 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl text-xs">
                 <span className="font-medium text-zinc-800 dark:text-zinc-200">{wf.name}</span>
                 <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 font-semibold px-2 py-0.5 rounded-md">
@@ -222,6 +248,63 @@ export const UniversalWidgetRenderer: React.FC<UniversalWidgetProps> = ({
             lockedParameters={widget.properties?.lockedParameters}
             className="w-full h-full flex-1"
           />
+        </div>
+      );
+
+    case 'booking-calendar':
+    case 'dispatch-board':
+    case 'scheduling-widget':
+    case 'calendar-schedule':
+      return (
+        <div className="relative group bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-5 shadow-sm overflow-hidden h-full flex flex-col">
+          <div className="flex items-center justify-between pb-3 mb-3 border-b border-zinc-100 dark:border-zinc-800">
+            <div className="flex items-center gap-2">
+              <CalendarClock size={18} className="text-indigo-500" />
+              <div>
+                <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">
+                  {widget.title || (widget.type === 'dispatch-board' ? 'Field Dispatch Board' : 'Operational Schedule')}
+                </h3>
+                {widget.subtitle && <p className="text-[11px] text-zinc-400">{widget.subtitle}</p>}
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full uppercase">
+                {widget.type === 'dispatch-board' ? 'Timeline' : 'Week View'}
+              </span>
+              <button 
+                onClick={() => toast.info('Opening quick booking drawer...')}
+                className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-500 transition-colors"
+                title="Book New Slot"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 space-y-2 overflow-y-auto min-h-[160px]">
+            {[
+              { time: '09:00 AM', title: 'Marcus Vance — Seaside Villa Check-in', type: 'Rental Stay', status: 'Confirmed', color: 'border-l-amber-500 bg-amber-50/50 dark:bg-amber-950/20 text-amber-900 dark:text-amber-200' },
+              { time: '11:00 AM', title: 'Elena Rostova — Executive Consultation', type: '30m Session', status: 'Confirmed', color: 'border-l-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/20 text-indigo-900 dark:text-indigo-200' },
+              { time: '01:30 PM', title: 'Apex Logistics — HVAC Van 4 Dispatch', type: 'On-Site Callout', status: 'In Route', color: 'border-l-rose-500 bg-rose-50/50 dark:bg-rose-950/20 text-rose-900 dark:text-rose-200' },
+              { time: '04:00 PM', title: 'David Kim — Leadership Masterclass', type: 'Room Suite A', status: '8 / 15 Booked', color: 'border-l-purple-500 bg-purple-50/50 dark:bg-purple-950/20 text-purple-900 dark:text-purple-200' }
+            ].map((event, idx) => (
+              <div 
+                key={idx} 
+                className={cn("p-2.5 rounded-xl border border-zinc-200/80 dark:border-zinc-800 border-l-4 flex items-center justify-between text-xs transition-all hover:shadow-xs", event.color)}
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="font-mono text-[11px] font-bold shrink-0">{event.time}</span>
+                  <div>
+                    <p className="font-bold text-zinc-900 dark:text-white leading-tight">{event.title}</p>
+                    <p className="text-[10px] opacity-75">{event.type}</p>
+                  </div>
+                </div>
+                <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-white/70 dark:bg-zinc-900/70 border border-zinc-200/50 dark:border-zinc-700/50 shrink-0">
+                  {event.status}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       );
 

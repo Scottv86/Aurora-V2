@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { GitBranch, Plus, Search, Trash2, ArrowRight, Layers } from 'lucide-react';
 
 
@@ -62,6 +63,25 @@ export const WorkflowsLibraryPage: React.FC = () => {
   useEffect(() => {
     fetchWorkflows();
   }, [tenant?.id, token]);
+
+  const location = useLocation();
+  useEffect(() => {
+    if (location.state?.draftArtifact) {
+      const draft = location.state.draftArtifact;
+      setSelectedWorkflow({
+        id: `workflow_${Date.now()}`,
+        name: draft.name || 'Draft Workflow from Solution',
+        description: draft.description || '',
+        schema: draft.schema || draft,
+        tenantId: tenant?.id || 't1',
+        isGlobal: true,
+        status: 'PUBLISHED',
+        version: 1
+      });
+      setIsBuilderOpen(true);
+      toast.info('Loaded workflow draft from Solution Builder');
+    }
+  }, [location.state]);
 
   const [workflowToDelete, setWorkflowToDelete] = useState<WorkflowEntity | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);

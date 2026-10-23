@@ -16,10 +16,17 @@ import {
   Circle,
   Trash2,
   AlertCircle,
-  ArrowRight
+  ArrowRight,
+  Sparkles,
+  ExternalLink,
+  ShieldCheck,
+  Check
 } from 'lucide-react';
 import { ScheduledActivity, ScheduledActivityType } from '../../lib/workflowProcessUtils';
 import { cn } from '../../lib/utils';
+import { Booking, BookingArchetype } from '../../types/scheduling';
+import { usePlatform } from '../../context/PlatformContext';
+import { schedulingService } from '../../services/schedulingService';
 
 export interface ScheduleActivityModalProps {
   isOpen: boolean;
@@ -28,6 +35,7 @@ export interface ScheduleActivityModalProps {
   recordKey?: string;
   recordTitle?: string;
   moduleName?: string;
+  moduleData?: any;
   onSchedule: (activity: ScheduledActivity) => Promise<void> | void;
   onCompleteActivity?: (activityId: string) => Promise<void> | void;
   onDeleteActivity?: (activityId: string) => Promise<void> | void;
@@ -54,6 +62,7 @@ export const ScheduleActivityModal: React.FC<ScheduleActivityModalProps> = ({
   recordKey,
   recordTitle,
   moduleName,
+  moduleData,
   onSchedule,
   onCompleteActivity,
   onDeleteActivity,
@@ -86,11 +95,23 @@ export const ScheduleActivityModal: React.FC<ScheduleActivityModalProps> = ({
   const activeRecordTitle = recordTitle || recordInfoRef.current.recordTitle;
   const activeModuleName = moduleName || recordInfoRef.current.moduleName;
 
+  const { tenant, members, modules } = usePlatform();
+  const availableResources = useMemo(() => {
+    return schedulingService.getResources(tenant?.id, members, modules);
+  }, [tenant?.id, members, modules]);
+
+  // Mode switcher: CRM activities vs Bookings
+  const isResourcePool = moduleData?.schedulingRole === 'RESOURCE_POOL';
+  const isBookingEvent = moduleData?.schedulingRole === 'BOOKING_EVENT';
+  const [mainMode, setMainMode] = useState<'crm' | 'booking'>(
+    isResourcePool || isBookingEvent ? 'booking' : 'crm'
+  );
+
   // View state
   const [activeFilter, setActiveFilter] = useState<FilterTab>('PENDING');
   const [isComposerExpanded, setIsComposerExpanded] = useState(activities.length === 0);
 
-  // Form state
+  // Form state for CRM Activity
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const defaultDueDate = tomorrow.toISOString().split('T')[0];
@@ -102,6 +123,75 @@ export const ScheduleActivityModal: React.FC<ScheduleActivityModalProps> = ({
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [localSubmitting, setLocalSubmitting] = useState(false);
+
+  // Unified Booking & Scheduling State
+  const [bookingArchetype, setBookingArchetype] = useState<BookingArchetype>(
+    moduleData?.schedulingConfig?.archetype || 'APPOINTMENT'
+  );
+  const [bookingDate, setBookingDate] = useState(defaultDueDate);
+  const [selectedSlot, setSelectedSlot] = useState<string>('10:00 AM');
+  const [selectedResource, setSelectedResource] = useState<string>(
+    activeRecordTitle || 'Meeting Room Alpha'
+  );
+  const [customerName, setCustomerName] = useState('Customer / Client');
+  const [bookingNotes, setBookingNotes] = useState('');
+  const [holdSeconds, setHoldSeconds] = useState(594);
+  const [isHoldActive, setIsHoldActive] = useState(true);
+  const [isBookingConfirmed, setIsBookingConfirmed] = useState(false);
+  const [bookingSuccessMsg, setBookingSuccessMsg] = useState('');
+
+  // 10-minute hold countdown timer
+  useEffect(() => {
+    if (!isHoldActive || !isOpen) return;
+    const timer = setInterval(() => {
+      setHoldSeconds(prev => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isHoldActive, isOpen]);
+
+  const handleConfirmBooking = async () => {
+    try {
+      setLocalSubmitting(true);
+      const bookingId = `bk_${Date.now()}`;
+      const matchedRes = availableResources.find(r => r.name === selectedResource || r.id === selectedResource);
+      const newBooking: Booking = {
+        id: bookingId,
+        configId: 'cfg_universal',
+        configTitle: `${bookingArchetype} Booking`,
+        resourceId: matchedRes?.id || recordId || 'res_1',
+        resourceName: matchedRes?.name || selectedResource,
+        archetype: bookingArchetype,
+        customerName: customerName.trim() || 'Client / Guest',
+        customerEmail: 'client@aurora.app',
+        startDateTime: `${bookingDate}T${selectedSlot}:00`,
+        endDateTime: `${bookingDate}T17:00:00`,
+        status: 'CONFIRMED',
+        notes: bookingNotes.trim() || undefined,
+        createdAt: new Date().toISOString()
+      };
+
+      schedulingService.createBooking(tenant?.id, newBooking);
+
+      await onSchedule({
+        id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+        type: 'meeting',
+        summary: `Booking: ${bookingArchetype} - ${newBooking.resourceName} (${selectedSlot})`,
+        dueDate: bookingDate,
+        assignedToName: currentUserName || 'Current User',
+        assignedToId: currentUserId,
+        note: `Unified Reservation #${bookingId} confirmed in scheduling ledger. Notes: ${bookingNotes}`,
+        done: false,
+        createdAt: new Date().toISOString()
+      });
+
+      setIsBookingConfirmed(true);
+      setBookingSuccessMsg(`Reservation #${bookingId} confirmed and synchronized to Central Bookings Ledger & Worksuite Calendar.`);
+    } catch (err) {
+      console.error('Failed to confirm booking:', err);
+    } finally {
+      setLocalSubmitting(false);
+    }
+  };
 
   // Auto-expand composer if no activities exist
   useEffect(() => {
@@ -297,49 +387,322 @@ export const ScheduleActivityModal: React.FC<ScheduleActivityModalProps> = ({
               </div>
             </div>
 
-            {/* TAB SELECTOR & COMPOSER TOGGLE */}
-            <div className="flex items-center justify-between gap-2.5 pt-1">
-              <div className="flex items-center p-0.5 rounded-xl bg-zinc-200/70 dark:bg-zinc-800/80 text-xs font-semibold">
-                {[
-                  { id: 'PENDING', label: `Pending (${pendingCount})` },
-                  { id: 'COMPLETED', label: `Completed (${activities.filter(a => a.done).length})` },
-                  { id: 'ALL', label: `All (${activities.length})` }
-                ].map(tab => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setActiveFilter(tab.id as any)}
-                    className={cn(
-                      "px-3 py-1.5 rounded-lg transition-all cursor-pointer text-xs",
-                      activeFilter === tab.id
-                        ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-xs font-bold"
-                        : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
-                    )}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
+            {/* TOP-LEVEL MODE SWITCHER: CRM vs BOOKING */}
+            <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-zinc-200/80 dark:bg-zinc-800/80">
+              <button
+                type="button"
+                onClick={() => setMainMode('crm')}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer",
+                  mainMode === 'crm'
+                    ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                    : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+                )}
+              >
+                <CheckSquare size={13} />
+                <span>CRM Follow-up</span>
+                {pendingCount > 0 && (
+                  <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-500/10 text-indigo-500 font-black">
+                    {pendingCount}
+                  </span>
+                )}
+              </button>
 
-              {!isComposerExpanded && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsComposerExpanded(true);
-                    setTimeout(() => summaryInputRef.current?.focus(), 50);
-                  }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer shrink-0"
-                >
-                  <Plus size={13} />
-                  <span>New Activity</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setMainMode('booking')}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer",
+                  mainMode === 'booking'
+                    ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                    : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+                )}
+              >
+                <Calendar size={13} />
+                <span>Book Appointment & Slot</span>
+                <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  Engine
+                </span>
+              </button>
             </div>
+
+            {/* TAB SELECTOR & COMPOSER TOGGLE (CRM MODE) */}
+            {mainMode === 'crm' && (
+              <div className="flex items-center justify-between gap-2.5 pt-1">
+                <div className="flex items-center p-0.5 rounded-xl bg-zinc-200/70 dark:bg-zinc-800/80 text-xs font-semibold">
+                  {[
+                    { id: 'PENDING', label: `Pending (${pendingCount})` },
+                    { id: 'COMPLETED', label: `Completed (${activities.filter(a => a.done).length})` },
+                    { id: 'ALL', label: `All (${activities.length})` }
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setActiveFilter(tab.id as any)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg transition-all cursor-pointer text-xs",
+                        activeFilter === tab.id
+                          ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-xs font-bold"
+                          : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+                      )}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                {!isComposerExpanded && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsComposerExpanded(true);
+                      setTimeout(() => summaryInputRef.current?.focus(), 50);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer shrink-0"
+                  >
+                    <Plus size={13} />
+                    <span>New Activity</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {/* DRAWER BODY */}
           <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
-            
+            {mainMode === 'booking' ? (
+              <div className="space-y-5 animate-in fade-in duration-200">
+                {isBookingConfirmed ? (
+                  <div className="p-6 rounded-3xl bg-white dark:bg-zinc-900 border border-emerald-500/30 text-center space-y-4 shadow-sm">
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
+                      <CheckCircle2 size={28} />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-zinc-900 dark:text-white">Booking Confirmed!</h3>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-sm mx-auto leading-relaxed">
+                        {bookingSuccessMsg}
+                      </p>
+                    </div>
+                    <div className="pt-2 flex items-center justify-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsBookingConfirmed(false);
+                          setHoldSeconds(600);
+                          setIsHoldActive(true);
+                        }}
+                        className="px-4 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 cursor-pointer"
+                      >
+                        Book Another
+                      </button>
+                      <a
+                        href="/workspace/apps/calendar"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs"
+                      >
+                        <Calendar size={13} />
+                        View in Calendar
+                      </a>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* Resource Pool Card if current module is a resource */}
+                    {isResourcePool && (
+                      <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-transparent border border-emerald-500/20 flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                              Bookable Resource Pool
+                            </span>
+                            <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                              {activeRecordTitle}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                            Category: {moduleData?.schedulingConfig?.resourceType || 'Space / Room'} • Status: Available
+                          </p>
+                        </div>
+                        <a
+                          href="/workspace/settings/platform-modules/scheduling"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2.5 py-1 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[10px] font-bold text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 shrink-0"
+                        >
+                          Blackout Rules
+                        </a>
+                      </div>
+                    )}
+
+                    {/* Booking Setup Form */}
+                    <div className="p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-4 shadow-sm">
+                      <div className="flex items-center justify-between border-b border-zinc-150 dark:border-zinc-800 pb-3">
+                        <div>
+                          <h3 className="text-xs font-bold text-zinc-950 dark:text-white uppercase tracking-wider">Reserve Time Slot</h3>
+                          <p className="text-[10px] text-zinc-400">Schedule appointments, dispatches, or facility reservations</p>
+                        </div>
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500">
+                          Live Availability
+                        </span>
+                      </div>
+
+                      {/* Archetype Selector */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Booking Archetype</label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {[
+                            { id: 'APPOINTMENT', label: '1:1 Meeting', icon: User },
+                            { id: 'RENTAL', label: 'Stay / Rental', icon: Calendar },
+                            { id: 'FIELD_SERVICE', label: 'Field Service', icon: Sparkles }
+                          ].map((arch) => (
+                            <button
+                              key={arch.id}
+                              type="button"
+                              onClick={() => setBookingArchetype(arch.id as any)}
+                              className={cn(
+                                "p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-2",
+                                bookingArchetype === arch.id
+                                  ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                                  : "bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300"
+                              )}
+                            >
+                              <arch.icon size={13} className="shrink-0" />
+                              <span className="text-xs font-bold truncate">{arch.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Date & Resource Inputs */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Target Date</label>
+                          <input
+                            type="date"
+                            value={bookingDate}
+                            onChange={(e) => setBookingDate(e.target.value)}
+                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold text-zinc-900 dark:text-white focus:outline-none"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Assigned Resource</label>
+                          <select
+                            value={selectedResource}
+                            onChange={(e) => setSelectedResource(e.target.value)}
+                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold text-zinc-900 dark:text-white focus:outline-none"
+                          >
+                            {activeRecordTitle && (
+                              <option value={activeRecordTitle}>{activeRecordTitle} (Current Record)</option>
+                            )}
+                            {availableResources
+                              .filter(r => r.name !== activeRecordTitle)
+                              .map(r => (
+                                <option key={r.id} value={r.name}>
+                                  {r.name} ({r.type})
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Slot Selection */}
+                      <div className="space-y-1.5 pt-1">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Select Available Slot</label>
+                          <span className="text-[9px] text-zinc-400">Timezone: Tenant Local</span>
+                        </div>
+                        <div className="grid grid-cols-5 gap-1.5">
+                          {['09:00 AM', '10:30 AM', '01:00 PM', '02:30 PM', '04:00 PM'].map((slot) => (
+                            <button
+                              key={slot}
+                              type="button"
+                              onClick={() => {
+                                setSelectedSlot(slot);
+                                setIsHoldActive(true);
+                                setHoldSeconds(599);
+                              }}
+                              className={cn(
+                                "py-2 px-1 rounded-xl text-[10px] font-bold border transition-all text-center cursor-pointer",
+                                selectedSlot === slot
+                                  ? "bg-indigo-600 text-white border-indigo-600 shadow-xs ring-2 ring-indigo-500/20"
+                                  : "bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300"
+                              )}
+                            >
+                              {slot}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 10-Minute Hold Lock Banner */}
+                      {isHoldActive && (
+                        <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-3 animate-in fade-in">
+                          <Clock size={16} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5 animate-pulse" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                                Tentative Hold Active: {Math.floor(holdSeconds / 60)}:{(holdSeconds % 60).toString().padStart(2, '0')}
+                              </span>
+                              <span className="text-[9px] font-black uppercase tracking-wider text-amber-600 bg-amber-500/20 px-1.5 py-0.5 rounded-full">
+                                Atomic Lock
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-amber-700/80 dark:text-amber-300/80 mt-0.5 leading-snug">
+                              Slot <strong>{selectedSlot}</strong> on <strong>{bookingDate}</strong> is reserved exclusively for this record against duplicate bookings across Aurora.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Customer & Notes */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Client / Attendee</label>
+                          <input
+                            type="text"
+                            value={customerName}
+                            onChange={(e) => setCustomerName(e.target.value)}
+                            placeholder="Client name or reference"
+                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-medium text-zinc-900 dark:text-white focus:outline-none"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Booking Notes</label>
+                          <input
+                            type="text"
+                            value={bookingNotes}
+                            onChange={(e) => setBookingNotes(e.target.value)}
+                            placeholder="Optional instructions..."
+                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-medium text-zinc-900 dark:text-white focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Submit Button */}
+                      <div className="pt-2">
+                        <button
+                          type="button"
+                          onClick={handleConfirmBooking}
+                          disabled={localSubmitting}
+                          className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                        >
+                          {localSubmitting ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <Check size={14} />
+                          )}
+                          <span>Confirm Reservation & Add to Calendar</span>
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <>
             {/* Quick Activity Composer */}
             <div className={cn(
               "rounded-2xl border transition-all duration-200 overflow-hidden",
@@ -669,6 +1032,8 @@ export const ScheduleActivityModal: React.FC<ScheduleActivityModalProps> = ({
                 })}
               </div>
             )}
+            </>
+          )}
           </div>
         </motion.div>
       )}

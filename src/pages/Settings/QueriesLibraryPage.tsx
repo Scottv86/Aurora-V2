@@ -78,6 +78,33 @@ export const QueriesLibraryPage: React.FC = () => {
     fetchQueries();
   }, [tenant?.id, token]);
 
+  useEffect(() => {
+    const draftArtifact = (location.state as any)?.draftArtifact;
+    if (draftArtifact) {
+      const content = draftArtifact.content || {};
+      const newQuery: SavedQueryEntity = {
+        id: `query_${Date.now()}`,
+        tenantId,
+        name: draftArtifact.name || 'New Query',
+        slug: (draftArtifact.name || 'new-query').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        description: draftArtifact.description || content.description || 'Imported from Solution Blueprint',
+        sql: content.sql || 'SELECT id, created_at, status FROM records LIMIT 50;',
+        parameters: content.parameters || [],
+        columnsConfig: content.columnsConfig || [
+          { name: 'id', label: 'ID', type: 'text', visible: true },
+          { name: 'status', label: 'Status', type: 'badge', visible: true },
+          { name: 'created_at', label: 'Created At', type: 'date', visible: true }
+        ],
+        status: 'DRAFT',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      setSelectedQuery(newQuery);
+      setIsBuilderOpen(true);
+      toast.success(`Loaded draft Query from Solution: "${draftArtifact.name}"`);
+    }
+  }, [location.state, tenantId]);
+
   // Check if opened from QueryExplorer with prefill SQL
   useEffect(() => {
     const prefill = (location.state as any)?.prefillSql;

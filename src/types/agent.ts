@@ -1,4 +1,4 @@
-﻿import { ContextSource } from './solutions';
+import { ContextSource } from './solutions';
 
 export type AgentStatus = 'ACTIVE' | 'DRAFT' | 'ARCHIVED';
 
@@ -9,7 +9,8 @@ export type AgentToolType =
   | 'WEBHOOK' 
   | 'REST_API' 
   | 'FILE_PARSER' 
-  | 'SUB_AGENT';
+  | 'SUB_AGENT'
+  | 'DOCUMENT_GENERATOR';
 
 export interface AgentCustomToolParameter {
   name: string;

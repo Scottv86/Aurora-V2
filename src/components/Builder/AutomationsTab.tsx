@@ -8,7 +8,7 @@ import {
   Mail, MessageSquare, ChevronDown, ChevronUp, RefreshCw, Database,
   ArrowRight, ToggleLeft, ToggleRight, Clock, HelpCircle, Search, Sparkles, Code, Play, Layers,
   Copy, GripVertical, UserCheck, GitFork, Route, RotateCw, FileText, Grid, CreditCard,
-  Bell, CheckSquare, StickyNote, Pin
+  Bell, CheckSquare, StickyNote, Pin, Bot
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, flattenFields } from '../../lib/utils';
@@ -747,6 +747,32 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
   const [loadingRuns, setLoadingRuns] = useState(false);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
 
+  // Available AI Agents for invocation
+  const [agentsList, setAgentsList] = useState<any[]>([]);
+  useEffect(() => {
+    const fetchAgents = async () => {
+      try {
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+        const res = await fetch(`${API_BASE_URL}/api/agents`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant?.id || 'default'
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setAgentsList(Array.isArray(data) ? data : []);
+        }
+      } catch {
+        setAgentsList([
+          { id: 'agent-triage', name: 'Intake Triage Copilot', roleTitle: 'Triage Specialist' },
+          { id: 'agent-compliance', name: 'Document Compliance Auditor', roleTitle: 'Auditor' }
+        ]);
+      }
+    };
+    fetchAgents();
+  }, [session?.access_token, tenant?.id]);
+
   // Form states for rule editing
   // Derived active rule object
   const selectedRule = useMemo(() => {
@@ -985,7 +1011,8 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
       CREATE_REMINDER: { title: 'Follow up on {{name}}', dueOffset: '+3 days at 09:00', priority: 'MEDIUM', assignedTo: '{{ownerId}}', description: '' },
       COMPLETE_REMINDER: { match: 'ALL_ON_RECORD', titleContains: '' },
       CREATE_NOTE: { title: 'Operational Note', body: '', color: 'zinc', isPinned: false },
-      PIN_RECORD_NOTE: { title: 'Important Alert', body: '', color: 'amber' }
+      PIN_RECORD_NOTE: { title: 'Important Alert', body: '', color: 'amber' },
+      INVOKE_AGENT: { agentId: '', promptTemplate: 'Evaluate record {{id}} and execute required task', outputVariable: 'agent_result' }
     };
 
     const newActions = [...actions, { type, config: defaultConfigs[type] || {} }];
@@ -1277,7 +1304,8 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                   { id: 'CREATE_REMINDER', label: 'Create Reminder', desc: 'Schedule follow-up task', icon: Bell },
                   { id: 'COMPLETE_REMINDER', label: 'Complete Reminder', desc: 'Mark record tasks done', icon: CheckSquare },
                   { id: 'CREATE_NOTE', label: 'Create Note', desc: 'Log note on record', icon: StickyNote },
-                  { id: 'PIN_RECORD_NOTE', label: 'Pin Alert Note', desc: 'Pin banner note to top', icon: Pin }
+                  { id: 'PIN_RECORD_NOTE', label: 'Pin Alert Note', desc: 'Pin banner note to top', icon: Pin },
+                  { id: 'INVOKE_AGENT', label: 'Invoke AI Agent', desc: 'Run digital coworker tool', icon: Bot }
                 ].map((actionType) => {
                   const Icon = actionType.icon;
                   return (
@@ -2329,6 +2357,62 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                               }}
                               className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white h-16 focus:outline-none focus:border-indigo-500/50"
                               placeholder="High value application received: {{ trigger.record.id }} amount: {{ trigger.record.amount }}"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Invoke AI Agent Form */}
+                      {action.type === 'INVOKE_AGENT' && (
+                        <div className="space-y-3">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-400">Select Digital Coworker</label>
+                            <select
+                              value={action.config.agentId || ''}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                updated[idx].config.agentId = e.target.value;
+                                setActions(updated);
+                              }}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500/50"
+                            >
+                              <option value="">-- Choose an Agent --</option>
+                              {agentsList.map(ag => (
+                                <option key={ag.id} value={ag.id}>
+                                  {ag.name} {ag.role ? `(${ag.role})` : ''}
+                                </option>
+                              ))}
+                              {agentsList.length === 0 && (
+                                <option value="default_agent">General Platform Assistant</option>
+                              )}
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-400">Prompt / Task Directives</label>
+                            <textarea 
+                              value={action.config.promptTemplate || ''}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                updated[idx].config.promptTemplate = e.target.value;
+                                setActions(updated);
+                              }}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white h-20 focus:outline-none focus:border-indigo-500/50 font-mono"
+                              placeholder="Review record {{record.title}} and draft a compliance summary..."
+                            />
+                            <p className="text-[9px] text-zinc-400">Supports variable injection like `{'{{record.field}}'}` or `{'{{trigger.id}}'}`.</p>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-400">Result Output Variable</label>
+                            <input 
+                              type="text"
+                              value={action.config.outputVariable || 'agent_result'}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                updated[idx].config.outputVariable = e.target.value;
+                                setActions(updated);
+                              }}
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500/50"
+                              placeholder="agent_result"
                             />
                           </div>
                         </div>
