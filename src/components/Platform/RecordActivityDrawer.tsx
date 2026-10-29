@@ -9,7 +9,9 @@ import {
   Download, 
   Send, 
   Loader2, 
-  Clock
+  Clock,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
@@ -45,6 +47,7 @@ export const RecordActivityDrawer: React.FC<RecordActivityDrawerProps> = ({
   const [loading, setLoading] = useState(true);
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [selectedCategory, setSelectedCategory] = useState<FilterCategory>('ALL');
+  const [includeViews, setIncludeViews] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [newComment, setNewComment] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
@@ -158,6 +161,9 @@ export const RecordActivityDrawer: React.FC<RecordActivityDrawerProps> = ({
         } else if (selectedCategory !== 'STATUS' && event.category !== selectedCategory) {
           return false;
         }
+      } else if (!includeViews && event.category === 'ACCESS') {
+        // By default in 'ALL' activities, hide view logs so operational edits are not buried
+        return false;
       }
 
       if (searchQuery.trim()) {
@@ -177,7 +183,7 @@ export const RecordActivityDrawer: React.FC<RecordActivityDrawerProps> = ({
 
       return true;
     });
-  }, [events, selectedCategory, searchQuery]);
+  }, [events, selectedCategory, includeViews, searchQuery]);
 
   const handlePostComment = async () => {
     if (!newComment.trim() || !recordId || !tenant?.id) return;
@@ -362,6 +368,23 @@ export const RecordActivityDrawer: React.FC<RecordActivityDrawerProps> = ({
                   {cat.label}
                 </button>
               ))}
+
+              {selectedCategory === 'ALL' && (
+                <button
+                  type="button"
+                  onClick={() => setIncludeViews(prev => !prev)}
+                  className={cn(
+                    "px-2.5 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer border flex items-center gap-1.5",
+                    includeViews
+                      ? "bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/30"
+                      : "bg-zinc-100 dark:bg-zinc-800/70 border-zinc-200/60 dark:border-zinc-700/60 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200"
+                  )}
+                  title="Toggle view access events in All timeline"
+                >
+                  {includeViews ? <Eye size={12} className="text-sky-500" /> : <EyeOff size={12} />}
+                  <span>{includeViews ? 'Views Included' : 'Hide Views'}</span>
+                </button>
+              )}
             </div>
           </div>
         </div>

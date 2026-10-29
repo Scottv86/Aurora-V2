@@ -62,6 +62,7 @@ router.get('/feed', async (req: TenantRequest, res) => {
       moduleId,
       actorId,
       category,
+      includeViews,
       search,
       order = 'desc',
       limit = '50',
@@ -112,6 +113,9 @@ router.get('/feed', async (req: TenantRequest, res) => {
     // Filter by category if specified
     if (category && category !== 'all') {
       events = events.filter((e: any) => e.category?.toLowerCase() === category.toLowerCase());
+    } else if (includeViews !== 'true') {
+      // By default in 'all' activity feed, exclude record views so operational timeline isn't flooded
+      events = events.filter((e: any) => e.category !== 'ACCESS' && e.action !== 'RECORD_VIEWED');
     }
 
     // Filter by search keyword

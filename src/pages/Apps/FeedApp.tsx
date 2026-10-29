@@ -8,7 +8,9 @@ import {
   Layers, 
   Users, 
   Loader2, 
-  Clock
+  Clock,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { PageHeader } from '../../components/UI/PageHeader';
 import { usePlatform } from '../../hooks/usePlatform';
@@ -28,6 +30,7 @@ export const FeedApp: React.FC = () => {
   const [selectedModuleId, setSelectedModuleId] = useState<string>('all');
   const [selectedActorId, setSelectedActorId] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [includeViews, setIncludeViews] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -51,6 +54,7 @@ export const FeedApp: React.FC = () => {
       if (selectedModuleId !== 'all') params.set('moduleId', selectedModuleId);
       if (selectedActorId !== 'all') params.set('actorId', selectedActorId);
       if (selectedCategory !== 'all') params.set('category', selectedCategory);
+      if (includeViews && selectedCategory === 'all') params.set('includeViews', 'true');
       if (searchQuery.trim()) params.set('search', searchQuery.trim());
       if (cursor) params.set('cursor', cursor);
 
@@ -80,7 +84,7 @@ export const FeedApp: React.FC = () => {
 
   useEffect(() => {
     fetchFeed();
-  }, [tenant?.id, selectedModuleId, selectedActorId, selectedCategory, sortOrder]);
+  }, [tenant?.id, selectedModuleId, selectedActorId, selectedCategory, includeViews, sortOrder]);
 
   // Handle Search Debounce
   useEffect(() => {
@@ -99,6 +103,7 @@ export const FeedApp: React.FC = () => {
       // Check if matches active module/category filter
       if (selectedModuleId !== 'all' && activity.moduleId !== selectedModuleId) return;
       if (selectedCategory !== 'all' && activity.category?.toLowerCase() !== selectedCategory.toLowerCase()) return;
+      if (selectedCategory === 'all' && !includeViews && activity.category === 'ACCESS') return;
 
       setEvents(prev => {
         if (prev.some(e => e.id === activity.id)) return prev;
@@ -113,7 +118,7 @@ export const FeedApp: React.FC = () => {
       socket.off('FEED_ACTIVITY', handleFeedActivity);
       socket.off('RECORD_ACTIVITY', handleFeedActivity);
     };
-  }, [selectedModuleId, selectedCategory, sortOrder]);
+  }, [selectedModuleId, selectedCategory, includeViews, sortOrder]);
 
   const handleManualRefresh = () => {
     setRefreshing(true);
@@ -186,12 +191,13 @@ export const FeedApp: React.FC = () => {
 
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
             {[
-              { id: 'all', label: 'All' },
+              { id: 'all', label: 'All Activities' },
               { id: 'field', label: 'Field Changes' },
               { id: 'status', label: 'Status & Workflow' },
               { id: 'assignment', label: 'Assignees' },
               { id: 'creation', label: 'Inception' },
-              { id: 'comment', label: 'Comments' }
+              { id: 'comment', label: 'Comments' },
+              { id: 'access', label: 'Views & Access' }
             ].map(cat => (
               <button
                 key={cat.id}
@@ -207,6 +213,23 @@ export const FeedApp: React.FC = () => {
                 {cat.label}
               </button>
             ))}
+
+            {selectedCategory === 'all' && (
+              <button
+                type="button"
+                onClick={() => setIncludeViews(prev => !prev)}
+                className={cn(
+                  "px-2.5 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer border flex items-center gap-1.5",
+                  includeViews
+                    ? "bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/30"
+                    : "bg-zinc-100 dark:bg-zinc-800/70 border-zinc-200/60 dark:border-zinc-700/60 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200"
+                )}
+                title="Toggle whether record views are shown in the main feed"
+              >
+                {includeViews ? <Eye size={12} className="text-sky-500" /> : <EyeOff size={12} />}
+                <span>{includeViews ? 'Views Included' : 'Hide Views'}</span>
+              </button>
+            )}
           </div>
         </div>
 
