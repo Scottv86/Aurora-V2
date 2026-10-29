@@ -900,6 +900,39 @@ export const RecordDetailView = ({
     fetchRecordCounts();
   }, [recordId, moduleId, tenant?.id, session?.access_token]);
 
+  // Audit record view for compliance and full auditability
+  const lastAuditedRecordKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!recordId || !tenant?.id || !record || record.id !== recordId) return;
+    const auditKey = `${tenant.id}:${recordId}`;
+    if (lastAuditedRecordKeyRef.current === auditKey) return;
+    lastAuditedRecordKeyRef.current = auditKey;
+
+    const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || localStorage.getItem('aurora_token') || '';
+    if (!token) return;
+
+    const resourceKey = record._record_key || record.key;
+    const resourceTitle = record.title || record.name || record.subject || resourceKey;
+
+    fetch(`${API_BASE_URL}/api/audit/${recordId}/view`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'x-tenant-id': tenant.id
+      },
+      body: JSON.stringify({
+        moduleId: moduleId || record.moduleId,
+        moduleName: moduleData?.name || record.moduleName,
+        resourceKey,
+        resourceTitle,
+        source: isModal ? 'MODAL_PREVIEW' : isEmbedded ? 'SPLIT_VIEW' : 'DIRECT_PAGE'
+      })
+    }).catch(err => {
+      console.debug('[Audit] View log error:', err);
+    });
+  }, [recordId, record?.id, tenant?.id, session?.access_token, isModal, isEmbedded, moduleId, moduleData?.name]);
+
   // Memoize the list names required by calculations to avoid expensive regex scanning on every render/update
   const requiredGlobalLists = useMemo(() => {
     if (!allFields.length) return [];

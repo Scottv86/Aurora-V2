@@ -35,8 +35,8 @@ export interface RecordActivityInput {
   tenantId: string;
   actorId?: string;
   actor?: ActivityActor;
-  action: string; // e.g. 'RECORD_CREATED', 'FIELD_UPDATED', 'STATUS_CHANGED', 'ASSIGNED', 'UNASSIGNED', 'DELETED', etc.
-  category?: 'CREATION' | 'FIELD' | 'STATUS' | 'ASSIGNMENT' | 'WORKFLOW' | 'AUTOMATION' | 'COMMENT' | 'SECURITY';
+  action: string; // e.g. 'RECORD_CREATED', 'FIELD_UPDATED', 'STATUS_CHANGED', 'ASSIGNED', 'UNASSIGNED', 'DELETED', 'RECORD_VIEWED', etc.
+  category?: 'CREATION' | 'FIELD' | 'STATUS' | 'ASSIGNMENT' | 'WORKFLOW' | 'AUTOMATION' | 'COMMENT' | 'SECURITY' | 'ACCESS';
   resourceId: string; // recordId
   moduleId?: string;
   moduleName?: string;
@@ -228,6 +228,8 @@ export async function logRecordActivity(params: RecordActivityInput) {
         humanDescription = `Record shared`;
       } else if (action === 'RECORD_STARRED') {
         humanDescription = newValue?.starred ? `Record starred` : `Record unstarred`;
+      } else if (action === 'RECORD_VIEWED') {
+        humanDescription = `${actor?.name || 'User'} viewed this record`;
       } else if (changes.length > 0) {
         if (changes.length === 1) {
           humanDescription = `Updated ${changes[0].fieldLabel}`;
@@ -289,4 +291,86 @@ export async function logRecordActivity(params: RecordActivityInput) {
   } catch (err) {
     console.error('[AuditService] Failed to log record activity:', err);
   }
+}
+
+// In-memory cache to debounce/throttle view logs per user per record (15m window by default)
+const recordViewThrottle = new Map<string, number>();
+
+// Clean up stale throttle keys periodically to avoid memory growth
+setInterval(() => {
+  const oneHourAgo = Date.now() - 60 * 60 * 1000;
+  for (const [key, ts] of recordViewThrottle.entries()) {
+    if (ts < oneHourAgo) {
+      recordViewThrottle.delete(key);
+    }
+  }
+}, 10 * 60 * 1000).unref();
+
+export interface RecordViewInput {
+  tenantId: string;
+  actorId?: string;
+  actor?: ActivityActor;
+  resourceId: string;
+  moduleId?: string;
+  moduleName?: string;
+  resourceKey?: string;
+  resourceTitle?: string;
+  ip?: string;
+  userAgent?: string;
+  source?: string;
+  strict?: boolean; // If true, bypasses throttling for forensic compliance
+  throttleMs?: number; // Defaults to 15 minutes
+}
+
+/**
+ * Audit log a record view event with automatic throttling to prevent database & feed noise.
+ */
+export async function logRecordView(params: RecordViewInput) {
+  const {
+    tenantId,
+    actorId = 'system',
+    resourceId,
+    strict = false,
+    throttleMs = 15 * 60 * 1000 // 15 minutes
+  } = params;
+
+  const throttleKey = `${tenantId}:${actorId}:${resourceId}`;
+  const now = Date.now();
+  const lastViewed = recordViewThrottle.get(throttleKey);
+
+  if (!strict && lastViewed && (now - lastViewed < throttleMs)) {
+    return {
+      logged: false,
+      throttled: true,
+      lastViewedAt: new Date(lastViewed).toISOString()
+    };
+  }
+
+  recordViewThrottle.set(throttleKey, now);
+
+  const entry = await logRecordActivity({
+    tenantId,
+    actorId,
+    actor: params.actor,
+    action: 'RECORD_VIEWED',
+    category: 'ACCESS',
+    resourceId,
+    moduleId: params.moduleId,
+    moduleName: params.moduleName,
+    resourceKey: params.resourceKey,
+    resourceTitle: params.resourceTitle,
+    description: `${params.actor?.name || 'User'} viewed this record`,
+    metadata: {
+      source: params.source || 'DIRECT_UI',
+      ip: params.ip,
+      userAgent: params.userAgent,
+      viewedAt: new Date(now).toISOString()
+    }
+  });
+
+  return {
+    logged: true,
+    throttled: false,
+    entry
+  };
 }

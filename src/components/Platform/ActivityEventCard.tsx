@@ -8,6 +8,7 @@ import {
   GitFork, 
   MessageSquare, 
   Shield, 
+  Eye,
   ExternalLink, 
   ChevronDown, 
   ChevronUp, 
@@ -29,7 +30,7 @@ export interface ActivityEvent {
   tenantId: string;
   timestamp: string;
   action: string;
-  category: 'CREATION' | 'FIELD' | 'STATUS' | 'ASSIGNMENT' | 'WORKFLOW' | 'AUTOMATION' | 'COMMENT' | 'SECURITY';
+  category: 'CREATION' | 'FIELD' | 'STATUS' | 'ASSIGNMENT' | 'WORKFLOW' | 'AUTOMATION' | 'COMMENT' | 'SECURITY' | 'ACCESS';
   resourceId: string;
   moduleId?: string;
   moduleName?: string;
@@ -81,6 +82,24 @@ function formatRelativeTime(isoString: string): string {
   } catch {
     return 'Recently';
   }
+}
+
+function formatUserAgent(ua?: string): string {
+  if (!ua) return '';
+  let browser = 'Browser';
+  if (ua.includes('Edg/')) browser = 'Edge';
+  else if (ua.includes('Chrome/')) browser = 'Chrome';
+  else if (ua.includes('Safari/') && !ua.includes('Chrome')) browser = 'Safari';
+  else if (ua.includes('Firefox/')) browser = 'Firefox';
+
+  let os = '';
+  if (ua.includes('Windows')) os = 'Windows';
+  else if (ua.includes('Macintosh') || ua.includes('Mac OS')) os = 'macOS';
+  else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS';
+  else if (ua.includes('Android')) os = 'Android';
+  else if (ua.includes('Linux')) os = 'Linux';
+
+  return os ? `${browser} on ${os}` : browser;
 }
 
 function renderValue(val: any): string {
@@ -147,6 +166,13 @@ export const ActivityEventCard: React.FC<ActivityEventCardProps> = ({
           color: 'text-rose-500 dark:text-rose-400',
           bg: 'bg-rose-500/10 dark:bg-rose-500/15 border-rose-500/20',
           pillBg: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+        };
+      case 'ACCESS':
+        return {
+          icon: Eye,
+          color: 'text-sky-500 dark:text-sky-400',
+          bg: 'bg-sky-500/10 dark:bg-sky-500/15 border-sky-500/20',
+          pillBg: 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300'
         };
       case 'FIELD':
       default:
@@ -255,6 +281,30 @@ export const ActivityEventCard: React.FC<ActivityEventCardProps> = ({
         {event.metadata?.comment && (
           <div className="p-2.5 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 text-xs text-zinc-800 dark:text-zinc-200 italic">
             "{event.metadata.comment}"
+          </div>
+        )}
+
+        {/* Access Audit Trail (IP, Client, Access Method) */}
+        {(event.category === 'ACCESS' || event.metadata?.ip || event.metadata?.userAgent) && (
+          <div className="flex items-center gap-1.5 pt-0.5 flex-wrap text-[10px] text-zinc-500 dark:text-zinc-400">
+            {event.metadata?.source && (
+              <span className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-medium border border-zinc-200/50 dark:border-zinc-700/50">
+                {event.metadata.source.replace(/_/g, ' ')}
+              </span>
+            )}
+            {event.metadata?.ip && (
+              <span className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 font-mono text-[9px] border border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-300">
+                IP: {event.metadata.ip}
+              </span>
+            )}
+            {event.metadata?.userAgent && (
+              <span 
+                className="px-1.5 py-0.5 rounded bg-sky-50 dark:bg-sky-950/30 text-sky-700 dark:text-sky-300 border border-sky-500/20 truncate max-w-[240px]"
+                title={event.metadata.userAgent}
+              >
+                {formatUserAgent(event.metadata.userAgent)}
+              </span>
+            )}
           </div>
         )}
 

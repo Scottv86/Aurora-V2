@@ -28,7 +28,7 @@ interface RecordActivityDrawerProps {
   moduleId?: string;
 }
 
-type FilterCategory = 'ALL' | 'FIELD' | 'STATUS' | 'ASSIGNMENT' | 'CREATION' | 'COMMENT';
+type FilterCategory = 'ALL' | 'FIELD' | 'STATUS' | 'ASSIGNMENT' | 'CREATION' | 'COMMENT' | 'ACCESS';
 
 export const RecordActivityDrawer: React.FC<RecordActivityDrawerProps> = ({
   isOpen,
@@ -220,7 +220,7 @@ export const RecordActivityDrawer: React.FC<RecordActivityDrawerProps> = ({
       return;
     }
 
-    const headers = ['Timestamp', 'Actor Name', 'Actor Email', 'Action', 'Category', 'Description', 'Field Changes'];
+    const headers = ['Timestamp', 'Actor Name', 'Actor Email', 'Action', 'Category', 'Description', 'Field Changes', 'Source', 'IP Address', 'User Agent'];
     const rows = events.map(e => [
       new Date(e.timestamp).toISOString(),
       `"${(e.actor?.name || 'System').replace(/"/g, '""')}"`,
@@ -228,7 +228,10 @@ export const RecordActivityDrawer: React.FC<RecordActivityDrawerProps> = ({
       `"${e.action}"`,
       `"${e.category}"`,
       `"${(e.description || '').replace(/"/g, '""')}"`,
-      `"${(e.changes || []).map(c => `${c.fieldLabel}: ${c.oldValue} -> ${c.newValue}`).join('; ').replace(/"/g, '""')}"`
+      `"${(e.changes || []).map(c => `${c.fieldLabel}: ${c.oldValue} -> ${c.newValue}`).join('; ').replace(/"/g, '""')}"`,
+      `"${(e.metadata?.source || '').replace(/"/g, '""')}"`,
+      `"${(e.metadata?.ip || '').replace(/"/g, '""')}"`,
+      `"${(e.metadata?.userAgent || '').replace(/"/g, '""')}"`
     ]);
 
     const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
@@ -342,7 +345,8 @@ export const RecordActivityDrawer: React.FC<RecordActivityDrawerProps> = ({
                 { id: 'STATUS', label: 'Status & Workflow' },
                 { id: 'ASSIGNMENT', label: 'Assignees' },
                 { id: 'CREATION', label: 'Creation' },
-                { id: 'COMMENT', label: 'Notes' }
+                { id: 'COMMENT', label: 'Notes' },
+                { id: 'ACCESS', label: 'Views & Access' }
               ].map(cat => (
                 <button
                   key={cat.id}

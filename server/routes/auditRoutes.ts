@@ -1,7 +1,7 @@
 import express from 'express';
 import { TenantRequest } from '../middleware/tenantMiddleware';
 import { authorize } from '../middleware/authorize';
-import { logRecordActivity } from '../lib/audit';
+import { logRecordActivity, logRecordView } from '../lib/audit';
 
 const router = express.Router();
 
@@ -38,7 +38,7 @@ function formatLogEntry(log: any, memberMap: Map<string, any>) {
     tenantId: log.tenantId,
     timestamp: log.timestamp ? log.timestamp.toISOString() : new Date().toISOString(),
     action: log.action,
-    category: newVal.category || (log.action.includes('STATUS') ? 'STATUS' : log.action.includes('ASSIGN') ? 'ASSIGNMENT' : log.action.includes('CREATED') ? 'CREATION' : 'FIELD'),
+    category: newVal.category || (log.action.includes('VIEW') ? 'ACCESS' : log.action.includes('STATUS') ? 'STATUS' : log.action.includes('ASSIGN') ? 'ASSIGNMENT' : log.action.includes('CREATED') ? 'CREATION' : 'FIELD'),
     resourceId: log.resourceId,
     moduleId: newVal.moduleId,
     moduleName: newVal.moduleName,
@@ -241,6 +241,48 @@ router.post('/:resourceId/comments', async (req: TenantRequest, res) => {
     res.status(201).json(entry);
   } catch (err: any) {
     console.error('[AuditRoutes POST comment error]:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5. Clock Record View (Access Audit for compliance & auditability)
+router.post('/:resourceId/view', async (req: TenantRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const { resourceId } = req.params;
+    const { moduleId, moduleName, resourceKey, resourceTitle, source, strict } = req.body || {};
+
+    const actorId = req.user?.memberId || req.user?.id || req.user?.uid || 'user';
+    const actorName = req.user?.name || req.user?.email || 'User';
+
+    // Extract client IP and User-Agent for forensic compliance audit trail
+    const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.socket?.remoteAddress || '';
+    const userAgent = req.headers['user-agent'] || '';
+
+    const result = await logRecordView({
+      tenantId,
+      actorId,
+      actor: {
+        id: actorId,
+        name: actorName,
+        email: req.user?.email || '',
+        avatarUrl: req.user?.avatarUrl,
+        type: 'USER'
+      },
+      resourceId,
+      moduleId,
+      moduleName,
+      resourceKey,
+      resourceTitle,
+      ip,
+      userAgent,
+      source: source || 'DIRECT_UI',
+      strict: strict === true
+    });
+
+    res.json(result);
+  } catch (err: any) {
+    console.error('[AuditRoutes POST view error]:', err);
     res.status(500).json({ error: err.message });
   }
 });
