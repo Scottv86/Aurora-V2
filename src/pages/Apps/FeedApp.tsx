@@ -175,10 +175,10 @@ export const FeedApp: React.FC = () => {
       />
 
       {/* Filter Toolbar */}
-      <div className="px-6 lg:px-12 py-3 border-b border-zinc-200 dark:border-zinc-800/80 bg-white/70 dark:bg-zinc-900/70 backdrop-blur-md flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0">
+      <div className="px-6 lg:px-12 py-3 border-b border-zinc-200 dark:border-zinc-800/80 bg-white/70 dark:bg-zinc-900/70 backdrop-blur-md flex flex-col xl:flex-row xl:items-center justify-between gap-3 shrink-0">
         {/* Left: Search Input & Category Pills */}
-        <div className="flex items-center gap-2.5 flex-1 max-w-2xl flex-wrap">
-          <div className="relative w-full sm:w-64 shrink-0">
+        <div className="flex items-center gap-3 flex-1 min-w-0 flex-wrap">
+          <div className="relative w-full sm:w-60 shrink-0">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
             <input
               type="text"
@@ -189,7 +189,7 @@ export const FeedApp: React.FC = () => {
             />
           </div>
 
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+          <div className="flex items-center gap-1.5 flex-wrap py-0.5">
             {[
               { id: 'all', label: 'All Activities' },
               { id: 'field', label: 'Field Changes' },

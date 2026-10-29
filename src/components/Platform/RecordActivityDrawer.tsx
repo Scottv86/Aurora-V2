@@ -344,7 +344,7 @@ export const RecordActivityDrawer: React.FC<RecordActivityDrawerProps> = ({
             </div>
 
             {/* Filter Category Chips */}
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+            <div className="flex items-center gap-1.5 flex-wrap py-0.5">
               {[
                 { id: 'ALL', label: 'All' },
                 { id: 'FIELD', label: 'Fields' },
