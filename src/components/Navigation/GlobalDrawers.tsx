@@ -5,6 +5,7 @@ import { ChatDrawer } from '../AI/ChatDrawer';
 import { AppLauncher } from './AppLauncher';
 import { NotificationsDrawer } from './NotificationsDrawer';
 import { RecyclingBinDrawer } from './RecyclingBinDrawer';
+import { CalculatorLaunchModal } from '../Calculator/CalculatorLaunchModal';
 
 export const GlobalDrawers = () => {
   const { 
@@ -16,12 +17,15 @@ export const GlobalDrawers = () => {
   } = usePlatform();
 
   return (
-    <AnimatePresence mode="wait">
-      {isAIAssistantOpen && <AIAssistant key="ai-assistant" />}
-      {isChatOpen && <ChatDrawer key="chat-drawer" />}
-      {isAppLauncherOpen && <AppLauncher key="app-launcher" />}
-      {isNotificationsOpen && <NotificationsDrawer key="notifications-drawer" />}
-      {isRecyclingBinOpen && <RecyclingBinDrawer key="recycling-bin-drawer" />}
-    </AnimatePresence>
+    <>
+      <AnimatePresence mode="wait">
+        {isAIAssistantOpen && <AIAssistant key="ai-assistant" />}
+        {isChatOpen && <ChatDrawer key="chat-drawer" />}
+        {isAppLauncherOpen && <AppLauncher key="app-launcher" />}
+        {isNotificationsOpen && <NotificationsDrawer key="notifications-drawer" />}
+        {isRecyclingBinOpen && <RecyclingBinDrawer key="recycling-bin-drawer" />}
+      </AnimatePresence>
+      <CalculatorLaunchModal />
+    </>
   );
 };

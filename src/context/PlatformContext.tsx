@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
-import { io } from 'socket.io-client';
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef, useMemo } from 'react';
+import { getSharedSocket } from '../lib/socketClient';
 import { useAuth } from '../hooks/useAuth';
 import type { User, Tenant, Environment, BillingUsage, TenantMember, Team, Module } from '../types/platform';
 import { API_BASE_URL } from '../config';
@@ -65,6 +65,14 @@ interface PlatformContextType {
   setIsNotificationsOpen: (open: boolean) => void;
   isRecyclingBinOpen: boolean;
   setIsRecyclingBinOpen: (open: boolean) => void;
+  isCalculatorDocked: boolean;
+  setIsCalculatorDocked: (docked: boolean) => void;
+  dockedCalculatorWidth: number;
+  setDockedCalculatorWidth: (width: number) => void;
+  isQuickCalculatorOpen: boolean;
+  setIsQuickCalculatorOpen: (open: boolean) => void;
+  isCalculatorLaunchModalOpen: boolean;
+  setIsCalculatorLaunchModalOpen: (open: boolean) => void;
   breadcrumbOverrides: Record<string, string>;
   setBreadcrumbOverride: (id: string, label: string) => void;
   members: TenantMember[];
@@ -122,6 +130,14 @@ const fallbackContext: PlatformContextType = {
   setIsNotificationsOpen: () => {},
   isRecyclingBinOpen: false,
   setIsRecyclingBinOpen: () => {},
+  isCalculatorDocked: false,
+  setIsCalculatorDocked: () => {},
+  dockedCalculatorWidth: 380,
+  setDockedCalculatorWidth: () => {},
+  isQuickCalculatorOpen: false,
+  setIsQuickCalculatorOpen: () => {},
+  isCalculatorLaunchModalOpen: false,
+  setIsCalculatorLaunchModalOpen: () => {},
   breadcrumbOverrides: {},
   setBreadcrumbOverride: () => {},
   members: [],
@@ -164,18 +180,27 @@ export const usePlatform = () => {
 
 export const PlatformProvider = ({ children }: { children: ReactNode }) => {
   const { user: supabaseUser, loading: authLoading, session } = useAuth();
-  const [user, setUser] = useState<User | null>(null);
-  const [tenant, setTenant] = useState<Tenant | null>(null);
+  const initialCache = useMemo(() => {
+    try {
+      const raw = localStorage.getItem('aurora_platform_cache');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const [user, setUser] = useState<User | null>(() => initialCache?.user || null);
+  const [tenant, setTenant] = useState<Tenant | null>(() => initialCache?.tenant || null);
   const [environment, setEnvironment] = useState<Environment>('DEV');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState<boolean>(() => !(initialCache?.user && initialCache?.tenant));
   const [capabilities, setCapabilities] = useState<Set<string>>(new Set());
   const [connectionError, setConnectionError] = useState(false);
   const [connectionErrorMessage, setConnectionErrorMessage] = useState<string | null>(null);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   
-  const [modules, setModules] = useState<any[]>([]);
+  const [modules, setModules] = useState<any[]>(() => Array.isArray(initialCache?.modules) ? initialCache.modules : []);
   const [modulesLoading, setModulesLoading] = useState(false);
-  const [menuConfig, setMenuConfig] = useState<MenuConfig | null>(null);
+  const [menuConfig, setMenuConfig] = useState<MenuConfig | null>(() => initialCache?.menuConfig || null);
   const [billingUsage, setBillingUsage] = useState<BillingUsage | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
   const [isAIAssistantOpen, setIsAIAssistantOpen] = useState(false);
@@ -183,6 +208,25 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
   const [isAppLauncherOpen, setIsAppLauncherOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isRecyclingBinOpen, setIsRecyclingBinOpen] = useState(false);
+  const [isCalculatorDocked, setIsCalculatorDockedState] = useState<boolean>(() => {
+    return localStorage.getItem('aurora_calculator_docked') === 'true';
+  });
+  const [dockedCalculatorWidth, setDockedCalculatorWidthState] = useState<number>(() => {
+    const saved = localStorage.getItem('aurora_calculator_docked_width');
+    return saved ? parseInt(saved, 10) : 380;
+  });
+  const [isQuickCalculatorOpen, setIsQuickCalculatorOpen] = useState(false);
+  const [isCalculatorLaunchModalOpen, setIsCalculatorLaunchModalOpen] = useState(false);
+
+  const setIsCalculatorDocked = useCallback((docked: boolean) => {
+    setIsCalculatorDockedState(docked);
+    localStorage.setItem('aurora_calculator_docked', String(docked));
+  }, []);
+
+  const setDockedCalculatorWidth = useCallback((width: number) => {
+    setDockedCalculatorWidthState(width);
+    localStorage.setItem('aurora_calculator_docked_width', String(width));
+  }, []);
   const [breadcrumbOverrides, setBreadcrumbOverrides] = useState<Record<string, string>>({});
   const [isBuilderFullscreen, setIsBuilderFullscreen] = useState(false);
 
@@ -196,10 +240,27 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [tenant?.id]);
   
-  const [members, setMembers] = useState<TenantMember[]>([]);
+  const [members, setMembers] = useState<TenantMember[]>(() => Array.isArray(initialCache?.members) ? initialCache.members : []);
   const [membersLoading, setMembersLoading] = useState(false);
-  const [teams, setTeams] = useState<Team[]>([]);
+  const [teams, setTeams] = useState<Team[]>(() => Array.isArray(initialCache?.teams) ? initialCache.teams : []);
   const [teamsLoading, setTeamsLoading] = useState(false);
+
+  // Persist lightweight shell snapshot for instant frame-1 startup on reload
+  useEffect(() => {
+    if (user && tenant) {
+      try {
+        localStorage.setItem('aurora_platform_cache', JSON.stringify({
+          user,
+          tenant,
+          modules,
+          menuConfig,
+          members,
+          teams,
+          updatedAt: Date.now()
+        }));
+      } catch {}
+    }
+  }, [user, tenant, modules, menuConfig, members, teams]);
 
   // Global Notifications State (User & Tenant Scoped)
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -286,16 +347,9 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
     const token = session?.access_token;
     if (!tenant?.id) return;
 
-    const socket = io(API_BASE_URL, {
-      auth: { token },
-      transports: ['websocket', 'polling']
-    });
+    const socket = getSharedSocket(token, tenant.id);
 
-    socket.on('connect', () => {
-      socket.emit('join_tenant', tenant.id);
-    });
-
-    socket.on('scheduled_task_triggered', (data: any) => {
+    const onTaskTriggered = (data: any) => {
       const taskId = data.taskId || data.id;
       const taskName = data.taskName || 'Scheduled Task';
       const sessionId = data.sessionId;
@@ -326,9 +380,9 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
           ...filtered
         ];
       });
-    });
+    };
 
-    socket.on('scheduled_task_completed', (data: any) => {
+    const onTaskCompleted = (data: any) => {
       const taskId = data.taskId || data.id;
       const taskName = data.taskName || 'Scheduled Task';
       const sessionId = data.sessionId;
@@ -357,7 +411,7 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
         };
         return [updated, ...prev.filter(n => n.id !== notifId)];
       });
-    });
+    };
 
     const handleRecordAssignment = (data: any) => {
       if (!data || !data.id) return;
@@ -392,15 +446,7 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       }
     };
 
-    socket.on('record_added', (data: any) => {
-      handleRecordAssignment(data);
-    });
-
-    socket.on('record_updated', (data: any) => {
-      handleRecordAssignment(data);
-    });
-
-    socket.on('sla_status_changed', (data: any) => {
+    const onSlaStatusChanged = (data: any) => {
       const isBreached = data.slaStatus === 'BREACHED';
       const notifId = `sla_${data.recordId}_${data.slaStatus}`;
       addNotification({
@@ -415,9 +461,9 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
         status: isBreached ? 'failed' : 'running',
         link: data.moduleId ? `/modules/${data.moduleId}` : '/triage'
       });
-    });
+    };
 
-    socket.on('connector_sync_failed', (data: any) => {
+    const onConnectorSyncFailed = (data: any) => {
       const notifId = `connector_err_${data.connectorId}_${Date.now()}`;
       addNotification({
         id: notifId,
@@ -431,9 +477,9 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
         status: 'failed',
         link: '/workspace/settings'
       });
-    });
+    };
 
-    socket.on('record_shared', (data: any) => {
+    const onRecordShared = (data: any) => {
       if (!data || !data.recordId) return;
       const currentUserId = user?.id || supabaseUser?.id;
       const currentUserEmail = user?.email || supabaseUser?.email;
@@ -473,10 +519,24 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
           }
         });
       }
-    });
+    };
+
+    socket.on('scheduled_task_triggered', onTaskTriggered);
+    socket.on('scheduled_task_completed', onTaskCompleted);
+    socket.on('record_added', handleRecordAssignment);
+    socket.on('record_updated', handleRecordAssignment);
+    socket.on('sla_status_changed', onSlaStatusChanged);
+    socket.on('connector_sync_failed', onConnectorSyncFailed);
+    socket.on('record_shared', onRecordShared);
 
     return () => {
-      socket.disconnect();
+      socket.off('scheduled_task_triggered', onTaskTriggered);
+      socket.off('scheduled_task_completed', onTaskCompleted);
+      socket.off('record_added', handleRecordAssignment);
+      socket.off('record_updated', handleRecordAssignment);
+      socket.off('sla_status_changed', onSlaStatusChanged);
+      socket.off('connector_sync_failed', onConnectorSyncFailed);
+      socket.off('record_shared', onRecordShared);
     };
   }, [tenant?.id, session?.access_token]);
 
@@ -616,10 +676,11 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
 
   const refreshModules = useCallback(async () => {
     if (!supabaseUser || !tenant?.id) return;
+    const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || (typeof localStorage !== 'undefined' ? localStorage.getItem('aurora_token') : null);
+    if (!token) return;
     
     setModulesLoading(true);
     try {
-      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       const res = await fetch(`${API_BASE_URL}/api/data/modules`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -727,10 +788,11 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
 
   const refreshBilling = useCallback(async () => {
     if (!tenant?.id) return;
+    const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || (typeof localStorage !== 'undefined' ? localStorage.getItem('aurora_token') : null);
+    if (!token) return;
     
     setBillingLoading(true);
     try {
-      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       const res = await fetch(`${API_BASE_URL}/api/billing/usage`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -761,10 +823,11 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
 
   const refreshMembers = useCallback(async () => {
     if (!supabaseUser || !tenant?.id) return;
+    const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || (typeof localStorage !== 'undefined' ? localStorage.getItem('aurora_token') : null);
+    if (!token) return;
     
     setMembersLoading(true);
     try {
-      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       const res = await fetch(`${API_BASE_URL}/api/members`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -784,10 +847,11 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
 
   const refreshTeams = useCallback(async () => {
     if (!supabaseUser || !tenant?.id) return;
+    const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || (typeof localStorage !== 'undefined' ? localStorage.getItem('aurora_token') : null);
+    if (!token) return;
     
     setTeamsLoading(true);
     try {
-      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       const res = await fetch(`${API_BASE_URL}/api/teams`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -923,32 +987,30 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
     });
   }, []);
 
-  // Fetch essential modules once tenant is available; secondary metadata is loaded asynchronously
+  // Fetch essential modules and workspace metadata in parallel once tenant and token are available
   useEffect(() => {
-    if (tenant?.id) {
+    const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || (typeof localStorage !== 'undefined' ? localStorage.getItem('aurora_token') : null);
+    if (tenant?.id && token) {
       refreshModules();
-      // Secondary platform state can be loaded in background after mount
-      const timeout = setTimeout(() => {
-        refreshBilling();
-        refreshMembers();
-        refreshTeams();
-      }, 1000);
-      return () => clearTimeout(timeout);
+      refreshMembers();
+      refreshTeams();
+      refreshBilling();
     }
-  }, [tenant?.id, supabaseUser, refreshModules, refreshBilling, refreshMembers, refreshTeams]);
+  }, [tenant?.id, supabaseUser, session?.access_token, refreshModules, refreshBilling, refreshMembers, refreshTeams]);
 
   const isDevUser = user?.licenceType === 'Developer' || user?.isSuperAdmin || user?.role === 'TENANT_ADMIN' || user?.role === 'admin' || user?.role === 'Admin' || false;
-  const unreadCount = (Array.isArray(notifications) ? notifications : []).filter(n => {
+  const unreadCount = useMemo(() => (Array.isArray(notifications) ? notifications : []).filter(n => {
     if (!n || n.isRead) return false;
     const aud = n.audience || (n.type === 'scheduled_task' ? 'developer' : 'all');
     if (aud === 'developer' && !isDevUser) return false;
     return true;
-  }).length;
+  }).length, [notifications, isDevUser]);
 
   const [inboxUnreadCount, setInboxUnreadCount] = useState<number>(0);
+  const lastInboxAccountSyncRef = useRef<number>(0);
 
   const refreshInboxUnreadCount = useCallback(async () => {
-    if (!tenant?.id) return;
+    if (!tenant?.id || (typeof document !== 'undefined' && document.hidden)) return;
     const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || localStorage.getItem('aurora_token') || '';
     if (!token) return;
 
@@ -958,50 +1020,54 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
     };
 
     try {
-      // 1. Sync personal connected accounts in background
-      const accsRes = await fetch(`${API_BASE_URL}/api/inbox/accounts`, {
-        headers
-      });
-      if (accsRes.ok) {
-        const accsData = await accsRes.json();
-        const accounts = accsData.accounts || [];
-        for (const acc of accounts) {
-          if (acc.status === 'CONNECTED' && acc.type === 'PERSONAL') {
-            const syncRes = await fetch(`${API_BASE_URL}/api/inbox/accounts/${acc.id}/sync`, {
-              method: 'POST',
-              headers
-            });
-            if (syncRes.ok) {
-              const syncData = await syncRes.json();
-              if (syncData.newThreads && syncData.newThreads.length > 0) {
-                playEmailNotificationSound();
-                syncData.newThreads.forEach((nt: any) => {
-                  toast.custom((t) => (
-                    <EmailNotificationToast
-                      toastId={t}
-                      payload={nt}
-                      onOpenThread={(id) => {
-                        window.location.href = `/workspace/apps/inbox?threadId=${id}`;
-                      }}
-                      onMarkRead={async (id) => {
-                        await fetch(`${API_BASE_URL}/api/inbox/threads/${id}/actions`, {
-                          method: 'PATCH',
-                          headers: { 'Content-Type': 'application/json', ...headers },
-                          body: JSON.stringify({ action: 'markRead', value: true })
-                        });
-                        refreshInboxUnreadCount();
-                      }}
-                      onArchive={async (id) => {
-                        await fetch(`${API_BASE_URL}/api/inbox/threads/${id}/actions`, {
-                          method: 'PATCH',
-                          headers: { 'Content-Type': 'application/json', ...headers },
-                          body: JSON.stringify({ action: 'archive', value: true })
-                        });
-                        refreshInboxUnreadCount();
-                      }}
-                    />
-                  ), { duration: 8000 });
-                });
+      // 1. Only trigger heavy remote account IMAP/OAuth sync at most once every 3 minutes in background
+      const now = Date.now();
+      if (now - lastInboxAccountSyncRef.current > 180000) {
+        lastInboxAccountSyncRef.current = now;
+        const accsRes = await fetch(`${API_BASE_URL}/api/inbox/accounts`, {
+          headers
+        });
+        if (accsRes.ok) {
+          const accsData = await accsRes.json();
+          const accounts = accsData.accounts || [];
+          for (const acc of accounts) {
+            if (acc.status === 'CONNECTED' && acc.type === 'PERSONAL') {
+              const syncRes = await fetch(`${API_BASE_URL}/api/inbox/accounts/${acc.id}/sync`, {
+                method: 'POST',
+                headers
+              });
+              if (syncRes.ok) {
+                const syncData = await syncRes.json();
+                if (syncData.newThreads && syncData.newThreads.length > 0) {
+                  playEmailNotificationSound();
+                  syncData.newThreads.forEach((nt: any) => {
+                    toast.custom((t) => (
+                      <EmailNotificationToast
+                        toastId={t}
+                        payload={nt}
+                        onOpenThread={(id) => {
+                          window.location.href = `/workspace/apps/inbox?threadId=${id}`;
+                        }}
+                        onMarkRead={async (id) => {
+                          await fetch(`${API_BASE_URL}/api/inbox/threads/${id}/actions`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json', ...headers },
+                            body: JSON.stringify({ action: 'markRead', value: true })
+                          });
+                          refreshInboxUnreadCount();
+                        }}
+                        onArchive={async (id) => {
+                          await fetch(`${API_BASE_URL}/api/inbox/threads/${id}/actions`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json', ...headers },
+                            body: JSON.stringify({ action: 'archive', value: true })
+                          });
+                          refreshInboxUnreadCount();
+                        }}
+                      />
+                    ), { duration: 8000 });
+                  });
+                }
               }
             }
           }
@@ -1024,66 +1090,86 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if (tenant?.id && (session?.access_token || localStorage.getItem('aurora_token') || (import.meta as any).env.VITE_DEV_TOKEN)) {
       refreshInboxUnreadCount();
-      const interval = setInterval(refreshInboxUnreadCount, 30000);
+      const interval = setInterval(refreshInboxUnreadCount, 60000);
       return () => clearInterval(interval);
     }
   }, [tenant?.id, session?.access_token, refreshInboxUnreadCount]);
 
+  const contextValue = useMemo<PlatformContextType>(() => ({
+    user, 
+    tenant, 
+    environment, 
+    setEnvironment, 
+    isLoading,
+    refetchContext,
+    isDeveloper: isDevUser,
+    capabilities,
+    modules,
+    modulesLoading,
+    refreshModules,
+    menuConfig,
+    setMenuConfig,
+    updateMenuConfig,
+    billingUsage,
+    billingLoading,
+    refreshBilling,
+    updateTenant,
+    isAIAssistantOpen,
+    setIsAIAssistantOpen,
+    isChatOpen,
+    setIsChatOpen,
+    isAppLauncherOpen,
+    setIsAppLauncherOpen,
+    isNotificationsOpen,
+    setIsNotificationsOpen,
+    isRecyclingBinOpen,
+    setIsRecyclingBinOpen,
+    isCalculatorDocked,
+    setIsCalculatorDocked,
+    dockedCalculatorWidth,
+    setDockedCalculatorWidth,
+    isQuickCalculatorOpen,
+    setIsQuickCalculatorOpen,
+    isCalculatorLaunchModalOpen,
+    setIsCalculatorLaunchModalOpen,
+    breadcrumbOverrides,
+    setBreadcrumbOverride,
+    members,
+    membersLoading,
+    refreshMembers,
+    teams,
+    teamsLoading,
+    refreshTeams,
+    notifications: Array.isArray(notifications) ? notifications : [],
+    runningTasks: Array.isArray(runningTasks) ? runningTasks : [],
+    addNotification,
+    markNotificationAsRead,
+    markAllNotificationsAsRead,
+    deleteNotification,
+    clearNotifications,
+    unreadCount,
+    inboxUnreadCount,
+    refreshInboxUnreadCount,
+    isBuilderFullscreen,
+    setIsBuilderFullscreen,
+    toggleBuilderFullscreen,
+    connectionError,
+    connectionErrorMessage,
+    isOffline
+  }), [
+    user, tenant, environment, isLoading, refetchContext, isDevUser, capabilities,
+    modules, modulesLoading, refreshModules, menuConfig, billingUsage, billingLoading,
+    refreshBilling, isAIAssistantOpen, isChatOpen, isAppLauncherOpen, isNotificationsOpen,
+    isRecyclingBinOpen, isCalculatorDocked, setIsCalculatorDocked, dockedCalculatorWidth, setDockedCalculatorWidth,
+    isQuickCalculatorOpen, setIsQuickCalculatorOpen, isCalculatorLaunchModalOpen, setIsCalculatorLaunchModalOpen, breadcrumbOverrides, setBreadcrumbOverride, members, membersLoading,
+    refreshMembers, teams, teamsLoading, refreshTeams, notifications, runningTasks,
+    addNotification, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification,
+    clearNotifications, unreadCount, inboxUnreadCount, refreshInboxUnreadCount,
+    isBuilderFullscreen, toggleBuilderFullscreen, connectionError, connectionErrorMessage, isOffline
+  ]);
+
   return (
-    <PlatformContext.Provider value={{ 
-      user, 
-      tenant, 
-      environment, 
-      setEnvironment, 
-      isLoading,
-      refetchContext,
-      isDeveloper: user?.licenceType === 'Developer' || user?.isSuperAdmin || user?.role === 'TENANT_ADMIN' || user?.role === 'admin' || user?.role === 'Admin' || false,
-      capabilities,
-      modules,
-      modulesLoading,
-      refreshModules,
-      menuConfig,
-      setMenuConfig,
-      updateMenuConfig,
-      billingUsage,
-      billingLoading,
-      refreshBilling,
-      updateTenant,
-      isAIAssistantOpen,
-      setIsAIAssistantOpen,
-      isChatOpen,
-      setIsChatOpen,
-      isAppLauncherOpen,
-      setIsAppLauncherOpen,
-      isNotificationsOpen,
-      setIsNotificationsOpen,
-      isRecyclingBinOpen,
-      setIsRecyclingBinOpen,
-      breadcrumbOverrides,
-      setBreadcrumbOverride,
-      members,
-      membersLoading,
-      refreshMembers,
-      teams,
-      teamsLoading,
-      refreshTeams,
-      notifications: Array.isArray(notifications) ? notifications : [],
-      runningTasks: Array.isArray(runningTasks) ? runningTasks : [],
-      addNotification,
-      markNotificationAsRead,
-      markAllNotificationsAsRead,
-      deleteNotification,
-      clearNotifications,
-      unreadCount,
-      inboxUnreadCount,
-      refreshInboxUnreadCount,
-      isBuilderFullscreen,
-      setIsBuilderFullscreen,
-      toggleBuilderFullscreen,
-      connectionError,
-      connectionErrorMessage,
-      isOffline
-    }}>
+    <PlatformContext.Provider value={contextValue}>
       {/* 
           IMPORTANT: We must always render children here. 
           If we return null during loading, components like ProtectedRoute (which usePlatform)

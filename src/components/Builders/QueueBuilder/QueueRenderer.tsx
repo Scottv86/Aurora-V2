@@ -2126,31 +2126,27 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
       )}
 
       {/* Share Record Modal */}
-      {recordToShare && (
-        <ShareRecordModal
-          isOpen={!!recordToShare}
-          onClose={() => setRecordToShare(null)}
-          record={recordToShare}
-          moduleId={recordToShare?.moduleId || activeQueue?.moduleId}
-          moduleName={getRecordModuleName(recordToShare)}
-        />
-      )}
+      <ShareRecordModal
+        isOpen={!!recordToShare}
+        onClose={() => setRecordToShare(null)}
+        record={recordToShare}
+        moduleId={recordToShare?.moduleId || activeQueue?.moduleId}
+        moduleName={getRecordModuleName(recordToShare)}
+      />
 
       {/* Move Record(s) Modal */}
-      {recordsToMove && recordsToMove.length > 0 && (
-        <MoveRecordModal
-          isOpen={!!recordsToMove}
-          onClose={() => setRecordsToMove(null)}
-          sourceRecords={recordsToMove}
-          sourceModuleId={recordsToMove[0]?.moduleId || activeQueue?.moduleId || ''}
-          sourceModuleName={getRecordModuleName(recordsToMove[0])}
-          onSuccess={() => {
-            queryClient.invalidateQueries({ queryKey: ['records'] });
-            queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
-            setRecordsToMove(null);
-          }}
-        />
-      )}
+      <MoveRecordModal
+        isOpen={Boolean(recordsToMove && recordsToMove.length > 0)}
+        onClose={() => setRecordsToMove(null)}
+        sourceRecords={recordsToMove || []}
+        sourceModuleId={recordsToMove?.[0]?.moduleId || activeQueue?.moduleId || ''}
+        sourceModuleName={getRecordModuleName(recordsToMove?.[0])}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['records'] });
+          queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
+          setRecordsToMove(null);
+        }}
+      />
 
       {/* Bulk Paste from Excel / Sheets Modal */}
       {showBulkPasteModal && targetBulkModule && (

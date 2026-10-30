@@ -129,7 +129,10 @@ export const getScopedPrisma = (
             'UniversalDocument',
             'UniversalDocumentLink',
             'UniversalDisposalSchedule',
-            'UniversalDocumentAuditLog'
+            'UniversalDocumentAuditLog',
+            'UniversalNote',
+            'UniversalReminder',
+            'UniversalCalculation'
           ];
 
           const isScopedModel = (TENANT_SCOPED_MODELS as readonly string[]).includes(model as string);
@@ -149,7 +152,15 @@ export const getScopedPrisma = (
             return query(a);
           }
 
-          // Start a transaction to set the PostgreSQL session variables
+          // Fast-path for read operations: inject tenant filter and execute directly without transaction overhead
+          if (operation.includes('find') || operation.includes('count')) {
+            if (isScopedModel && tId) {
+              a.where = { ...(a.where || {}), tenantId: tId };
+            }
+            return query(a);
+          }
+
+          // Start a transaction to set the PostgreSQL session variables for writes
           try {
             return await (client as any).$transaction(async (tx: any) => {
               // Set session variables (SET LOCAL persists only for this transaction)
@@ -178,9 +189,22 @@ export const getScopedPrisma = (
               // Fallback to standard query if dynamic resolution fails
               return query({ ...a, [RLS_CONTEXT]: true } as any);
             }, { 
-              timeout: 30000 
+              timeout: 10000 
             });
-          } catch (err) {
+          } catch (err: any) {
+            // If transaction failed to start (e.g. pool contention or timeout), fallback to direct app-scoped query
+            if (err?.code === 'P2028' || err?.message?.includes('transaction')) {
+              console.warn('[Prisma RLS Warning] Transaction contention fallback to direct scoped query');
+              if (isScopedModel && tId) {
+                if (operation.includes('find') || operation.includes('count') || operation.includes('update') || operation.includes('delete')) {
+                  a.where = { ...(a.where || {}), tenantId: tId };
+                }
+                if (operation === 'create') {
+                  a.data = { ...(a.data || {}), tenantId: tId };
+                }
+              }
+              return query(a);
+            }
             console.error('[Prisma RLS Error]:', err);
             throw err;
           }

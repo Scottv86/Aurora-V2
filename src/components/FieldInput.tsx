@@ -1267,8 +1267,34 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
   }
 
   // Standard Inputs
-  if (type === 'date') return <DatePicker value={localValue} onChange={(val) => { updateLocalValue(val); setIsFocused(true); }} readonly={readonly} onBlur={handleBlur} dateFormat={field.dateFormat} excludeWeekends={field.excludeWeekends} min={minConstraint} max={maxConstraint} />;
-  if (type === 'time') return <TimePicker value={localValue} onChange={(val) => { updateLocalValue(val); setIsFocused(true); }} readonly={readonly} onBlur={handleBlur} timeFormat={field.timeFormat} minuteStep={field.minuteStep} min={minConstraint} max={maxConstraint} />;
+  if (type === 'date') return (
+    <DatePicker 
+      value={localValue} 
+      onChange={(val) => { 
+        triggerImmediateChange(val); 
+      }} 
+      readonly={readonly} 
+      onBlur={handleBlur} 
+      dateFormat={field.dateFormat} 
+      excludeWeekends={field.excludeWeekends} 
+      min={minConstraint} 
+      max={maxConstraint} 
+    />
+  );
+  if (type === 'time') return (
+    <TimePicker 
+      value={localValue} 
+      onChange={(val) => { 
+        triggerImmediateChange(val); 
+      }} 
+      readonly={readonly} 
+      onBlur={handleBlur} 
+      timeFormat={field.timeFormat} 
+      minuteStep={field.minuteStep} 
+      min={minConstraint} 
+      max={maxConstraint} 
+    />
+  );
   if (type === 'number' || type === 'currency') return (
     <div className="relative w-full">
       {type === 'currency' && <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 text-xs">$</span>}

@@ -89,7 +89,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
     const handleClickOutside = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
-        if (onBlur) onBlur();
+        onBlur?.();
       }
     };
     if (isOpen) {
@@ -117,11 +117,13 @@ export const DatePicker: React.FC<DatePickerProps> = ({
   const handleDateSelect = (date: Date) => {
     onChange(format(date, 'yyyy-MM-dd'));
     setIsOpen(false);
+    onBlur?.();
   };
 
   const clearDate = (e: React.MouseEvent) => {
     e.stopPropagation();
     onChange('');
+    onBlur?.();
   };
 
   const weekDays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
@@ -129,11 +131,21 @@ export const DatePicker: React.FC<DatePickerProps> = ({
   return (
     <div className={cn("relative w-full", isOpen && "z-50", className)} ref={containerRef}>
       <div 
-        onClick={() => !readonly && setIsOpen(!isOpen)}
+        onClick={() => {
+          if (!readonly) {
+            if (isOpen) {
+              onBlur?.();
+            }
+            setIsOpen(!isOpen);
+          }
+        }}
         tabIndex={readonly ? -1 : 0}
         onKeyDown={(e) => {
           if (!readonly && (e.key === 'Enter' || e.key === ' ')) {
             e.preventDefault();
+            if (isOpen) {
+              onBlur?.();
+            }
             setIsOpen(!isOpen);
           }
         }}
@@ -347,7 +359,14 @@ export const DatePicker: React.FC<DatePickerProps> = ({
                 Today
               </button>
               <button 
-                onClick={() => setIsOpen(false)}
+                onClick={() => {
+                  setIsOpen(false);
+                  if (onBlur) {
+                    setTimeout(() => {
+                      onBlur();
+                    }, 50);
+                  }
+                }}
                 className="text-[10px] font-bold text-zinc-400 hover:text-zinc-600 uppercase tracking-widest transition-colors"
               >
                 Close

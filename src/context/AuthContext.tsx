@@ -22,9 +22,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-  const [tenantIds, setTenantIds] = useState<string[]>([]);
-  const [currentRoleId, setCurrentRoleId] = useState<string | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(() => {
+    try {
+      const cached = localStorage.getItem('aurora_sync_cache');
+      return cached ? Boolean(JSON.parse(cached).isSuperAdmin) : false;
+    } catch {
+      return false;
+    }
+  });
+  const [tenantIds, setTenantIds] = useState<string[]>(() => {
+    try {
+      const cached = localStorage.getItem('aurora_sync_cache');
+      return cached ? (JSON.parse(cached).tenantIds || []) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [currentRoleId, setCurrentRoleId] = useState<string | null>(() => {
+    try {
+      const cached = localStorage.getItem('aurora_sync_cache');
+      return cached ? (JSON.parse(cached).roleId || null) : null;
+    } catch {
+      return null;
+    }
+  });
   const userRef = useRef<User | null>(null);
   const isInitialCheck = useRef(true);
   const lastSyncedRef = useRef<{ sessionId: string; timestamp: number } | null>(null);
@@ -62,6 +83,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setIsSuperAdmin(sessionData.isSuperAdmin);
         setTenantIds(sessionData.tenantIds || []);
         setCurrentRoleId(sessionData.roleId || null);
+        try {
+          localStorage.setItem('aurora_sync_cache', JSON.stringify({
+            isSuperAdmin: sessionData.isSuperAdmin,
+            tenantIds: sessionData.tenantIds || [],
+            roleId: sessionData.roleId || null,
+          }));
+        } catch {}
         
         // Ensure localStorage aurora_tenant_id is aligned with user's verified tenants
         const currentStoredTenant = localStorage.getItem('aurora_tenant_id');
@@ -121,7 +149,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       if (session?.access_token && (isSignIn || event === 'USER_UPDATED' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED')) {
         const sessionId = session.user.id + (session.expires_at || '');
-        await syncUser(session.access_token, sessionId);
+        const hasCachedTenant = Boolean(localStorage.getItem('aurora_tenant_id'));
+        if (hasCachedTenant && (isInitial || event === 'TOKEN_REFRESHED')) {
+          // Unblock downstream PlatformProvider immediately while syncing in background
+          setLoading(false);
+          isInitialCheck.current = false;
+          syncUser(session.access_token, sessionId);
+        } else {
+          await syncUser(session.access_token, sessionId);
+        }
       } else if (isSignOut) {
         console.log(`[AuthTrace] Clearing local state on SIGNED_OUT`);
         setIsSuperAdmin(false);
@@ -131,6 +167,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         localStorage.removeItem('aurora_token');
         localStorage.removeItem('aurora_auth');
         localStorage.removeItem('aurora_tenant_id');
+        localStorage.removeItem('aurora_sync_cache');
+        localStorage.removeItem('aurora_platform_cache');
       }
       
       // Always ensure loading is false after the first event or sign-in/out

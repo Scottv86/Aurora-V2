@@ -84,6 +84,7 @@ model Tenant {
   paymentGatewayConnections PaymentGatewayConnection[]
   universalNotes         UniversalNote[]
   universalReminders     UniversalReminder[]
+  universalCalculations  UniversalCalculation[]
 
   @@map("tenants")
 }
@@ -133,6 +134,7 @@ model Module {
   records     Record[]
   universalNotes UniversalNote[]
   universalReminders UniversalReminder[]
+  universalCalculations UniversalCalculation[]
 
   @@unique([id, tenantId])
   @@index([tenantId], map: "Module_tenantId_idx")
@@ -308,6 +310,7 @@ model Record {
   createdByMember TenantMember? @relation("RecordCreator", fields: [createdByMemberId, tenantId], references: [id, tenantId])
   universalNotes  UniversalNote[]
   universalReminders UniversalReminder[]
+  universalCalculations UniversalCalculation[]
 
   @@index([moduleId], map: "Record_moduleId_idx")
   @@index([tenantId], map: "Record_tenantId_idx")
@@ -2513,4 +2516,39 @@ model UniversalReminder {
   @@index([tenantId, entityType, entityId])
   @@map("universal_reminders")
 }
+
+model UniversalCalculation {
+  id              String         @id @default(cuid())
+  tenantId        String         @map("tenant_id")
+  authorId        String         @map("author_id")
+  authorName      String?        @map("author_name")
+  authorEmail     String?        @map("author_email")
+  
+  title           String         @default("Untitled Calculation")
+  mode            String         @default("standard") // standard, scientific, financial, records, scratchpad
+  expression      String?        @db.Text
+  result          String?
+  tape            Json           @default("[]")
+  variables       Json           @default("{}")
+  notes           String?        @db.Text
+  isPinned        Boolean        @default(false) @map("is_pinned")
+  isArchived      Boolean        @default(false) @map("is_archived")
+  
+  moduleId        String?        @map("module_id")
+  recordId        String?        @map("record_id")
+  metadata        Json?
+  
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  module          Module?        @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  record          Record?        @relation(fields: [recordId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, authorId])
+  @@index([tenantId, moduleId, recordId])
+  @@index([tenantId, isPinned, updatedAt])
+  @@map("universal_calculations")
+}
+
 

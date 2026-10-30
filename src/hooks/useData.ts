@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { usePlatform } from './usePlatform';
 import { useAuth } from './useAuth';
-import { io, Socket } from 'socket.io-client';
+import { getSharedSocket } from '../lib/socketClient';
 import { builderCache } from '../utils/builderCache';
 
 const API_BASE_URL = 'http://127.0.0.1:3001/api/data';
-const WS_BASE_URL = 'http://127.0.0.1:3001';
 
 export const useData = (collectionName: 'records' | 'modules', options: { page?: number, limit?: number, append?: boolean } = {}) => {
   const { tenant } = usePlatform();
@@ -91,61 +90,39 @@ export const useData = (collectionName: 'records' | 'modules', options: { page?:
   useEffect(() => {
     if (!tenant?.id || !user) return;
 
-    let s: Socket | null = null;
-    let isActive = true;
+    const s = getSharedSocket(session?.access_token, tenant.id);
 
-    const connectSocket = async () => {
-      try {
-        const token = session?.access_token;
-        if (!isActive) return;
-
-        s = io(WS_BASE_URL, {
-          auth: { token }
+    const onAdded = (record: any) => {
+      if (collectionName === 'records') {
+        setData(prev => {
+          if (prev.find(p => p.id === record.id)) return prev;
+          return [record, ...prev];
         });
-
-        s.on('connect', () => {
-          s?.emit('join_tenant', tenant.id);
-        });
-
-        s.on('record_added', (record: any) => {
-          if (collectionName === 'records') {
-            setData(prev => {
-              if (prev.find(p => p.id === record.id)) return prev;
-              return [record, ...prev];
-            });
-            setTotal(t => t + 1);
-          }
-        });
-
-        s.on('record_updated', (record: any) => {
-          if (collectionName === 'records') {
-            setData(prev => prev.map(p => p.id === record.id ? record : p));
-          }
-        });
-
-        s.on('record_deleted', (id: string) => {
-          if (collectionName === 'records') {
-            setData(prev => prev.filter(p => p.id !== id));
-            setTotal(t => Math.max(0, t - 1));
-          }
-        });
-        
-        s.on('disconnect', () => {
-          console.log('[Socket] Disconnected');
-        });
-
-      } catch (err) {
-        console.error('Socket connection failed', err);
+        setTotal(t => t + 1);
       }
     };
 
-    connectSocket();
+    const onUpdated = (record: any) => {
+      if (collectionName === 'records') {
+        setData(prev => prev.map(p => p.id === record.id ? record : p));
+      }
+    };
+
+    const onDeleted = (id: string) => {
+      if (collectionName === 'records') {
+        setData(prev => prev.filter(p => p.id !== id));
+        setTotal(t => Math.max(0, t - 1));
+      }
+    };
+
+    s.on('record_added', onAdded);
+    s.on('record_updated', onUpdated);
+    s.on('record_deleted', onDeleted);
 
     return () => {
-      isActive = false;
-      if (s) {
-        s.disconnect();
-      }
+      s.off('record_added', onAdded);
+      s.off('record_updated', onUpdated);
+      s.off('record_deleted', onDeleted);
     };
   }, [tenant?.id, user, session?.access_token, collectionName]);
 

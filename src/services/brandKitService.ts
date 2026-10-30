@@ -86,24 +86,66 @@ export interface AIPaletteSuggestion {
   voiceAndTone: BrandVoiceAndTone;
 }
 
+const brandKitsCache = new Map<string, { data: BrandKit[]; timestamp: number }>();
+const inFlightBrandKits = new Map<string, Promise<BrandKit[]>>();
+const BRAND_KITS_TTL_MS = 30_000;
+
 export class BrandKitService {
+  private static resolveAuth(token?: string, tenantId?: string) {
+    const resolvedToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('aurora_token') || undefined : undefined);
+    const resolvedTenantId = tenantId || (typeof localStorage !== 'undefined' ? localStorage.getItem('aurora_tenant_id') || undefined : undefined);
+    return { token: resolvedToken, tenantId: resolvedTenantId };
+  }
+
   private static getHeaders(token?: string, tenantId?: string) {
+    const resolved = this.resolveAuth(token, tenantId);
     return {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(tenantId ? { 'x-tenant-id': tenantId } : {})
+      ...(resolved.token ? { Authorization: `Bearer ${resolved.token}` } : {}),
+      ...(resolved.tenantId ? { 'x-tenant-id': resolved.tenantId } : {})
     };
   }
 
-  static async getBrandKits(token?: string, tenantId?: string): Promise<BrandKit[]> {
-    const res = await fetch(`${API_BASE_URL}/api/brand-kits`, {
-      headers: this.getHeaders(token, tenantId)
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Failed to fetch brand kits');
+  static invalidateCache(tenantId?: string) {
+    if (tenantId) {
+      brandKitsCache.delete(tenantId);
+    } else {
+      brandKitsCache.clear();
     }
-    return res.json();
+  }
+
+  static async getBrandKits(token?: string, tenantId?: string, forceRefresh = false): Promise<BrandKit[]> {
+    const resolved = this.resolveAuth(token, tenantId);
+    if (!resolved.token || !resolved.tenantId) {
+      return [];
+    }
+
+    const cached = brandKitsCache.get(resolved.tenantId);
+    if (!forceRefresh && cached && Date.now() - cached.timestamp < BRAND_KITS_TTL_MS) {
+      return cached.data;
+    }
+
+    if (inFlightBrandKits.has(resolved.tenantId)) {
+      return inFlightBrandKits.get(resolved.tenantId)!;
+    }
+
+    const promise = (async () => {
+      const res = await fetch(`${API_BASE_URL}/api/brand-kits`, {
+        headers: this.getHeaders(resolved.token, resolved.tenantId)
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to fetch brand kits');
+      }
+      const data: BrandKit[] = await res.json();
+      brandKitsCache.set(resolved.tenantId!, { data, timestamp: Date.now() });
+      return data;
+    })().finally(() => {
+      inFlightBrandKits.delete(resolved.tenantId!);
+    });
+
+    inFlightBrandKits.set(resolved.tenantId, promise);
+    return promise;
   }
 
   static async getBrandKit(id: string, token?: string, tenantId?: string): Promise<BrandKit> {
@@ -131,6 +173,7 @@ export class BrandKitService {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Failed to create brand kit');
     }
+    this.invalidateCache(tenantId);
     return res.json();
   }
 
@@ -149,6 +192,7 @@ export class BrandKitService {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Failed to update brand kit');
     }
+    this.invalidateCache(tenantId);
     return res.json();
   }
 
@@ -161,6 +205,7 @@ export class BrandKitService {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Failed to set default brand kit');
     }
+    this.invalidateCache(tenantId);
     return res.json();
   }
 
@@ -173,6 +218,7 @@ export class BrandKitService {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Failed to delete brand kit');
     }
+    this.invalidateCache(tenantId);
     return res.json();
   }
 

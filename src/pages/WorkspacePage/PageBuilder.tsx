@@ -463,7 +463,7 @@ const BuilderChartPreview: React.FC<{ widget: any; tenant: any; session: any }> 
         </div>
       ) : (
         <div className="flex-1 min-h-[120px] w-full">
-          <ResponsiveContainer width="100%" height="100%" minHeight={100}>
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={100} initialDimension={{ width: 100, height: 100 }}>
             {chartType === 'line' ? (
               <LineChart data={dataToRender} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(120, 120, 120, 0.15)" />

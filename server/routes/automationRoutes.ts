@@ -1,5 +1,6 @@
 import express from 'express';
 import { TenantRequest } from '../middleware/tenantMiddleware';
+import { globalPrisma } from '../lib/prisma';
 import { AutomationEngine } from '../services/automationEngine';
 import { WorkflowEngine } from '../services/workflowEngine';
 
@@ -183,10 +184,11 @@ router.post('/quarantine/:id/release', async (req: TenantRequest, res) => {
 // GET all automations for the tenant (and optionally module-specific)
 router.get('/', async (req: TenantRequest, res) => {
   try {
-    const db = req.db!;
+    const db = req.db || globalPrisma;
     const moduleId = req.query.moduleId as string;
+    const tenantId = req.tenantId;
 
-    const whereClause: any = {};
+    const whereClause: any = tenantId ? { tenantId } : {};
     if (moduleId) {
       try {
         const targetMod = await db.module.findFirst({

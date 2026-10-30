@@ -33,6 +33,7 @@ import { GlobalDrawers } from '../Navigation/GlobalDrawers';
 import { PageLoader } from '../UI/PageLoader';
 import { TransitionBar } from '../UI/TransitionBar';
 import { ConnectionErrorPage } from '../Error/ConnectionErrorPage';
+import { DockedCalculatorPanel } from '../Calculator/DockedCalculatorPanel';
 
 
 const SidebarItemRenderer = ({ 
@@ -206,7 +207,12 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     connectionErrorMessage,
     isOffline,
     refetchContext,
-    isBuilderFullscreen
+    isBuilderFullscreen,
+    isCalculatorDocked,
+    setIsCalculatorDocked,
+    dockedCalculatorWidth,
+    setDockedCalculatorWidth,
+    setIsQuickCalculatorOpen
   } = usePlatform();
 
   const isTenantAdmin = isDeveloper || 
@@ -1148,7 +1154,10 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         )}
 
         <main 
-          style={{ marginLeft: `${currentMainMargin}px` }}
+          style={{ 
+            marginLeft: `${currentMainMargin}px`,
+            marginRight: isCalculatorDocked ? `${dockedCalculatorWidth}px` : undefined 
+          }}
           className={cn(
             "flex-1 flex flex-col min-h-0",
             (fullBleed || isAdminPath || isBuilderFullscreen || isModuleBuilder || isPosPage) ? "overflow-hidden" : "overflow-y-auto",
@@ -1173,6 +1182,19 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
             {children}
           </div>
         </main>
+        
+        {isCalculatorDocked && (
+          <DockedCalculatorPanel
+            width={dockedCalculatorWidth}
+            onResize={setDockedCalculatorWidth}
+            onClose={() => setIsCalculatorDocked(false)}
+            onUndock={() => {
+              setIsCalculatorDocked(false);
+              setIsQuickCalculatorOpen(true);
+            }}
+          />
+        )}
+
         <GlobalDrawers />
       </div>
     </div>

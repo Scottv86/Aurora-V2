@@ -354,13 +354,26 @@ export class WorkflowEngine {
   }
 
   private static findNextTransitions(record: any, currentNodeId: string, workflow: Workflow, layout?: any[]): { node: WorkflowNode; condition?: string }[] {
+    const currentNode = workflow.nodes.find(n => n.id === currentNodeId);
     const edges = workflow.edges.filter(e => e.source === currentNodeId);
     const nextTransitions: { node: WorkflowNode; condition?: string }[] = [];
 
     for (const edge of edges) {
+      const targetNode = workflow.nodes.find(n => n.id === edge.target);
+      if (!targetNode) continue;
+
+      // If current node is a STATUS node and target node is also a STATUS node,
+      // it represents a manual workflow stage progression unless an explicit automated condition is specified.
+      // Unconditional edges between STATUS stages require an explicit user action (transitionTo)
+      // and must never auto-transition during ordinary field updates (e.g. changing assignee).
+      if (currentNode?.type === 'STATUS' && targetNode.type === 'STATUS') {
+        if (!edge.condition || edge.condition.trim() === '') {
+          continue;
+        }
+      }
+
       if (this.evaluateCondition(record, edge.condition, layout)) {
-        const node = workflow.nodes.find(n => n.id === edge.target);
-        if (node) nextTransitions.push({ node, condition: edge.condition });
+        nextTransitions.push({ node: targetNode, condition: edge.condition });
       }
     }
 

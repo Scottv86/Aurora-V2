@@ -9,7 +9,7 @@ import { getEnabledApps } from '../../config/appsCatalog';
 
 export const AppLauncher = () => {
   const navigate = useNavigate();
-  const { tenant, setIsAppLauncherOpen, inboxUnreadCount } = usePlatform();
+  const { tenant, setIsAppLauncherOpen, inboxUnreadCount, setIsCalculatorLaunchModalOpen } = usePlatform();
   const [searchQuery, setSearchQuery] = useState('');
 
   // Sourced from centralized apps catalog with core suite app persistence
@@ -19,6 +19,16 @@ export const AppLauncher = () => {
     app.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
     app.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const handleAppLaunch = (app: any) => {
+    if (!app.to) return;
+    setIsAppLauncherOpen(false);
+    if (app.id === 'calculator') {
+      setIsCalculatorLaunchModalOpen(true);
+      return;
+    }
+    navigate(app.to);
+  };
 
   return (
     <motion.aside
@@ -66,20 +76,21 @@ export const AppLauncher = () => {
         <div className="grid grid-cols-3 gap-3">
           {filteredApps.map((app) => {
             const Icon = (LucideIcons as any)[app.iconName] || LayoutGrid;
+            const isClickable = Boolean(app.to);
             return (
               <button
                 key={app.id}
-                disabled={!app.to}
+                type="button"
+                disabled={!isClickable}
                 onClick={() => {
                   if (app.to) {
-                    setIsAppLauncherOpen(false);
-                    navigate(app.to);
+                    handleAppLaunch(app);
                   }
                 }}
                 className={cn(
-                  "flex flex-col items-center justify-center p-4 rounded-xl transition-all duration-200 relative group/app cursor-pointer",
-                  app.to
-                    ? "hover:bg-zinc-100 dark:hover:bg-white/5 border border-transparent hover:border-zinc-200 dark:hover:border-zinc-800"
+                  "flex flex-col items-center justify-center p-4 rounded-xl transition-all duration-200 relative group/app select-none outline-none",
+                  isClickable
+                    ? "hover:bg-zinc-100 dark:hover:bg-white/5 border border-transparent hover:border-zinc-200 dark:border-zinc-800 cursor-pointer focus:ring-2 focus:ring-indigo-500/30"
                     : "opacity-60 cursor-not-allowed grayscale-[0.5]"
                 )}
               >
@@ -96,16 +107,21 @@ export const AppLauncher = () => {
                   )}
                 </div>
                 <span className="text-[11px] font-bold text-zinc-900 dark:text-white mb-0.5 text-center leading-tight">{app.label}</span>
-                {!app.to && (
+                {!isClickable && (
                   <span className="text-[8px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-tighter">Soon</span>
                 )}
                 
                 {/* Tooltip-like description on hover */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/95 dark:bg-zinc-950/95 opacity-0 group-hover/app:opacity-100 transition-opacity p-2 rounded-xl border border-indigo-500/20 z-10">
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/95 dark:bg-zinc-950/95 opacity-0 group-hover/app:opacity-100 transition-opacity p-2 rounded-xl border border-indigo-500/20 z-10 pointer-events-none">
                   <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 mb-1">{app.label}</span>
-                  <p className="text-[9px] text-zinc-500 dark:text-zinc-400 text-center leading-tight">{app.description}</p>
-                  {!app.to ? (
+                  <p className="text-[9px] text-zinc-500 dark:text-zinc-400 text-center leading-tight line-clamp-2">{app.description}</p>
+                  
+                  {!isClickable ? (
                     <span className="mt-2 text-[8px] font-bold px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 uppercase">Coming Soon</span>
+                  ) : app.id === 'calculator' ? (
+                    <div className="mt-2 text-indigo-600 dark:text-indigo-400 flex items-center gap-1 text-[9px] font-bold bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800">
+                      Launch Mode <ExternalLink size={10} />
+                    </div>
                   ) : (
                     <div className="mt-2 text-indigo-600 dark:text-indigo-400 flex items-center gap-1 text-[9px] font-bold">
                       Open <ExternalLink size={10} />

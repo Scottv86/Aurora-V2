@@ -27,6 +27,8 @@ import {
   Share2,
   Calendar,
   StickyNote,
+  PanelRightClose,
+  PanelRightOpen,
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -34,6 +36,7 @@ import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { UserAvatarWithPresence } from '../../components/Common/UserPresenceBadge';
 import { ShareRecordModal } from '../../components/Platform/ShareRecordModal';
+import { RecordContextRail } from '../../components/Record/RecordContextRail';
 import { RecordActivityDrawer } from '../../components/Platform/RecordActivityDrawer';
 import { RecordDocumentsDrawer } from '../../components/Platform/RecordDocumentsDrawer';
 import { RecordNotesRemindersDrawer } from '../../components/Platform/RecordNotesRemindersDrawer';
@@ -50,12 +53,14 @@ import { validateRecordRules, ValidationError } from '../../lib/validationEngine
 
 import { compactLayout } from '../../lib/layoutEngine';
 import { Module, ModuleField } from '../../types/platform';
+import { useQueryClient } from '@tanstack/react-query';
 import { calculateDefaultValue } from '../../services/fieldService';
+import { getCachedRecordById, getCachedRecords, primeRecordCache, invalidateModuleRecordsCache } from '../../services/dataService';
 import { CollapsibleFieldGroup } from '../../components/UI/CollapsibleFieldGroup';
 import { WorkflowPreview } from '../../components/Builder/Workflow/WorkflowPreview';
 import { WorkflowStatusBar } from '../../components/Platform/WorkflowStatusBar';
 import { ScheduleActivityModal } from '../../components/Platform/ScheduleActivityModal';
-import { ScheduledActivity } from '../../lib/workflowProcessUtils';
+import { ScheduledActivity, buildPipelineSteps } from '../../lib/workflowProcessUtils';
 import { RepeatableGroupBlock } from '../../components/Platform/RepeatableGroupBlock';
 import { RecursiveCollectionBlock } from '../../components/Platform/RecursiveCollectionBlock';
 import { AccordionContainer } from '../../components/UI/AccordionContainer';
@@ -98,6 +103,7 @@ export const RecordDetailView = ({
   const { pageId, queueId, moduleId: routeModuleId, recordId: routeRecordId, parentModuleId, parentRecordId } = useParams();
   const navigate = useNavigate();
   const auth = useAuth();
+  const queryClient = useQueryClient();
   const { session, user: supabaseUser } = auth;
   const { tenant, user: platformUser, isLoading: platformLoading, setBreadcrumbOverride, members, modules } = usePlatform();
   
@@ -111,12 +117,77 @@ export const RecordDetailView = ({
 
   const recordId = recordIdProp || routeRecordId;
   const recordCacheKey = `record_${tenant?.id || 'default'}_${recordId || 'none'}`;
-  const [record, setRecord] = useState<Record<string, any> | null>(() => builderCache.get(recordCacheKey) || null);
+  const [record, setRecord] = useState<Record<string, any> | null>(() => builderCache.get(recordCacheKey) || getCachedRecordById(recordId || '') || null);
   const moduleId = moduleIdProp || resolvedRouteModuleId || record?.moduleId || '';
   const [moduleData, setModuleData] = useState<Module | null>(() => modules?.find((m: any) => m.id === moduleId || slugify(m.name) === moduleId) || null);
   const [syncingConnectors, setSyncingConnectors] = useState<Record<string, boolean>>({});
   const [quickActionAutomations, setQuickActionAutomations] = useState<any[]>([]);
   const [triggeringAutomationId, setTriggeringAutomationId] = useState<string | null>(null);
+
+  // Synchronously update from cache when recordId changes (e.g. Prev/Next stepper or Split View click)
+  useEffect(() => {
+    if (!recordId) return;
+    const cached = builderCache.get<Record<string, any>>(recordCacheKey) || getCachedRecordById(recordId);
+    if (cached && cached.id === recordId) {
+      setRecord(cached);
+      setEditData(cached);
+      setLoading(false);
+    }
+  }, [recordId, recordCacheKey]);
+
+  const siblingRecordIds = useMemo<string[]>(() => {
+    if (!moduleId) return [];
+    const listCache = builderCache.get<any[]>(`records_${tenant?.id || 'default'}_${moduleId}`);
+    if (Array.isArray(listCache) && listCache.length > 0) {
+      return listCache.map((r: any) => r?.id).filter(Boolean);
+    }
+    const memCached = getCachedRecords(moduleId, 1, 25);
+    if (memCached?.records?.length) {
+      return memCached.records.map((r: any) => r?.id).filter(Boolean);
+    }
+    return [];
+  }, [moduleId, tenant?.id, recordId]);
+
+  const currentSiblingIndex = useMemo(() => {
+    if (!recordId || siblingRecordIds.length === 0) return -1;
+    return siblingRecordIds.indexOf(recordId);
+  }, [recordId, siblingRecordIds]);
+
+  const handleNavigateSibling = useCallback((direction: 'prev' | 'next') => {
+    if (currentSiblingIndex === -1 || siblingRecordIds.length <= 1) return;
+    const targetIdx = direction === 'prev' ? currentSiblingIndex - 1 : currentSiblingIndex + 1;
+    if (targetIdx < 0 || targetIdx >= siblingRecordIds.length) return;
+    const targetId = siblingRecordIds[targetIdx];
+    if (!targetId) return;
+    if (pageId) {
+      navigate(`/workspace/pages/${pageId}/modules/${routeModuleId || moduleId}/records/${targetId}`);
+    } else if (queueId) {
+      navigate(`/workspace/queues/${queueId}/modules/${routeModuleId || moduleId}/records/${targetId}`);
+    } else {
+      navigate(`/workspace/modules/${routeModuleId || moduleId}/records/${targetId}`);
+    }
+  }, [currentSiblingIndex, siblingRecordIds, pageId, queueId, routeModuleId, moduleId, navigate]);
+
+  // Keyboard shortcuts [ and ] to step between Prev / Next records
+  useEffect(() => {
+    if (isModal || isEmbedded || siblingRecordIds.length <= 1) return;
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) {
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === '[') {
+        e.preventDefault();
+        handleNavigateSibling('prev');
+      } else if (e.key === ']') {
+        e.preventDefault();
+        handleNavigateSibling('next');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isModal, isEmbedded, siblingRecordIds.length, handleNavigateSibling]);
 
   const getBackUrl = useCallback(() => {
     if (parentModuleId && parentRecordId) {
@@ -204,13 +275,42 @@ export const RecordDetailView = ({
     return LucideIcons.Layers;
   }, [moduleData]);
 
-  const [loading, setLoading] = useState(() => !builderCache.has(recordCacheKey));
+  const [loading, setLoading] = useState(() => !(builderCache.has(recordCacheKey) || getCachedRecordById(recordId || '')));
   const [activeFieldId, setActiveFieldId] = useState<string | null>(null);
   const [savingFieldId, setSavingFieldId] = useState<string | null>(null);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [hoveredTabId, setHoveredTabId] = useState<string | null>(null);
   const [hoveredTabRect, setHoveredTabRect] = useState<{ bottom: number, left: number } | null>(null);
-  const [editData, setEditData] = useState<Record<string, any>>({});
+  const [editData, setEditData] = useState<Record<string, any>>(() => builderCache.get(recordCacheKey) || getCachedRecordById(recordId || '') || {});
+  const [isRailCollapsed, setIsRailCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('aurora_record_rail_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleRail = useCallback(() => {
+    setIsRailCollapsed(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('aurora_record_rail_collapsed', String(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  // Keyboard shortcut ⌘\ or Ctrl+\ to toggle context rail
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
+        e.preventDefault();
+        toggleRail();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [toggleRail]);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showActivityDrawer, setShowActivityDrawer] = useState(false);
@@ -738,6 +838,35 @@ export const RecordDetailView = ({
     return moduleData.workflow || (moduleData.workflows && moduleData.workflows[0]) || null;
   }, [moduleData]);
 
+  const statusOptions = useMemo(() => {
+    // 1. If module has an active workflow, extract stages in DAG pipeline order
+    if (activeWorkflow && activeWorkflow.nodes && activeWorkflow.nodes.length > 0) {
+      const { stages } = buildPipelineSteps(activeWorkflow, new Set(), new Set(), false);
+      if (stages.length > 0) {
+        return stages.map(s => ({
+          id: s.id,
+          name: s.name,
+          type: s.type,
+          condition: s.condition,
+          decisionName: s.decisionName,
+          automatedActions: s.automatedActions
+        }));
+      }
+    }
+
+    // 2. Fallback: check if module has a status field with custom options
+    const statusField = (allFields || []).find((f: any) => f.id === 'status' || f.name?.toLowerCase() === 'status');
+    if (statusField?.options && Array.isArray(statusField.options) && statusField.options.length > 0) {
+      return statusField.options.map((opt: any) => {
+        const val = typeof opt === 'string' ? opt : (opt.value || opt.label);
+        return { id: val, name: val };
+      });
+    }
+
+    // 3. Default fallback
+    return ['Draft', 'In Progress', 'Under Review', 'Approved', 'Completed', 'Archived'].map(s => ({ id: s, name: s }));
+  }, [activeWorkflow, allFields]);
+
   useEffect(() => {
     if (platformLoading) return;
     if (!tenant?.id || !recordId) {
@@ -843,9 +972,12 @@ export const RecordDetailView = ({
             }
           }
 
-          // Trigger AI summary update once on load if field exists
+          primeRecordCache(recData);
+
+          // Trigger AI summary update once on load only if field exists and has no summary yet
           const aiField = currentFlatFields.find(f => f.type === 'ai_summary');
-          if (aiField) {
+          const existingSummary = aiField ? (recData[aiField.id] || recData.data?.[aiField.id]) : null;
+          if (aiField && !existingSummary) {
             (async () => {
               try {
                 const summary = await generateAISummary(withCalculations, currentFlatFields);
@@ -885,7 +1017,7 @@ export const RecordDetailView = ({
     if (!recordId || !tenant?.id) return;
     const fetchRecordCounts = async () => {
       try {
-        const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+        const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token || localStorage.getItem('aurora_token');
         const [notes, reminders, docs] = await Promise.all([
           NotesClientService.getNotes({ recordId, moduleId }, token, tenant.id).catch((): any[] => []),
           RemindersClientService.getReminders({ recordId, moduleId }, token, tenant.id).catch((): any[] => []),
@@ -1149,8 +1281,13 @@ export const RecordDetailView = ({
   };
 
   const handleFieldChange = (fieldId: string, val: any, metadata?: any) => {
-    let updatedData = { ...editData };
+    let updatedData = { ...(editDataRef.current || editData) };
     updatedData[fieldId] = val;
+    
+    const groupId = fieldToGroupMap[fieldId];
+    if (groupId) {
+      updatedData[groupId] = { ...(updatedData[groupId] || {}), [fieldId]: val };
+    }
     
     // Execute Lookup Output Mappings
     const field = allFields.find(f => f.id === fieldId);
@@ -1395,6 +1532,14 @@ export const RecordDetailView = ({
         // Always include the primary field being saved
         payload[fieldIdBeingSaved] = getFieldValue(currentData, fieldIdBeingSaved);
         
+        const groupId = fieldToGroupMap[fieldIdBeingSaved];
+        if (groupId) {
+          payload[groupId] = {
+            ...(currentData[groupId] || {}),
+            [fieldIdBeingSaved]: getFieldValue(currentData, fieldIdBeingSaved)
+          };
+        }
+        
         // Also include any other fields that have changed (e.g. from lookup mappings or calculations)
         allFields.forEach(f => {
           if (f.id !== fieldIdBeingSaved) {
@@ -1437,9 +1582,13 @@ export const RecordDetailView = ({
         setRecord(prev => ({ ...prev, ...payload }));
         setEditData(prev => ({ ...prev, ...payload }));
         editDataRef.current = { ...editDataRef.current, ...payload };
+        
+        const optimisticRecord = { ...(record || {}), ...payload };
+        builderCache.set(recordCacheKey, optimisticRecord);
+        primeRecordCache(optimisticRecord);
       }
       
-      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token || localStorage.getItem('aurora_token');
       const method = fieldIdBeingSaved ? 'PATCH' : 'PUT';
       
       const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
@@ -1459,16 +1608,27 @@ export const RecordDetailView = ({
 
       const updatedRecord = await res.json();
       
+      // Sync caches so switching records in split view retains the latest data
+      builderCache.set(recordCacheKey, updatedRecord);
+      primeRecordCache(updatedRecord);
+      invalidateModuleRecordsCache(moduleId);
+      queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+      queryClient.invalidateQueries({ queryKey: ['records'] });
+      
       // Final sync with server data - merge with current local state to preserve in-flight edits
       setRecord(updatedRecord);
       setEditData(prev => {
         if (!fieldIdBeingSaved) return updatedRecord;
-        return {
+        const groupId = fieldToGroupMap[fieldIdBeingSaved];
+        const nextState = {
           ...updatedRecord,
           ...prev,
           // Always take the server's version of the saved field (it may have generated autonumbers)
-          [fieldIdBeingSaved]: updatedRecord[fieldIdBeingSaved]
+          [fieldIdBeingSaved]: updatedRecord[fieldIdBeingSaved],
+          ...(groupId ? { [groupId]: updatedRecord[groupId] || prev[groupId] } : {})
         };
+        editDataRef.current = nextState;
+        return nextState;
       });
 
       if (recordId && updatedRecord._record_key) {
@@ -1517,7 +1677,12 @@ export const RecordDetailView = ({
     
     setIsTransitioning(true);
     try {
-      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+      const targetNode = transitionTo
+        ? activeWorkflow?.nodes.find((n: any) => n.id === transitionTo)
+        : activeWorkflow?.nodes.find((n: any) => (n.type === 'STATUS' || n.type === 'START' || n.type === 'END' || n.isStage) && (n.name?.toLowerCase() === newStatus.toLowerCase() || n.id === newStatus));
+      const effectiveTransitionTo = targetNode?.id || transitionTo;
+
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token || localStorage.getItem('aurora_token');
       const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
         method: 'PUT',
         headers: {
@@ -1528,7 +1693,7 @@ export const RecordDetailView = ({
         body: JSON.stringify({
           moduleId,
           status: newStatus,
-          transitionTo,
+          transitionTo: effectiveTransitionTo,
           ...(additionalData || {})
         })
       });
@@ -1539,10 +1704,10 @@ export const RecordDetailView = ({
       }
 
       const updatedRecord = await res.json();
+      builderCache.set(recordCacheKey, updatedRecord);
+      primeRecordCache(updatedRecord);
       setRecord(updatedRecord);
-      if (additionalData) {
-        setEditData(prev => ({ ...prev, ...additionalData }));
-      }
+      setEditData(prev => ({ ...prev, ...updatedRecord, ...(additionalData || {}) }));
       toast.success(`Status updated to ${newStatus}`);
     } catch (error: any) {
       console.error("Status Update Error:", error);
@@ -1558,7 +1723,7 @@ export const RecordDetailView = ({
       const existingActivities: ScheduledActivity[] = record._activities || record.data?._activities || [];
       const updatedActivities = [...existingActivities, activity];
 
-      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token || localStorage.getItem('aurora_token');
       const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
         method: 'PUT',
         headers: {
@@ -1591,7 +1756,7 @@ export const RecordDetailView = ({
       const existingActivities: ScheduledActivity[] = record._activities || record.data?._activities || [];
       const updatedActivities = existingActivities.map(act => act.id === activityId ? { ...act, done: true } : act);
 
-      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token || localStorage.getItem('aurora_token');
       const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
         method: 'PUT',
         headers: {
@@ -1624,7 +1789,7 @@ export const RecordDetailView = ({
       const existingActivities: ScheduledActivity[] = record._activities || record.data?._activities || [];
       const updatedActivities = existingActivities.filter(act => act.id !== activityId);
 
-      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token || localStorage.getItem('aurora_token');
       const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
         method: 'PUT',
         headers: {
@@ -1662,7 +1827,7 @@ export const RecordDetailView = ({
 
     setIsTransitioning(true);
     try {
-      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token || localStorage.getItem('aurora_token');
       const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
         method: 'PUT',
         headers: {
@@ -1679,7 +1844,10 @@ export const RecordDetailView = ({
       if (!res.ok) throw new Error("Failed to start workflow");
       
       const updatedRecord = await res.json();
+      builderCache.set(recordCacheKey, updatedRecord);
+      primeRecordCache(updatedRecord);
       setRecord(updatedRecord);
+      setEditData(prev => ({ ...prev, ...updatedRecord }));
       toast.success("Workflow started!");
     } catch (err: any) {
       toast.error(err.message || "Failed to start workflow");
@@ -1695,7 +1863,7 @@ export const RecordDetailView = ({
     
     setSyncingConnectors(prev => ({ ...prev, [field.id]: true }));
     try {
-      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token || localStorage.getItem('aurora_token');
       
       const res = await fetch(`${DATA_API_URL}/nexus/execute`, {
         method: 'POST',
@@ -1734,7 +1902,7 @@ export const RecordDetailView = ({
     if (!tenant?.id || !moduleId || !recordId) return;
 
     try {
-      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token || localStorage.getItem('aurora_token');
       const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
         method: 'DELETE',
         headers: {
@@ -1868,7 +2036,12 @@ export const RecordDetailView = ({
                     })();
                 return isSecMasked ? formatMaskedFieldValue(rawVal) : rawVal;
               })()}
-              onChange={(val, metadata) => handleFieldChange(nestedField.id, val, metadata)}
+              onChange={(val, metadata) => {
+                const withCalculations = handleFieldChange(nestedField.id, val, metadata);
+                if (['date', 'time', 'user', 'select', 'choice', 'status_pill', 'boolean', 'toggle', 'rating', 'colorpicker'].includes(nestedField.type)) {
+                  handleUpdateEntry(withCalculations, nestedField.id, true);
+                }
+              }}
               onBlur={() => handleUpdateEntry(undefined, nestedField.id)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleUpdateEntry(undefined, nestedField.id);
@@ -2028,7 +2201,12 @@ export const RecordDetailView = ({
                                 })();
                             return isSecMasked ? formatMaskedFieldValue(rawVal) : rawVal;
                           })()}
-                          onChange={(val, metadata) => handleFieldChange(field!.id, val, metadata)}
+                          onChange={(val, metadata) => {
+                            const withCalculations = handleFieldChange(field!.id, val, metadata);
+                            if (['date', 'time', 'user', 'select', 'choice', 'status_pill', 'boolean', 'toggle', 'rating', 'colorpicker'].includes(field!.type)) {
+                              handleUpdateEntry(withCalculations, field!.id, true);
+                            }
+                          }}
                           onBlur={() => handleUpdateEntry(undefined, field!.id)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') handleUpdateEntry(undefined, field!.id);
@@ -2302,7 +2480,12 @@ export const RecordDetailView = ({
                         })();
                     return isSecMasked ? formatMaskedFieldValue(rawVal) : rawVal;
                   })()}
-                  onChange={(val, metadata) => handleFieldChange(field.id, val, metadata)}
+                  onChange={(val, metadata) => {
+                    const withCalculations = handleFieldChange(field.id, val, metadata);
+                    if (['date', 'time', 'user', 'select', 'choice', 'status_pill', 'boolean', 'toggle', 'rating', 'colorpicker'].includes(field.type)) {
+                      handleUpdateEntry(withCalculations, field.id, true);
+                    }
+                  }}
                   onBlur={() => handleUpdateEntry(undefined, field.id)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleUpdateEntry(undefined, field.id);
@@ -2639,13 +2822,40 @@ export const RecordDetailView = ({
               <LucideIcons.ExternalLink size={14} />
             </Link>
           ) : (
-            <Link 
-              to={getBackUrl()}
-              className="h-8 w-8 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-lg transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-xs shrink-0"
-              title="Back"
-            >
-              <ArrowLeft size={15} />
-            </Link>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <Link 
+                to={getBackUrl()}
+                className="h-8 w-8 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-lg transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-xs shrink-0"
+                title="Back"
+              >
+                <ArrowLeft size={15} />
+              </Link>
+              {currentSiblingIndex !== -1 && siblingRecordIds.length > 1 && (
+                <div className="hidden sm:flex items-center h-8 bg-zinc-100/80 dark:bg-zinc-800/80 border border-zinc-200/80 dark:border-zinc-700/80 rounded-lg overflow-hidden shadow-2xs">
+                  <button
+                    type="button"
+                    disabled={currentSiblingIndex <= 0}
+                    onClick={() => handleNavigateSibling('prev')}
+                    className="h-full px-1.5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/70 dark:hover:bg-zinc-700/70 disabled:opacity-35 disabled:pointer-events-none transition-colors cursor-pointer"
+                    title="Previous record ( [ )"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  <span className="px-1.5 text-[10px] font-mono font-semibold text-zinc-500 dark:text-zinc-400 select-none">
+                    {currentSiblingIndex + 1}/{siblingRecordIds.length}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={currentSiblingIndex >= siblingRecordIds.length - 1}
+                    onClick={() => handleNavigateSibling('next')}
+                    className="h-full px-1.5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/70 dark:hover:bg-zinc-700/70 disabled:opacity-35 disabled:pointer-events-none transition-colors cursor-pointer"
+                    title="Next record ( ] )"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
           )}
 
           {Icon && (
@@ -2950,74 +3160,24 @@ export const RecordDetailView = ({
               </AnimatePresence>
             </div>
 
-            {/* Files & Compliance Vault Button */}
+            {/* Details Rail Toggle Button */}
             <button
               type="button"
-              onClick={() => setShowDocumentsDrawer(true)}
-              className="h-8 px-2.5 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-200 shadow-xs cursor-pointer hover:border-indigo-500/30"
-              title="View Attached Files & Vault"
-            >
-              <LucideIcons.Files size={12} className="text-indigo-500" />
-              <span className="hidden sm:inline">Files</span>
-              {docCount > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
-                  {docCount}
-                </span>
+              onClick={toggleRail}
+              className={cn(
+                "h-8 px-2.5 rounded-lg border transition-all flex items-center gap-1.5 text-xs font-semibold shadow-xs cursor-pointer",
+                !isRailCollapsed
+                  ? "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-500/40 text-indigo-600 dark:text-indigo-400"
+                  : "bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-200 hover:text-zinc-950 dark:hover:text-white"
               )}
-            </button>
-
-            {/* Activity Feed Button */}
-            <button
-              type="button"
-              onClick={() => setShowActivityDrawer(true)}
-              className="h-8 px-2.5 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-200 shadow-xs cursor-pointer hover:border-indigo-500/30"
-              title="View Record Activity & Audit Trail"
+              title={isRailCollapsed ? "Open Details [⌘\\]" : "Collapse Details [⌘\\]"}
             >
-              <History size={12} className="text-indigo-500" />
-              <span className="hidden sm:inline">Activity</span>
-            </button>
-
-            {/* Notes Button */}
-            <button
-              type="button"
-              onClick={() => setShowNotesRemindersDrawer(true)}
-              className="h-8 px-2.5 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-200 shadow-xs cursor-pointer hover:border-indigo-500/30"
-              title="Notes & Reminders"
-            >
-              <StickyNote size={12} className="text-indigo-500" />
-              <span className="hidden sm:inline">Notes</span>
-              {notesRemindersCount > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
-                  {notesRemindersCount}
-                </span>
+              {isRailCollapsed ? (
+                <PanelRightOpen size={13} className="text-indigo-500" />
+              ) : (
+                <PanelRightClose size={13} className="text-indigo-500" />
               )}
-            </button>
-
-            {/* Schedule Task Button */}
-            <button
-              type="button"
-              onClick={() => setShowScheduleActivityModal(true)}
-              className="h-8 px-2.5 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-200 shadow-xs cursor-pointer hover:border-indigo-500/30"
-              title="Schedule Activity (Call, Email, Meeting, Task)"
-            >
-              <Calendar size={12} className="text-indigo-500" />
-              <span className="hidden sm:inline">Schedule</span>
-              {((record?._activities || record?.data?._activities || []).filter((a: any) => !a.done).length > 0) && (
-                <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
-                  {(record?._activities || record?.data?._activities || []).filter((a: any) => !a.done).length}
-                </span>
-              )}
-            </button>
-
-            {/* Share Button */}
-            <button
-              type="button"
-              onClick={() => setShowShareModal(true)}
-              className="h-8 px-2.5 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg transition-all flex items-center gap-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-200 shadow-xs cursor-pointer hover:border-indigo-500/30"
-              title="Share Record"
-            >
-              <Share2 size={12} className="text-indigo-500" />
-              <span className="hidden sm:inline">Share</span>
+              <span className="hidden sm:inline">Details</span>
             </button>
           </div>
 
@@ -3208,14 +3368,16 @@ export const RecordDetailView = ({
           currentUserId={session?.user?.id}
           onOpenVisualizer={() => setShowVisualizer(true)}
           className={cn(
-            "w-full px-6 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 shrink-0 box-border",
-            isEmbedded ? "h-[52px]" : "h-13"
+            "w-full px-6 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 shrink-0 box-border h-[52px]"
           )}
         />
       )}
 
-      {/* Main Content Area Supporting all 5 Layout Options */}
-      {editForm && !editForm.isMultistep ? (
+      {/* 2-Column Main Workspace: Form Layout (Left) + Unified Context Rail (Right) */}
+      <div className="flex-1 flex flex-row w-full min-h-0 relative overflow-hidden">
+        <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
+          {/* Main Content Area Supporting all 5 Layout Options */}
+          {editForm && !editForm.isMultistep ? (
         <div className="flex-1 w-full p-6 min-h-0 relative z-10 flex flex-col overflow-y-auto custom-scrollbar bg-zinc-50 dark:bg-[#101010]">
           {renderFieldsGrid('default')}
         </div>
@@ -3305,10 +3467,7 @@ export const RecordDetailView = ({
         /* Edge-to-Edge Tabbed View */
         <div className="flex-1 w-full min-h-0 relative z-10 flex flex-col overflow-hidden">
           {moduleData?.tabs && moduleData.tabs.length > 0 && (
-            <div className={cn(
-              "shrink-0 relative group/tabs overflow-hidden border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900",
-              isEmbedded && "h-[52px] box-border"
-            )}>
+            <div className="shrink-0 relative group/tabs overflow-hidden border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 h-[52px] box-border flex items-center">
               <AnimatePresence>
                 {showLeftScroll && (
                   <motion.div 
@@ -3332,10 +3491,7 @@ export const RecordDetailView = ({
               <div 
                 ref={tabContainerRef}
                 onScroll={checkScroll}
-                className={cn(
-                  "flex gap-2 overflow-x-auto no-scrollbar scroll-smooth",
-                  isEmbedded ? "px-6 py-0 h-full items-center" : "px-6 py-3"
-                )}
+                className="flex gap-2 overflow-x-auto no-scrollbar scroll-smooth px-6 py-0 h-full items-center"
               >
                 {sortedVisibleTabs.filter((t: any) => !t.parentId).map((tab: any) => {
                   const subtabs = sortedVisibleTabs.filter((sub: any) => sub.parentId === tab.id);
@@ -3474,6 +3630,28 @@ export const RecordDetailView = ({
           </div>
         </div>
       )}
+        </div>
+
+        {/* Collapsible Record Context Rail */}
+        <RecordContextRail
+          record={record}
+          moduleId={moduleId || routeModuleId}
+          moduleData={moduleData}
+          editData={editData}
+          onUpdateField={handleFieldChange}
+          onUpdateAssignee={handleUpdateAssignee}
+          onUpdateStatus={(newStatus, targetNodeId) => {
+            handleStatusTransition(newStatus, targetNodeId);
+          }}
+          members={members || []}
+          allFields={allFields}
+          isCollapsed={isRailCollapsed}
+          onToggleCollapse={toggleRail}
+          onOpenShare={() => setShowShareModal(true)}
+          statusOptions={statusOptions}
+          workflowTransitions={activeWorkflow?.edges || []}
+        />
+      </div>
     </div>
   );
 
@@ -3540,15 +3718,13 @@ export const RecordDetailView = ({
     )}
 
       {/* Share Record Modal */}
-      {showShareModal && (
-        <ShareRecordModal
-          isOpen={showShareModal}
-          onClose={() => setShowShareModal(false)}
-          record={record}
-          moduleId={moduleId}
-          moduleName={moduleData?.name}
-        />
-      )}
+      <ShareRecordModal
+        isOpen={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        record={record}
+        moduleId={moduleId}
+        moduleName={moduleData?.name}
+      />
 
       {/* Enterprise Record Activity & Audit Drawer */}
       <RecordActivityDrawer

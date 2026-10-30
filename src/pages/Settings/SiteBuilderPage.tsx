@@ -3562,7 +3562,7 @@ export const SiteBuilderPage: React.FC = () => {
                       )}
 
                       {/* BOOKING & SCHEDULING WIDGET */}
-                      {w.type === 'booking_widget' && (
+                      {(w.type as string) === 'booking_widget' && (
                         <div className={`${getThemeCardClass()} ${getThemeRadiusClass()} p-6 space-y-4 border border-indigo-500/20`}>
                           <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
                             <div className="flex items-center gap-2">
@@ -3588,7 +3588,7 @@ export const SiteBuilderPage: React.FC = () => {
                               <span className="text-xs font-bold text-zinc-300">Select Time Slot</span>
                               <div className="grid grid-cols-3 gap-1.5">
                                 {['09:00 AM', '11:00 AM', '02:30 PM'].map((slot, idx) => (
-                                  <div key={idx} className={cn("py-1.5 text-center text-xs font-bold rounded-lg border", idx === 0 ? "bg-indigo-600 text-white border-indigo-600" : "bg-zinc-900 text-zinc-300 border-zinc-800")}>
+                                  <div key={idx} className={`py-1.5 text-center text-xs font-bold rounded-lg border ${idx === 0 ? "bg-indigo-600 text-white border-indigo-600" : "bg-zinc-900 text-zinc-300 border-zinc-800"}`}>
                                     {slot}
                                   </div>
                                 ))}

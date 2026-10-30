@@ -68,7 +68,7 @@ export const TimePicker: React.FC<TimePickerProps> = ({
     const handleClickOutside = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
-        if (onBlur) onBlur();
+        onBlur?.();
       }
     };
     if (isOpen) {
@@ -95,16 +95,27 @@ export const TimePicker: React.FC<TimePickerProps> = ({
   const clearTime = (e: React.MouseEvent) => {
     e.stopPropagation();
     onChange('');
+    onBlur?.();
   };
 
   return (
     <div className={cn("relative w-full", isOpen && "z-50", className)} ref={containerRef}>
       <div 
-        onClick={() => !readonly && setIsOpen(!isOpen)}
+        onClick={() => {
+          if (!readonly) {
+            if (isOpen) {
+              onBlur?.();
+            }
+            setIsOpen(!isOpen);
+          }
+        }}
         tabIndex={readonly ? -1 : 0}
         onKeyDown={(e) => {
           if (!readonly && (e.key === 'Enter' || e.key === ' ')) {
             e.preventDefault();
+            if (isOpen) {
+              onBlur?.();
+            }
             setIsOpen(!isOpen);
           }
         }}
@@ -232,7 +243,10 @@ export const TimePicker: React.FC<TimePickerProps> = ({
                 Now
               </button>
               <button 
-                onClick={() => setIsOpen(false)}
+                onClick={() => {
+                  setIsOpen(false);
+                  onBlur?.();
+                }}
                 className="text-[10px] font-bold text-zinc-400 hover:text-zinc-600 uppercase tracking-widest transition-colors"
               >
                 Done

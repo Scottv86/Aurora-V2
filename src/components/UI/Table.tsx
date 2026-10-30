@@ -464,6 +464,49 @@ export function Table<T extends { id: string | number }>({
     return sortedData.slice(start, start + currentPageSize);
   }, [sortedData, pagination, totalCount, currentPage, currentPageSize]);
 
+  // Power-user keyboard navigation (J/K or ArrowDown/ArrowUp + Enter to open)
+  const [focusedRowIdx, setFocusedRowIdx] = useState<number | null>(null);
+
+  useEffect(() => {
+    setFocusedRowIdx(null);
+  }, [currentPage, activeSearch, activeGroupConfig]);
+
+  useEffect(() => {
+    if (!onRowClick || isEditMode || paginatedData.length === 0) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      if (e.key === 'j' || e.key === 'ArrowDown') {
+        if (e.key === 'j') e.preventDefault();
+        setFocusedRowIdx((prev) => {
+          if (prev === null) return 0;
+          return Math.min(paginatedData.length - 1, prev + 1);
+        });
+      } else if (e.key === 'k' || e.key === 'ArrowUp') {
+        if (e.key === 'k') e.preventDefault();
+        setFocusedRowIdx((prev) => {
+          if (prev === null) return 0;
+          return Math.max(0, prev - 1);
+        });
+      } else if (e.key === 'Enter' && focusedRowIdx !== null && paginatedData[focusedRowIdx]) {
+        e.preventDefault();
+        onRowClick(paginatedData[focusedRowIdx]);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onRowClick, isEditMode, paginatedData, focusedRowIdx]);
+
   // Selection helpers
   const selectedItems = useMemo(() => {
     return data.filter(d => selectedSet.has(d.id));
@@ -1092,6 +1135,7 @@ export function Table<T extends { id: string | number }>({
                 paginatedData.map((item, rowIdx) => {
                   const rowId = item.id;
                   const isSelected = selectedSet.has(rowId);
+                  const isFocused = focusedRowIdx === rowIdx;
 
                   return (
                     <tr 
@@ -1099,7 +1143,11 @@ export function Table<T extends { id: string | number }>({
                       onClick={() => onRowClick?.(item)}
                       className={cn(
                         'group transition-colors duration-100 bg-white dark:bg-[#101010]',
-                        isSelected ? 'bg-indigo-50/70 dark:bg-indigo-950/30' : 'hover:bg-zinc-50/80 dark:hover:bg-zinc-900/60',
+                        isSelected
+                          ? 'bg-indigo-50/70 dark:bg-indigo-950/30'
+                          : isFocused
+                          ? 'bg-indigo-50/40 dark:bg-indigo-500/10 ring-1 ring-inset ring-indigo-500/40'
+                          : 'hover:bg-zinc-50/80 dark:hover:bg-zinc-900/60',
                         onRowClick && 'cursor-pointer',
                         rowClassName?.(item)
                       )}

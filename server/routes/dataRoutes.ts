@@ -1384,8 +1384,18 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
       
       if (workflow) {
         try {
-          if (transitionTo) {
-            const targetNode = workflow.nodes.find((n: any) => n.id === transitionTo);
+          let effectiveTransitionTo = transitionTo;
+          if (!effectiveTransitionTo && status && status !== existing.status) {
+            const matchingNode = workflow.nodes.find((n: any) => 
+              (n.type === 'STATUS' || n.type === 'START' || n.type === 'END' || n.isStage) && (n.name?.toLowerCase() === status.toLowerCase() || n.id === status)
+            );
+            if (matchingNode) {
+              effectiveTransitionTo = matchingNode.id;
+            }
+          }
+
+          if (effectiveTransitionTo) {
+            const targetNode = workflow.nodes.find((n: any) => n.id === effectiveTransitionTo || n.name?.toLowerCase() === effectiveTransitionTo.toLowerCase());
             if (targetNode) {
               const currentWorkflowState = (existing.workflowState as any) || { history: [] };
               const intermediateState = {
@@ -1415,9 +1425,14 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
             }
           } else {
             // Auto-transition based on data changes from current node
+            const matchingStatusNode = existing.status 
+              ? workflow.nodes.find((n: any) => n.type === 'STATUS' && (n.name?.toLowerCase() === existing.status.toLowerCase() || n.id === existing.status))
+              : null;
+            const fallbackStartId = matchingStatusNode?.id || workflow.nodes.find((n: any) => n.type === 'START')?.id || workflow.nodes[0]?.id;
+
             const currentWorkflowState = (existing.workflowState as any) || {
-              currentNodeId: workflow.nodes.find((n: any) => n.type === 'START')?.id || workflow.nodes[0]?.id,
-              activeNodeIds: workflow.nodes.find((n: any) => n.type === 'START')?.id ? [workflow.nodes.find((n: any) => n.type === 'START')?.id] : [workflow.nodes[0]?.id],
+              currentNodeId: fallbackStartId,
+              activeNodeIds: [fallbackStartId],
               history: []
             };
             const evaluatedState = await WorkflowEngine.evaluate(
@@ -1707,8 +1722,18 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
       
       if (workflow) {
         try {
-          if (transitionTo) {
-            const targetNode = workflow.nodes.find((n: any) => n.id === transitionTo);
+          let effectiveTransitionTo = transitionTo;
+          if (!effectiveTransitionTo && status && status !== existing.status) {
+            const matchingNode = workflow.nodes.find((n: any) => 
+              (n.type === 'STATUS' || n.type === 'START' || n.type === 'END' || n.isStage) && (n.name?.toLowerCase() === status.toLowerCase() || n.id === status)
+            );
+            if (matchingNode) {
+              effectiveTransitionTo = matchingNode.id;
+            }
+          }
+
+          if (effectiveTransitionTo) {
+            const targetNode = workflow.nodes.find((n: any) => n.id === effectiveTransitionTo || n.name?.toLowerCase() === effectiveTransitionTo.toLowerCase());
             if (targetNode) {
               const currentWorkflowState = (existing.workflowState as any) || { history: [] };
               const intermediateState = {
@@ -1738,9 +1763,14 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
             }
           } else {
             // Auto-transition based on data changes from current node
+            const matchingStatusNode = existing.status 
+              ? workflow.nodes.find((n: any) => n.type === 'STATUS' && (n.name?.toLowerCase() === existing.status.toLowerCase() || n.id === existing.status))
+              : null;
+            const fallbackStartId = matchingStatusNode?.id || workflow.nodes.find((n: any) => n.type === 'START')?.id || workflow.nodes[0]?.id;
+
             const currentWorkflowState = (existing.workflowState as any) || {
-              currentNodeId: workflow.nodes.find((n: any) => n.type === 'START')?.id || workflow.nodes[0]?.id,
-              activeNodeIds: workflow.nodes.find((n: any) => n.type === 'START')?.id ? [workflow.nodes.find((n: any) => n.type === 'START')?.id] : [workflow.nodes[0]?.id],
+              currentNodeId: fallbackStartId,
+              activeNodeIds: [fallbackStartId],
               history: []
             };
             const evaluatedState = await WorkflowEngine.evaluate(

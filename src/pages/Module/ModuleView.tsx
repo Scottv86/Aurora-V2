@@ -1662,6 +1662,70 @@ export const ModuleView = () => {
   const [calendarViewMode, setCalendarViewMode] = useState<'year' | 'month' | 'week' | 'day'>('month');
   const [activeDetailRecordId, setActiveDetailRecordId] = useState<string | null>(null);
   const [cardImgIndices, setCardImgIndices] = useState<Record<string, number>>({});
+  const [activeLayoutOverride, setActiveLayoutOverride] = useState<string | null>(() => {
+    if (!moduleId) return null;
+    try {
+      return localStorage.getItem(`aurora_view_layout_${moduleId}`) || null;
+    } catch {
+      return null;
+    }
+  });
+  const [showMoreViewsDropdown, setShowMoreViewsDropdown] = useState(false);
+  const moreViewsDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!moduleId) return;
+    try {
+      setActiveLayoutOverride(localStorage.getItem(`aurora_view_layout_${moduleId}`) || null);
+    } catch {
+      setActiveLayoutOverride(null);
+    }
+  }, [moduleId]);
+
+  useEffect(() => {
+    if (!showMoreViewsDropdown) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (moreViewsDropdownRef.current && !moreViewsDropdownRef.current.contains(e.target as Node)) {
+        setShowMoreViewsDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [showMoreViewsDropdown]);
+
+  // Handle ?action=create from global Command Palette
+  useEffect(() => {
+    if (searchParams.get('action') === 'create' && moduleData) {
+      const initialDefaults: any = {};
+      allFields.forEach((f: any) => {
+        const defVal = calculateDefaultValue(f, initialDefaults);
+        if (defVal !== undefined && defVal !== null && defVal !== '') {
+          initialDefaults[f.id] = defVal;
+        }
+      });
+      setNewEntryData(initialDefaults);
+      setEditingRecord(null);
+      setShowNewEntryModal(true);
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        next.delete('action');
+        return next;
+      }, { replace: true });
+    }
+  }, [searchParams, moduleData, allFields, setSearchParams]);
+
+  const handleSelectViewLayout = useCallback((layoutType: string | null) => {
+    setActiveLayoutOverride(layoutType);
+    setShowMoreViewsDropdown(false);
+    if (!moduleId) return;
+    try {
+      if (layoutType) {
+        localStorage.setItem(`aurora_view_layout_${moduleId}`, layoutType);
+      } else {
+        localStorage.removeItem(`aurora_view_layout_${moduleId}`);
+      }
+    } catch {}
+  }, [moduleId]);
 
   const interfaceSettings = useMemo(() => {
     const raw = (moduleData as any)?.interfaceSettings || {
@@ -1678,9 +1742,13 @@ export const ModuleView = () => {
 
     return {
       ...raw,
+      master: {
+        ...(raw.master || {}),
+        layoutType: activeLayoutOverride || raw.master?.layoutType || 'table'
+      },
       actions: (raw.actions || []).filter((act: any) => act.label?.trim().toLowerCase() !== 'archive')
     };
-  }, [moduleData]);
+  }, [moduleData, activeLayoutOverride]);
 
   const getRecordTitle = useCallback((r: any) => {
     if (!r) return 'Untitled';
@@ -2897,23 +2965,26 @@ export const ModuleView = () => {
   const renderKanbanView = () => {
     const { stages, grouped } = kanbanConfig;
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-4 shadow-sm">
-          <div className="flex items-center gap-4 flex-1 max-w-md">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2.5 shadow-2xs">
+          <div className="flex items-center gap-3 flex-1 max-w-sm">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={14} />
               <input 
                 type="text" 
-                placeholder="Filter cards..." 
+                placeholder="Filter board cards..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-transparent border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-sm text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                className="w-full bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/60 rounded-lg pl-8 pr-3 py-1.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-colors"
               />
             </div>
           </div>
+          <div className="text-[11px] font-medium text-zinc-400">
+            {records.length} {records.length === 1 ? 'record' : 'records'} across {stages.length} stages
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 overflow-x-auto pb-4">
+        <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar">
           {stages.map((stage: string) => {
             const cards = grouped[stage] || [];
             return (
@@ -2924,28 +2995,31 @@ export const ModuleView = () => {
                   const rId = e.dataTransfer.getData('text/plain');
                   if (rId) handleMoveCard(rId, stage);
                 }}
-                className="bg-zinc-50 dark:bg-zinc-900/30 border border-zinc-200/60 dark:border-zinc-800/60 rounded-[2rem] p-6 flex flex-col min-h-[500px]"
+                className="bg-zinc-50/90 dark:bg-zinc-900/40 border border-zinc-200/70 dark:border-zinc-800/70 rounded-2xl p-3.5 flex flex-col min-h-[500px] w-[300px] shrink-0"
               >
-                <div className="flex items-center justify-between mb-6 pb-3 border-b border-zinc-200/50 dark:border-zinc-800/50">
-                  <span className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
+                <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-zinc-200/60 dark:border-zinc-800/60">
+                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-indigo-500" />
                     {stage}
                   </span>
-                  <span className="px-2 py-0.5 bg-zinc-200/50 dark:bg-zinc-800/50 rounded-full text-[10px] font-bold text-zinc-500">
+                  <span className="px-2 py-0.5 bg-zinc-200/70 dark:bg-zinc-800 rounded-md text-[10px] font-bold text-zinc-600 dark:text-zinc-400">
                     {cards.length}
                   </span>
                 </div>
 
-                <div className="flex-1 space-y-4 overflow-y-auto max-h-[600px] pr-1.5 custom-scrollbar">
+                <div className="flex-1 space-y-2.5 overflow-y-auto max-h-[620px] pr-1 custom-scrollbar">
                   {cards.map(record => (
                     <div 
                       key={record.id}
                       draggable
                       onDragStart={(e) => e.dataTransfer.setData('text/plain', record.id)}
                       onClick={() => handleRecordClick(record.id)}
-                      className="p-6 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-grab active:cursor-grabbing hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-md transition-all group relative space-y-4"
+                      className="p-3.5 bg-white dark:bg-zinc-900 border border-zinc-200/90 dark:border-zinc-800 rounded-xl cursor-grab active:cursor-grabbing hover:border-indigo-500/40 dark:hover:border-indigo-500/40 hover:shadow-sm transition-all group relative space-y-2.5"
                     >
-                      <div className="flex items-center justify-end">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono font-semibold text-zinc-400 dark:text-zinc-500">
+                          {record._record_key || `#${String(record.id || '').slice(-6)}`}
+                        </span>
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
                             onClick={(e) => {
@@ -3305,6 +3379,8 @@ export const ModuleView = () => {
       firstDayIndex, 
       numDays, 
       dateFieldId, 
+      enableHoldBadges,
+      enableSlotBooking,
       weekDates, 
       yearRecordsMap, 
       monthRecordsMap, 
@@ -4782,7 +4858,7 @@ export const ModuleView = () => {
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-6 shadow-sm flex flex-col">
             <h4 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white mb-6">Status Breakdown</h4>
             <div className="h-64 flex items-center justify-center">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 100, height: 100 }}>
                 <PieChart>
                   <Pie
                     data={analyticsData.statusData}
@@ -4816,7 +4892,7 @@ export const ModuleView = () => {
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-6 shadow-sm flex flex-col">
             <h4 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white mb-6">Creation Activity Trend</h4>
             <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 100, height: 100 }}>
                 <AreaChart data={analyticsData.trendData}>
                   <defs>
                     <linearGradient id="colorTrend" x1="0" y1="0" x2="0" y2="1">
@@ -4837,7 +4913,7 @@ export const ModuleView = () => {
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-6 shadow-sm flex flex-col lg:col-span-2">
             <h4 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white mb-6">Workload distribution by Member</h4>
             <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 100, height: 100 }}>
                 <BarChart data={analyticsData.assigneeData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e4e4e720" />
                   <XAxis dataKey="name" tickLine={false} style={{ fontSize: '10px', fill: '#888' }} />
@@ -5525,11 +5601,123 @@ export const ModuleView = () => {
     <div className="flex flex-col w-full flex-1 min-h-0 h-full bg-transparent overflow-hidden">
       
       {/* Tier 1: Consistent Breadcrumbs & Context Action Bar */}
-      <div className="sticky top-0 z-30 h-10 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between px-6 shrink-0">
-        <Breadcrumbs />
+      <div className="sticky top-0 z-30 h-10 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between px-6 shrink-0 gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <Breadcrumbs />
+        </div>
 
-        {/* Right: Context Actions + Primary CTA */}
+        {/* Center/Right: Interactive Multi-View Switcher + Context Actions */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* Single Icon View Switcher Dropdown */}
+          <div className="relative" ref={moreViewsDropdownRef}>
+            {(() => {
+              const ALL_MODULE_LAYOUTS = [
+                { id: 'table', label: 'Table', description: 'Interactive grid with inline editing', icon: LucideIcons.Table2 },
+                { id: 'split', label: 'Split View', description: 'Side-by-side list and detail pane', icon: LucideIcons.Columns2 },
+                { id: 'kanban', label: 'Board', description: 'Status columns with drag cards', icon: LucideIcons.Kanban },
+                { id: 'calendar', label: 'Calendar', description: 'Day, week, and month schedule', icon: LucideIcons.Calendar },
+                { id: 'analytics', label: 'Analytics', description: 'Charts, trends, and aggregations', icon: LucideIcons.BarChart3 },
+                { id: 'pipeline', label: 'Pipeline', description: 'Stage totals and deal cards', icon: LucideIcons.GitCommitHorizontal },
+                { id: 'timeline', label: 'Timeline', description: 'Chronological activity stream', icon: LucideIcons.Clock },
+                { id: 'gantt', label: 'Gantt Chart', description: 'Duration bars across dates', icon: LucideIcons.GanttChart },
+                { id: 'cards', label: 'Gallery Cards', description: 'Grid of card records', icon: LucideIcons.LayoutGrid },
+                { id: 'portfolio', label: 'Portfolio', description: 'Showcase with image carousels', icon: LucideIcons.Briefcase },
+                { id: 'map', label: 'Geo Map', description: 'Geocoded records on Leaflet map', icon: LucideIcons.MapPin }
+              ] as const;
+
+              const currentLayout = interfaceSettings.master?.layoutType || 'table';
+              const activeLayout = ALL_MODULE_LAYOUTS.find((l) => l.id === currentLayout) || ALL_MODULE_LAYOUTS[0];
+              const ActiveIcon = activeLayout.icon;
+
+              return (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowMoreViewsDropdown((prev) => !prev)}
+                    className={cn(
+                      'flex items-center justify-center gap-1.5 h-7.5 px-2 bg-white dark:bg-zinc-800/80 hover:bg-zinc-50 dark:hover:bg-zinc-700/80 border border-zinc-200/80 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-lg text-xs font-medium transition-all shadow-2xs group shrink-0 cursor-pointer select-none',
+                      showMoreViewsDropdown && 'border-indigo-500/50 ring-2 ring-indigo-500/10 dark:bg-zinc-700/80'
+                    )}
+                    title={`View: ${activeLayout.label} (click to switch)`}
+                    aria-label={`Current view layout is ${activeLayout.label}. Click to switch view.`}
+                  >
+                    <ActiveIcon size={14} className="text-indigo-600 dark:text-indigo-400 group-hover:scale-105 transition-transform shrink-0" />
+                    <ChevronDown size={11} className={cn('text-zinc-400 transition-transform duration-150 shrink-0', showMoreViewsDropdown && 'rotate-180')} />
+                  </button>
+
+                  <AnimatePresence>
+                    {showMoreViewsDropdown && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: 4 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: 4 }}
+                        transition={{ duration: 0.12 }}
+                        className="absolute right-0 top-full mt-1.5 w-60 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl p-1.5 z-50 divide-y divide-zinc-100 dark:divide-zinc-800/60"
+                      >
+                        <div className="px-2.5 py-1.5 mb-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Layout Views</span>
+                            <span className="text-[10px] font-semibold text-indigo-500 dark:text-indigo-400">{activeLayout.label}</span>
+                          </div>
+                        </div>
+
+                        <div className="py-1 space-y-0.5 max-h-80 overflow-y-auto custom-scrollbar">
+                          {ALL_MODULE_LAYOUTS.map((layout) => {
+                            const LayoutIcon = layout.icon;
+                            const isSelected = currentLayout === layout.id;
+                            return (
+                              <button
+                                key={layout.id}
+                                type="button"
+                                onClick={() => handleSelectViewLayout(layout.id)}
+                                className={cn(
+                                  'w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-left transition-colors cursor-pointer group',
+                                  isSelected
+                                    ? 'bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 font-semibold'
+                                    : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800/80'
+                                )}
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <div
+                                    className={cn(
+                                      'w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition-colors',
+                                      isSelected
+                                        ? 'bg-indigo-600 text-white'
+                                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-800 dark:group-hover:text-zinc-200'
+                                    )}
+                                  >
+                                    <LayoutIcon size={13} />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="text-xs truncate leading-tight">{layout.label}</div>
+                                    <div className="text-[10px] text-zinc-400 dark:text-zinc-500 truncate leading-tight">{layout.description}</div>
+                                  </div>
+                                </div>
+                                {isSelected && <LucideIcons.Check size={13} className="text-indigo-600 dark:text-indigo-400 shrink-0 ml-2" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {activeLayoutOverride && (
+                          <div className="pt-1.5 mt-1 px-1">
+                            <button
+                              type="button"
+                              onClick={() => handleSelectViewLayout(null)}
+                              className="w-full text-center px-2 py-1.5 rounded-lg text-[11px] font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer transition-colors"
+                            >
+                              Reset to module default
+                            </button>
+                          </div>
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </>
+              );
+            })()}
+          </div>
+
           {/* Configure Module (Admin only) */}
           {isTenantAdmin && (
             <button
@@ -6512,15 +6700,13 @@ export const ModuleView = () => {
     )}
 
       {/* Share Record Modal */}
-      {recordToShare && (
-        <ShareRecordModal
-          isOpen={!!recordToShare}
-          onClose={() => setRecordToShare(null)}
-          record={recordToShare}
-          moduleId={moduleData?.id || (typeof moduleId === 'string' ? moduleId : '')}
-          moduleName={moduleData?.name}
-        />
-      )}
+      <ShareRecordModal
+        isOpen={!!recordToShare}
+        onClose={() => setRecordToShare(null)}
+        record={recordToShare}
+        moduleId={moduleData?.id || (typeof moduleId === 'string' ? moduleId : '')}
+        moduleName={moduleData?.name}
+      />
 
       {/* Record Activity & Audit Drawer */}
       <RecordActivityDrawer
@@ -6552,21 +6738,19 @@ export const ModuleView = () => {
       )}
 
       {/* Move Record(s) Modal */}
-      {recordsToMove && recordsToMove.length > 0 && (
-        <MoveRecordModal
-          isOpen={!!recordsToMove}
-          onClose={() => setRecordsToMove(null)}
-          sourceRecords={recordsToMove}
-          sourceModuleId={moduleData?.id || (typeof moduleId === 'string' ? moduleId : '')}
-          sourceModuleName={moduleData?.name}
-          sourceFields={allFields}
-          onSuccess={({ targetModuleId }) => {
-            queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
-            queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, targetModuleId] });
-            setRecordsToMove(null);
-          }}
-        />
-      )}
+      <MoveRecordModal
+        isOpen={Boolean(recordsToMove && recordsToMove.length > 0)}
+        onClose={() => setRecordsToMove(null)}
+        sourceRecords={recordsToMove || []}
+        sourceModuleId={moduleData?.id || (typeof moduleId === 'string' ? moduleId : '')}
+        sourceModuleName={moduleData?.name}
+        sourceFields={allFields}
+        onSuccess={({ targetModuleId }) => {
+          queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+          queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, targetModuleId] });
+          setRecordsToMove(null);
+        }}
+      />
 
       {/* Bulk Paste from Excel / Sheets Modal */}
       {showBulkPasteModal && moduleData && (

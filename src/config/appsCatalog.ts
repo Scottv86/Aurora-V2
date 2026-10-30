@@ -301,7 +301,8 @@ export const AURORA_APPS: AppItem[] = [
     color: 'text-slate-500',
     to: '/workspace/apps/calculator',
     category: 'Creation & Tools',
-    status: 'coming_soon'
+    isCore: true,
+    status: 'active'
   },
   {
     id: 'snipper',

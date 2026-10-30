@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Share2, 
   Search, 
@@ -50,8 +51,15 @@ export const ShareRecordModal: React.FC<ShareRecordModalProps> = ({
   const [isSharing, setIsSharing] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
-  const recordId = record?.id || (typeof record === 'string' ? record : '');
-  const resolvedModuleId = explicitModuleId || record?.moduleId || '';
+  // Preserve record details across exit animations when parent nullifies record prop on close
+  const lastRecordRef = useRef(record);
+  if (record) {
+    lastRecordRef.current = record;
+  }
+  const effectiveRecord = record || lastRecordRef.current;
+
+  const recordId = effectiveRecord?.id || (typeof effectiveRecord === 'string' ? effectiveRecord : '');
+  const resolvedModuleId = explicitModuleId || effectiveRecord?.moduleId || '';
   
   const resolvedModule = useMemo(() => {
     return modules.find(m => m.id === resolvedModuleId);
@@ -61,18 +69,18 @@ export const ShareRecordModal: React.FC<ShareRecordModalProps> = ({
 
   const recordTitle = useMemo(() => {
     if (explicitRecordTitle) return explicitRecordTitle;
-    if (!record) return 'Record';
+    if (!effectiveRecord) return 'Record';
     return (
-      record.name ||
-      record.title ||
-      record.subject ||
-      record.ticketNumber ||
-      record.caseNumber ||
-      record.displayName ||
-      record._record_key ||
+      effectiveRecord.name ||
+      effectiveRecord.title ||
+      effectiveRecord.subject ||
+      effectiveRecord.ticketNumber ||
+      effectiveRecord.caseNumber ||
+      effectiveRecord.displayName ||
+      effectiveRecord._record_key ||
       `Record #${String(recordId).slice(-6)}`
     );
-  }, [explicitRecordTitle, record, recordId]);
+  }, [explicitRecordTitle, effectiveRecord, recordId]);
 
   const directUrl = useMemo(() => {
     const origin = window.location.origin;
@@ -92,6 +100,29 @@ export const ShareRecordModal: React.FC<ShareRecordModalProps> = ({
       setCopiedLink(false);
     }
   }, [isOpen]);
+
+  // Prevent body scrolling when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isOpen]);
+
+  // Close on Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   const currentMemberId = platformUser?.memberId || platformUser?.cuid;
   const currentUserId = platformUser?.id;
@@ -206,23 +237,30 @@ export const ShareRecordModal: React.FC<ShareRecordModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
+  if (typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <AnimatePresence>
-      <div 
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200"
-        onClick={(e) => {
-          if (e.target === e.currentTarget) onClose();
-        }}
-      >
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95, y: 10 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 10 }}
-          transition={{ duration: 0.2 }}
-          className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
-        >
+      {isOpen && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
+          {/* Fullscreen Backdrop with Blur covering the entire app shell */}
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            onClick={onClose}
+            className="fixed inset-0 bg-black/60 dark:bg-black/75 backdrop-blur-sm cursor-pointer"
+          />
+
+          {/* Modal Dialog Window with signature Aurora spring physics */}
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 15 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 15 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            className="relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden flex flex-col max-h-[90vh] z-10"
+          >
           {/* Header */}
           <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50">
             <div className="flex items-center gap-3">
@@ -434,6 +472,8 @@ export const ShareRecordModal: React.FC<ShareRecordModalProps> = ({
           </div>
         </motion.div>
       </div>
-    </AnimatePresence>
-  );
+    )}
+  </AnimatePresence>,
+  document.body
+);
 };

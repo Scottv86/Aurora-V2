@@ -11,11 +11,20 @@ export function useBrandKits() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchBrandKits = useCallback(async () => {
+  const fetchBrandKits = useCallback(async (forceRefresh?: boolean | any) => {
+    const effectiveToken = session?.access_token || (typeof localStorage !== 'undefined' ? localStorage.getItem('aurora_token') || undefined : undefined);
+    const effectiveTenantId = tenant?.id || (typeof localStorage !== 'undefined' ? localStorage.getItem('aurora_tenant_id') || undefined : undefined);
+
+    if (!effectiveToken || !effectiveTenantId) {
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
-      const data = await BrandKitService.getBrandKits(session?.access_token, tenant?.id);
+      const shouldForce = Boolean(forceRefresh);
+      const data = await BrandKitService.getBrandKits(effectiveToken, effectiveTenantId, shouldForce);
       setBrandKits(data);
     } catch (err: any) {
       console.error('[useBrandKits] fetch error:', err);

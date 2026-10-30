@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Sparkles, 
   Check, 
@@ -478,27 +479,53 @@ const extractModuleFields = (mod?: any): any[] => {
     }
   };
 
-  if (!isOpen) return null;
+  // Prevent body scrolling when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isOpen]);
 
-  return (
+  // Close on Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
-      <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-6 overflow-hidden">
-        {/* Backdrop */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={onClose}
-          className="absolute inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm"
-        />
+      {isOpen && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 overflow-hidden">
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            onClick={onClose}
+            className="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm cursor-pointer"
+          />
 
-        {/* Modal Window */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 15 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 15 }}
-          className="relative w-full max-w-5xl max-h-[92vh] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden z-10"
-        >
+          {/* Modal Window with signature Aurora spring physics */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 15 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 15 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            className="relative w-full max-w-5xl max-h-[92vh] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden z-10"
+          >
           {/* Header */}
           <div className="px-6 py-4 sm:py-5 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50">
             <div className="flex items-center gap-3">
@@ -1172,7 +1199,9 @@ const extractModuleFields = (mod?: any): any[] => {
           </div>
         </motion.div>
       </div>
-    </AnimatePresence>
-  );
+    )}
+  </AnimatePresence>,
+  document.body
+);
 };
 

@@ -15,8 +15,10 @@ import {
   Loader2,
   Trash2,
   ShieldCheck,
-  StickyNote
+  StickyNote,
+  Calculator
 } from 'lucide-react';
+import { QuickCalculatorModal } from '../Calculator/QuickCalculatorModal';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { useTheme } from '../../hooks/useTheme';
@@ -27,6 +29,7 @@ import { useDigitalTwin } from '../../context/DigitalTwinContext';
 import { DigitalTwinSettingsModal } from '../Twin/DigitalTwinSettingsModal';
 import { MorningHandoverModal } from '../Twin/MorningHandoverModal';
 import { AccountModal } from '../Settings/AccountModal';
+import { WorkspaceCommandPalette } from './WorkspaceCommandPalette';
 
 export const Navbar = () => {
   const { 
@@ -44,6 +47,11 @@ export const Navbar = () => {
     setIsNotificationsOpen,
     isRecyclingBinOpen,
     setIsRecyclingBinOpen,
+    isCalculatorDocked,
+    setIsCalculatorDocked,
+    isQuickCalculatorOpen,
+    setIsQuickCalculatorOpen,
+    setIsCalculatorLaunchModalOpen,
     unreadCount = 0,
     runningTasks = []
   } = usePlatform();
@@ -71,6 +79,7 @@ export const Navbar = () => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showEnvMenu, setShowEnvMenu] = useState(false);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const envMenuRef = useRef<HTMLDivElement>(null);
   
@@ -87,7 +96,17 @@ export const Navbar = () => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
-        setIsAppLauncherOpen(!isAppLauncherOpen);
+        setIsCommandPaletteOpen((prev) => !prev);
+      }
+      if (event.altKey && event.key.toLowerCase() === 'c') {
+        event.preventDefault();
+        if (isCalculatorDocked) {
+          setIsCalculatorDocked(false);
+        } else if (isQuickCalculatorOpen) {
+          setIsQuickCalculatorOpen(false);
+        } else {
+          setIsCalculatorLaunchModalOpen(true);
+        }
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -96,7 +115,7 @@ export const Navbar = () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isAppLauncherOpen, setIsAppLauncherOpen]);
+  }, [isCalculatorDocked, isQuickCalculatorOpen, setIsCalculatorDocked, setIsQuickCalculatorOpen, setIsCalculatorLaunchModalOpen]);
 
   useEffect(() => {
     // Branding handled via style bindings below
@@ -211,20 +230,19 @@ export const Navbar = () => {
         <button
           type="button"
           onClick={() => {
-            setIsAppLauncherOpen(!isAppLauncherOpen);
-            if (!isAppLauncherOpen) {
-              setIsChatOpen(false);
-              setIsAIAssistantOpen(false);
-              setIsNotificationsOpen(false);
-              setIsRecyclingBinOpen(false);
-            }
+            setIsCommandPaletteOpen(true);
+            setIsAppLauncherOpen(false);
+            setIsChatOpen(false);
+            setIsAIAssistantOpen(false);
+            setIsNotificationsOpen(false);
+            setIsRecyclingBinOpen(false);
           }}
           className="relative w-full max-w-md group cursor-pointer"
         >
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 group-hover:text-indigo-500 transition-colors" size={16} />
-          <div className="w-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-10 pr-3 py-1.5 text-sm text-zinc-500 dark:text-zinc-400 text-left flex items-center justify-between group-hover:border-zinc-300 dark:group-hover:border-zinc-700 transition-all shadow-sm">
-            <span>Search or type a command...</span>
-            <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 group-hover:text-indigo-500 transition-colors" size={15} />
+          <div className="w-full bg-zinc-100/80 dark:bg-zinc-900/90 border border-zinc-200/90 dark:border-zinc-800 rounded-xl pl-9 pr-2.5 py-1.5 text-xs font-medium text-zinc-500 dark:text-zinc-400 text-left flex items-center justify-between group-hover:border-indigo-500/40 dark:group-hover:border-indigo-500/40 group-hover:bg-white dark:group-hover:bg-zinc-900 transition-all shadow-2xs">
+            <span>Search records, modules, or type a command...</span>
+            <div className="flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
               <kbd className="px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[10px] font-bold text-zinc-400">⌘</kbd>
               <kbd className="px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-[10px] font-bold text-zinc-400">K</kbd>
             </div>
@@ -371,6 +389,28 @@ export const Navbar = () => {
           title="Open Notes"
         >
           <StickyNote size={18} />
+        </button>
+
+        {/* Quick & Docked Calculator Shortcut */}
+        <button
+          onClick={() => {
+            if (isCalculatorDocked) {
+              setIsCalculatorDocked(false);
+            } else if (isQuickCalculatorOpen) {
+              setIsQuickCalculatorOpen(false);
+            } else {
+              setIsCalculatorLaunchModalOpen(true);
+            }
+          }}
+          className={cn(
+            "p-2 transition-all duration-300 rounded-lg cursor-pointer",
+            (isCalculatorDocked || isQuickCalculatorOpen)
+              ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-md shadow-indigo-500/10"
+              : "text-zinc-500 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          )}
+          title={isCalculatorDocked ? "Calculator Docked (Click to Close)" : "Calculator (Alt+C)"}
+        >
+          <Calculator size={18} />
         </button>
 
         <button 
@@ -629,6 +669,14 @@ export const Navbar = () => {
       <AccountModal 
         isOpen={isAccountModalOpen} 
         onClose={() => setIsAccountModalOpen(false)} 
+      />
+      <WorkspaceCommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+      />
+      <QuickCalculatorModal
+        isOpen={isQuickCalculatorOpen}
+        onClose={() => setIsQuickCalculatorOpen(false)}
       />
     </>
   );

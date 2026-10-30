@@ -138,6 +138,7 @@ const ChatApp = lazy(() => import('./pages/Apps/ChatApp').then(m => ({ default: 
 const FeedApp = lazy(() => import('./pages/Apps/FeedApp').then(m => ({ default: m.FeedApp })));
 const NotesApp = lazy(() => import('./pages/Apps/NotesApp').then(m => ({ default: m.NotesApp })));
 const RemindersApp = lazy(() => import('./pages/Apps/RemindersApp').then(m => ({ default: m.RemindersApp })));
+const CalculatorApp = lazy(() => import('./pages/Apps/CalculatorApp').then(m => ({ default: m.CalculatorApp })));
 const SearchesDirectoryPage = lazy(() => import('./pages/Search/SearchesDirectoryPage').then(m => ({ default: m.SearchesDirectoryPage })));
 const SearchRunnerPage = lazy(() => import('./pages/Search/SearchRunnerPage').then(m => ({ default: m.SearchRunnerPage })));
 const ApprovalsHubPage = lazy(() => import('./pages/Approvals/ApprovalsHubPage'));
@@ -385,6 +386,8 @@ const App = () => {
                 <Route path="apps/query" element={<QueryExplorer />} />
                 <Route path="apps/pos" element={<PointOfSalePage />} />
                 <Route path="pos" element={<Navigate to="/workspace/apps/pos" replace />} />
+                <Route path="apps/calculator" element={<CalculatorApp />} />
+                <Route path="calculator" element={<Navigate to="/workspace/apps/calculator" replace />} />
 
                 {/* Federated Searches (Consumer Runtime) */}
                 <Route path="searches" element={<SearchesDirectoryPage />} />

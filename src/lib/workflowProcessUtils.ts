@@ -43,7 +43,37 @@ export interface ProcessStage {
   isCurrent: boolean;
   isCompleted: boolean;
   isUpcoming: boolean;
+  isDirectNext?: boolean;
+  actionLabel?: string;
+  variant?: 'primary' | 'success' | 'destructive' | 'outline';
+  requiredFieldIds?: string[];
   description?: string;
+  isFork?: boolean;
+  forkBranches?: ForkBranch[];
+  // Automation & Rule metadata
+  condition?: string;
+  decisionName?: string;
+  automatedActions?: Array<{ id: string; name: string; type: string }>;
+}
+
+export interface PipelineStep {
+  id: string;
+  isFork: boolean;
+  stages: ProcessStage[];
+}
+
+export interface ForkBranch {
+  id: string;
+  edgeId?: string;
+  targetNodeId: string;
+  targetNodeName: string;
+  label: string;
+  variant?: 'primary' | 'success' | 'destructive' | 'outline';
+  requiredFieldIds?: string[];
+  description?: string;
+  condition?: string;
+  decisionName?: string;
+  automatedActions?: Array<{ id: string; name: string; type: string }>;
 }
 
 export interface NextStepResolution {
@@ -54,13 +84,195 @@ export interface NextStepResolution {
   activeNodeIds: string[];
   primaryAction: NextStepAction | null;
   alternativeActions: NextStepAction[];
+  availableTransitions: NextStepAction[];
+  forkBranches: ForkBranch[];
   stages: ProcessStage[];
+  steps: PipelineStep[];
 }
 
 function isStageNode(node: WorkflowNode | undefined): boolean {
   if (!node) return false;
   if (node.isStage !== undefined) return node.isStage;
   return node.type === 'STATUS' || node.type === 'START' || node.type === 'END';
+}
+
+function getStageDirectActions(
+  stageNodeId: string,
+  workflow: Workflow
+): Array<{ id: string; name: string; type: string }> {
+  const outgoing = workflow.edges.filter(e => e.source === stageNodeId);
+  const actions: Array<{ id: string; name: string; type: string }> = [];
+  for (const edge of outgoing) {
+    const target = workflow.nodes.find(n => n.id === edge.target);
+    if (target && target.type === 'ACTION') {
+      actions.push({
+        id: target.id,
+        name: target.name,
+        type: (target.config as any)?.actionType || target.type
+      });
+    }
+  }
+  return actions;
+}
+
+function getDownstreamStageTargets(
+  fromNodeId: string,
+  workflow: Workflow
+): Array<{
+  stageNode: WorkflowNode;
+  edge: WorkflowEdge;
+  condition?: string;
+  decisionName?: string;
+  actions: Array<{ id: string; name: string; type: string }>;
+}> {
+  const results: Array<{
+    stageNode: WorkflowNode;
+    edge: WorkflowEdge;
+    condition?: string;
+    decisionName?: string;
+    actions: Array<{ id: string; name: string; type: string }>;
+  }> = [];
+
+  const initialEdges = workflow.edges.filter(e => e.source === fromNodeId);
+  for (const edge of initialEdges) {
+    const targetNode = workflow.nodes.find(n => n.id === edge.target);
+    if (!targetNode) continue;
+
+    if (isStageNode(targetNode)) {
+      results.push({
+        stageNode: targetNode,
+        edge,
+        condition: edge.condition,
+        actions: getStageDirectActions(targetNode.id, workflow)
+      });
+      continue;
+    }
+
+    // Traverse through non-stage nodes (DECISION, ACTION, etc.)
+    const queue: Array<{
+      currId: string;
+      condition?: string;
+      decisionName?: string;
+      actions: Array<{ id: string; name: string; type: string }>;
+    }> = [{
+      currId: targetNode.id,
+      condition: edge.condition,
+      decisionName: targetNode.type === 'DECISION' ? targetNode.name : undefined,
+      actions: targetNode.type === 'ACTION' ? [{ id: targetNode.id, name: targetNode.name, type: (targetNode.config as any)?.actionType || targetNode.type }] : []
+    }];
+
+    const visited = new Set<string>([targetNode.id]);
+    while (queue.length > 0) {
+      const item = queue.shift()!;
+      const outgoing = workflow.edges.filter(e => e.source === item.currId);
+      for (const outEdge of outgoing) {
+        if (!visited.has(outEdge.target)) {
+          visited.add(outEdge.target);
+          const nextNode = workflow.nodes.find(n => n.id === outEdge.target);
+          if (nextNode) {
+            const nextCondition = outEdge.condition || item.condition;
+            const nextDecision = nextNode.type === 'DECISION' ? nextNode.name : item.decisionName;
+            const nextActions = nextNode.type === 'ACTION'
+              ? [...item.actions, { id: nextNode.id, name: nextNode.name, type: (nextNode.config as any)?.actionType || nextNode.type }]
+              : item.actions;
+
+            if (isStageNode(nextNode)) {
+              if (!results.some(r => r.stageNode.id === nextNode.id)) {
+                results.push({
+                  stageNode: nextNode,
+                  edge: outEdge,
+                  condition: nextCondition,
+                  decisionName: nextDecision,
+                  actions: [...nextActions, ...getStageDirectActions(nextNode.id, workflow)]
+                });
+              }
+            } else {
+              queue.push({
+                currId: nextNode.id,
+                condition: nextCondition,
+                decisionName: nextDecision,
+                actions: nextActions
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return results;
+}
+
+function mapNodeToProcessStage(
+  node: WorkflowNode,
+  workflow: Workflow
+): ProcessStage {
+  const incomingEdges = workflow.edges.filter(e => e.target === node.id);
+  const primaryIncoming = incomingEdges.find(e => e.isPrimary) || incomingEdges[0];
+
+  let condition = primaryIncoming?.condition;
+  let decisionName: string | undefined;
+  const actionsCollected: Array<{ id: string; name: string; type: string }> = [...getStageDirectActions(node.id, workflow)];
+
+  for (const inEdge of incomingEdges) {
+    const sourceNode = workflow.nodes.find(n => n.id === inEdge.source);
+    if (sourceNode?.type === 'DECISION') {
+      decisionName = sourceNode.name;
+      if (inEdge.condition) condition = inEdge.condition;
+    } else if (sourceNode?.type === 'ACTION') {
+      actionsCollected.push({
+        id: sourceNode.id,
+        name: sourceNode.name,
+        type: (sourceNode.config as any)?.actionType || sourceNode.type
+      });
+    }
+  }
+
+  const uniqueActions = actionsCollected.filter((act, index, self) =>
+    index === self.findIndex(a => a.id === act.id)
+  );
+
+  return {
+    id: node.id,
+    name: node.name,
+    type: node.type,
+    isCurrent: false,
+    isCompleted: false,
+    isUpcoming: false,
+    description: node.stageDescription,
+    condition,
+    decisionName,
+    automatedActions: uniqueActions.length > 0 ? uniqueActions : undefined,
+    requiredFieldIds: primaryIncoming?.requiredFieldIds || []
+  };
+}
+
+function resolveDownstreamStageNode(
+  nodeId: string,
+  workflow: Workflow
+): WorkflowNode | null {
+  const node = workflow.nodes.find(n => n.id === nodeId);
+  if (!node) return null;
+  if (isStageNode(node)) return node;
+
+  const queue = [nodeId];
+  const visited = new Set<string>([nodeId]);
+  while (queue.length > 0) {
+    const currId = queue.shift()!;
+    const outgoing = workflow.edges.filter(e => e.source === currId);
+    outgoing.sort((a, b) => (b.isPrimary ? 1 : 0) - (a.isPrimary ? 1 : 0));
+    for (const edge of outgoing) {
+      if (!visited.has(edge.target)) {
+        visited.add(edge.target);
+        const target = workflow.nodes.find(n => n.id === edge.target);
+        if (target && isStageNode(target)) {
+          return target;
+        }
+        queue.push(edge.target);
+      }
+    }
+  }
+  return null;
 }
 
 function resolvePrecedingStageNode(
@@ -103,6 +315,146 @@ function resolvePrecedingStageNode(
   return null;
 }
 
+function canReachNode(
+  startId: string,
+  targetId: string,
+  downstreamMap: Map<string, Array<{ stageNode: WorkflowNode }>>,
+  visited = new Set<string>()
+): boolean {
+  if (startId === targetId) return true;
+  visited.add(startId);
+  const targets = downstreamMap.get(startId) || [];
+  for (const t of targets) {
+    if (!visited.has(t.stageNode.id)) {
+      if (canReachNode(t.stageNode.id, targetId, downstreamMap, visited)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+export function buildPipelineSteps(
+  workflow: Workflow,
+  currentStageIds: Set<string>,
+  availableActionTargetIds: Set<string>,
+  isCompletedWorkflow: boolean
+): { steps: PipelineStep[]; stages: ProcessStage[] } {
+  const stageNodes = workflow.nodes.filter(isStageNode);
+  if (stageNodes.length === 0) {
+    return { steps: [], stages: [] };
+  }
+
+  // Pre-calculate downstream stage connections for each stage
+  const stageDownstreamMap = new Map<string, ReturnType<typeof getDownstreamStageTargets>>();
+  for (const s of stageNodes) {
+    stageDownstreamMap.set(s.id, getDownstreamStageTargets(s.id, workflow));
+  }
+
+  // Find START node (or node with in-degree 0 from other stages)
+  const startNode = stageNodes.find(n => n.type === 'START') || stageNodes[0];
+
+  // Assign topological rank (levels) to each stage in DAG
+  const levels = new Map<string, number>();
+  levels.set(startNode.id, 0);
+
+  const queue: string[] = [startNode.id];
+  const maxVisits = stageNodes.length * 2;
+  const visitCount = new Map<string, number>();
+
+  while (queue.length > 0) {
+    const currId = queue.shift()!;
+    const currLevel = levels.get(currId)!;
+    const downstream = stageDownstreamMap.get(currId) || [];
+
+    for (const item of downstream) {
+      const targetId = item.stageNode.id;
+      // Cycle detection: If targetId can reach currId, this edge is a back-edge/loop -> skip forward leveling
+      if (canReachNode(targetId, currId, stageDownstreamMap, new Set())) {
+        continue;
+      }
+
+      const currentTargetLevel = levels.get(targetId);
+      const candidateLevel = currLevel + 1;
+      const visits = (visitCount.get(targetId) || 0) + 1;
+      visitCount.set(targetId, visits);
+
+      if (visits > maxVisits) {
+        continue;
+      }
+
+      if (currentTargetLevel === undefined || candidateLevel > currentTargetLevel) {
+        levels.set(targetId, candidateLevel);
+        queue.push(targetId);
+      }
+    }
+  }
+
+  // Any unreachable stage nodes get placed at the end
+  let maxLvl = Math.max(-1, ...Array.from(levels.values()));
+  for (const s of stageNodes) {
+    if (!levels.has(s.id)) {
+      levels.set(s.id, ++maxLvl);
+    }
+  }
+
+  // Group stage nodes by their level
+  const levelGroups = new Map<number, WorkflowNode[]>();
+  for (const s of stageNodes) {
+    const lvl = levels.get(s.id) ?? 0;
+    if (!levelGroups.has(lvl)) {
+      levelGroups.set(lvl, []);
+    }
+    levelGroups.get(lvl)!.push(s);
+  }
+
+  const sortedLevels = Array.from(levelGroups.keys()).sort((a, b) => a - b);
+
+  // Identify current level in pipeline
+  let currentLevel = -1;
+  for (const s of stageNodes) {
+    if (currentStageIds.has(s.id)) {
+      currentLevel = levels.get(s.id) ?? -1;
+      break;
+    }
+  }
+
+  const steps: PipelineStep[] = [];
+  const stages: ProcessStage[] = [];
+
+  for (const lvl of sortedLevels) {
+    const nodesInLevel = levelGroups.get(lvl)!;
+    const isFork = nodesInLevel.length > 1;
+
+    const stepStages: ProcessStage[] = nodesInLevel.map(node => {
+      const mapped = mapNodeToProcessStage(node, workflow);
+      const isCurrent = currentStageIds.has(node.id);
+      const isCompletedStage = isCompletedWorkflow || (currentLevel !== -1 && lvl < currentLevel);
+      const isUpcoming = !isCurrent && !isCompletedStage;
+      const isDirectNext = !isCurrent && !isCompletedStage && availableActionTargetIds.has(node.id);
+
+      const stageObj: ProcessStage = {
+        ...mapped,
+        isCurrent,
+        isCompleted: isCompletedStage,
+        isUpcoming,
+        isDirectNext,
+        isFork
+      };
+      stages.push(stageObj);
+      return stageObj;
+    });
+
+    steps.push({
+      id: `step_${lvl}`,
+      isFork,
+      stages: stepStages
+    });
+  }
+
+  return { steps, stages };
+}
+
 export function resolveRecordNextStep(
   record: any,
   workflow: Workflow | null | undefined,
@@ -117,7 +469,10 @@ export function resolveRecordNextStep(
       activeNodeIds: [],
       primaryAction: null,
       alternativeActions: [],
-      stages: []
+      availableTransitions: [],
+      forkBranches: [],
+      stages: [],
+      steps: []
     };
   }
 
@@ -131,41 +486,12 @@ export function resolveRecordNextStep(
   // If workflow has not started yet
   if (rawActiveIds.length === 0) {
     const startNode = workflow.nodes.find(n => n.type === 'START') || workflow.nodes[0];
-    
-    // Trace planned path downstream from start node
-    const plannedStages: WorkflowNode[] = [];
-    if (startNode) {
-      if (isStageNode(startNode)) plannedStages.push(startNode);
-      const queue = [startNode.id];
-      const visited = new Set<string>([startNode.id]);
-      while (queue.length > 0) {
-        const currId = queue.shift()!;
-        const outgoing = workflow.edges.filter(e => e.source === currId);
-        // Follow primary edges first
-        outgoing.sort((a, b) => (b.isPrimary ? 1 : 0) - (a.isPrimary ? 1 : 0));
-        for (const edge of outgoing) {
-          if (!visited.has(edge.target)) {
-            visited.add(edge.target);
-            const targetNode = workflow.nodes.find(n => n.id === edge.target);
-            if (targetNode && isStageNode(targetNode) && !plannedStages.some(s => s.id === targetNode.id)) {
-              plannedStages.push(targetNode);
-            }
-            queue.push(edge.target);
-          }
-        }
-      }
-    }
-
-    const stagesToRender = plannedStages.length > 0 ? plannedStages : allStageNodes;
-    const stages: ProcessStage[] = stagesToRender.map((n, idx) => ({
-      id: n.id,
-      name: n.name,
-      type: n.type,
-      isCurrent: idx === 0,
-      isCompleted: false,
-      isUpcoming: idx > 0,
-      description: n.stageDescription
-    }));
+    const { steps, stages } = buildPipelineSteps(
+      workflow,
+      new Set(startNode ? [startNode.id] : []),
+      new Set(),
+      false
+    );
 
     return {
       hasWorkflow: true,
@@ -181,7 +507,10 @@ export function resolveRecordNextStep(
         isStart: true
       } : null,
       alternativeActions: [],
-      stages
+      availableTransitions: [],
+      forkBranches: [],
+      stages,
+      steps
     };
   }
 
@@ -213,96 +542,7 @@ export function resolveRecordNextStep(
     return n?.type === 'END';
   });
 
-  // 2. Collect History Stages (actually traversed path, in chronological order)
   const currentStageIds = new Set(currentStageNodes.map(s => s.id));
-  const historyStages: WorkflowNode[] = [];
-
-  for (const h of history) {
-    const stage = resolvePrecedingStageNode(h.nodeId, workflow, history);
-    if (stage && !currentStageIds.has(stage.id)) {
-      if (!historyStages.some(s => s.id === stage.id)) {
-        historyStages.push(stage);
-      }
-    }
-  }
-
-  // If history was empty but currentStageNodes is downstream of START, include START
-  if (historyStages.length === 0 && currentStageNodes.length > 0) {
-    const startNode = workflow.nodes.find(n => n.type === 'START');
-    if (startNode && !currentStageIds.has(startNode.id)) {
-      historyStages.push(startNode);
-    }
-  }
-
-  // 3. Collect Reachable Downstream Stages (forward BFS along active branch only)
-  const downstreamStages: WorkflowNode[] = [];
-  const visitedForward = new Set<string>();
-  const forwardQueue: string[] = [];
-
-  [...rawActiveIds, ...currentStageNodes.map(s => s.id)].forEach(id => {
-    if (!visitedForward.has(id)) {
-      visitedForward.add(id);
-      forwardQueue.push(id);
-    }
-  });
-
-  while (forwardQueue.length > 0) {
-    const currId = forwardQueue.shift()!;
-    const outgoing = workflow.edges.filter(e => e.source === currId);
-    
-    // Follow primary edges first
-    outgoing.sort((a, b) => (b.isPrimary ? 1 : 0) - (a.isPrimary ? 1 : 0));
-
-    for (const edge of outgoing) {
-      if (!visitedForward.has(edge.target)) {
-        visitedForward.add(edge.target);
-        const targetNode = workflow.nodes.find(n => n.id === edge.target);
-        if (targetNode) {
-          if (isStageNode(targetNode)) {
-            if (
-              !currentStageIds.has(targetNode.id) &&
-              !historyStages.some(s => s.id === targetNode.id) &&
-              !downstreamStages.some(s => s.id === targetNode.id)
-            ) {
-              downstreamStages.push(targetNode);
-            }
-          }
-          forwardQueue.push(edge.target);
-        }
-      }
-    }
-  }
-
-  // 4. Assemble the Path-Aware Pipeline
-  const stages: ProcessStage[] = [
-    ...historyStages.map(n => ({
-      id: n.id,
-      name: n.name,
-      type: n.type,
-      isCurrent: false,
-      isCompleted: true,
-      isUpcoming: false,
-      description: n.stageDescription
-    })),
-    ...currentStageNodes.map(n => ({
-      id: n.id,
-      name: n.name,
-      type: n.type,
-      isCurrent: true,
-      isCompleted: isCompleted,
-      isUpcoming: false,
-      description: n.stageDescription
-    })),
-    ...downstreamStages.map(n => ({
-      id: n.id,
-      name: n.name,
-      type: n.type,
-      isCurrent: false,
-      isCompleted: false,
-      isUpcoming: true,
-      description: n.stageDescription
-    }))
-  ];
 
   // Collect available transitions from raw active nodes
   const candidateEdges: WorkflowEdge[] = [];
@@ -315,32 +555,69 @@ export function resolveRecordNextStep(
     }
   }
 
-  // Transform edges into NextStepActions
-  const actions: NextStepAction[] = candidateEdges.map(edge => {
-    const targetNode = workflow.nodes.find(n => n.id === edge.target);
-    const label = edge.actionButtonLabel || edge.label || (targetNode ? `Move to ${targetNode.name}` : 'Next Step');
-    
-    let variant = edge.buttonVariant;
-    if (!variant) {
-      const lower = label.toLowerCase();
-      if (lower.includes('reject') || lower.includes('cancel') || lower.includes('decline') || lower.includes('fail')) {
-        variant = 'destructive';
-      } else if (lower.includes('approve') || lower.includes('complete') || lower.includes('done') || lower.includes('finish') || lower.includes('publish')) {
-        variant = 'success';
-      } else {
-        variant = 'primary';
+  // Fallback: If no candidate edges were found from rawActiveIds, check currentStageNodes
+  if (candidateEdges.length === 0 && currentStageNodes.length > 0) {
+    for (const st of currentStageNodes) {
+      const nodeEdges = workflow.edges?.filter(e => e.source === st.id) || [];
+      for (const edge of nodeEdges) {
+        if (!candidateEdges.some(e => e.id === edge.id)) {
+          candidateEdges.push(edge);
+        }
       }
     }
+  }
 
-    return {
-      edgeId: edge.id,
-      targetNodeId: edge.target,
-      targetNodeName: targetNode?.name || 'Next Step',
-      label,
-      variant,
-      requiredFieldIds: edge.requiredFieldIds || []
-    };
-  });
+  // Transform edges into NextStepActions
+  const actions: NextStepAction[] = [];
+  for (const edge of candidateEdges) {
+    const targetNode = workflow.nodes.find(n => n.id === edge.target);
+    const stageNode = targetNode && isStageNode(targetNode)
+      ? targetNode
+      : (targetNode ? resolveDownstreamStageNode(targetNode.id, workflow) : null);
+
+    if (stageNode) {
+      const label = edge.actionButtonLabel || edge.label || (stageNode ? `Move to ${stageNode.name}` : 'Next Step');
+      let variant = edge.buttonVariant;
+      if (!variant) {
+        const lower = (label + ' ' + stageNode.name).toLowerCase();
+        if (lower.includes('reject') || lower.includes('cancel') || lower.includes('decline') || lower.includes('fail') || lower.includes('close')) {
+          variant = 'destructive';
+        } else if (lower.includes('approve') || lower.includes('complete') || lower.includes('done') || lower.includes('finish') || lower.includes('publish') || lower.includes('accept')) {
+          variant = 'success';
+        } else {
+          variant = 'primary';
+        }
+      }
+
+      actions.push({
+        edgeId: edge.id,
+        targetNodeId: stageNode.id,
+        targetNodeName: stageNode.name,
+        label,
+        variant,
+        requiredFieldIds: edge.requiredFieldIds || []
+      });
+    }
+  }
+
+  // Deduplicate branches targeting the same stage
+  const uniqueBranchStages = new Map<string, ForkBranch>();
+  for (const a of actions) {
+    if (!uniqueBranchStages.has(a.targetNodeId)) {
+      uniqueBranchStages.set(a.targetNodeId, {
+        id: `branch_${a.targetNodeId}`,
+        edgeId: a.edgeId,
+        targetNodeId: a.targetNodeId,
+        targetNodeName: a.targetNodeName,
+        label: a.label,
+        variant: a.variant,
+        requiredFieldIds: a.requiredFieldIds,
+        description: workflow.nodes.find(n => n.id === a.targetNodeId)?.stageDescription
+      });
+    }
+  }
+  const forkBranches: ForkBranch[] = Array.from(uniqueBranchStages.values());
+  const isFork = forkBranches.length > 1;
 
   // Pick primary action
   let primaryAction: NextStepAction | null = null;
@@ -365,6 +642,14 @@ export function resolveRecordNextStep(
     }
   }
 
+  const availableActionTargetIds = new Set(actions.map(a => a.targetNodeId));
+  const { steps, stages } = buildPipelineSteps(
+    workflow,
+    currentStageIds,
+    availableActionTargetIds,
+    isCompleted
+  );
+
   return {
     hasWorkflow: true,
     isStarted: true,
@@ -373,7 +658,10 @@ export function resolveRecordNextStep(
     activeNodeIds: rawActiveIds,
     primaryAction,
     alternativeActions: nonPrimaryActions,
-    stages
+    availableTransitions: actions,
+    forkBranches,
+    stages,
+    steps
   };
 }
 
