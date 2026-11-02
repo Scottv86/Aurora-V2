@@ -27,8 +27,6 @@ import {
   Share2,
   Calendar,
   StickyNote,
-  PanelRightClose,
-  PanelRightOpen,
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -55,7 +53,7 @@ import { compactLayout } from '../../lib/layoutEngine';
 import { Module, ModuleField } from '../../types/platform';
 import { useQueryClient } from '@tanstack/react-query';
 import { calculateDefaultValue } from '../../services/fieldService';
-import { getCachedRecordById, getCachedRecords, primeRecordCache, invalidateModuleRecordsCache } from '../../services/dataService';
+import { getCachedRecordById, getCachedRecords, primeRecordCache, invalidateModuleRecordsCache, updateCachedRecordInModule } from '../../services/dataService';
 import { CollapsibleFieldGroup } from '../../components/UI/CollapsibleFieldGroup';
 import { WorkflowPreview } from '../../components/Builder/Workflow/WorkflowPreview';
 import { WorkflowStatusBar } from '../../components/Platform/WorkflowStatusBar';
@@ -87,17 +85,22 @@ interface WorkflowState {
   }[];
 }
 
+const isDirectInteractableField = (type?: string) => 
+  ['date', 'time', 'datetime', 'select', 'choice', 'status_pill', 'boolean', 'toggle', 'rating', 'colorpicker'].includes(type || '');
+
 export const RecordDetailView = ({
   moduleIdProp,
   recordIdProp,
   isModal = false,
   isEmbedded = false,
+  onRecordUpdate,
   onClose
 }: {
   moduleIdProp?: string;
   recordIdProp?: string;
   isModal?: boolean;
   isEmbedded?: boolean;
+  onRecordUpdate?: (record: any) => void;
   onClose?: () => void;
 } = {}) => {
   const { pageId, queueId, moduleId: routeModuleId, recordId: routeRecordId, parentModuleId, parentRecordId } = useParams();
@@ -805,6 +808,10 @@ export const RecordDetailView = ({
     }
   };
 
+  const recKey = useMemo(() => {
+    return editData._record_key || record?._record_key || null;
+  }, [editData._record_key, record?._record_key]);
+
   const recordTitle = useMemo(() => {
     if (!moduleData || (!record && Object.keys(editData).length === 0)) return 'Record Details';
     
@@ -818,7 +825,11 @@ export const RecordDetailView = ({
         return record?.createdBy || 'System';
       }
       if (titleFieldId === '_record_key') {
-        return record?._record_key || record?.id || 'Untitled';
+        const fallbackTitle = editData.name || record?.name || 
+          editData.title || record?.title || 
+          editData.premises_name || record?.premises_name ||
+          (record?.data && (record.data.name || record.data.title));
+        return fallbackTitle || record?._record_key || record?.id || 'Untitled';
       }
       const field = allFields.find(f => f.id === titleFieldId);
       const val = getFieldValue(editData, titleFieldId, field?.name) ?? getFieldValue(record, titleFieldId, field?.name);
@@ -826,9 +837,11 @@ export const RecordDetailView = ({
     }
 
     return (
-      editData._record_key || record?._record_key || 
       editData.name || record?.name || 
       editData.title || record?.title || 
+      editData.premises_name || record?.premises_name ||
+      (record?.data && (record.data.name || record.data.title)) ||
+      editData._record_key || record?._record_key || 
       record?.id || 'Record Details'
     );
   }, [moduleData, editData, record, allFields]);
@@ -1614,6 +1627,14 @@ export const RecordDetailView = ({
       invalidateModuleRecordsCache(moduleId);
       queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
       queryClient.invalidateQueries({ queryKey: ['records'] });
+      onRecordUpdate?.(updatedRecord);
+      window.dispatchEvent(new CustomEvent('aurora:record-updated', {
+        detail: {
+          recordId,
+          moduleId,
+          record: updatedRecord
+        }
+      }));
       
       // Final sync with server data - merge with current local state to preserve in-flight edits
       setRecord(updatedRecord);
@@ -1676,12 +1697,109 @@ export const RecordDetailView = ({
     if (!tenant?.id || !moduleId || !recordId || !record || isTransitioning) return;
     
     setIsTransitioning(true);
-    try {
-      const targetNode = transitionTo
-        ? activeWorkflow?.nodes.find((n: any) => n.id === transitionTo)
-        : activeWorkflow?.nodes.find((n: any) => (n.type === 'STATUS' || n.type === 'START' || n.type === 'END' || n.isStage) && (n.name?.toLowerCase() === newStatus.toLowerCase() || n.id === newStatus));
-      const effectiveTransitionTo = targetNode?.id || transitionTo;
 
+    const targetNode = transitionTo
+      ? activeWorkflow?.nodes.find((n: any) => n.id === transitionTo)
+      : activeWorkflow?.nodes.find((n: any) => (n.type === 'STATUS' || n.type === 'START' || n.type === 'END' || n.isStage) && (n.name?.toLowerCase() === newStatus.toLowerCase() || n.id === newStatus));
+    const effectiveTransitionTo = targetNode?.id || transitionTo;
+    const resolvedStatus = targetNode?.name || newStatus;
+
+    // Snapshot previous state for rollback on error
+    const previousRecord = { ...record };
+    const previousEditData = { ...editData };
+
+    // Build optimistic workflow state
+    const optimisticWorkflowState: WorkflowState = targetNode ? {
+      ...(record.workflowState || {}),
+      currentNodeId: targetNode.id,
+      activeNodeIds: [targetNode.id],
+      history: [
+        ...(record.workflowState?.history || []),
+        {
+          nodeId: targetNode.id,
+          timestamp: new Date().toISOString(),
+          action: 'Transitioned',
+          triggeredBy: platformUser?.name || session?.user?.email || 'User'
+        }
+      ]
+    } : record.workflowState;
+
+    const optimisticRecord = {
+      ...record,
+      status: resolvedStatus,
+      workflowState: optimisticWorkflowState,
+      ...(additionalData || {}),
+      data: {
+        ...(record.data || {}),
+        status: resolvedStatus,
+        ...(additionalData || {})
+      }
+    };
+
+    // 1. Instantly update local record and editData in state & cache
+    setRecord(optimisticRecord);
+    editDataRef.current = {
+      ...editDataRef.current,
+      ...editData,
+      status: resolvedStatus,
+      ...(additionalData || {})
+    };
+    setEditData(prev => ({
+      ...prev,
+      status: resolvedStatus,
+      ...(additionalData || {})
+    }));
+    builderCache.set(recordCacheKey, optimisticRecord);
+
+    // 2. Instantly update dataService in-memory caches
+    updateCachedRecordInModule(moduleId, optimisticRecord);
+
+    // 3. Notify parent listener (ModuleView) immediately
+    onRecordUpdate?.(optimisticRecord);
+
+    // 4. Optimistically update all records queries across the workspace in React Query
+    queryClient.setQueriesData(
+      {
+        predicate: (query) => {
+          const key = query.queryKey;
+          return Array.isArray(key) && key[0] === 'records';
+        }
+      },
+      (old: any) => {
+        if (!old || !Array.isArray(old.records)) return old;
+        return {
+          ...old,
+          records: old.records.map((r: any) =>
+            r.id === recordId
+              ? {
+                  ...r,
+                  ...optimisticRecord,
+                  status: resolvedStatus,
+                  workflowState: optimisticWorkflowState,
+                  data: {
+                    ...(r.data || {}),
+                    status: resolvedStatus
+                  }
+                }
+              : r
+          )
+        };
+      }
+    );
+
+    // 5. Dispatch global window event so ModuleView records list updates immediately
+    window.dispatchEvent(new CustomEvent('aurora:record-updated', {
+      detail: {
+        recordId,
+        moduleId,
+        record: optimisticRecord
+      }
+    }));
+
+    const recKey = record?._record_key || editData?._record_key || record?.id?.slice(0, 8) || 'Record';
+    const toastId = toast.loading(`Updating ${recKey} workflow status to ${resolvedStatus}...`);
+
+    try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token || localStorage.getItem('aurora_token');
       const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
         method: 'PUT',
@@ -1692,7 +1810,7 @@ export const RecordDetailView = ({
         },
         body: JSON.stringify({
           moduleId,
-          status: newStatus,
+          status: resolvedStatus,
           transitionTo: effectiveTransitionTo,
           ...(additionalData || {})
         })
@@ -1706,12 +1824,87 @@ export const RecordDetailView = ({
       const updatedRecord = await res.json();
       builderCache.set(recordCacheKey, updatedRecord);
       primeRecordCache(updatedRecord);
+      updateCachedRecordInModule(moduleId, updatedRecord);
+      invalidateModuleRecordsCache(moduleId);
+
       setRecord(updatedRecord);
+      editDataRef.current = { ...editDataRef.current, ...updatedRecord, ...(additionalData || {}) };
       setEditData(prev => ({ ...prev, ...updatedRecord, ...(additionalData || {}) }));
-      toast.success(`Status updated to ${newStatus}`);
+      onRecordUpdate?.(updatedRecord);
+
+      queryClient.setQueriesData(
+        {
+          predicate: (query) => {
+            const key = query.queryKey;
+            return Array.isArray(key) && key[0] === 'records';
+          }
+        },
+        (old: any) => {
+          if (!old || !Array.isArray(old.records)) return old;
+          return {
+            ...old,
+            records: old.records.map((r: any) =>
+              r.id === recordId
+                ? {
+                    ...r,
+                    ...updatedRecord,
+                    status: updatedRecord.status || resolvedStatus,
+                    workflowState: updatedRecord.workflowState || optimisticWorkflowState,
+                    data: {
+                      ...(r.data || {}),
+                      status: updatedRecord.status || resolvedStatus
+                    }
+                  }
+                : r
+            )
+          };
+        }
+      );
+
+      window.dispatchEvent(new CustomEvent('aurora:record-updated', {
+        detail: {
+          recordId,
+          moduleId,
+          record: updatedRecord
+        }
+      }));
+
+      toast.success(`${recKey} status updated to ${resolvedStatus}`, { id: toastId });
     } catch (error: any) {
       console.error("Status Update Error:", error);
-      toast.error(error.message || "Failed to update status");
+      toast.error(`Failed to update ${recKey} status: ${error.message || 'Unknown error'}`, { id: toastId });
+      // Rollback on failure
+      builderCache.set(recordCacheKey, previousRecord);
+      primeRecordCache(previousRecord);
+      updateCachedRecordInModule(moduleId, previousRecord);
+      setRecord(previousRecord);
+      editDataRef.current = previousEditData;
+      setEditData(previousEditData);
+      onRecordUpdate?.(previousRecord);
+      queryClient.setQueriesData(
+        {
+          predicate: (query) => {
+            const key = query.queryKey;
+            return Array.isArray(key) && key[0] === 'records';
+          }
+        },
+        (old: any) => {
+          if (!old || !Array.isArray(old.records)) return old;
+          return {
+            ...old,
+            records: old.records.map((r: any) =>
+              r.id === recordId ? previousRecord : r
+            )
+          };
+        }
+      );
+      window.dispatchEvent(new CustomEvent('aurora:record-updated', {
+        detail: {
+          recordId,
+          moduleId,
+          record: previousRecord
+        }
+      }));
     } finally {
       setIsTransitioning(false);
     }
@@ -1826,6 +2019,76 @@ export const RecordDetailView = ({
     }
 
     setIsTransitioning(true);
+
+    const resolvedStatus = startNode.name;
+    const previousRecord = { ...record };
+    const previousEditData = { ...editData };
+
+    const optimisticWorkflowState: WorkflowState = {
+      ...(record.workflowState || {}),
+      currentNodeId: startNode.id,
+      activeNodeIds: [startNode.id],
+      history: [
+        ...(record.workflowState?.history || []),
+        {
+          nodeId: startNode.id,
+          timestamp: new Date().toISOString(),
+          action: 'Started Workflow',
+          triggeredBy: platformUser?.name || session?.user?.email || 'User'
+        }
+      ]
+    };
+
+    const optimisticRecord = {
+      ...record,
+      status: resolvedStatus,
+      workflowState: optimisticWorkflowState,
+      data: {
+        ...(record.data || {}),
+        status: resolvedStatus
+      }
+    };
+
+    setRecord(optimisticRecord);
+    editDataRef.current = {
+      ...editDataRef.current,
+      ...editData,
+      status: resolvedStatus
+    };
+    setEditData(prev => ({ ...prev, status: resolvedStatus }));
+    builderCache.set(recordCacheKey, optimisticRecord);
+    updateCachedRecordInModule(moduleId, optimisticRecord);
+    onRecordUpdate?.(optimisticRecord);
+
+    queryClient.setQueriesData(
+      {
+        predicate: (query) => {
+          const key = query.queryKey;
+          return Array.isArray(key) && key[0] === 'records';
+        }
+      },
+      (old: any) => {
+        if (!old || !Array.isArray(old.records)) return old;
+        return {
+          ...old,
+          records: old.records.map((r: any) =>
+            r.id === recordId ? { ...r, ...optimisticRecord, status: resolvedStatus } : r
+          )
+        };
+      }
+    );
+
+    window.dispatchEvent(new CustomEvent('aurora:record-updated', {
+      detail: {
+        recordId,
+        moduleId,
+        record: optimisticRecord
+      }
+    }));
+
+    const startRecKey = record?._record_key || editData?._record_key || record?.id?.slice(0, 8) || 'Record';
+    const startToastId = toast.loading(`Starting workflow for ${startRecKey}...`);
+
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token || localStorage.getItem('aurora_token');
       const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
@@ -1837,7 +2100,8 @@ export const RecordDetailView = ({
         },
         body: JSON.stringify({
           moduleId,
-          transitionTo: startNode.id
+          transitionTo: startNode.id,
+          status: resolvedStatus
         })
       });
 
@@ -1846,11 +2110,74 @@ export const RecordDetailView = ({
       const updatedRecord = await res.json();
       builderCache.set(recordCacheKey, updatedRecord);
       primeRecordCache(updatedRecord);
+      updateCachedRecordInModule(moduleId, updatedRecord);
+      invalidateModuleRecordsCache(moduleId);
+
       setRecord(updatedRecord);
+      editDataRef.current = { ...editDataRef.current, ...updatedRecord };
       setEditData(prev => ({ ...prev, ...updatedRecord }));
-      toast.success("Workflow started!");
+      onRecordUpdate?.(updatedRecord);
+
+      queryClient.setQueriesData(
+        {
+          predicate: (query) => {
+            const key = query.queryKey;
+            return Array.isArray(key) && key[0] === 'records';
+          }
+        },
+        (old: any) => {
+          if (!old || !Array.isArray(old.records)) return old;
+          return {
+            ...old,
+            records: old.records.map((r: any) =>
+              r.id === recordId ? { ...r, ...updatedRecord, status: updatedRecord.status || resolvedStatus } : r
+            )
+          };
+        }
+      );
+
+      window.dispatchEvent(new CustomEvent('aurora:record-updated', {
+        detail: {
+          recordId,
+          moduleId,
+          record: updatedRecord
+        }
+      }));
+
+      toast.success(`Workflow started for ${startRecKey}`, { id: startToastId });
     } catch (err: any) {
-      toast.error(err.message || "Failed to start workflow");
+      toast.error(`Failed to start workflow for ${startRecKey}: ${err.message || 'Unknown error'}`, { id: startToastId });
+      builderCache.set(recordCacheKey, previousRecord);
+      primeRecordCache(previousRecord);
+      updateCachedRecordInModule(moduleId, previousRecord);
+      setRecord(previousRecord);
+      editDataRef.current = previousEditData;
+      setEditData(previousEditData);
+      onRecordUpdate?.(previousRecord);
+      queryClient.setQueriesData(
+        {
+          predicate: (query) => {
+            const key = query.queryKey;
+            return Array.isArray(key) && key[0] === 'records';
+          }
+        },
+        (old: any) => {
+          if (!old || !Array.isArray(old.records)) return old;
+          return {
+            ...old,
+            records: old.records.map((r: any) =>
+              r.id === recordId ? previousRecord : r
+            )
+          };
+        }
+      );
+      window.dispatchEvent(new CustomEvent('aurora:record-updated', {
+        detail: {
+          recordId,
+          moduleId,
+          record: previousRecord
+        }
+      }));
     } finally {
       setIsTransitioning(false);
     }
@@ -1932,35 +2259,35 @@ export const RecordDetailView = ({
     switch (d) {
       case 'compact':
         return {
-          gapX: '16px',
-          gapY: '16px',
+          gapX: '12px',
+          gapY: '10px',
           padding: 'p-2',
-          rounded: 'rounded-xl',
-          cardPaddingAndRounding: 'p-2.5 -m-2.5 rounded-xl',
-          nestedGridGap: 'gap-3',
+          rounded: 'rounded-lg',
+          cardPaddingAndRounding: 'p-2 -m-2 rounded-lg',
+          nestedGridGap: 'gap-2.5',
           labelSize: 'text-[9px]',
           fontSize: 'text-[10px]'
         };
       case 'spacious':
         return {
-          gapX: '32px',
-          gapY: '32px',
-          padding: 'p-6',
-          rounded: 'rounded-[32px]',
-          cardPaddingAndRounding: 'p-6 -m-6 rounded-3xl',
-          nestedGridGap: 'gap-8',
+          gapX: '24px',
+          gapY: '20px',
+          padding: 'p-5',
+          rounded: 'rounded-2xl',
+          cardPaddingAndRounding: 'p-5 -m-5 rounded-2xl',
+          nestedGridGap: 'gap-5',
           labelSize: 'text-[11px]',
           fontSize: 'text-sm'
         };
       case 'standard':
       default:
         return {
-          gapX: '24px',
-          gapY: '24px',
-          padding: 'p-4',
-          rounded: 'rounded-2xl',
-          cardPaddingAndRounding: 'p-4 -m-4 rounded-2xl',
-          nestedGridGap: 'gap-6',
+          gapX: '16px',
+          gapY: '14px',
+          padding: 'p-3',
+          rounded: 'rounded-xl',
+          cardPaddingAndRounding: 'p-3 -m-3 rounded-xl',
+          nestedGridGap: 'gap-3.5',
           labelSize: 'text-[10px]',
           fontSize: 'text-xs'
         };
@@ -1976,25 +2303,26 @@ export const RecordDetailView = ({
     const density = (interfaceSettings.detail as any)?.density || 'standard';
     const ds = getDensityStyles(density);
     const isErrorField = validationErrorField?.fieldId === nestedField.id;
+    const isDirect = isDirectInteractableField(nestedField.type);
     
     return (
       <div 
         key={nestedField.id} 
         className={cn(
           "transition-all relative group/nestedField min-w-0",
-          !activeFieldId && !isSecReadOnly && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) && "cursor-pointer"
+          !activeFieldId && !isSecReadOnly && !isDirect && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) && "cursor-pointer"
         )}
         data-field-id={nestedField.id}
         data-active-field={activeFieldId === nestedField.id ? nestedField.id : undefined}
         onClick={(e) => {
-          if (!isSecReadOnly && activeFieldId !== nestedField.id && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type)) {
+          if (!isSecReadOnly && !isDirect && activeFieldId !== nestedField.id && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type)) {
             e.stopPropagation();
             setActiveFieldId(nestedField.id);
           }
         }}
       >
         <div className="w-full relative">
-          {activeFieldId === nestedField.id && savingFieldId === nestedField.id && (
+          {savingFieldId === nestedField.id && (
             <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300 flex items-center gap-1.5">
               <Loader2 size={10} className="animate-spin" />
               Saving
@@ -2014,7 +2342,7 @@ export const RecordDetailView = ({
                   </div>
                 </div>
               )}
-              {!activeFieldId && (
+              {!activeFieldId && !isDirect && (
                 isSecReadOnly || ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) ? (
                   <Lock size={8} className="opacity-0 group-hover/nestedField:opacity-100 transition-opacity text-zinc-400" />
                 ) : (
@@ -2047,7 +2375,7 @@ export const RecordDetailView = ({
                 if (e.key === 'Enter') handleUpdateEntry(undefined, nestedField.id);
                 if (e.key === 'Escape') setActiveFieldId(null);
               }}
-              readonly={isSecReadOnly || activeFieldId !== nestedField.id}
+              readonly={isSecReadOnly || (!isDirect && activeFieldId !== nestedField.id)}
               disabled={savingFieldId === nestedField.id}
               recordData={editData}
               allFields={allFields}
@@ -2121,6 +2449,8 @@ export const RecordDetailView = ({
               const isSecMasked = Boolean(field && isFieldMaskedBySecurity(field.id, moduleData, currentUserObj));
               const isErrorField = validationErrorField?.fieldId === fObj.id;
               
+              const isDirect = isDirectInteractableField(field?.type);
+
               return (
                 <motion.div
                   key={fObj.id}
@@ -2132,16 +2462,16 @@ export const RecordDetailView = ({
                     "group/field transition-all relative min-w-0 focus-within:z-30 hover:z-20",
                     activeFieldId === fObj.id && "z-30",
                     fObj.width === 'half' ? "col-span-6" : "col-span-12",
-                    !activeFieldId && !isVisual && !isReadOnly && !['calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field!.type) && "cursor-pointer"
+                    !activeFieldId && !isVisual && !isReadOnly && !isDirect && !['calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field!.type) && "cursor-pointer"
                   )}
                   onClick={() => {
-                    if (!isVisual && !isReadOnly && activeFieldId !== field!.id && !['calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field!.type)) {
+                    if (!isVisual && !isReadOnly && !isDirect && activeFieldId !== field!.id && !['calculation', 'ai_summary', 'autonumber', 'automation', 'datatable', 'sub_module'].includes(field!.type)) {
                       setActiveFieldId(field!.id);
                     }
                   }}
                 >
                   <div className="w-full relative">
-                    {activeFieldId === field?.id && savingFieldId === field?.id && (
+                    {savingFieldId === field?.id && (
                       <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300 flex items-center gap-1.5">
                         <Loader2 size={10} className="animate-spin" />
                         Saving
@@ -2179,7 +2509,7 @@ export const RecordDetailView = ({
                               </div>
                             </div>
                           )}
-                          {!activeFieldId && (
+                          {!activeFieldId && !isDirect && (
                             isReadOnly || ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(field!.type) ? (
                               <Lock size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-zinc-400" />
                             ) : (
@@ -2212,7 +2542,7 @@ export const RecordDetailView = ({
                             if (e.key === 'Enter') handleUpdateEntry(undefined, field!.id);
                             if (e.key === 'Escape') setActiveFieldId(null);
                           }}
-                          readonly={isReadOnly || activeFieldId !== field!.id}
+                          readonly={isReadOnly || (!isDirect && activeFieldId !== field!.id)}
                           disabled={savingFieldId === field!.id}
                           recordData={editData}
                           allFields={allFields}
@@ -2281,7 +2611,7 @@ export const RecordDetailView = ({
     });
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-3.5">
         {tabValidations.length > 0 && (
           <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
             {tabValidations.map((val, idx) => {
@@ -2316,6 +2646,7 @@ export const RecordDetailView = ({
             const isParentOfActive = isContainerOrStructural && (
               (field.fields || []).some((f: any) => f.id === activeFieldId)
             );
+            const isDirect = isDirectInteractableField(field.type);
 
             return (
               <motion.div 
@@ -2335,20 +2666,20 @@ export const RecordDetailView = ({
                 className={cn(
                   "group/field transition-all relative min-w-0 focus-within:z-30 hover:z-20",
                   (activeFieldId === field.id || isParentOfActive) && "z-30",
-                  !activeFieldId && !isSecReadOnly && !isContainerOrStructural && "cursor-pointer"
+                  !activeFieldId && !isSecReadOnly && !isContainerOrStructural && !isDirect && "cursor-pointer"
                 )}
                 style={{
                   gridColumn: `${field.startCol || 1} / span ${field.colSpan || 12}`,
                   gridRow: `${(field.rowIndex || 0) + 1} / span ${calculateHeight(field)}`
                 }}
                 onClick={() => {
-                  if (!isSecReadOnly && activeFieldId !== field.id && !isContainerOrStructural) {
+                  if (!isSecReadOnly && !isDirect && activeFieldId !== field.id && !isContainerOrStructural) {
                     setActiveFieldId(field.id);
                   }
                 }}
               >
               <div className="w-full relative">
-              {activeFieldId === field.id && savingFieldId === field.id && (
+              {savingFieldId === field.id && (
                 <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20 animate-in zoom-in-50 duration-300 flex items-center gap-1.5">
                   <Loader2 size={10} className="animate-spin" />
                   Saving
@@ -2458,7 +2789,7 @@ export const RecordDetailView = ({
                       </div>
                     </div>
                   )}
-                  {!activeFieldId && (
+                  {!activeFieldId && !isDirect && (
                     isSecReadOnly || ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(field.type) ? (
                       <Lock size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-zinc-400" />
                     ) : (
@@ -2491,7 +2822,7 @@ export const RecordDetailView = ({
                     if (e.key === 'Enter') handleUpdateEntry(undefined, field.id);
                     if (e.key === 'Escape') setActiveFieldId(null);
                   }}
-                  readonly={isSecReadOnly || activeFieldId !== field.id}
+                  readonly={isSecReadOnly || (!isDirect && activeFieldId !== field.id)}
                   disabled={savingFieldId === field.id}
                   recordData={editData}
                   allFields={allFields}
@@ -2755,7 +3086,7 @@ export const RecordDetailView = ({
                     transition={{ duration: 0.2 }}
                     className="overflow-hidden"
                   >
-                    <div className="p-6 md:p-8">
+                    <div className="p-4 sm:p-5">
                       {renderFieldsGrid(tab.id)}
                     </div>
                   </motion.div>
@@ -2799,36 +3130,28 @@ export const RecordDetailView = ({
 
       {/* Standardized Full-Width Sticky PageHeader */}
       <div className={cn(
-        "w-full px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 z-30",
+        "w-full px-5 py-2.5 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-3 z-30",
         !isModal && !isEmbedded && "sticky top-0",
-        isEmbedded && "h-[72px] py-0 px-6 box-border flex-row items-center"
+        isEmbedded && "h-[54px] py-0 px-5 box-border flex-row items-center"
       )}>
         {/* Left: Back + Icon + Title + Metadata */}
-        <div className="flex items-center gap-3.5 min-w-0">
+        <div className="flex items-center gap-3 min-w-0">
           {isModal ? (
             <button 
               onClick={onClose}
-              className="h-8 w-8 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-lg transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-xs shrink-0"
+              className="w-8 h-8 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white rounded-lg transition-all flex items-center justify-center shadow-xs shrink-0"
               title="Back"
             >
-              <ArrowLeft size={15} />
+              <ArrowLeft size={14} />
             </button>
-          ) : isEmbedded ? (
-            <Link
-              to={`/workspace/modules/${routeModuleId || moduleId}/records/${recordId}`}
-              className="h-8 w-8 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-lg transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-xs shrink-0"
-              title="Open Full Page View"
-            >
-              <LucideIcons.ExternalLink size={14} />
-            </Link>
-          ) : (
+          ) : !isEmbedded ? (
             <div className="flex items-center gap-1.5 shrink-0">
               <Link 
                 to={getBackUrl()}
-                className="h-8 w-8 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-900 dark:hover:text-white rounded-lg transition-all flex items-center justify-center hover:scale-105 active:scale-95 shadow-xs shrink-0"
+                className="w-8 h-8 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white rounded-lg transition-all flex items-center justify-center shadow-xs shrink-0"
                 title="Back"
               >
-                <ArrowLeft size={15} />
+                <ArrowLeft size={14} />
               </Link>
               {currentSiblingIndex !== -1 && siblingRecordIds.length > 1 && (
                 <div className="hidden sm:flex items-center h-8 bg-zinc-100/80 dark:bg-zinc-800/80 border border-zinc-200/80 dark:border-zinc-700/80 rounded-lg overflow-hidden shadow-2xs">
@@ -2839,7 +3162,7 @@ export const RecordDetailView = ({
                     className="h-full px-1.5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/70 dark:hover:bg-zinc-700/70 disabled:opacity-35 disabled:pointer-events-none transition-colors cursor-pointer"
                     title="Previous record ( [ )"
                   >
-                    <ChevronLeft size={14} />
+                    <ChevronLeft size={13} />
                   </button>
                   <span className="px-1.5 text-[10px] font-mono font-semibold text-zinc-500 dark:text-zinc-400 select-none">
                     {currentSiblingIndex + 1}/{siblingRecordIds.length}
@@ -2851,40 +3174,40 @@ export const RecordDetailView = ({
                     className="h-full px-1.5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/70 dark:hover:bg-zinc-700/70 disabled:opacity-35 disabled:pointer-events-none transition-colors cursor-pointer"
                     title="Next record ( ] )"
                   >
-                    <ChevronRight size={14} />
+                    <ChevronRight size={13} />
                   </button>
                 </div>
               )}
             </div>
-          )}
+          ) : null}
 
           {Icon && (
-            <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
-              <Icon size={20} />
+            <div className="w-8 h-8 rounded-lg bg-indigo-50/80 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-500/20 flex items-center justify-center shrink-0">
+              <Icon size={16} />
             </div>
           )}
 
-          <div className="min-w-0">
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-base font-bold text-zinc-950 dark:text-white leading-none truncate">
-                {recordTitle}
-              </h1>
+          <div className="min-w-0 flex flex-col justify-center">
+            {/* Title Row: Monospace Key Badge + Descriptive Title */}
+            <div className="flex items-center gap-2 min-w-0">
+              {recKey && (
+                <span className="px-2 py-0.5 font-mono text-[11px] font-bold rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200/80 dark:border-zinc-700/80 shrink-0 select-all tracking-tight shadow-2xs">
+                  {recKey}
+                </span>
+              )}
+              {recordTitle && recordTitle !== recKey ? (
+                <h1 className="text-sm font-bold text-zinc-950 dark:text-white leading-none truncate">
+                  {recordTitle}
+                </h1>
+              ) : !recKey ? (
+                <h1 className="text-sm font-bold text-zinc-950 dark:text-white leading-none truncate">
+                  {recordTitle || 'Record Details'}
+                </h1>
+              ) : null}
             </div>
 
-            <div className="flex flex-wrap items-center gap-1.5 mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-              <span className="font-medium text-zinc-600 dark:text-zinc-400">
-                {moduleData.name}
-              </span>
-
-              {(editData._record_key || record._record_key) && (
-                <>
-                  <span className="text-zinc-350 dark:text-zinc-600">•</span>
-                  <span className="font-mono font-medium text-zinc-600 dark:text-zinc-400">
-                    {editData._record_key || record._record_key}
-                  </span>
-                </>
-              )}
-
+            {/* Subtitle Row: Custom Subtitle Fields + Created Date */}
+            <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
               {(() => {
                 const config = moduleData.config || (moduleData as any).config;
                 const subtitleFieldIds = config?.subtitleFieldIds;
@@ -2908,9 +3231,9 @@ export const RecordDetailView = ({
 
                   if (items.length > 0) {
                     return items.map((item, idx) => (
-                      <span key={idx} className="flex items-center gap-1 text-xs text-zinc-500 dark:text-zinc-400">
-                        <span className="text-zinc-350 dark:text-zinc-600">•</span>
+                      <span key={idx} className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
                         <span>{String(item)}</span>
+                        <span className="text-zinc-300 dark:text-zinc-700">•</span>
                       </span>
                     ));
                   }
@@ -2918,9 +3241,8 @@ export const RecordDetailView = ({
                 return null;
               })()}
 
-              <span className="flex items-center gap-1 text-xs text-zinc-400 dark:text-zinc-500">
-                <span className="text-zinc-350 dark:text-zinc-600">•</span>
-                <span>Created {record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'Just now'}</span>
+              <span className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                Created {record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'Just now'}
               </span>
             </div>
           </div>
@@ -3159,26 +3481,6 @@ export const RecordDetailView = ({
                 )}
               </AnimatePresence>
             </div>
-
-            {/* Details Rail Toggle Button */}
-            <button
-              type="button"
-              onClick={toggleRail}
-              className={cn(
-                "h-8 px-2.5 rounded-lg border transition-all flex items-center gap-1.5 text-xs font-semibold shadow-xs cursor-pointer",
-                !isRailCollapsed
-                  ? "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-500/40 text-indigo-600 dark:text-indigo-400"
-                  : "bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-200 hover:text-zinc-950 dark:hover:text-white"
-              )}
-              title={isRailCollapsed ? "Open Details [⌘\\]" : "Collapse Details [⌘\\]"}
-            >
-              {isRailCollapsed ? (
-                <PanelRightOpen size={13} className="text-indigo-500" />
-              ) : (
-                <PanelRightClose size={13} className="text-indigo-500" />
-              )}
-              <span className="hidden sm:inline">Details</span>
-            </button>
           </div>
 
           {/* More Options Menu (•••) */}
@@ -3340,6 +3642,17 @@ export const RecordDetailView = ({
             </AnimatePresence>
           </div>
 
+          {/* Open Full Page View Button (when in split view / embedded) */}
+          {isEmbedded && (
+            <Link
+              to={`/workspace/modules/${routeModuleId || moduleId}/records/${recordId}`}
+              className="w-8 h-8 rounded-lg border bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white transition-all flex items-center justify-center shadow-xs shrink-0"
+              title="Open full page view"
+            >
+              <LucideIcons.ExternalLink size={14} />
+            </Link>
+          )}
+
           {/* Close Button (for Modal) */}
           {isModal && (
             <button 
@@ -3368,7 +3681,7 @@ export const RecordDetailView = ({
           currentUserId={session?.user?.id}
           onOpenVisualizer={() => setShowVisualizer(true)}
           className={cn(
-            "w-full px-6 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 shrink-0 box-border h-[52px]"
+            "w-full px-5 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 shrink-0 box-border h-[46px]"
           )}
         />
       )}
@@ -3378,13 +3691,13 @@ export const RecordDetailView = ({
         <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
           {/* Main Content Area Supporting all 5 Layout Options */}
           {editForm && !editForm.isMultistep ? (
-        <div className="flex-1 w-full p-6 min-h-0 relative z-10 flex flex-col overflow-y-auto custom-scrollbar bg-zinc-50 dark:bg-[#101010]">
+        <div className="flex-1 w-full p-4 sm:p-5 min-h-0 relative z-10 flex flex-col overflow-y-auto custom-scrollbar bg-zinc-50 dark:bg-[#101010]">
           {renderFieldsGrid('default')}
         </div>
       ) : interfaceSettings.detail?.layoutType === 'process' || (editForm && editForm.isMultistep) ? (
         renderProcessWizardView()
       ) : interfaceSettings.detail?.layoutType === 'accordion' ? (
-        <div className="flex-1 w-full p-6 min-h-0 relative z-10 flex flex-col overflow-hidden bg-zinc-50 dark:bg-[#101010]">
+        <div className="flex-1 w-full p-4 sm:p-5 min-h-0 relative z-10 flex flex-col overflow-hidden bg-zinc-50 dark:bg-[#101010]">
           {renderAccordionView()}
         </div>
       ) : interfaceSettings.detail?.layoutType === 'split' ? (
@@ -3437,14 +3750,14 @@ export const RecordDetailView = ({
           </div>
 
           {/* Right Field Cards Container */}
-          <div className="flex-1 min-h-0 h-full p-6 overflow-y-auto custom-scrollbar bg-zinc-50 dark:bg-[#101010]">
+          <div className="flex-1 min-h-0 h-full p-4 sm:p-5 overflow-y-auto custom-scrollbar bg-zinc-50 dark:bg-[#101010]">
             {activeTabId ? renderFieldsGrid(activeTabId) : (
               <div className="text-zinc-400 text-xs text-center py-12 uppercase tracking-widest font-bold">Select a section</div>
             )}
           </div>
         </div>
       ) : interfaceSettings.detail?.layoutType === 'sidebar' || interfaceSettings.detail?.layoutType === 'single_page' || interfaceSettings.detail?.layoutType === 'single' ? (
-        <div className="flex-1 min-h-0 w-full h-full p-6 overflow-y-auto custom-scrollbar space-y-6 bg-zinc-50 dark:bg-[#101010]">
+        <div className="flex-1 min-h-0 w-full h-full p-4 sm:p-5 overflow-y-auto custom-scrollbar space-y-4 bg-zinc-50 dark:bg-[#101010]">
           {visibleTabs.filter((t: any) => !visibleTabs.some((sub: any) => sub.parentId === t.id)).map((tab: any) => {
             const parentTab = tab.parentId ? visibleTabs.find((t: any) => t.id === tab.parentId) : null;
             const displayLabel = parentTab ? `${parentTab.label} › ${tab.label}` : tab.label;
@@ -3467,21 +3780,21 @@ export const RecordDetailView = ({
         /* Edge-to-Edge Tabbed View */
         <div className="flex-1 w-full min-h-0 relative z-10 flex flex-col overflow-hidden">
           {moduleData?.tabs && moduleData.tabs.length > 0 && (
-            <div className="shrink-0 relative group/tabs overflow-hidden border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 h-[52px] box-border flex items-center">
+            <div className="shrink-0 relative group/tabs overflow-hidden border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 h-10 box-border flex items-center">
               <AnimatePresence>
                 {showLeftScroll && (
                   <motion.div 
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -10 }}
-                    className="absolute left-0 top-0 bottom-0 w-20 z-10 pointer-events-none"
+                    className="absolute left-0 top-0 bottom-0 w-16 z-10 pointer-events-none"
                   >
-                    <div className="w-full h-full bg-gradient-to-r from-zinc-50 dark:from-zinc-900 via-zinc-50/40 dark:via-zinc-900/40 to-transparent flex items-center justify-start pl-4 opacity-0 group-hover/tabs:opacity-100 transition-opacity duration-300">
+                    <div className="w-full h-full bg-gradient-to-r from-white dark:from-zinc-900 via-white/40 dark:via-zinc-900/40 to-transparent flex items-center justify-start pl-3 opacity-0 group-hover/tabs:opacity-100 transition-opacity duration-300">
                       <button 
                         onClick={() => handleScroll('left')}
-                        className="p-1.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-full shadow-xl pointer-events-auto transition-all hover:scale-110 active:scale-95"
+                        className="p-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-full shadow-md pointer-events-auto transition-all hover:scale-110 active:scale-95"
                       >
-                        <ChevronLeft size={16} />
+                        <ChevronLeft size={13} />
                       </button>
                     </div>
                   </motion.div>
@@ -3491,7 +3804,7 @@ export const RecordDetailView = ({
               <div 
                 ref={tabContainerRef}
                 onScroll={checkScroll}
-                className="flex gap-2 overflow-x-auto no-scrollbar scroll-smooth px-6 py-0 h-full items-center"
+                className="flex gap-6 overflow-x-auto no-scrollbar scroll-smooth px-5 py-0 h-full items-center"
               >
                 {sortedVisibleTabs.filter((t: any) => !t.parentId).map((tab: any) => {
                   const subtabs = sortedVisibleTabs.filter((sub: any) => sub.parentId === tab.id);
@@ -3505,7 +3818,7 @@ export const RecordDetailView = ({
                   return (
                     <div 
                       key={tab.id}
-                      className="relative"
+                      className="relative h-full flex items-center"
                       onMouseEnter={(e) => {
                         setHoveredTabId(tab.id);
                         const rect = e.currentTarget.getBoundingClientRect();
@@ -3525,19 +3838,46 @@ export const RecordDetailView = ({
                           }
                         }}
                         className={cn(
-                          "px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2 border cursor-pointer",
+                          "relative h-full flex items-center gap-1.5 px-0.5 text-xs transition-colors whitespace-nowrap cursor-pointer select-none group/tab",
                           isActive
-                            ? "bg-zinc-100 dark:bg-white/10 text-zinc-900 dark:text-white border-zinc-200/80 dark:border-white/10 shadow-sm"
-                            : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white bg-transparent border-transparent hover:bg-zinc-100/60 dark:hover:bg-zinc-800/60"
+                            ? "text-zinc-950 dark:text-white font-bold"
+                            : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-medium"
                         )}
                       >
                         {interfaceSettings.detail?.showTabIcons && (
-                          <DynamicIcon name={tab.iconName || (isParent ? 'Folder' : 'Layout')} size={13} className="shrink-0" />
+                          <DynamicIcon 
+                            name={tab.iconName || (isParent ? 'Folder' : 'Layout')} 
+                            size={13} 
+                            className={cn(
+                              "shrink-0 transition-colors",
+                              isActive
+                                ? "text-indigo-600 dark:text-indigo-400"
+                                : "text-zinc-400 dark:text-zinc-500 group-hover/tab:text-zinc-600 dark:group-hover/tab:text-zinc-300"
+                            )} 
+                          />
                         )}
                         <span>{tab.label}</span>
-                        {isParent && <ChevronDown size={10} className={cn("ml-0.5 transition-transform", hoveredTabId === tab.id ? "rotate-180" : "")} />}
+                        {isParent && (
+                          <ChevronDown 
+                            size={10} 
+                            className={cn(
+                              "ml-0.5 transition-transform", 
+                              hoveredTabId === tab.id ? "rotate-180" : "",
+                              isActive ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-400"
+                            )} 
+                          />
+                        )}
                         {hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />}
                         {hasWarnings && !hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />}
+
+                        {/* Animated Active Tab Underline Indicator */}
+                        {isActive && (
+                          <motion.div
+                            layoutId="activeTabUnderline"
+                            className="absolute bottom-0 left-0 right-0 h-[2px] bg-indigo-600 dark:bg-indigo-400 rounded-t-full shadow-[0_0_8px_rgba(99,102,241,0.5)] z-20"
+                            transition={{ type: "spring", stiffness: 500, damping: 38 }}
+                          />
+                        )}
                       </button>
 
                       {/* Mega Menu Dropdown */}
@@ -3603,14 +3943,14 @@ export const RecordDetailView = ({
                     initial={{ opacity: 0, x: 10 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 10 }}
-                    className="absolute right-0 top-0 bottom-0 w-20 z-10 pointer-events-none"
+                    className="absolute right-0 top-0 bottom-0 w-16 z-10 pointer-events-none"
                   >
-                    <div className="w-full h-full bg-gradient-to-l from-zinc-50 dark:from-zinc-900 via-zinc-50/40 dark:via-zinc-900/40 to-transparent flex items-center justify-end pr-4 opacity-0 group-hover/tabs:opacity-100 transition-opacity duration-300">
+                    <div className="w-full h-full bg-gradient-to-l from-white dark:from-zinc-900 via-white/40 dark:via-zinc-900/40 to-transparent flex items-center justify-end pr-3 opacity-0 group-hover/tabs:opacity-100 transition-opacity duration-300">
                       <button 
                         onClick={() => handleScroll('right')}
-                        className="p-1.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-full shadow-xl pointer-events-auto transition-all hover:scale-110 active:scale-95"
+                        className="p-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-full shadow-md pointer-events-auto transition-all hover:scale-110 active:scale-95"
                       >
-                        <ChevronRight size={16} />
+                        <ChevronRight size={13} />
                       </button>
                     </div>
                   </motion.div>
@@ -3619,7 +3959,7 @@ export const RecordDetailView = ({
             </div>
           )}
 
-          <div className="p-6 flex-1 min-h-0 overflow-y-auto custom-scrollbar bg-zinc-50 dark:bg-[#101010]">
+          <div className="p-4 sm:p-5 flex-1 min-h-0 overflow-y-auto custom-scrollbar bg-zinc-50 dark:bg-[#101010]">
             {activeTabId ? (
               renderFieldsGrid(activeTabId)
             ) : (
@@ -3638,6 +3978,7 @@ export const RecordDetailView = ({
           moduleId={moduleId || routeModuleId}
           moduleData={moduleData}
           editData={editData}
+          workflow={activeWorkflow}
           onUpdateField={handleFieldChange}
           onUpdateAssignee={handleUpdateAssignee}
           onUpdateStatus={(newStatus, targetNodeId) => {
@@ -3662,7 +4003,7 @@ export const RecordDetailView = ({
           {mainContent}
         </div>
       ) : (
-        <PageWrapper className="w-full h-[calc(100vh-4rem)] flex flex-col relative overflow-hidden bg-zinc-50 dark:bg-[#101010]">
+        <PageWrapper className="w-full h-full flex flex-col relative overflow-hidden bg-zinc-50 dark:bg-[#101010]">
           {mainContent}
         </PageWrapper>
       )}
@@ -3938,7 +4279,7 @@ export const RecordDetailView = ({
       {createPortal(
         <AnimatePresence>
           {showQuickActionModal && (
-            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6">
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-6">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -3949,38 +4290,51 @@ export const RecordDetailView = ({
                 setActionForm(null);
                 setActionFormData({});
               }}
-              className="absolute inset-0 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-sm"
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             />
             <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] shadow-2xl flex flex-col z-10 animate-in zoom-in-95 duration-350"
+              exit={{ opacity: 0, scale: 0.96, y: 12 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="relative w-full max-w-2xl bg-white dark:bg-[#151518] border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl flex flex-col z-10 overflow-hidden ring-1 ring-black/5 dark:ring-white/5"
             >
-              <div className="p-8 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50">
-                <h2 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-3">
-                  <div className="p-2 bg-indigo-500/10 text-indigo-500 rounded-lg">
-                    <Zap size={20} />
+              {/* Modal Header */}
+              <div className="px-6 py-4.5 border-b border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between bg-zinc-50/70 dark:bg-zinc-900/40 shrink-0">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 shadow-2xs">
+                    <Zap size={18} strokeWidth={2.5} />
                   </div>
-                  Quick Action: {activeQuickAction?.label}
-                </h2>
+                  <div className="min-w-0">
+                    <h2 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-white truncate">
+                      {activeQuickAction?.label || 'Quick Action'}
+                    </h2>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
+                      {actionForm?.settings?.description || 'Execute this action on the record.'}
+                    </p>
+                  </div>
+                </div>
                 <button 
+                  type="button"
                   onClick={() => {
                     setShowQuickActionModal(false);
                     setActiveQuickAction(null);
                     setActionForm(null);
                     setActionFormData({});
                   }}
-                  className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800/80 transition-colors cursor-pointer shrink-0 ml-3"
+                  title="Close"
                 >
-                  <X size={20} />
+                  <X size={16} />
                 </button>
               </div>
-              <div className="p-8 max-h-[60vh] overflow-y-auto custom-scrollbar w-full">
+
+              {/* Modal Body */}
+              <div className="p-6 max-h-[62vh] overflow-y-auto custom-scrollbar w-full">
                 {actionForm ? (
-                  <div className="space-y-10 w-full">
+                  <div className="space-y-6 w-full">
                     {actionForm.isMultistep && (
-                      <div className="flex items-center gap-4 px-2 mb-8 overflow-x-auto no-scrollbar py-2 border-b border-zinc-100 dark:border-zinc-800">
+                      <div className="flex items-center gap-2 px-1 mb-5 pb-4 border-b border-zinc-100 dark:border-zinc-800/80 overflow-x-auto no-scrollbar">
                         {actionForm.steps
                           .filter((s: any) => isFieldVisible(s, actionFormData, visibilityContext))
                           .map((step: any, idx: number, list: any[]) => {
@@ -3989,20 +4343,29 @@ export const RecordDetailView = ({
                             const isCompleted = activeIdx > idx;
 
                             return (
-                              <div key={step.id} className="flex items-center gap-3 shrink-0">
+                              <div key={step.id} className="flex items-center gap-2 shrink-0">
                                 <div className={cn(
-                                  "w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black transition-all duration-300",
-                                  isActive ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/30" : 
-                                  isCompleted ? "bg-emerald-500 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"
+                                  "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
+                                  isActive 
+                                    ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30" 
+                                    : isCompleted 
+                                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20" 
+                                      : "bg-zinc-100 dark:bg-zinc-800/60 text-zinc-400 dark:text-zinc-500 border border-transparent"
                                 )}>
-                                  {isCompleted ? <CheckCircle2 size={12} /> : idx + 1}
+                                  <span className={cn(
+                                    "w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold",
+                                    isActive 
+                                      ? "bg-indigo-600 text-white" 
+                                      : isCompleted 
+                                        ? "bg-emerald-500 text-white" 
+                                        : "bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300"
+                                  )}>
+                                    {isCompleted ? <CheckCircle2 size={10} strokeWidth={3} /> : idx + 1}
+                                  </span>
+                                  <span>{step.title}</span>
                                 </div>
-                                <span className={cn(
-                                  "text-[9px] font-black uppercase tracking-widest transition-colors",
-                                  isActive ? "text-zinc-900 dark:text-white" : "text-zinc-400"
-                                )}>{step.title}</span>
                                 {idx < list.length - 1 && (
-                                  <div className="w-8 h-px bg-zinc-200 dark:bg-zinc-800 ml-2" />
+                                  <div className="w-4 h-px bg-zinc-200 dark:bg-zinc-800" />
                                 )}
                               </div>
                             );
@@ -4010,7 +4373,7 @@ export const RecordDetailView = ({
                       </div>
                     )}
 
-                    <div className="grid grid-cols-12 gap-x-8 gap-y-8 w-full font-sans select-none">
+                    <div className="grid grid-cols-12 gap-x-5 gap-y-4 w-full font-sans select-none">
                       {(() => {
                         const currentStep = actionForm.isMultistep 
                           ? actionForm.steps.find((s: any) => s.id === actionStepId)
@@ -4032,37 +4395,41 @@ export const RecordDetailView = ({
 
                           return (
                             <div key={fObj.id} className={cn(
-                              "space-y-2",
-                              fObj.width === 'half' ? "col-span-6" : "col-span-12"
+                              "flex flex-col",
+                              fObj.width === 'half' ? "col-span-12 sm:col-span-6" : "col-span-12"
                             )}>
                               {isVisual ? (
-                                <div className="py-2 animate-in fade-in duration-300">
+                                <div className="py-1">
                                   {fObj.type === 'heading' && (
-                                    <h4 className="font-bold text-zinc-900 dark:text-white mt-2 text-xl">{fObj.labelOverride || 'Section Heading'}</h4>
+                                    <h4 className="font-bold text-zinc-900 dark:text-white text-sm pt-2 pb-1 border-b border-zinc-100 dark:border-zinc-800/80 mb-2 flex items-center gap-2">
+                                      {fObj.labelOverride || 'Section Heading'}
+                                    </h4>
                                   )}
                                   {fObj.type === 'divider' && (
                                     <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800 my-2" />
                                   )}
                                   {fObj.type === 'spacer' && (
-                                    <div style={{ height: fObj.height === 'sm' ? 16 : fObj.height === 'lg' ? 64 : fObj.height === 'xl' ? 128 : 32 }} />
+                                    <div style={{ height: fObj.height === 'sm' ? 12 : fObj.height === 'lg' ? 40 : fObj.height === 'xl' ? 64 : 20 }} />
                                   )}
                                   {fObj.type === 'html-text' && (
-                                    <div className="text-sm text-zinc-500 leading-relaxed prose dark:prose-invert max-w-none">
+                                    <div className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed prose dark:prose-invert max-w-none">
                                       {fObj.labelOverride || 'Text content goes here...'}
                                     </div>
                                   )}
                                 </div>
                               ) : (
                                 <>
-                                  <label className="text-xs font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 mb-2 relative group/label">
-                                    {labelOverride}
-                                    {isRequired && <span className="text-rose-500">*</span>}
+                                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider flex items-center justify-between gap-1.5 mb-1.5 relative group/label">
+                                    <span className="flex items-center gap-1.5">
+                                      <span>{labelOverride}</span>
+                                      {isRequired && <span className="text-rose-500 font-bold">*</span>}
+                                    </span>
                                     {field?.tooltip && (
                                       <div className="relative cursor-help">
-                                        <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-                                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                        <HelpCircle size={11} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
+                                        <div className="absolute bottom-full right-0 mb-1.5 px-2.5 py-1.5 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
                                           {field.tooltip}
-                                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-zinc-900" />
+                                          <div className="absolute top-full right-2 border-4 border-transparent border-t-zinc-900" />
                                         </div>
                                       </div>
                                     )}
@@ -4088,7 +4455,7 @@ export const RecordDetailView = ({
                                     <p className="text-[10px] text-rose-500 mt-1 font-semibold">{error}</p>
                                   )}
                                   {field?.helperText && !error && (
-                                    <p className="text-[10px] text-zinc-500 mt-0.5 font-medium absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{field.helperText}</p>
+                                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1 font-medium leading-tight">{field.helperText}</p>
                                   )}
                                 </>
                               )}
@@ -4099,78 +4466,100 @@ export const RecordDetailView = ({
                     </div>
                   </div>
                 ) : (
-                  <div className="text-center py-12 text-zinc-500 italic">
+                  <div className="text-center py-12 text-zinc-500 italic text-xs">
                     No action form layout configured. Click Submit to execute.
                   </div>
                 )}
               </div>
-              <div className="p-8 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex gap-4">
-                {actionForm?.isMultistep && actionStepId !== actionForm.steps[0].id ? (
-                  <button
-                    onClick={() => {
-                      const visibleSteps = actionForm.steps.filter((s: any) => isFieldVisible(s, actionFormData, visibilityContext));
-                      const currentIdx = visibleSteps.findIndex((s: any) => s.id === actionStepId);
-                      if (currentIdx > 0) {
-                        setActionStepId(visibleSteps[currentIdx - 1].id);
-                      }
-                    }}
-                    className="flex-1 py-4 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 transition-colors uppercase tracking-widest text-xs"
-                  >
-                    Back
-                  </button>
-                ) : (
-                  <button 
-                    onClick={() => {
-                      setShowQuickActionModal(false);
-                      setActiveQuickAction(null);
-                      setActionForm(null);
-                      setActionFormData({});
-                    }}
-                    className="flex-1 py-4 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                )}
-                <button 
-                  onClick={async () => {
-                    if (actionForm?.isMultistep) {
-                      // Validation
-                      const currentStep = actionForm.steps.find((s: any) => s.id === actionStepId);
-                      const fieldsToValidate = currentStep ? currentStep.fields : [];
-                      let hasErrors = false;
-                      const errors: Record<string, string> = {};
-                      fieldsToValidate.forEach((fObj: any) => {
-                        if (fObj.id.startsWith('visual-')) return;
-                        if (!isFieldVisible(fObj, actionFormData, visibilityContext)) return;
-                        const field = allFields.find(f => f.id === fObj.id);
-                        const isRequired = fObj.required || field?.required;
-                        const value = actionFormData[fObj.id];
-                        if (isRequired && (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0))) {
-                          hasErrors = true;
-                          errors[fObj.id] = 'This field is required';
-                        }
-                      });
-                      if (hasErrors) {
-                        setActionFormErrors(errors);
-                        toast.error('Please fill in all required fields.');
-                        return;
-                      }
 
-                      const visibleSteps = actionForm.steps.filter((s: any) => isFieldVisible(s, actionFormData, visibilityContext));
-                      const currentIdx = visibleSteps.findIndex((s: any) => s.id === actionStepId);
-                      if (currentIdx < visibleSteps.length - 1) {
-                        setActionStepId(visibleSteps[currentIdx + 1].id);
-                        return;
+              {/* Modal Footer */}
+              <div className="px-6 py-4 border-t border-zinc-100 dark:border-zinc-800/80 bg-zinc-50/70 dark:bg-zinc-900/40 flex items-center justify-between gap-3 shrink-0">
+                <div className="text-[11px] text-zinc-400 dark:text-zinc-500 font-medium hidden sm:flex items-center gap-1.5">
+                  <span className="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700/80 text-[10px] font-mono text-zinc-500 dark:text-zinc-400 shadow-2xs">Esc</span>
+                  <span>to cancel</span>
+                </div>
+
+                <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+                  {actionForm?.isMultistep && actionStepId !== actionForm.steps[0].id ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const visibleSteps = actionForm.steps.filter((s: any) => isFieldVisible(s, actionFormData, visibilityContext));
+                        const currentIdx = visibleSteps.findIndex((s: any) => s.id === actionStepId);
+                        if (currentIdx > 0) {
+                          setActionStepId(visibleSteps[currentIdx - 1].id);
+                        }
+                      }}
+                      className="px-4 h-9 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700/80 border border-zinc-200 dark:border-zinc-700 rounded-xl font-semibold text-xs text-zinc-700 dark:text-zinc-200 transition-all cursor-pointer shadow-2xs"
+                    >
+                      Back
+                    </button>
+                  ) : (
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setShowQuickActionModal(false);
+                        setActiveQuickAction(null);
+                        setActionForm(null);
+                        setActionFormData({});
+                      }}
+                      className="px-4 h-9 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700/80 border border-zinc-200 dark:border-zinc-700 rounded-xl font-semibold text-xs text-zinc-700 dark:text-zinc-200 transition-all cursor-pointer shadow-2xs"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                  <button 
+                    type="button"
+                    onClick={async () => {
+                      if (actionForm?.isMultistep) {
+                        // Validation
+                        const currentStep = actionForm.steps.find((s: any) => s.id === actionStepId);
+                        const fieldsToValidate = currentStep ? currentStep.fields : [];
+                        let hasErrors = false;
+                        const errors: Record<string, string> = {};
+                        fieldsToValidate.forEach((fObj: any) => {
+                          if (fObj.id.startsWith('visual-')) return;
+                          if (!isFieldVisible(fObj, actionFormData, visibilityContext)) return;
+                          const field = allFields.find(f => f.id === fObj.id);
+                          const isRequired = fObj.required || field?.required;
+                          const value = actionFormData[fObj.id];
+                          if (isRequired && (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0))) {
+                            hasErrors = true;
+                            errors[fObj.id] = 'This field is required';
+                          }
+                        });
+                        if (hasErrors) {
+                          setActionFormErrors(errors);
+                          toast.error('Please fill in all required fields.');
+                          return;
+                        }
+
+                        const visibleSteps = actionForm.steps.filter((s: any) => isFieldVisible(s, actionFormData, visibilityContext));
+                        const currentIdx = visibleSteps.findIndex((s: any) => s.id === actionStepId);
+                        if (currentIdx < visibleSteps.length - 1) {
+                          setActionStepId(visibleSteps[currentIdx + 1].id);
+                          return;
+                        }
                       }
-                    }
-                    handleSubmitQuickAction();
-                  }}
-                  disabled={isActionSubmitting}
-                  className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {isActionSubmitting && <LucideIcons.Loader2 size={18} className="animate-spin" />}
-                  {isActionSubmitting ? 'Submitting...' : (actionForm?.isMultistep && actionStepId !== actionForm.steps[actionForm.steps.length - 1].id ? 'Continue' : (actionForm?.settings?.submitLabel || 'Submit'))}
-                </button>
+                      handleSubmitQuickAction();
+                    }}
+                    disabled={isActionSubmitting}
+                    className="px-5 h-9 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white rounded-xl font-semibold text-xs transition-all shadow-sm shadow-indigo-500/25 disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    {isActionSubmitting ? (
+                      <>
+                        <LucideIcons.Loader2 size={14} className="animate-spin" />
+                        <span>Submitting...</span>
+                      </>
+                    ) : (
+                      <span>
+                        {actionForm?.isMultistep && actionStepId !== actionForm.steps[actionForm.steps.length - 1].id 
+                          ? 'Continue' 
+                          : (actionForm?.settings?.submitLabel || 'Submit')}
+                      </span>
+                    )}
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>

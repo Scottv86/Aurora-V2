@@ -469,9 +469,9 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
     }
   }, [autoFocus]);
 
-  // Auto-focus and open dropdown when select becomes active
+  // Auto-focus and open dropdown when select becomes active with explicit autoFocus
   React.useEffect(() => {
-    if (!readonly && type === 'select' && inputRef.current) {
+    if (autoFocus && !readonly && type === 'select' && inputRef.current) {
       inputRef.current.focus();
       try {
         if (typeof inputRef.current.showPicker === 'function') {
@@ -483,7 +483,7 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
         }
       }
     }
-  }, [readonly, type]);
+  }, [autoFocus, readonly, type]);
 
   const [localValue, setLocalValue] = React.useState(value);
   const localValueRef = React.useRef(value);
@@ -591,10 +591,10 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
       ? "border-rose-500 bg-rose-500/5 focus:border-rose-600 ring-4 ring-rose-500/5" 
       : formattingResult
         ? cn(formattingResult.borderClassName, formattingResult.textClassName)
-        : !readonly 
+        : (isFocused || autoFocus)
           ? "border-indigo-500 ring-2 ring-indigo-500/20 bg-white dark:bg-zinc-950 focus:border-indigo-500" 
-          : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 focus:border-indigo-500",
-    readonly && "cursor-pointer pointer-events-none"
+          : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 bg-white dark:bg-zinc-950",
+    readonly && "cursor-not-allowed opacity-75"
   );
 
   // Layout & Content Components (No Value)
@@ -654,7 +654,7 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
         <select 
           ref={inputRef}
           value={localValue || ''}
-          disabled={readonly}
+          disabled={readonly || disabled}
           onChange={(e) => { 
             const selectedVal = e.target.value;
             setIsFocused(true); 
@@ -664,7 +664,7 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
           autoFocus={autoFocus}
-          className={cn(inputClasses, "appearance-none")}
+          className={cn(inputClasses, "appearance-none cursor-pointer")}
         >
           <option value="" className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">Select...</option>
           {effectiveSource === 'connector' ? (
@@ -1502,7 +1502,7 @@ export const FieldInput: React.FC<FieldInputProps> = (props) => {
     props.onBlur?.();
   } : undefined;
 
-  const needsPointerEventsNone = ['select', 'date', 'time', 'user', 'lookup', 'connector', 'number', 'currency', 'longText', 'email', 'phone', 'url', 'text'].includes(type) || !type;
+  const needsPointerEventsNone = ['user', 'lookup', 'connector', 'number', 'currency', 'longText', 'email', 'phone', 'url', 'text'].includes(type) || !type;
 
   return (
     <div 

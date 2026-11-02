@@ -790,7 +790,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
 
       {/* Top Mounted Mega Menu */}
       {layoutStyle === 'top' && !isSettingsMode && !isAdminPath && (
-        <div className="sticky top-16 z-40 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 h-12 flex items-center px-6 lg:px-12 w-full shrink-0">
+        <div className="sticky top-[52px] z-40 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 h-12 flex items-center px-6 lg:px-12 w-full shrink-0">
           <TopMegaMenu menuConfig={resolvedConfig} isDeveloper={isTenantAdmin} />
         </div>
       )}
@@ -802,7 +802,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
             onMouseEnter={handleAsideMouseEnter}
             onMouseLeave={handleAsideMouseLeave}
             className={cn(
-              "fixed left-0 top-16 bottom-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col overflow-x-hidden",
+              "fixed left-0 top-[52px] bottom-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col overflow-x-hidden",
               isOverlay ? "z-50 shadow-2xl shadow-black/15 dark:shadow-black/60" : "z-45",
               (isModuleBuilder || isBuilderFullscreen || layoutStyle === 'top') && "opacity-0 pointer-events-none border-none",
               !isResizing && !isModuleBuilder && !isBuilderFullscreen && "transition-all duration-300"
@@ -1165,8 +1165,8 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
             (isBuilderFullscreen || isModuleBuilder)
               ? "h-screen" 
               : (layoutStyle === 'top' && !isSettingsMode && !isAdminPath 
-                  ? "h-[calc(100vh-7rem)]" 
-                  : "h-[calc(100vh-4rem)]")
+                  ? "h-[calc(100vh-100px)]" 
+                  : "h-[calc(100vh-52px)]")
           )}
         >
           <div className={cn(
@@ -1174,7 +1174,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
             (fullBleed || isAdminPath || isBuilderFullscreen || isModuleBuilder || isPosPage) ? "w-full flex-1 h-full" : "max-w-7xl w-full"
           )}>
             {pathnames.length > 0 && !isModuleBuilder && !isBuilderFullscreen && !shouldHideShellBreadcrumbs && (isSettingsMode || tenant?.branding?.show_breadcrumbs !== false || isTenantAdmin) && (
-              <div className="sticky top-0 z-30 h-10 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between px-6 shrink-0">
+              <div className="sticky top-0 z-30 h-9 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between px-5 shrink-0">
                 <Breadcrumbs />
                 {getContextualAction()}
               </div>

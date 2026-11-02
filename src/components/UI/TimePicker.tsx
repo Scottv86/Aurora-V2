@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Clock,
   X,
@@ -35,16 +36,35 @@ export const TimePicker: React.FC<TimePickerProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
 
   const [openUp, setOpenUp] = useState(false);
+  const [triggerRect, setTriggerRect] = useState<DOMRect | null>(null);
+
+  const updatePosition = useCallback(() => {
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      setTriggerRect(rect);
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setOpenUp(spaceBelow < 320 && rect.top > 320);
+    }
+  }, []);
 
   useEffect(() => {
-    if (isOpen && containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom;
-      setOpenUp(spaceBelow < 300 && rect.top > 300);
+    if (isOpen) {
+      updatePosition();
+      const handleScrollOrResize = (e: Event) => {
+        if (popoverRef.current && popoverRef.current.contains(e.target as Node)) return;
+        updatePosition();
+      };
+      window.addEventListener('resize', handleScrollOrResize);
+      window.addEventListener('scroll', handleScrollOrResize, true);
+      return () => {
+        window.removeEventListener('resize', handleScrollOrResize);
+        window.removeEventListener('scroll', handleScrollOrResize, true);
+      };
     }
-  }, [isOpen]);
+  }, [isOpen, updatePosition]);
 
   // Parse current value
   const [hours, minutes] = useMemo(() => {
@@ -66,7 +86,11 @@ export const TimePicker: React.FC<TimePickerProps> = ({
   // Handle click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        containerRef.current && !containerRef.current.contains(target) &&
+        (!popoverRef.current || !popoverRef.current.contains(target))
+      ) {
         setIsOpen(false);
         onBlur?.();
       }
@@ -105,6 +129,8 @@ export const TimePicker: React.FC<TimePickerProps> = ({
           if (!readonly) {
             if (isOpen) {
               onBlur?.();
+            } else {
+              updatePosition();
             }
             setIsOpen(!isOpen);
           }
@@ -115,6 +141,8 @@ export const TimePicker: React.FC<TimePickerProps> = ({
             e.preventDefault();
             if (isOpen) {
               onBlur?.();
+            } else {
+              updatePosition();
             }
             setIsOpen(!isOpen);
           }
@@ -141,17 +169,26 @@ export const TimePicker: React.FC<TimePickerProps> = ({
         )}
       </div>
 
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: openUp ? -10 : 10, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: openUp ? -10 : 10, scale: 0.95 }}
-            className={cn(
-              "absolute z-[100] left-0 w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl p-4 overflow-hidden",
-              openUp ? "bottom-full mb-2" : "top-full mt-2"
-            )}
-          >
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {isOpen && triggerRect && (
+            <motion.div
+              ref={popoverRef}
+              initial={{ opacity: 0, y: openUp ? -8 : 8, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: openUp ? -8 : 8, scale: 0.96 }}
+              transition={{ duration: 0.14 }}
+              style={{
+                position: 'fixed',
+                ...(openUp 
+                  ? { bottom: Math.max(12, window.innerHeight - triggerRect.top + 6) } 
+                  : { top: Math.min(triggerRect.bottom + 6, window.innerHeight - 320) }
+                ),
+                left: Math.min(Math.max(12, triggerRect.left), window.innerWidth - 270),
+                zIndex: 99999
+              }}
+              className="w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl p-4 overflow-hidden"
+            >
             {/* Header / Selector */}
             <div className="flex flex-col items-center gap-6 py-2">
               <div className="flex items-center gap-4">
@@ -253,8 +290,10 @@ export const TimePicker: React.FC<TimePickerProps> = ({
               </button>
             </div>
           </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   );
 };

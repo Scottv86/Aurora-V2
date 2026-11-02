@@ -1090,15 +1090,33 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [splitStatusFilter, setSplitStatusFilter] = useState('all');
   const [splitAssigneeFilter, setSplitAssigneeFilter] = useState('all');
-  const [splitSortBy, setSplitSortBy] = useState<'updated' | 'created' | 'title' | 'key'>('updated');
+  const [splitSortBy, setSplitSortBy] = useState<'created' | 'updated' | 'title' | 'key'>('created');
   const [modalRecord, setModalRecord] = useState<any | null>(null);
+
+  const splitStatusOptions = useMemo(() => {
+    const statuses = new Set<string>();
+    (rawRecords || []).forEach((r: any) => {
+      const s = r.status || r.data?.status;
+      if (s && typeof s === 'string' && s.trim()) {
+        statuses.add(s.trim());
+      }
+    });
+    if (statuses.size > 0) {
+      return Array.from(statuses);
+    }
+    return ['Open', 'In Progress', 'Under Review', 'Completed', 'Closed'];
+  }, [rawRecords]);
 
   // Split view filtered & sorted records
   const splitRecords = useMemo(() => {
     let list = [...filteredRecords];
 
     if (splitStatusFilter !== 'all') {
-      list = list.filter(r => (r.status || r.data?.status) === splitStatusFilter);
+      const target = splitStatusFilter.toLowerCase();
+      list = list.filter(r => {
+        const s = r.status || r.data?.status;
+        return String(s || '').toLowerCase() === target;
+      });
     }
     if (splitAssigneeFilter !== 'all') {
       if (splitAssigneeFilter === 'unassigned') {
@@ -1119,14 +1137,16 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
         const kB = (b._record_key || b.id || '').toLowerCase();
         return kA.localeCompare(kB);
       }
-      if (splitSortBy === 'created') {
-        const cA = new Date(a.createdAt || 0).getTime();
-        const cB = new Date(b.createdAt || 0).getTime();
-        return cB - cA;
+      if (splitSortBy === 'updated') {
+        const uA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+        const uB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+        return uB - uA;
       }
-      const uA = new Date(a.updatedAt || a.createdAt || 0).getTime();
-      const uB = new Date(b.updatedAt || b.createdAt || 0).getTime();
-      return uB - uA;
+      // default 'created'
+      const cA = new Date(a.createdAt || 0).getTime();
+      const cB = new Date(b.createdAt || 0).getTime();
+      if (cB !== cA) return cB - cA;
+      return (b._record_key || b.id || '').localeCompare(a._record_key || a.id || '');
     });
 
     return list;
@@ -1450,7 +1470,7 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
               className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none focus:border-indigo-500 uppercase tracking-wider cursor-pointer truncate"
             >
               <option value="all">All Status</option>
-              {['Open', 'In Progress', 'Under Review', 'Completed', 'Closed'].map(st => (
+              {splitStatusOptions.map(st => (
                 <option key={st} value={st}>{st}</option>
               ))}
             </select>
@@ -1472,8 +1492,8 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
               onChange={(e) => setSplitSortBy(e.target.value as any)}
               className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none focus:border-indigo-500 uppercase tracking-wider cursor-pointer truncate"
             >
-              <option value="updated">Updated</option>
               <option value="created">Created</option>
+              <option value="updated">Updated</option>
               <option value="title">Title</option>
               <option value="key">Key</option>
             </select>

@@ -66,60 +66,47 @@ export const CollapsibleFieldGroup: React.FC<CollapsibleFieldGroupProps> = ({
 
   return (
     <div className={cn(
-      "transition-all duration-300 rounded-2xl bg-white dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-zinc-800/80 relative focus-within:z-30 hover:z-20",
+      "transition-all duration-300 rounded-xl bg-white dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-zinc-800/80 relative focus-within:z-30 hover:z-20",
       (isCollapsed || isAnimating) ? "overflow-hidden" : "overflow-visible",
       isCollapsed ? "shadow-xs" : "shadow-sm",
       className
     )}>
-      {/* Header */}
+      {/* Header - Slim & Dense */}
       <div 
         className={cn(
-          "px-4.5 py-3.5 flex items-center justify-between select-none",
-          isCollapsible ? "cursor-pointer hover:bg-zinc-100/60 dark:hover:bg-zinc-800/40 transition-colors" : "",
-          isCollapsed ? "rounded-2xl" : "rounded-t-2xl"
+          "px-3.5 py-2 flex items-center justify-between select-none",
+          isCollapsible ? "cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/40 transition-colors" : "",
+          isCollapsed ? "rounded-xl" : "rounded-t-xl"
         )}
         onClick={toggleCollapse}
       >
-        <div className="flex items-center gap-2.5">
-          {showIcon && (
-            <div className={cn(
-              "w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-300",
-              isCollapsed 
-                ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-400" 
-                : "bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20 dark:text-indigo-400 border border-indigo-500/20"
-            )}>
-              {getIcon()}
-            </div>
-          )}
-          <div className="flex flex-col">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-2">
-              <h5 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 uppercase tracking-wider">
+              <h5 className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider truncate">
                 {field.label}
               </h5>
               {count !== undefined && (
-                <span className="px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-md text-[9px] font-semibold text-zinc-400 border border-zinc-200/60 dark:border-zinc-700/60">
+                <span className="px-1.5 py-0.2 bg-zinc-100 dark:bg-zinc-800 rounded text-[9px] font-mono font-semibold text-zinc-400 border border-zinc-200/60 dark:border-zinc-700/60">
                   {count}
                 </span>
               )}
             </div>
             {field.helperText && (
-              <p className="text-[10px] text-zinc-400 font-medium tracking-normal mt-0.5">
+              <p className="text-[10px] text-zinc-400 font-medium tracking-normal mt-0.5 truncate">
                 {field.helperText}
               </p>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 shrink-0">
           {actions}
           {isCollapsible && (
-            <div className={cn(
-              "w-6 h-6 rounded-md flex items-center justify-center transition-all duration-200",
-              isCollapsed ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-400" : "bg-zinc-100 dark:bg-zinc-800/80 text-zinc-500 dark:text-zinc-300"
-            )}>
+            <div className="p-0.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors cursor-pointer">
               <ChevronDown 
                 size={14} 
-                className={cn("transition-transform duration-300 ease-out", isCollapsed ? "-rotate-90" : "rotate-0")} 
+                className={cn("transition-transform duration-200 ease-out", isCollapsed ? "-rotate-90" : "rotate-0")} 
               />
             </div>
           )}
@@ -137,13 +124,13 @@ export const CollapsibleFieldGroup: React.FC<CollapsibleFieldGroupProps> = ({
               onAnimationStart={() => setIsAnimating(true)}
               onAnimationComplete={() => setIsAnimating(false)}
               transition={{ 
-                height: { duration: 0.3, ease: [0.04, 0.62, 0.23, 0.98] },
+                height: { duration: 0.25, ease: [0.04, 0.62, 0.23, 0.98] },
                 opacity: { duration: 0.15 }
               }}
               className={cn(isAnimating ? "overflow-hidden" : "overflow-visible")}
             >
               <div className="h-px bg-zinc-200/60 dark:bg-zinc-800/60" />
-              <div className="p-4.5">
+              <div className="p-3.5">
                 {children}
               </div>
             </motion.div>
@@ -152,7 +139,7 @@ export const CollapsibleFieldGroup: React.FC<CollapsibleFieldGroupProps> = ({
       ) : (
         <div className="overflow-visible">
           <div className="h-px bg-zinc-200/60 dark:bg-zinc-800/60" />
-          <div className="p-4.5">
+          <div className="p-3.5">
             {children}
           </div>
         </div>

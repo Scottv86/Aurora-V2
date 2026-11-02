@@ -45,7 +45,7 @@ const ChatDrawerInner: React.FC = () => {
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: 420, opacity: 0 }}
       transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-      className="fixed right-0 top-16 bottom-0 w-96 bg-white dark:bg-zinc-950 border-l border-zinc-200 dark:border-zinc-800 flex flex-col z-40 shadow-2xl shadow-black/30 select-none"
+      className="fixed right-0 top-[52px] bottom-0 w-96 bg-white dark:bg-zinc-950 border-l border-zinc-200 dark:border-zinc-800 flex flex-col z-40 shadow-2xl shadow-black/30 select-none"
     >
       {/* Header */}
       <div className="p-3.5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-white dark:bg-zinc-950 relative z-30">

@@ -38,5 +38,10 @@ export function getSharedSocket(token?: string, tenantId?: string): Socket {
     }
   }
 
+  // Ensure window._auroraSocket is populated for any components relying on window reference
+  if (typeof window !== 'undefined') {
+    (window as any)._auroraSocket = sharedSocket;
+  }
+
   return sharedSocket;
 }

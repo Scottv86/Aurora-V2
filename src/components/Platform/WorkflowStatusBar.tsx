@@ -498,43 +498,10 @@ export const WorkflowStatusBar: React.FC<WorkflowStatusBarProps> = ({
           className
         )}
       >
-        {/* Animated Top Progress Accent Line during transition */}
-        <AnimatePresence>
-          {isTransitioning && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute top-0 left-0 right-0 h-[2px] bg-indigo-500/20 overflow-hidden z-20 pointer-events-none"
-            >
-              <motion.div
-                className="h-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.8)]"
-                animate={{ x: ['-100%', '300%'] }}
-                transition={{ repeat: Infinity, duration: 1.1, ease: 'easeInOut' }}
-                style={{ width: '40%' }}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         {/* Left: Workflow Process State / Context / SLA */}
         <div className="flex items-center gap-3 shrink-0">
           <AnimatePresence mode="wait">
-            {isTransitioning ? (
-              <motion.div
-                key="transitioning"
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.15 }}
-                className="flex items-center gap-2 text-xs"
-              >
-                <Loader2 size={13} className="animate-spin text-indigo-500 shrink-0" />
-                <span className="font-semibold text-indigo-600 dark:text-indigo-400 animate-pulse">
-                  Updating workflow status...
-                </span>
-              </motion.div>
-            ) : !isStarted ? (
+            {!isStarted ? (
               <motion.button
                 key="start"
                 initial={{ opacity: 0, scale: 0.95 }}
@@ -618,7 +585,7 @@ export const WorkflowStatusBar: React.FC<WorkflowStatusBarProps> = ({
                         Due: <span className="font-semibold text-zinc-700 dark:text-zinc-300">{slaStatus.nearestDate ? new Date(slaStatus.nearestDate).toLocaleDateString() : 'Today'}</span>
                       </p>
                       {slaStatus.nearestActivity?.note && (
-                        <p className="text-[11px] text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-950 p-2 rounded-lg mt-2 border border-zinc-200/60 dark:border-zinc-800/60">
+                        <p className="text-[11px] text-zinc-600 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-900 p-2 rounded-lg mt-2 border border-zinc-200/60 dark:border-zinc-800/60">
                           {slaStatus.nearestActivity.note}
                         </p>
                       )}
@@ -667,7 +634,7 @@ export const WorkflowStatusBar: React.FC<WorkflowStatusBarProps> = ({
           {steps && steps.length > 0 && !compact && (
             <nav 
               aria-label="Process progression" 
-              className="inline-flex items-center gap-0.5 bg-zinc-100/70 dark:bg-zinc-950/60 border border-zinc-200/80 dark:border-zinc-800/80 rounded-lg p-1 text-xs shadow-2xs"
+              className="inline-flex items-center gap-0.5 bg-zinc-100/70 dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800/80 rounded-lg p-1 text-xs shadow-2xs"
             >
               {steps.map((step, stepIdx) => (
                 <React.Fragment key={step.id}>
@@ -756,7 +723,7 @@ export const WorkflowStatusBar: React.FC<WorkflowStatusBarProps> = ({
               </div>
               <div className="space-y-1">
                 {hoveredStage.stage.automatedActions.map(action => (
-                  <div key={action.id} className="flex items-center justify-between gap-1.5 px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-950 border border-zinc-200/60 dark:border-zinc-800 text-[11px]">
+                  <div key={action.id} className="flex items-center justify-between gap-1.5 px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800 text-[11px]">
                     <span className="font-medium text-zinc-700 dark:text-zinc-300 truncate">{action.name}</span>
                     <span className="text-[9px] font-semibold uppercase px-1 py-0.2 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 shrink-0">{action.type}</span>
                   </div>

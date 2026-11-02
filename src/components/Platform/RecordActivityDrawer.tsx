@@ -18,6 +18,7 @@ import { cn } from '../../lib/utils';
 import { API_BASE_URL } from '../../config';
 import { useAuth } from '../../hooks/useAuth';
 import { usePlatform } from '../../hooks/usePlatform';
+import { getSharedSocket } from '../../lib/socketClient';
 import { ActivityEventCard, ActivityEvent } from './ActivityEventCard';
 
 interface RecordActivityDrawerProps {
@@ -133,12 +134,14 @@ export const RecordActivityDrawer: React.FC<RecordActivityDrawerProps> = ({
 
   // Real-time updates via global socket
   useEffect(() => {
-    if (!isOpen || !recordId) return;
-    const socket = (window as any)._auroraSocket;
+    if (!isOpen || !recordId || !tenant?.id) return;
+    const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';
+    const socket = getSharedSocket(token, tenant.id);
     if (!socket) return;
 
     const handleNewActivity = (activity: any) => {
-      if (activity.resourceId === recordId) {
+      if (!activity) return;
+      if (activity.resourceId === recordId || (recordKey && activity.resourceKey === recordKey)) {
         setEvents(prev => {
           if (prev.some(e => e.id === activity.id)) return prev;
           return sortOrder === 'desc' ? [activity, ...prev] : [...prev, activity];
@@ -150,7 +153,23 @@ export const RecordActivityDrawer: React.FC<RecordActivityDrawerProps> = ({
     return () => {
       socket.off('RECORD_ACTIVITY', handleNewActivity);
     };
-  }, [isOpen, recordId, sortOrder]);
+  }, [isOpen, recordId, recordKey, sortOrder, tenant?.id, session?.access_token]);
+
+  // Synchronize with local record updates within the same window
+  useEffect(() => {
+    if (!isOpen || !recordId) return;
+    const handleLocalRecordUpdated = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail?.recordId === recordId || (recordKey && detail?.record?._record_key === recordKey)) {
+        fetchEvents();
+      }
+    };
+
+    window.addEventListener('aurora:record-updated', handleLocalRecordUpdated as EventListener);
+    return () => {
+      window.removeEventListener('aurora:record-updated', handleLocalRecordUpdated as EventListener);
+    };
+  }, [isOpen, recordId, recordKey]);
 
   // Filtered list
   const filteredEvents = useMemo(() => {

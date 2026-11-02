@@ -13,6 +13,28 @@ export interface AppItem {
 export const AURORA_APPS: AppItem[] = [
   // Core Platform & Active Workspace Suite
   {
+    id: 'ai-assistant',
+    label: 'AI Assistant',
+    iconName: 'Sparkles',
+    description: 'Conversational agent, smart assistant and generative workflow copilot',
+    color: 'text-indigo-500',
+    to: '/workspace/aurora-vibe',
+    category: 'Productivity',
+    isCore: true,
+    status: 'active'
+  },
+  {
+    id: 'recycling-bin',
+    label: 'Recycling Bin',
+    iconName: 'Trash2',
+    description: 'Restore or permanently purge deleted records, modules, and files',
+    color: 'text-zinc-500',
+    to: '#recycling-bin',
+    category: 'Commerce & Operations',
+    isCore: true,
+    status: 'active'
+  },
+  {
     id: 'approvals',
     label: 'Approvals Hub',
     iconName: 'ShieldCheck',
@@ -317,7 +339,7 @@ export const AURORA_APPS: AppItem[] = [
 ];
 
 export const INITIAL_APP_IDS = [
-  'inbox', 'docs', 'drive', 'chat', 'meet', 'calendar', 'notes', 'reminders',
+  'ai-assistant', 'recycling-bin', 'approvals', 'inbox', 'docs', 'drive', 'chat', 'meet', 'calendar', 'notes', 'reminders',
   'reports', 'converter', 'feed', 'draw', 'whiteboard', 'calculator', 'snipper', 'flowchart'
 ];
 

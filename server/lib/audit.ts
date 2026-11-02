@@ -62,26 +62,48 @@ export function computeFieldDiff(
   // Flatten layout fields for easy lookup
   const fieldMap = new Map<string, any>();
   const flatten = (fields: any[]) => {
+    if (!Array.isArray(fields)) return;
     for (const f of fields) {
-      if (f && f.id) {
-        fieldMap.set(f.id, f);
+      if (f && typeof f === 'object') {
+        if (f.id) {
+          fieldMap.set(f.id, f);
+        }
         if (Array.isArray(f.fields)) {
           flatten(f.fields);
+        }
+        if (Array.isArray(f.columns)) {
+          flatten(f.columns);
         }
       }
     }
   };
   flatten(layoutFields);
 
-  // Combine unique keys from both objects, ignoring private metadata keys
+  // Combine unique keys from both objects, ignoring private metadata and specialized keys
   const keys = new Set([...Object.keys(oldData || {}), ...Object.keys(newData || {})]);
-  const ignoredKeys = new Set(['_record_key', '_comments', '_path', '_formId', '_formName', '_submissionSource', 'status', 'workflowState']);
+  const ignoredKeys = new Set([
+    '_record_key', 
+    '_comments', 
+    '_path', 
+    '_formId', 
+    '_formName', 
+    '_submissionSource', 
+    'status', 
+    'workflowState',
+    'assigneeId',
+    'participantIds'
+  ]);
 
   for (const key of keys) {
     if (ignoredKeys.has(key)) continue;
 
     const oldVal = oldData ? oldData[key] : undefined;
     const newVal = newData ? newData[key] : undefined;
+
+    // Skip if both are effectively empty
+    const isOldEmpty = oldVal === undefined || oldVal === null || oldVal === '';
+    const isNewEmpty = newVal === undefined || newVal === null || newVal === '';
+    if (isOldEmpty && isNewEmpty) continue;
 
     // Deep equality check for primitives, arrays, objects
     if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {

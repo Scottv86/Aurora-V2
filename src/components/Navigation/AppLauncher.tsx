@@ -9,7 +9,13 @@ import { getEnabledApps } from '../../config/appsCatalog';
 
 export const AppLauncher = () => {
   const navigate = useNavigate();
-  const { tenant, setIsAppLauncherOpen, inboxUnreadCount, setIsCalculatorLaunchModalOpen } = usePlatform();
+  const { 
+    tenant, 
+    setIsAppLauncherOpen, 
+    inboxUnreadCount, 
+    setIsCalculatorLaunchModalOpen,
+    setIsRecyclingBinOpen 
+  } = usePlatform();
   const [searchQuery, setSearchQuery] = useState('');
 
   // Sourced from centralized apps catalog with core suite app persistence
@@ -27,6 +33,10 @@ export const AppLauncher = () => {
       setIsCalculatorLaunchModalOpen(true);
       return;
     }
+    if (app.id === 'recycling-bin' || app.id === 'recycling_bin') {
+      setIsRecyclingBinOpen(true);
+      return;
+    }
     navigate(app.to);
   };
 
@@ -36,7 +46,7 @@ export const AppLauncher = () => {
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: 400, opacity: 0 }}
       transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-      className="fixed right-0 top-16 bottom-0 w-96 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 flex flex-col z-40 shadow-2xl shadow-black/20"
+      className="fixed right-0 top-[52px] bottom-0 w-96 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 flex flex-col z-40 shadow-2xl shadow-black/20"
     >
       
       {/* Header & Search */}

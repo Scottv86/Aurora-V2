@@ -205,7 +205,7 @@ export const DockedCalculatorPanel: React.FC<DockedCalculatorPanelProps> = ({
   return (
     <aside
       style={{ width: `${width}px` }}
-      className="fixed right-0 top-16 bottom-0 z-30 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col shadow-sm select-none"
+      className="fixed right-0 top-[52px] bottom-0 z-30 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col shadow-sm select-none"
     >
       {/* Resizable Left Edge Drag Handle */}
       <div

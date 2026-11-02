@@ -54,7 +54,7 @@ import { MoveRecordModal } from '../../components/Platform/MoveRecordModal';
 import { BulkPasteRecordModal } from '../../components/Platform/BulkPasteRecordModal';
 import { RecordActivityDrawer } from '../../components/Platform/RecordActivityDrawer';
 import { TransitionRequirementsModal } from '../../components/Platform/TransitionRequirementsModal';
-import { resolveRecordNextStep, checkMissingRequiredFields, resolveRecordSlaStatus } from '../../lib/workflowProcessUtils';
+import { resolveRecordNextStep, checkMissingRequiredFields, resolveRecordSlaStatus, buildPipelineSteps } from '../../lib/workflowProcessUtils';
 import { isFieldHiddenBySecurity, isFieldMaskedBySecurity, formatMaskedFieldValue } from '../../utils/fieldSecurity';
 
 const InlineAssigneeCell = ({
@@ -893,7 +893,7 @@ export const ModuleView = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [splitStatusFilter, setSplitStatusFilter] = useState<string>('all');
   const [splitAssigneeFilter, setSplitAssigneeFilter] = useState<string>('all');
-  const [splitSortBy, setSplitSortBy] = useState<'updated' | 'created' | 'title' | 'key'>('updated');
+  const [splitSortBy, setSplitSortBy] = useState<'created' | 'updated' | 'title' | 'key'>('created');
   const { session, user } = useAuth();
   const { tenant, isLoading: platformLoading, modules, members, user: platformUser, menuConfig, isDeveloper } = usePlatform();
 
@@ -1057,6 +1057,49 @@ export const ModuleView = () => {
     return raw.filter((f: ModuleField) => !isFieldHiddenBySecurity(f.id, moduleData, platformUser || user));
   }, [moduleData, platformUser, user]);
 
+  const activeWorkflow = useMemo(() => {
+    return moduleData?.workflow || (moduleData?.workflows && moduleData.workflows[0]) || null;
+  }, [moduleData]);
+
+  const moduleStatusOptions = useMemo(() => {
+    // 1. If module has an active workflow, extract stages in DAG pipeline order
+    if (activeWorkflow && activeWorkflow.nodes && activeWorkflow.nodes.length > 0) {
+      const { stages } = buildPipelineSteps(activeWorkflow, new Set(), new Set(), false);
+      if (stages && stages.length > 0) {
+        return stages.map(s => s.name);
+      }
+      const stageNodes = activeWorkflow.nodes.filter((n: any) => 
+        n.type === 'STATUS' || n.type === 'START' || n.type === 'END' || n.isStage
+      );
+      if (stageNodes.length > 0) {
+        return stageNodes.map((n: any) => n.name);
+      }
+    }
+
+    // 2. Check if module has a status field (by id or name, but NOT generic select field!)
+    const statusField = (allFields || []).find((f: any) => 
+      f.id === 'status' || f.name?.toLowerCase() === 'status' || f.label?.toLowerCase() === 'status'
+    );
+    if (statusField?.options && Array.isArray(statusField.options) && statusField.options.length > 0) {
+      return statusField.options.map((opt: any) => typeof opt === 'string' ? opt : (opt.label || opt.value || opt.name));
+    }
+
+    // 3. Fallback: extract distinct statuses from existing records
+    const existingStatuses = new Set<string>();
+    (records || []).forEach((r: any) => {
+      const s = r.status || (r.data && r.data.status);
+      if (s && typeof s === 'string' && s.trim()) {
+        existingStatuses.add(s.trim());
+      }
+    });
+    if (existingStatuses.size > 0) {
+      return Array.from(existingStatuses);
+    }
+
+    // 4. Default fallback
+    return ['Draft', 'In Progress', 'Under Review', 'Completed', 'Archived'];
+  }, [activeWorkflow, allFields, records]);
+
   const displayFields = useMemo(() => {
     return allFields.filter((f: ModuleField) => 
       !['heading', 'divider', 'spacer', 'alert', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(f.type)
@@ -1122,7 +1165,29 @@ export const ModuleView = () => {
   useEffect(() => {
     if (recordsResult) {
       const recs = recordsResult.records || [];
-      setRecords(recs);
+      setRecords(prev => {
+        if (!prev || prev.length === 0) return recs;
+        return recs.map((incoming: any) => {
+          const local = prev.find(p => p.id === incoming.id);
+          if (!local) return incoming;
+          const localTime = new Date(local.updatedAt || 0).getTime();
+          const incomingTime = new Date(incoming.updatedAt || 0).getTime();
+          // If local has newer or equal timestamp, preserve the updated status and workflow state
+          if (localTime >= incomingTime && local.status) {
+            return {
+              ...incoming,
+              status: local.status,
+              workflowState: local.workflowState || incoming.workflowState,
+              data: {
+                ...(incoming.data || {}),
+                ...(local.data || {}),
+                status: local.status
+              }
+            };
+          }
+          return incoming;
+        });
+      });
       builderCache.set(recordsCacheKey, recs);
       if (!queueId) {
         setTotalRecords(recordsResult.total ?? recs.length);
@@ -1134,6 +1199,98 @@ export const ModuleView = () => {
   const isSessionReady = !!session?.access_token || !!(import.meta as any).env.VITE_DEV_TOKEN;
   const loading = moduleQueryLoading || !isSessionReady;
   const recordsLoading = recordsQueryLoading;
+
+  // Real-time optimistic synchronization for embedded and global record updates
+  const handleEmbeddedRecordUpdate = useCallback((updated: any) => {
+    if (!updated?.id) return;
+    const nowIso = new Date().toISOString();
+    const normalizedUpdate = {
+      ...updated,
+      updatedAt: updated.updatedAt || nowIso
+    };
+    setRecords(prev => prev.map(r => 
+      r.id === updated.id 
+        ? { 
+            ...r, 
+            ...normalizedUpdate, 
+            status: normalizedUpdate.status || r.status,
+            workflowState: normalizedUpdate.workflowState || r.workflowState,
+            data: {
+              ...(r.data || {}),
+              ...(normalizedUpdate.data || {}),
+              status: normalizedUpdate.status || r.status
+            }
+          } 
+        : r
+    ));
+    const cached = builderCache.get<Record<string, any>[]>(recordsCacheKey);
+    if (Array.isArray(cached)) {
+      builderCache.set(
+        recordsCacheKey,
+        cached.map(r => r.id === updated.id ? { 
+          ...r, 
+          ...normalizedUpdate, 
+          status: normalizedUpdate.status || r.status,
+          workflowState: normalizedUpdate.workflowState || r.workflowState,
+          data: {
+            ...(r.data || {}),
+            ...(normalizedUpdate.data || {}),
+            status: normalizedUpdate.status || r.status
+          }
+        } : r)
+      );
+    }
+  }, [recordsCacheKey]);
+
+  useEffect(() => {
+    const handleRecordUpdatedEvent = (e: any) => {
+      const detail = e.detail;
+      if (!detail?.recordId || !detail?.record) return;
+
+      const updated = detail.record;
+      const nowIso = new Date().toISOString();
+      const normalizedUpdate = {
+        ...updated,
+        updatedAt: updated.updatedAt || nowIso
+      };
+
+      setRecords(prev => prev.map(r => 
+        r.id === detail.recordId 
+          ? { 
+              ...r, 
+              ...normalizedUpdate, 
+              status: normalizedUpdate.status || r.status,
+              workflowState: normalizedUpdate.workflowState || r.workflowState,
+              data: {
+                ...(r.data || {}),
+                ...(normalizedUpdate.data || {}),
+                status: normalizedUpdate.status || r.status
+              }
+            } 
+          : r
+      ));
+      const cached = builderCache.get<Record<string, any>[]>(recordsCacheKey);
+      if (Array.isArray(cached)) {
+        builderCache.set(
+          recordsCacheKey,
+          cached.map(r => r.id === detail.recordId ? { 
+            ...r, 
+            ...normalizedUpdate, 
+            status: normalizedUpdate.status || r.status,
+            workflowState: normalizedUpdate.workflowState || r.workflowState,
+            data: {
+              ...(r.data || {}),
+              ...(normalizedUpdate.data || {}),
+              status: normalizedUpdate.status || r.status
+            }
+          } : r)
+        );
+      }
+    };
+
+    window.addEventListener('aurora:record-updated', handleRecordUpdatedEvent as EventListener);
+    return () => window.removeEventListener('aurora:record-updated', handleRecordUpdatedEvent as EventListener);
+  }, [recordsCacheKey]);
 
   const createMutation = useMutation({
     mutationFn: async (payload: any) => {
@@ -2244,26 +2401,29 @@ export const ModuleView = () => {
   };
 
   const kanbanConfig = useMemo(() => {
-    const statusField = allFields.find(f => f.type === 'select' || f.id === 'status' || f.name === 'status');
-    const stages = statusField?.options || ['Todo', 'In Progress', 'Done'];
-    const fieldId = statusField?.id || 'status';
+    const stages = moduleStatusOptions && moduleStatusOptions.length > 0
+      ? moduleStatusOptions
+      : ['Todo', 'In Progress', 'Done'];
+    const fieldId = 'status';
 
     const grouped: Record<string, any[]> = {};
-    stages.forEach(stage => {
+    stages.forEach((stage: string) => {
       grouped[stage] = [];
     });
 
-    filteredRecords.forEach(record => {
-      const val = record[fieldId] || record.status || 'Todo';
-      if (grouped[val]) {
-        grouped[val].push(record);
+    filteredRecords.forEach((record: any) => {
+      const wfNode = activeWorkflow?.nodes?.find((n: any) => n.id === record.workflowState?.currentNodeId);
+      const val = record.status || wfNode?.name || record[fieldId] || (record.data && record.data.status) || stages[0];
+      const matchedStage = stages.find((s: string) => s.toLowerCase() === String(val).toLowerCase()) || stages[0];
+      if (grouped[matchedStage]) {
+        grouped[matchedStage].push(record);
       } else {
         if (grouped[stages[0]]) grouped[stages[0]].push(record);
       }
     });
 
     return { stages, fieldId, grouped };
-  }, [allFields, filteredRecords]);
+  }, [moduleStatusOptions, filteredRecords, activeWorkflow]);
 
   const handleMoveCard = (recordId: string, newStage: string) => {
     const fieldId = kanbanConfig.fieldId;
@@ -2498,17 +2658,20 @@ export const ModuleView = () => {
     "July", "August", "September", "October", "November", "December"
   ];
 
-  const splitStatusOptions = useMemo(() => {
-    const statusField = allFields.find(f => f.type === 'select' || f.id === 'status' || f.name === 'status');
-    return statusField?.options || ['Todo', 'In Progress', 'Done', 'Archived'];
-  }, [allFields]);
+  const splitStatusOptions = moduleStatusOptions;
 
   const splitRecords = useMemo(() => {
     let result = [...filteredRecords];
     if (splitStatusFilter !== 'all') {
       result = result.filter(r => {
-        const s = r.status || (r.data && r.data.status) || (r.workflowState?.currentNodeId);
-        return String(s || '').toLowerCase() === splitStatusFilter.toLowerCase();
+        const wfNode = activeWorkflow?.nodes?.find((n: any) => n.id === r.workflowState?.currentNodeId);
+        const sName = r.status || wfNode?.name || (r.data && r.data.status);
+        const sId = r.workflowState?.currentNodeId;
+        const target = splitStatusFilter.toLowerCase();
+        return (
+          (sName && String(sName).toLowerCase() === target) ||
+          (sId && String(sId).toLowerCase() === target)
+        );
       });
     }
     if (splitAssigneeFilter !== 'all') {
@@ -2519,8 +2682,8 @@ export const ModuleView = () => {
       }
     }
     result.sort((a, b) => {
-      if (splitSortBy === 'created') {
-        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+      if (splitSortBy === 'updated') {
+        return new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime();
       }
       if (splitSortBy === 'title') {
         return (getRecordTitle(a) || '').localeCompare(getRecordTitle(b) || '');
@@ -2528,11 +2691,13 @@ export const ModuleView = () => {
       if (splitSortBy === 'key') {
         return (a._record_key || a.id || '').localeCompare(b._record_key || b.id || '');
       }
-      // default 'updated'
-      return new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime();
+      // default 'created'
+      const cDiff = new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+      if (cDiff !== 0) return cDiff;
+      return (b._record_key || b.id || '').localeCompare(a._record_key || a.id || '');
     });
     return result;
-  }, [filteredRecords, splitStatusFilter, splitAssigneeFilter, splitSortBy, getRecordTitle]);
+  }, [filteredRecords, splitStatusFilter, splitAssigneeFilter, splitSortBy, getRecordTitle, activeWorkflow]);
 
   const effectiveSelectedSplitRecordId = useMemo(() => {
     if (selectedSplitRecordId && splitRecords.some(r => r.id === selectedSplitRecordId)) {
@@ -2646,6 +2811,8 @@ export const ModuleView = () => {
   };
 
   const renderSplitView = () => {
+    const hasWorkflow = !!(moduleData?.workflow || (moduleData?.workflows && moduleData.workflows.length > 0));
+
     return (
       <div className="flex-1 w-full h-full min-h-0 flex relative overflow-hidden bg-zinc-100/50 dark:bg-zinc-950">
         {/* Left Sidebar: Record Navigator */}
@@ -2655,50 +2822,92 @@ export const ModuleView = () => {
             isSidebarCollapsed ? "w-0 overflow-hidden border-r-0" : "w-80 lg:w-96"
           )}
         >
-          {/* Rail Header */}
-          <div className="h-[124px] px-3.5 py-3 border-b border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-900/50 flex flex-col justify-between shrink-0 box-border w-full min-w-0 overflow-hidden">
-            {/* Top row: Counter, quick actions, collapse */}
-            <div className="flex items-center justify-between w-full min-w-0">
-              <div className="flex items-center gap-2 min-w-0">
+          {/* Rail Header - Exactly synchronized with RecordDetailView (54px Title Header + 46px Workflow Bar = 100px) */}
+          {hasWorkflow ? (
+            <>
+              {/* Row 1: Records Title & Collapse Button - Exactly h-[54px] with border-b to align with Record Title Header bottom border */}
+              <div className="h-[54px] px-3.5 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shrink-0 box-border w-full min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[11px] font-bold text-zinc-900 dark:text-white uppercase tracking-wider">
+                    Records
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-200/60 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-mono">
+                    {splitRecords.length}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => setIsSidebarCollapsed(true)}
+                    className="p-1.5 hover:bg-zinc-200/60 dark:hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                    title="Collapse sidebar"
+                  >
+                    <PanelLeftClose size={15} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Row 2: Search Input - Exactly h-[46px] with border-b to align with WorkflowStatusBar bottom border */}
+              <div className="h-[46px] px-3.5 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 flex items-center shrink-0 box-border w-full min-w-0">
+                <div className="relative w-full min-w-0">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" size={13} />
+                  <input
+                    type="text"
+                    placeholder="Search in records..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-8 pr-7 py-1.5 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:border-indigo-500 transition-colors shadow-2xs"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="h-[54px] px-3.5 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-2 shrink-0 box-border w-full min-w-0">
+              <div className="flex items-center gap-1.5 shrink-0">
                 <span className="text-[11px] font-bold text-zinc-900 dark:text-white uppercase tracking-wider">
                   Records
                 </span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-200/60 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-mono">
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-zinc-200/60 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-mono">
                   {splitRecords.length}
                 </span>
               </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  onClick={() => setIsSidebarCollapsed(true)}
-                  className="p-1.5 hover:bg-zinc-200/60 dark:hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors cursor-pointer"
-                  title="Collapse sidebar"
-                >
-                  <PanelLeftClose size={15} />
-                </button>
+              <div className="relative flex-1 min-w-0">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" size={13} />
+                <input
+                  type="text"
+                  placeholder="Search in records..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-8 pr-6 py-1 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:border-indigo-500 transition-colors shadow-2xs"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
               </div>
+              <button
+                onClick={() => setIsSidebarCollapsed(true)}
+                className="p-1 hover:bg-zinc-200/60 dark:hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors cursor-pointer shrink-0"
+                title="Collapse sidebar"
+              >
+                <PanelLeftClose size={15} />
+              </button>
             </div>
+          )}
 
-            {/* Search Input */}
-            <div className="relative w-full min-w-0">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" size={13} />
-              <input
-                type="text"
-                placeholder="Search in records..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-8 pr-7 py-1.5 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:border-indigo-500 transition-colors shadow-2xs"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
-                >
-                  <X size={12} />
-                </button>
-              )}
-            </div>
-
-            {/* Filter Bar */}
+          {/* Filter Bar Row - Exactly h-10 to match Tab and Details row */}
+          <div className="h-10 px-3.5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex items-center shrink-0 box-border w-full min-w-0">
             <div className="grid grid-cols-3 gap-1.5 w-full min-w-0">
               {/* Status Filter Dropdown */}
               <select
@@ -2708,8 +2917,8 @@ export const ModuleView = () => {
               >
                 <option value="all">All Status</option>
                 {splitStatusOptions.map((opt: any) => {
-                  const optVal = typeof opt === 'string' ? opt : opt.value || opt.label;
-                  const optLabel = typeof opt === 'string' ? opt : opt.label;
+                  const optVal = typeof opt === 'string' ? opt : opt.value || opt.label || opt.name;
+                  const optLabel = typeof opt === 'string' ? opt : opt.label || opt.name || opt.value;
                   return (
                     <option key={optVal} value={optVal}>{optLabel}</option>
                   );
@@ -2736,8 +2945,8 @@ export const ModuleView = () => {
                 className="w-full min-w-0 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none focus:border-indigo-500 uppercase tracking-wider cursor-pointer truncate"
                 title="Sort records"
               >
-                <option value="updated">Updated</option>
                 <option value="created">Created</option>
+                <option value="updated">Updated</option>
                 <option value="title">Title</option>
                 <option value="key">Key</option>
               </select>
@@ -2773,7 +2982,9 @@ export const ModuleView = () => {
                 const isSelected = rec.id === effectiveSelectedSplitRecordId;
                 const recTitle = getRecordTitle(rec);
                 const recKey = rec._record_key || rec.id.slice(0, 8);
-                const rawStatus = rec.status || (rec.data && rec.data.status) || (rec.workflowState?.currentNodeId) || 'Todo';
+                const activeWf = moduleData?.workflow || (moduleData?.workflows && moduleData.workflows[0]) || null;
+                const wfNode = activeWf?.nodes?.find((n: any) => n.id === rec.workflowState?.currentNodeId);
+                const rawStatus = rec.status || wfNode?.name || (rec.data && rec.data.status) || (rec.workflowState?.currentNodeId) || 'Todo';
                 const statusStyle = getSplitStatusStyle(rawStatus);
                 const assignedMember = (members || []).find((m: any) => m.id === rec.assigneeId);
                 const timeAgo = formatSplitTime(rec.updatedAt || rec.createdAt);
@@ -2883,7 +3094,7 @@ export const ModuleView = () => {
                           onCopyLink={() => handleCopyRecordLink(rec)}
                           onQuickStatus={(status) => handleQuickUpdateStatus(rec, status)}
                           onQuickAssign={(assigneeId) => handleQuickUpdateAssignee(rec, assigneeId)}
-                          statusOptions={allFields.find(f => f.type === 'select' || f.id === 'status' || f.name === 'status')?.options || ['Todo', 'In Progress', 'Done', 'Archived']}
+                          statusOptions={moduleStatusOptions}
                           members={members}
                           currentUserId={resolvedCurrentUserId}
                         />
@@ -2917,6 +3128,7 @@ export const ModuleView = () => {
                 moduleIdProp={moduleId}
                 recordIdProp={effectiveSelectedSplitRecordId}
                 isEmbedded={true}
+                onRecordUpdate={handleEmbeddedRecordUpdate}
                 onClose={() => {
                   setSelectedSplitRecordId(null);
                   queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
@@ -5419,7 +5631,7 @@ export const ModuleView = () => {
               onCopyLink={() => handleCopyRecordLink(record)}
               onQuickStatus={(status) => handleQuickUpdateStatus(record, status)}
               onQuickAssign={(assigneeId) => handleQuickUpdateAssignee(record, assigneeId)}
-              statusOptions={allFields.find(f => f.type === 'select' || f.id === 'status' || f.name === 'status')?.options || ['Todo', 'In Progress', 'Done', 'Archived']}
+              statusOptions={moduleStatusOptions}
               members={members}
               currentUserId={resolvedCurrentUserId}
             />
@@ -5433,7 +5645,7 @@ export const ModuleView = () => {
         { id: '_record_key', label: 'Key', type: 'text' as const },
         { id: '_starred', label: 'Starred', type: 'boolean' as const },
         { id: 'assigneeId', label: 'Assignee', type: 'user' as const, userOptions: members },
-        { id: 'status', label: 'Status', type: 'status' as const, options: allFields.find(f => f.type === 'select' || f.id === 'status' || f.name === 'status')?.options || ['Todo', 'In Progress', 'Done', 'Archived'] },
+        { id: 'status', label: 'Status', type: 'status' as const, options: moduleStatusOptions },
         { id: 'nextStep', label: 'Next Step', type: 'text' as const },
         { id: 'createdAt', label: 'Created At', type: 'date' as const },
         { id: 'updatedAt', label: 'Updated At', type: 'date' as const }
@@ -5496,7 +5708,7 @@ export const ModuleView = () => {
           pageSizeOptions={[10, 25, 50, 100]}
           enableSelection={true}
           assigneeOptions={members}
-          statusOptions={allFields.find(f => f.type === 'select' || f.id === 'status' || f.name === 'status')?.options || ['Todo', 'In Progress', 'Done', 'Archived']}
+          statusOptions={moduleStatusOptions}
           onBulkStar={handleBulkStar}
           onBulkAssign={(selectedIds, _selectedItems, assigneeId, clearSelection) => {
             const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
@@ -5601,7 +5813,7 @@ export const ModuleView = () => {
     <div className="flex flex-col w-full flex-1 min-h-0 h-full bg-transparent overflow-hidden">
       
       {/* Tier 1: Consistent Breadcrumbs & Context Action Bar */}
-      <div className="sticky top-0 z-30 h-10 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between px-6 shrink-0 gap-4">
+      <div className="sticky top-0 z-30 h-9 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between px-5 shrink-0 gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <Breadcrumbs />
         </div>
@@ -5635,13 +5847,13 @@ export const ModuleView = () => {
                     type="button"
                     onClick={() => setShowMoreViewsDropdown((prev) => !prev)}
                     className={cn(
-                      'flex items-center justify-center gap-1.5 h-7.5 px-2 bg-white dark:bg-zinc-800/80 hover:bg-zinc-50 dark:hover:bg-zinc-700/80 border border-zinc-200/80 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-lg text-xs font-medium transition-all shadow-2xs group shrink-0 cursor-pointer select-none',
+                      'flex items-center justify-center gap-1.5 h-7 px-2 bg-white dark:bg-zinc-800/80 hover:bg-zinc-50 dark:hover:bg-zinc-700/80 border border-zinc-200/80 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-lg text-xs font-medium transition-all shadow-2xs group shrink-0 cursor-pointer select-none',
                       showMoreViewsDropdown && 'border-indigo-500/50 ring-2 ring-indigo-500/10 dark:bg-zinc-700/80'
                     )}
                     title={`View: ${activeLayout.label} (click to switch)`}
                     aria-label={`Current view layout is ${activeLayout.label}. Click to switch view.`}
                   >
-                    <ActiveIcon size={14} className="text-indigo-600 dark:text-indigo-400 group-hover:scale-105 transition-transform shrink-0" />
+                    <ActiveIcon size={13} className="text-indigo-600 dark:text-indigo-400 group-hover:scale-105 transition-transform shrink-0" />
                     <ChevronDown size={11} className={cn('text-zinc-400 transition-transform duration-150 shrink-0', showMoreViewsDropdown && 'rotate-180')} />
                   </button>
 
@@ -5726,10 +5938,10 @@ export const ModuleView = () => {
                 const targetUrl = `/workspace/settings/builder/${moduleData?.id || moduleId}`;
                 navigate(`${targetUrl}?returnUrl=${encodeURIComponent(currentPath)}`, { state: { returnUrl: currentPath } });
               }}
-              className="flex items-center justify-center w-7.5 h-7.5 bg-white dark:bg-zinc-800/80 hover:bg-zinc-50 dark:hover:bg-zinc-700/80 border border-zinc-200/80 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-lg text-xs font-medium transition-all shadow-2xs group shrink-0 cursor-pointer select-none"
+              className="flex items-center justify-center w-7 h-7 bg-white dark:bg-zinc-800/80 hover:bg-zinc-50 dark:hover:bg-zinc-700/80 border border-zinc-200/80 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-lg text-xs font-medium transition-all shadow-2xs group shrink-0 cursor-pointer select-none"
               title="Configure Module in Builder"
             >
-              <SlidersHorizontal size={14} className="text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-zinc-200 transition-colors shrink-0" />
+              <SlidersHorizontal size={13} className="text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-zinc-200 transition-colors shrink-0" />
             </button>
           )}
 
@@ -5764,9 +5976,9 @@ export const ModuleView = () => {
                   setActionFormErrors({});
                   setShowQuickActionModal(true);
                 }}
-                className="flex items-center gap-1.5 h-7.5 px-2.5 bg-white dark:bg-zinc-800/80 hover:bg-zinc-50 dark:hover:bg-zinc-700/80 border border-zinc-200/80 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-lg text-xs font-medium transition-all shadow-2xs cursor-pointer select-none"
+                className="flex items-center gap-1.5 h-7 px-2 bg-white dark:bg-zinc-800/80 hover:bg-zinc-50 dark:hover:bg-zinc-700/80 border border-zinc-200/80 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-lg text-xs font-medium transition-all shadow-2xs cursor-pointer select-none"
               >
-                <ActionIcon size={13} className="text-zinc-500 dark:text-zinc-400" />
+                <ActionIcon size={12} className="text-zinc-500 dark:text-zinc-400" />
                 <span>{act.label}</span>
               </button>
             );
@@ -5804,7 +6016,7 @@ export const ModuleView = () => {
                 setShowNewEntryModal(true);
                 setShowCreateDropdown(false);
               }}
-              className="flex items-center gap-1.5 h-7.5 pl-3 pr-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-l-lg font-semibold text-xs transition-all cursor-pointer select-none border-r border-indigo-700/60 active:scale-[0.98]"
+              className="flex items-center gap-1.5 h-7 pl-2.5 pr-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-l-lg font-semibold text-xs transition-all cursor-pointer select-none border-r border-indigo-700/60 active:scale-[0.98]"
             >
               <Plus size={13} />
               <span>{createForm?.settings?.workspaceButtonLabel && createForm.settings.workspaceButtonLabel !== 'New Entry' ? createForm.settings.workspaceButtonLabel : 'Create'}</span>
@@ -5814,10 +6026,10 @@ export const ModuleView = () => {
             <button
               type="button"
               onClick={() => setShowCreateDropdown(!showCreateDropdown)}
-              className="flex items-center justify-center w-6 h-7.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-r-lg text-xs transition-all cursor-pointer select-none active:scale-[0.98]"
+              className="flex items-center justify-center w-5.5 h-7 bg-indigo-600 hover:bg-indigo-500 text-white rounded-r-lg text-xs transition-all cursor-pointer select-none active:scale-[0.98]"
               title="More creation options"
             >
-              <ChevronDown size={12} className={cn("transition-transform duration-150", showCreateDropdown && "rotate-180")} />
+              <ChevronDown size={11} className={cn("transition-transform duration-150", showCreateDropdown && "rotate-180")} />
             </button>
 
             {/* Linear / Notion Dropdown Popover */}
@@ -5985,7 +6197,7 @@ export const ModuleView = () => {
       {createPortal(
         <AnimatePresence>
           {showNewEntryModal && (
-            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6">
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-6">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -5995,44 +6207,61 @@ export const ModuleView = () => {
                 setEditingRecord(null);
                 setNewEntryData({});
               }}
-              className="absolute inset-0 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-sm"
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             />
             <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] shadow-2xl flex flex-col"
+              exit={{ opacity: 0, scale: 0.96, y: 12 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="relative w-full max-w-2xl bg-white dark:bg-[#151518] border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl flex flex-col z-10 overflow-hidden ring-1 ring-black/5 dark:ring-white/5"
             >
-              <div className="p-8 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50">
-                <div className="space-y-1">
-                  <h2 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-3">
-                    <div className="p-2 bg-indigo-500/10 text-indigo-500 rounded-lg">
-                      <Plus size={20} />
+              {/* Modal Header */}
+              <div className="px-6 py-4.5 border-b border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between bg-zinc-50/70 dark:bg-zinc-900/40 shrink-0">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 shadow-2xs">
+                    <Plus size={18} strokeWidth={2.5} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-white truncate">
+                        {createForm ? createForm.name : `New ${moduleData?.name || 'Record'} Entry`}
+                      </h2>
+                      {moduleData?.name && createForm?.name !== moduleData.name && (
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200/50 dark:border-zinc-700/50 shrink-0">
+                          {moduleData.name}
+                        </span>
+                      )}
                     </div>
-                    {createForm ? createForm.name : `New ${moduleData?.name || 'Record'} Entry`}
-                  </h2>
-                  {createForm?.settings?.description && (
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400 font-medium leading-relaxed pl-12">
-                      {createForm.settings.description}
-                    </p>
-                  )}
+                    {createForm?.settings?.description ? (
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
+                        {createForm.settings.description}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5">
+                        Fill in the details below to create a new record.
+                      </p>
+                    )}
+                  </div>
                 </div>
                 <button 
+                  type="button"
                   onClick={() => {
                     setShowNewEntryModal(false);
                     setEditingRecord(null);
                     setNewEntryData({});
                   }}
-                  className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800/80 transition-colors cursor-pointer shrink-0 ml-3"
+                  title="Close"
                 >
-                  <X size={20} />
+                  <X size={16} />
                 </button>
               </div>
-              <div className="p-8 max-h-[60vh] overflow-y-auto custom-scrollbar w-full">
+              <div className="p-6 max-h-[62vh] overflow-y-auto custom-scrollbar w-full">
                 {createForm ? (
-                  <div className="space-y-10 w-full">
+                  <div className="space-y-6 w-full">
                     {createForm.isMultistep && (
-                      <div className="flex items-center gap-4 px-2 mb-8 overflow-x-auto no-scrollbar py-2 border-b border-zinc-100 dark:border-zinc-800">
+                      <div className="flex items-center gap-2 px-1 mb-5 pb-4 border-b border-zinc-100 dark:border-zinc-800/80 overflow-x-auto no-scrollbar">
                         {createForm.steps
                           .filter((s: any) => isFieldVisible(s, newEntryData, visibilityContext))
                           .map((step: any, idx: number, list: any[]) => {
@@ -6041,20 +6270,29 @@ export const ModuleView = () => {
                             const isCompleted = activeIdx > idx;
 
                             return (
-                              <div key={step.id} className="flex items-center gap-3 shrink-0">
+                              <div key={step.id} className="flex items-center gap-2 shrink-0">
                                 <div className={cn(
-                                  "w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black transition-all duration-300",
-                                  isActive ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/30" : 
-                                  isCompleted ? "bg-emerald-500 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"
+                                  "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
+                                  isActive 
+                                    ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30" 
+                                    : isCompleted 
+                                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20" 
+                                      : "bg-zinc-100 dark:bg-zinc-800/60 text-zinc-400 dark:text-zinc-500 border border-transparent"
                                 )}>
-                                  {isCompleted ? <LucideIcons.Check size={12} /> : idx + 1}
+                                  <span className={cn(
+                                    "w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold",
+                                    isActive 
+                                      ? "bg-indigo-600 text-white" 
+                                      : isCompleted 
+                                        ? "bg-emerald-500 text-white" 
+                                        : "bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300"
+                                  )}>
+                                    {isCompleted ? <LucideIcons.Check size={10} strokeWidth={3} /> : idx + 1}
+                                  </span>
+                                  <span>{step.title}</span>
                                 </div>
-                                <span className={cn(
-                                  "text-[9px] font-black uppercase tracking-widest transition-colors",
-                                  isActive ? "text-zinc-900 dark:text-white" : "text-zinc-400"
-                                )}>{step.title}</span>
                                 {idx < list.length - 1 && (
-                                  <div className="w-8 h-px bg-zinc-200 dark:bg-zinc-800 ml-2" />
+                                  <div className="w-4 h-px bg-zinc-200 dark:bg-zinc-800" />
                                 )}
                               </div>
                             );
@@ -6062,7 +6300,7 @@ export const ModuleView = () => {
                       </div>
                     )}
 
-                    <div className="grid grid-cols-12 gap-x-8 gap-y-8 w-full font-sans select-none">
+                    <div className="grid grid-cols-12 gap-x-5 gap-y-4 w-full font-sans select-none">
                       {(() => {
                         const currentStep = createForm.isMultistep 
                           ? createForm.steps.find((s: any) => s.id === activeStepId)
@@ -6083,37 +6321,41 @@ export const ModuleView = () => {
 
                           return (
                             <div key={fObj.id} className={cn(
-                              "space-y-2",
-                              fObj.width === 'half' ? "col-span-6" : "col-span-12"
+                              "flex flex-col",
+                              fObj.width === 'half' ? "col-span-12 sm:col-span-6" : "col-span-12"
                             )}>
                               {isVisual ? (
-                                <div className="py-2">
+                                <div className="py-1">
                                   {fObj.type === 'heading' && (
-                                    <h4 className="font-bold text-zinc-900 dark:text-white mt-2 text-xl">{fObj.labelOverride || 'Section Heading'}</h4>
+                                    <h4 className="font-bold text-zinc-900 dark:text-white text-sm pt-2 pb-1 border-b border-zinc-100 dark:border-zinc-800/80 mb-2 flex items-center gap-2">
+                                      {fObj.labelOverride || 'Section Heading'}
+                                    </h4>
                                   )}
                                   {fObj.type === 'divider' && (
                                     <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800 my-2" />
                                   )}
                                   {fObj.type === 'spacer' && (
-                                    <div style={{ height: fObj.height === 'sm' ? 16 : fObj.height === 'lg' ? 64 : fObj.height === 'xl' ? 128 : 32 }} />
+                                    <div style={{ height: fObj.height === 'sm' ? 12 : fObj.height === 'lg' ? 40 : fObj.height === 'xl' ? 64 : 20 }} />
                                   )}
                                   {fObj.type === 'html-text' && (
-                                    <div className="text-sm text-zinc-500 leading-relaxed prose dark:prose-invert max-w-none">
+                                    <div className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed prose dark:prose-invert max-w-none">
                                       {fObj.labelOverride || 'Text content goes here...'}
                                     </div>
                                   )}
                                 </div>
                               ) : (
                                 <>
-                                  <label className="text-xs font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 mb-2 relative group/label">
-                                    {labelOverride}
-                                    {isRequired && <span className="text-rose-500">*</span>}
+                                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider flex items-center justify-between gap-1.5 mb-1.5 relative group/label">
+                                    <span className="flex items-center gap-1.5">
+                                      <span>{labelOverride}</span>
+                                      {isRequired && <span className="text-rose-500 font-bold">*</span>}
+                                    </span>
                                     {field?.tooltip && (
                                       <div className="relative cursor-help">
-                                        <LucideIcons.HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-                                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                        <LucideIcons.HelpCircle size={11} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
+                                        <div className="absolute bottom-full right-0 mb-1.5 px-2.5 py-1.5 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
                                           {field.tooltip}
-                                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-zinc-900" />
+                                          <div className="absolute top-full right-2 border-4 border-transparent border-t-zinc-900" />
                                         </div>
                                       </div>
                                     )}
@@ -6124,9 +6366,10 @@ export const ModuleView = () => {
                                     onChange={(val, metadata) => handleFieldChange(field!.id, val, metadata)}
                                     recordData={newEntryData}
                                     readonly={isReadOnly}
+                                    allFields={allFields}
                                   />
                                   {field?.helperText && (
-                                    <p className="text-[10px] text-zinc-500 mt-0.5 font-medium absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{field.helperText}</p>
+                                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1 font-medium leading-tight">{field.helperText}</p>
                                   )}
                                 </>
                               )}
@@ -6139,20 +6382,20 @@ export const ModuleView = () => {
                 ) : (
                   <>
                     {visibleTabs && visibleTabs.length > 0 && (
-                      <div className="flex gap-2 mb-8 p-1.5 bg-zinc-100 dark:bg-zinc-950/50 rounded-2xl overflow-x-auto no-scrollbar">
+                      <div className="flex gap-1.5 mb-5 p-1 bg-zinc-100 dark:bg-zinc-900/60 rounded-xl overflow-x-auto no-scrollbar border border-zinc-200/60 dark:border-zinc-800/60">
                         {visibleTabs.map((tab: any) => (
                           <button
                             key={tab.id}
                             onClick={() => setActiveTabId(tab.id)}
                             className={cn(
-                              "px-6 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap flex items-center gap-2",
+                              "px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer",
                               activeTabId === tab.id
-                                ? "bg-white dark:bg-zinc-900 text-indigo-500 shadow-xl shadow-indigo-500/5"
+                                ? "bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 shadow-2xs font-bold"
                                 : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
                             )}
                           >
                             {interfaceSettings.detail?.showTabIcons && (
-                              <DynamicIcon name={tab.iconName || 'Layout'} size={14} className="shrink-0" />
+                              <DynamicIcon name={tab.iconName || 'Layout'} size={13} className="shrink-0" />
                             )}
                             {tab.label}
                           </button>
@@ -6160,7 +6403,7 @@ export const ModuleView = () => {
                       </div>
                     )}
                     {moduleData?.layout ? (
-                      <div className="grid grid-cols-12 gap-x-8 gap-y-8 w-full">
+                      <div className="grid grid-cols-12 gap-x-5 gap-y-4 w-full">
                         {(moduleData.layout || [])
                           .filter((field: ModuleField) => {
                             if (visibleTabs.length === 0) return true;
@@ -6176,13 +6419,13 @@ export const ModuleView = () => {
                                 <div 
                                   key={field.id} 
                                   className={cn(
-                                    "space-y-2",
+                                    "flex flex-col",
                                     field.colSpan === 1 ? "col-span-1" :
                                     field.colSpan === 2 ? "col-span-2" :
                                     field.colSpan === 3 ? "col-span-3" :
                                     field.colSpan === 4 ? "col-span-4" :
                                     field.colSpan === 5 ? "col-span-5" :
-                                    field.colSpan === 6 ? "col-span-6" :
+                                    field.colSpan === 6 ? "col-span-12 sm:col-span-6" :
                                     field.colSpan === 7 ? "col-span-7" :
                                     field.colSpan === 8 ? "col-span-8" :
                                     field.colSpan === 9 ? "col-span-9" :
@@ -6196,18 +6439,18 @@ export const ModuleView = () => {
                                 >
                                 {field.type === 'heading' ? (
                                   <h4 className={cn(
-                                    "font-bold text-zinc-900 dark:text-white mt-2",
-                                    field.options?.[0] === 'h1' ? "text-2xl" :
-                                    field.options?.[0] === 'h3' ? "text-lg" :
-                                    field.options?.[0] === 'h4' ? "text-base" : "text-xl"
+                                    "font-bold text-zinc-900 dark:text-white pt-2 pb-1 border-b border-zinc-100 dark:border-zinc-800/80 mb-2 flex items-center gap-2",
+                                    field.options?.[0] === 'h1' ? "text-xl" :
+                                    field.options?.[0] === 'h3' ? "text-sm" :
+                                    field.options?.[0] === 'h4' ? "text-xs" : "text-base"
                                   )}>{field.label}</h4>
                                 ) : field.type === 'divider' ? (
                                   <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800 my-2" />
                                 ) : field.type === 'spacer' ? (
-                                  <div className="w-full h-8" />
+                                  <div className="w-full h-6" />
                                 ) : field.type === 'alert' ? (
                                   <div className={cn(
-                                    "p-4 rounded-xl border text-sm",
+                                    "p-3 rounded-xl border text-xs",
                                     field.options?.[0] === 'success' ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400" :
                                     field.options?.[0] === 'warning' ? "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400" :
                                     field.options?.[0] === 'error' ? "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400" :
@@ -6217,19 +6460,19 @@ export const ModuleView = () => {
                                   </div>
                                 ) : ['fieldGroup', 'group', 'card', 'accordion', 'tabs_nested'].includes(field.type) ? (
                                   <CollapsibleFieldGroup field={field}>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                                       {(field.fields || []).map((nestedField: any) => {
                                         if (!isFieldVisible(nestedField, newEntryData[field.id] || {}, visibilityContext)) return null;
                                         return (
-                                        <div key={nestedField.id} className="space-y-2">
-                                          <label className="text-xs font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
-                                            {nestedField.label}
+                                        <div key={nestedField.id} className="flex flex-col">
+                                          <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider flex items-center justify-between gap-1.5 mb-1.5 relative group/label">
+                                            <span>{nestedField.label}</span>
                                             {nestedField.tooltip && (
                                               <div className="relative cursor-help">
-                                                <LucideIcons.HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-                                                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                                <LucideIcons.HelpCircle size={11} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
+                                                <div className="absolute bottom-full right-0 mb-1.5 px-2.5 py-1.5 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
                                                   {nestedField.tooltip}
-                                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-zinc-900" />
+                                                  <div className="absolute top-full right-2 border-4 border-transparent border-t-zinc-900" />
                                                 </div>
                                               </div>
                                             )}
@@ -6243,6 +6486,7 @@ export const ModuleView = () => {
                                             })()}
                                             onChange={(val, metadata) => handleFieldChange(nestedField.id, val, metadata)}
                                             recordData={newEntryData[field.id] || {}}
+                                            allFields={allFields}
                                           />
                                         </div>
                                       )})}
@@ -6259,31 +6503,34 @@ export const ModuleView = () => {
                                   </CollapsibleFieldGroup>
                                 ) : (
                                   <>
-                                    <label className="text-xs font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 mb-2 relative group/label">
-                                      {field.label}
-                                      {field.required && <span className="text-rose-500">*</span>}
+                                    <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider flex items-center justify-between gap-1.5 mb-1.5 relative group/label">
+                                      <span className="flex items-center gap-1.5">
+                                        <span>{field.label}</span>
+                                        {field.required && <span className="text-rose-500 font-bold">*</span>}
+                                      </span>
                                       {field.tooltip && (
                                         <div className="relative cursor-help">
-                                          <LucideIcons.HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-                                          <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                          <LucideIcons.HelpCircle size={11} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
+                                          <div className="absolute bottom-full right-0 mb-1.5 px-2.5 py-1.5 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
                                             {field.tooltip}
-                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-zinc-900" />
+                                            <div className="absolute top-full right-2 border-4 border-transparent border-t-zinc-900" />
                                           </div>
                                         </div>
                                       )}
                                     </label>
-                                      <FieldInput 
-                                        field={field}
-                                        value={(() => {
-                                        const val = newEntryData[field.id];
-                                        if (val !== undefined) return val;
-                                        return calculateDefaultValue(field, newEntryData);
-                                      })()}
-                                        onChange={(val, metadata) => handleFieldChange(field.id, val, metadata)}
-                                        recordData={newEntryData}
-                                      />
+                                    <FieldInput 
+                                      field={field}
+                                      value={(() => {
+                                      const val = newEntryData[field.id];
+                                      if (val !== undefined) return val;
+                                      return calculateDefaultValue(field, newEntryData);
+                                    })()}
+                                      onChange={(val, metadata) => handleFieldChange(field.id, val, metadata)}
+                                      recordData={newEntryData}
+                                      allFields={allFields}
+                                    />
                                     {field?.helperText && (
-                                     <p className="text-[10px] text-zinc-500 mt-0.5 font-medium absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{field.helperText}</p>
+                                     <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1 font-medium leading-tight">{field.helperText}</p>
                                    )}
                                   </>
                                 )}
@@ -6299,69 +6546,89 @@ export const ModuleView = () => {
                   </>
                 )}
               </div>
-              <div className="p-8 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex gap-4">
-                {createForm?.isMultistep && activeStepId !== createForm.steps[0].id ? (
-                  <button
-                    onClick={() => {
-                      const visibleSteps = createForm.steps.filter((s: any) => isFieldVisible(s, newEntryData, visibilityContext));
-                      const currentIdx = visibleSteps.findIndex((s: any) => s.id === activeStepId);
-                      if (currentIdx > 0) {
-                        setActiveStepId(visibleSteps[currentIdx - 1].id);
-                      }
-                    }}
-                    className="flex-1 py-4 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 transition-colors uppercase tracking-widest text-xs"
-                  >
-                    Back
-                  </button>
-                ) : (
-                  <button 
-                    onClick={() => {
-                      setShowNewEntryModal(false);
-                      setEditingRecord(null);
-                      setNewEntryData({});
-                    }}
-                    className="flex-1 py-4 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                )}
-                <button 
-                  onClick={async () => {
-                    if (createForm?.isMultistep) {
-                      // Validation
-                      const currentStep = createForm.steps.find((s: any) => s.id === activeStepId);
-                      const fieldsToValidate = currentStep ? currentStep.fields : [];
-                      let hasErrors = false;
-                      fieldsToValidate.forEach((fObj: any) => {
-                        if (fObj.id.startsWith('visual-')) return;
-                        if (!isFieldVisible(fObj, newEntryData, visibilityContext)) return;
-                        const field = allFields.find(f => f.id === fObj.id);
-                        const isRequired = fObj.required || field?.required;
-                        const value = newEntryData[fObj.id];
-                        if (isRequired && (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0))) {
-                          hasErrors = true;
-                        }
-                      });
-                      if (hasErrors) {
-                        toast.error('Please fill in all required fields.');
-                        return;
-                      }
+              <div className="px-6 py-4 border-t border-zinc-100 dark:border-zinc-800/80 bg-zinc-50/70 dark:bg-zinc-900/40 flex items-center justify-between gap-3 shrink-0">
+                <div className="text-[11px] text-zinc-400 dark:text-zinc-500 font-medium hidden sm:flex items-center gap-1.5">
+                  <span className="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700/80 text-[10px] font-mono text-zinc-500 dark:text-zinc-400 shadow-2xs">Esc</span>
+                  <span>to cancel</span>
+                </div>
 
-                      const visibleSteps = createForm.steps.filter((s: any) => isFieldVisible(s, newEntryData, visibilityContext));
-                      const currentIdx = visibleSteps.findIndex((s: any) => s.id === activeStepId);
-                      if (currentIdx < visibleSteps.length - 1) {
-                        setActiveStepId(visibleSteps[currentIdx + 1].id);
-                        return;
+                <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+                  {createForm?.isMultistep && activeStepId !== createForm.steps[0].id ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const visibleSteps = createForm.steps.filter((s: any) => isFieldVisible(s, newEntryData, visibilityContext));
+                        const currentIdx = visibleSteps.findIndex((s: any) => s.id === activeStepId);
+                        if (currentIdx > 0) {
+                          setActiveStepId(visibleSteps[currentIdx - 1].id);
+                        }
+                      }}
+                      className="px-4 h-9 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700/80 border border-zinc-200 dark:border-zinc-700 rounded-xl font-semibold text-xs text-zinc-700 dark:text-zinc-200 transition-all cursor-pointer shadow-2xs"
+                    >
+                      Back
+                    </button>
+                  ) : (
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setShowNewEntryModal(false);
+                        setEditingRecord(null);
+                        setNewEntryData({});
+                      }}
+                      className="px-4 h-9 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700/80 border border-zinc-200 dark:border-zinc-700 rounded-xl font-semibold text-xs text-zinc-700 dark:text-zinc-200 transition-all cursor-pointer shadow-2xs"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                  <button 
+                    type="button"
+                    onClick={async () => {
+                      if (createForm?.isMultistep) {
+                        // Validation
+                        const currentStep = createForm.steps.find((s: any) => s.id === activeStepId);
+                        const fieldsToValidate = currentStep ? currentStep.fields : [];
+                        let hasErrors = false;
+                        fieldsToValidate.forEach((fObj: any) => {
+                          if (fObj.id.startsWith('visual-')) return;
+                          if (!isFieldVisible(fObj, newEntryData, visibilityContext)) return;
+                          const field = allFields.find(f => f.id === fObj.id);
+                          const isRequired = fObj.required || field?.required;
+                          const value = newEntryData[fObj.id];
+                          if (isRequired && (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0))) {
+                            hasErrors = true;
+                          }
+                        });
+                        if (hasErrors) {
+                          toast.error('Please fill in all required fields.');
+                          return;
+                        }
+
+                        const visibleSteps = createForm.steps.filter((s: any) => isFieldVisible(s, newEntryData, visibilityContext));
+                        const currentIdx = visibleSteps.findIndex((s: any) => s.id === activeStepId);
+                        if (currentIdx < visibleSteps.length - 1) {
+                          setActiveStepId(visibleSteps[currentIdx + 1].id);
+                          return;
+                        }
                       }
-                    }
-                    handleCreateEntry();
-                  }}
-                  disabled={isSubmitting}
-                  className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {isSubmitting && <LucideIcons.Loader2 size={18} className="animate-spin" />}
-                  {isSubmitting ? 'Saving...' : (createForm?.isMultistep && activeStepId !== createForm.steps[createForm.steps.length - 1].id ? 'Continue' : (createForm?.settings?.submitLabel || 'Create Entry'))}
-                </button>
+                      handleCreateEntry();
+                    }}
+                    disabled={isSubmitting}
+                    className="px-5 h-9 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white rounded-xl font-semibold text-xs transition-all shadow-sm shadow-indigo-500/25 disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <LucideIcons.Loader2 size={14} className="animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <span>
+                        {createForm?.isMultistep && activeStepId !== createForm.steps[createForm.steps.length - 1].id 
+                          ? 'Continue' 
+                          : (createForm?.settings?.submitLabel || 'Create Record')}
+                      </span>
+                    )}
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>
@@ -6373,7 +6640,7 @@ export const ModuleView = () => {
       {createPortal(
         <AnimatePresence>
           {showQuickActionModal && (
-            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6">
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-6">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -6384,38 +6651,49 @@ export const ModuleView = () => {
                 setActionForm(null);
                 setActionFormData({});
               }}
-              className="absolute inset-0 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-sm"
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             />
             <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-3xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] shadow-2xl flex flex-col z-10 animate-in zoom-in-95 duration-350"
+              exit={{ opacity: 0, scale: 0.96, y: 12 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="relative w-full max-w-2xl bg-white dark:bg-[#151518] border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl flex flex-col z-10 overflow-hidden ring-1 ring-black/5 dark:ring-white/5"
             >
-              <div className="p-8 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50">
-                <h2 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-3">
-                  <div className="p-2 bg-indigo-500/10 text-indigo-500 rounded-lg">
-                    <LucideIcons.Zap size={20} />
+              {/* Modal Header */}
+              <div className="px-6 py-4.5 border-b border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between bg-zinc-50/70 dark:bg-zinc-900/40 shrink-0">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 shadow-2xs">
+                    <LucideIcons.Zap size={18} strokeWidth={2.5} />
                   </div>
-                  Quick Action: {activeQuickAction?.label}
-                </h2>
+                  <div className="min-w-0">
+                    <h2 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-white truncate">
+                      {activeQuickAction?.label || 'Quick Action'}
+                    </h2>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
+                      {actionForm?.settings?.description || 'Execute this action on the workspace module.'}
+                    </p>
+                  </div>
+                </div>
                 <button 
+                  type="button"
                   onClick={() => {
                     setShowQuickActionModal(false);
                     setActiveQuickAction(null);
                     setActionForm(null);
                     setActionFormData({});
                   }}
-                  className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800/80 transition-colors cursor-pointer shrink-0 ml-3"
+                  title="Close"
                 >
-                  <X size={20} />
+                  <X size={16} />
                 </button>
               </div>
-              <div className="p-8 max-h-[60vh] overflow-y-auto custom-scrollbar w-full">
+              <div className="p-6 max-h-[62vh] overflow-y-auto custom-scrollbar w-full">
                 {actionForm ? (
-                  <div className="space-y-10 w-full">
+                  <div className="space-y-6 w-full">
                     {actionForm.isMultistep && (
-                      <div className="flex items-center gap-4 px-2 mb-8 overflow-x-auto no-scrollbar py-2 border-b border-zinc-100 dark:border-zinc-800">
+                      <div className="flex items-center gap-2 px-1 mb-5 pb-4 border-b border-zinc-100 dark:border-zinc-800/80 overflow-x-auto no-scrollbar">
                         {actionForm.steps
                           .filter((s: any) => isFieldVisible(s, actionFormData, visibilityContext))
                           .map((step: any, idx: number, list: any[]) => {
@@ -6424,20 +6702,29 @@ export const ModuleView = () => {
                             const isCompleted = activeIdx > idx;
 
                             return (
-                              <div key={step.id} className="flex items-center gap-3 shrink-0">
+                              <div key={step.id} className="flex items-center gap-2 shrink-0">
                                 <div className={cn(
-                                  "w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black transition-all duration-300",
-                                  isActive ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/30" : 
-                                  isCompleted ? "bg-emerald-500 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"
+                                  "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
+                                  isActive 
+                                    ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30" 
+                                    : isCompleted 
+                                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20" 
+                                      : "bg-zinc-100 dark:bg-zinc-800/60 text-zinc-400 dark:text-zinc-500 border border-transparent"
                                 )}>
-                                  {isCompleted ? <LucideIcons.Check size={12} /> : idx + 1}
+                                  <span className={cn(
+                                    "w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold",
+                                    isActive 
+                                      ? "bg-indigo-600 text-white" 
+                                      : isCompleted 
+                                        ? "bg-emerald-500 text-white" 
+                                        : "bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300"
+                                  )}>
+                                    {isCompleted ? <LucideIcons.Check size={10} strokeWidth={3} /> : idx + 1}
+                                  </span>
+                                  <span>{step.title}</span>
                                 </div>
-                                <span className={cn(
-                                  "text-[9px] font-black uppercase tracking-widest transition-colors",
-                                  isActive ? "text-zinc-900 dark:text-white" : "text-zinc-400"
-                                )}>{step.title}</span>
                                 {idx < list.length - 1 && (
-                                  <div className="w-8 h-px bg-zinc-200 dark:bg-zinc-800 ml-2" />
+                                  <div className="w-4 h-px bg-zinc-200 dark:bg-zinc-800" />
                                 )}
                               </div>
                             );
@@ -6445,7 +6732,7 @@ export const ModuleView = () => {
                       </div>
                     )}
 
-                    <div className="grid grid-cols-12 gap-x-8 gap-y-8 w-full font-sans select-none">
+                    <div className="grid grid-cols-12 gap-x-5 gap-y-4 w-full font-sans select-none">
                       {(() => {
                         const currentStep = actionForm.isMultistep 
                           ? actionForm.steps.find((s: any) => s.id === actionStepId)
@@ -6467,37 +6754,41 @@ export const ModuleView = () => {
 
                           return (
                             <div key={fObj.id} className={cn(
-                              "space-y-2",
-                              fObj.width === 'half' ? "col-span-6" : "col-span-12"
+                              "flex flex-col",
+                              fObj.width === 'half' ? "col-span-12 sm:col-span-6" : "col-span-12"
                             )}>
                               {isVisual ? (
-                                <div className="py-2 animate-in fade-in duration-300">
+                                <div className="py-1">
                                   {fObj.type === 'heading' && (
-                                    <h4 className="font-bold text-zinc-900 dark:text-white mt-2 text-xl">{fObj.labelOverride || 'Section Heading'}</h4>
+                                    <h4 className="font-bold text-zinc-900 dark:text-white text-sm pt-2 pb-1 border-b border-zinc-100 dark:border-zinc-800/80 mb-2 flex items-center gap-2">
+                                      {fObj.labelOverride || 'Section Heading'}
+                                    </h4>
                                   )}
                                   {fObj.type === 'divider' && (
                                     <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800 my-2" />
                                   )}
                                   {fObj.type === 'spacer' && (
-                                    <div style={{ height: fObj.height === 'sm' ? 16 : fObj.height === 'lg' ? 64 : fObj.height === 'xl' ? 128 : 32 }} />
+                                    <div style={{ height: fObj.height === 'sm' ? 12 : fObj.height === 'lg' ? 40 : fObj.height === 'xl' ? 64 : 20 }} />
                                   )}
                                   {fObj.type === 'html-text' && (
-                                    <div className="text-sm text-zinc-500 leading-relaxed prose dark:prose-invert max-w-none">
+                                    <div className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed prose dark:prose-invert max-w-none">
                                       {fObj.labelOverride || 'Text content goes here...'}
                                     </div>
                                   )}
                                 </div>
                               ) : (
                                 <>
-                                  <label className="text-xs font-black text-zinc-500 dark:text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 mb-2 relative group/label">
-                                    {labelOverride}
-                                    {isRequired && <span className="text-rose-500">*</span>}
+                                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider flex items-center justify-between gap-1.5 mb-1.5 relative group/label">
+                                    <span className="flex items-center gap-1.5">
+                                      <span>{labelOverride}</span>
+                                      {isRequired && <span className="text-rose-500 font-bold">*</span>}
+                                    </span>
                                     {field?.tooltip && (
                                       <div className="relative cursor-help">
-                                        <LucideIcons.HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-                                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                        <LucideIcons.HelpCircle size={11} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
+                                        <div className="absolute bottom-full right-0 mb-1.5 px-2.5 py-1.5 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
                                           {field.tooltip}
-                                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-zinc-900" />
+                                          <div className="absolute top-full right-2 border-4 border-transparent border-t-zinc-900" />
                                         </div>
                                       </div>
                                     )}
@@ -6523,7 +6814,7 @@ export const ModuleView = () => {
                                     <p className="text-[10px] text-rose-500 mt-1 font-semibold">{error}</p>
                                   )}
                                   {field?.helperText && !error && (
-                                    <p className="text-[10px] text-zinc-500 mt-0.5 font-medium absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{field.helperText}</p>
+                                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1 font-medium leading-tight">{field.helperText}</p>
                                   )}
                                 </>
                               )}
@@ -6534,78 +6825,98 @@ export const ModuleView = () => {
                     </div>
                   </div>
                 ) : (
-                  <div className="text-center py-12 text-zinc-500 italic">
+                  <div className="text-center py-12 text-zinc-500 italic text-xs">
                     No action form layout configured. Click Submit to execute.
                   </div>
                 )}
               </div>
-              <div className="p-8 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex gap-4">
-                {actionForm?.isMultistep && actionStepId !== actionForm.steps[0].id ? (
-                  <button
-                    onClick={() => {
-                      const visibleSteps = actionForm.steps.filter((s: any) => isFieldVisible(s, actionFormData, visibilityContext));
-                      const currentIdx = visibleSteps.findIndex((s: any) => s.id === actionStepId);
-                      if (currentIdx > 0) {
-                        setActionStepId(visibleSteps[currentIdx - 1].id);
-                      }
-                    }}
-                    className="flex-1 py-4 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 transition-colors uppercase tracking-widest text-xs"
-                  >
-                    Back
-                  </button>
-                ) : (
-                  <button 
-                    onClick={() => {
-                      setShowQuickActionModal(false);
-                      setActiveQuickAction(null);
-                      setActionForm(null);
-                      setActionFormData({});
-                    }}
-                    className="flex-1 py-4 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl font-bold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                )}
-                <button 
-                  onClick={async () => {
-                    if (actionForm?.isMultistep) {
-                      // Validation
-                      const currentStep = actionForm.steps.find((s: any) => s.id === actionStepId);
-                      const fieldsToValidate = currentStep ? currentStep.fields : [];
-                      let hasErrors = false;
-                      const errors: Record<string, string> = {};
-                      fieldsToValidate.forEach((fObj: any) => {
-                        if (fObj.id.startsWith('visual-')) return;
-                        if (!isFieldVisible(fObj, actionFormData, visibilityContext)) return;
-                        const field = allFields.find(f => f.id === fObj.id);
-                        const isRequired = fObj.required || field?.required;
-                        const value = actionFormData[fObj.id];
-                        if (isRequired && (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0))) {
-                          hasErrors = true;
-                          errors[fObj.id] = 'This field is required';
-                        }
-                      });
-                      if (hasErrors) {
-                        setActionFormErrors(errors);
-                        toast.error('Please fill in all required fields.');
-                        return;
-                      }
+              <div className="px-6 py-4 border-t border-zinc-100 dark:border-zinc-800/80 bg-zinc-50/70 dark:bg-zinc-900/40 flex items-center justify-between gap-3 shrink-0">
+                <div className="text-[11px] text-zinc-400 dark:text-zinc-500 font-medium hidden sm:flex items-center gap-1.5">
+                  <span className="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700/80 text-[10px] font-mono text-zinc-500 dark:text-zinc-400 shadow-2xs">Esc</span>
+                  <span>to cancel</span>
+                </div>
 
-                      const visibleSteps = actionForm.steps.filter((s: any) => isFieldVisible(s, actionFormData, visibilityContext));
-                      const currentIdx = visibleSteps.findIndex((s: any) => s.id === actionStepId);
-                      if (currentIdx < visibleSteps.length - 1) {
-                        setActionStepId(visibleSteps[currentIdx + 1].id);
-                        return;
+                <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+                  {actionForm?.isMultistep && actionStepId !== actionForm.steps[0].id ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const visibleSteps = actionForm.steps.filter((s: any) => isFieldVisible(s, actionFormData, visibilityContext));
+                        const currentIdx = visibleSteps.findIndex((s: any) => s.id === actionStepId);
+                        if (currentIdx > 0) {
+                          setActionStepId(visibleSteps[currentIdx - 1].id);
+                        }
+                      }}
+                      className="px-4 h-9 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700/80 border border-zinc-200 dark:border-zinc-700 rounded-xl font-semibold text-xs text-zinc-700 dark:text-zinc-200 transition-all cursor-pointer shadow-2xs"
+                    >
+                      Back
+                    </button>
+                  ) : (
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setShowQuickActionModal(false);
+                        setActiveQuickAction(null);
+                        setActionForm(null);
+                        setActionFormData({});
+                      }}
+                      className="px-4 h-9 bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700/80 border border-zinc-200 dark:border-zinc-700 rounded-xl font-semibold text-xs text-zinc-700 dark:text-zinc-200 transition-all cursor-pointer shadow-2xs"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                  <button 
+                    type="button"
+                    onClick={async () => {
+                      if (actionForm?.isMultistep) {
+                        // Validation
+                        const currentStep = actionForm.steps.find((s: any) => s.id === actionStepId);
+                        const fieldsToValidate = currentStep ? currentStep.fields : [];
+                        let hasErrors = false;
+                        const errors: Record<string, string> = {};
+                        fieldsToValidate.forEach((fObj: any) => {
+                          if (fObj.id.startsWith('visual-')) return;
+                          if (!isFieldVisible(fObj, actionFormData, visibilityContext)) return;
+                          const field = allFields.find(f => f.id === fObj.id);
+                          const isRequired = fObj.required || field?.required;
+                          const value = actionFormData[fObj.id];
+                          if (isRequired && (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0))) {
+                            hasErrors = true;
+                            errors[fObj.id] = 'This field is required';
+                          }
+                        });
+                        if (hasErrors) {
+                          setActionFormErrors(errors);
+                          toast.error('Please fill in all required fields.');
+                          return;
+                        }
+
+                        const visibleSteps = actionForm.steps.filter((s: any) => isFieldVisible(s, actionFormData, visibilityContext));
+                        const currentIdx = visibleSteps.findIndex((s: any) => s.id === actionStepId);
+                        if (currentIdx < visibleSteps.length - 1) {
+                          setActionStepId(visibleSteps[currentIdx + 1].id);
+                          return;
+                        }
                       }
-                    }
-                    handleSubmitQuickAction();
-                  }}
-                  disabled={isSubmitting}
-                  className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {isSubmitting && <LucideIcons.Loader2 size={18} className="animate-spin" />}
-                  {isSubmitting ? 'Submitting...' : (actionForm?.isMultistep && actionStepId !== actionForm.steps[actionForm.steps.length - 1].id ? 'Continue' : (actionForm?.settings?.submitLabel || 'Submit'))}
-                </button>
+                      handleSubmitQuickAction();
+                    }}
+                    disabled={isSubmitting}
+                    className="px-5 h-9 bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white rounded-xl font-semibold text-xs transition-all shadow-sm shadow-indigo-500/25 disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <LucideIcons.Loader2 size={14} className="animate-spin" />
+                        <span>Submitting...</span>
+                      </>
+                    ) : (
+                      <span>
+                        {actionForm?.isMultistep && actionStepId !== actionForm.steps[actionForm.steps.length - 1].id 
+                          ? 'Continue' 
+                          : (actionForm?.settings?.submitLabel || 'Submit')}
+                      </span>
+                    )}
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>
@@ -6686,6 +6997,7 @@ export const ModuleView = () => {
                   moduleIdProp={moduleId} 
                   recordIdProp={activeDetailRecordId} 
                   isModal={true} 
+                  onRecordUpdate={handleEmbeddedRecordUpdate}
                   onClose={() => {
                     setActiveDetailRecordId(null);
                     queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });

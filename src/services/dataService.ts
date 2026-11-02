@@ -67,13 +67,51 @@ export const primeRecordCache = (record: any) => {
   }
 };
 
+export const updateCachedRecordInModule = (moduleId: string | undefined, updatedRecord: any) => {
+  if (!updatedRecord?.id) return;
+  recordsCache.forEach((entry, key) => {
+    if (!moduleId || key.includes(moduleId)) {
+      if (Array.isArray(entry.data?.records)) {
+        entry.data.records = entry.data.records.map((r: any) =>
+          r.id === updatedRecord.id
+            ? {
+                ...r,
+                ...updatedRecord,
+                status: updatedRecord.status || r.status,
+                workflowState: updatedRecord.workflowState || r.workflowState,
+                data: {
+                  ...(r.data || {}),
+                  ...(updatedRecord.data || {}),
+                  status: updatedRecord.status || r.status
+                }
+              }
+            : r
+        );
+      }
+    }
+  });
+
+  if (recordByIdCache.has(updatedRecord.id)) {
+    const existing = recordByIdCache.get(updatedRecord.id)?.data;
+    recordByIdCache.set(updatedRecord.id, {
+      data: {
+        ...existing,
+        ...updatedRecord,
+        status: updatedRecord.status || existing?.status,
+        workflowState: updatedRecord.workflowState || existing?.workflowState
+      },
+      timestamp: Date.now()
+    });
+  }
+};
+
 export const invalidateModuleRecordsCache = (moduleId?: string) => {
   if (!moduleId) {
     recordsCache.clear();
     return;
   }
   for (const key of Array.from(recordsCache.keys())) {
-    if (key.startsWith(`${moduleId}:`)) {
+    if (key.includes(moduleId) || key.startsWith(`${moduleId}:`)) {
       recordsCache.delete(key);
     }
   }

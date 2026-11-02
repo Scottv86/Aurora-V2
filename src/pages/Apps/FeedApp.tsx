@@ -16,6 +16,7 @@ import { PageHeader } from '../../components/UI/PageHeader';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../config';
+import { getSharedSocket } from '../../lib/socketClient';
 import { ActivityEventCard, ActivityEvent } from '../../components/Platform/ActivityEventCard';
 import { cn } from '../../lib/utils';
 
@@ -96,7 +97,9 @@ export const FeedApp: React.FC = () => {
 
   // Real-Time WebSocket Streaming
   useEffect(() => {
-    const socket = (window as any)._auroraSocket;
+    if (!tenant?.id) return;
+    const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';
+    const socket = getSharedSocket(token, tenant.id);
     if (!socket) return;
 
     const handleFeedActivity = (activity: ActivityEvent) => {
@@ -118,7 +121,7 @@ export const FeedApp: React.FC = () => {
       socket.off('FEED_ACTIVITY', handleFeedActivity);
       socket.off('RECORD_ACTIVITY', handleFeedActivity);
     };
-  }, [selectedModuleId, selectedCategory, includeViews, sortOrder]);
+  }, [tenant?.id, session?.access_token, selectedModuleId, selectedCategory, includeViews, sortOrder]);
 
   const handleManualRefresh = () => {
     setRefreshing(true);

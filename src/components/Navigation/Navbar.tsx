@@ -138,7 +138,7 @@ export const Navbar = () => {
 
   return (
     <>
-      <header className="h-16 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between px-6 sticky top-0 z-50">
+      <header className="h-[52px] border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between px-5 sticky top-0 z-50">
       <div className="flex items-center gap-4 flex-1">
         <div 
           className="flex items-center gap-2 cursor-pointer hover:opacity-85 transition-all"
@@ -252,166 +252,27 @@ export const Navbar = () => {
 
       <div className="flex items-center gap-4 flex-1 justify-end h-full">
         {!isAdminPath && !isSuperAdminUser && (
-          <>
-            <button 
-              onClick={() => {
-                setIsAppLauncherOpen(!isAppLauncherOpen);
-                if (!isAppLauncherOpen) {
-                  setIsChatOpen(false);
-                  setIsAIAssistantOpen(false);
-                  setIsNotificationsOpen(false);
-                  setIsRecyclingBinOpen(false);
-                }
-              }}
-              className={cn(
-                "p-2 transition-all duration-300 rounded-lg group",
-                isAppLauncherOpen 
-                  ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/10" 
-                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
-              )}
-              title="App Launcher"
-            >
-              <LayoutGrid size={20} />
-            </button>
-
-            {/* Aurora AI Chat */}
-            <button 
-              onClick={() => {
-                if (isAurora) {
-                  navigate(lastPlatformPath);
-                } else {
-                  setIsAppLauncherOpen(false);
-                  setIsChatOpen(false);
-                  setIsAIAssistantOpen(false);
-                  setIsNotificationsOpen(false);
-                  setIsRecyclingBinOpen(false);
-                  navigate('/workspace/aurora-vibe');
-                }
-              }}
-              className={cn(
-                "p-2 transition-all duration-300 rounded-lg group",
-                isAurora 
-                  ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/10" 
-                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
-              )}
-              title="Aurora AI Chat"
-            >
-              <Sparkles size={20} className={cn(isAurora ? "text-indigo-600 dark:text-indigo-400 animate-pulse" : "group-hover:text-indigo-500 transition-colors")} />
-            </button>
-          </>
-        )}
-
-        {!location.pathname.startsWith('/admin') && (
-          <>
-            {/* Chat App Icon */}
-            {tenant?.enabledApps?.includes('chat') && (
-              <button 
-                onClick={() => {
-                  setIsChatOpen(!isChatOpen);
-                  if (!isChatOpen) {
-                    setIsAIAssistantOpen(false);
-                    setIsAppLauncherOpen(false);
-                    setIsNotificationsOpen(false);
-                    setIsRecyclingBinOpen(false);
-                  }
-                }}
-                className={cn(
-                  "p-2 transition-all duration-300 rounded-lg",
-                  isChatOpen 
-                    ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/10" 
-                    : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
-                )}
-                title="Team Chat"
-              >
-                <div className="relative">
-                  <MessageSquare size={20} />
-                  {isChatOpen && (
-                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
-                  )}
-                </div>
-              </button>
-            )}
-
-            {/* Approvals & Decision Hub */}
-            <button 
-              onClick={() => {
-                setIsAppLauncherOpen(false);
+          <button 
+            onClick={() => {
+              setIsAppLauncherOpen(!isAppLauncherOpen);
+              if (!isAppLauncherOpen) {
                 setIsChatOpen(false);
                 setIsAIAssistantOpen(false);
                 setIsNotificationsOpen(false);
                 setIsRecyclingBinOpen(false);
-                navigate('/workspace/approvals');
-              }}
-              className={cn(
-                "p-2 transition-all duration-300 rounded-lg relative",
-                location.pathname === '/workspace/approvals'
-                  ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/10" 
-                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
-              )}
-              title="Executive Approvals & Decision Hub"
-            >
-              <ShieldCheck size={20} />
-            </button>
-
-            {/* Recycling Bin Icon */}
-            <button 
-              onClick={() => {
-                setIsRecyclingBinOpen(!isRecyclingBinOpen);
-                if (!isRecyclingBinOpen) {
-                  setIsChatOpen(false);
-                  setIsAIAssistantOpen(false);
-                  setIsAppLauncherOpen(false);
-                  setIsNotificationsOpen(false);
-                }
-              }}
-              className={cn(
-                "p-2 transition-all duration-300 rounded-lg relative",
-                isRecyclingBinOpen
-                  ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/10"
-                  : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
-              )}
-              title="Recycling Bin"
-            >
-              <div className="relative flex items-center justify-center">
-                <Trash2 size={20} />
-                {isRecyclingBinOpen && (
-                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
-                )}
-              </div>
-            </button>
-          </>
+              }
+            }}
+            className={cn(
+              "p-2 transition-all duration-300 rounded-lg group",
+              isAppLauncherOpen 
+                ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/10" 
+                : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+            )}
+            title="App Launcher"
+          >
+            <LayoutGrid size={20} />
+          </button>
         )}
-
-        {/* Notes & Reminders Quick Shortcuts */}
-        <button
-          onClick={() => navigate('/workspace/apps/notes')}
-          className="p-2 text-zinc-500 dark:text-zinc-400 hover:text-amber-500 dark:hover:text-amber-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
-          title="Open Notes"
-        >
-          <StickyNote size={18} />
-        </button>
-
-        {/* Quick & Docked Calculator Shortcut */}
-        <button
-          onClick={() => {
-            if (isCalculatorDocked) {
-              setIsCalculatorDocked(false);
-            } else if (isQuickCalculatorOpen) {
-              setIsQuickCalculatorOpen(false);
-            } else {
-              setIsCalculatorLaunchModalOpen(true);
-            }
-          }}
-          className={cn(
-            "p-2 transition-all duration-300 rounded-lg cursor-pointer",
-            (isCalculatorDocked || isQuickCalculatorOpen)
-              ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-md shadow-indigo-500/10"
-              : "text-zinc-500 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-          )}
-          title={isCalculatorDocked ? "Calculator Docked (Click to Close)" : "Calculator (Alt+C)"}
-        >
-          <Calculator size={18} />
-        </button>
 
         <button 
           onClick={() => {

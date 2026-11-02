@@ -524,13 +524,13 @@ router.get('/records', async (req: TenantRequest, res) => {
         moduleId: r.moduleId,
         moduleName: r.module?.name,
         moduleIcon: r.module?.icon,
-        status: r.status,
         associations: r.associations,
         path: r.path,
         createdAt: r.createdAt,
         updatedAt: r.updatedAt,
         createdBy: r.createdByMember ? `${r.createdByMember.firstName || ''} ${r.createdByMember.familyName || ''}`.trim() : 'System',
         ...safeData,
+        status: r.status,
         workflowState: r.workflowState
       };
     });
@@ -565,13 +565,13 @@ router.get('/records/:id', async (req: TenantRequest, res) => {
       moduleId: record.moduleId,
       moduleName: (record as any).module?.name,
       moduleIcon: (record as any).module?.icon,
-      status: record.status,
       associations: record.associations,
       path: record.path,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       createdBy: (record as any).createdByMember ? `${(record as any).createdByMember.firstName || ''} ${(record as any).createdByMember.familyName || ''}`.trim() : 'System',
       ...safeData,
+      status: record.status,
       workflowState: record.workflowState
     });
   } catch (err: any) {
@@ -767,13 +767,13 @@ router.post('/records', async (req: TenantRequest, res) => {
     const formatted = {
       id: record.id,
       moduleId: record.moduleId,
-      status: record.status,
       associations: record.associations,
       path: record.path,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       createdBy: recordWithMember?.createdByMember ? `${recordWithMember.createdByMember.firstName || ''} ${recordWithMember.createdByMember.familyName || ''}`.trim() : 'System',
       ...(record.data as any),
+      status: record.status,
       workflowState: record.workflowState
     };
     emitTenantUpdate(tenantId, 'record_added', formatted);
@@ -1457,6 +1457,11 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
     }
 
     const finalStatus = updatePayload.status || existing.status;
+    if (finalStatus) {
+      updatedData.status = finalStatus;
+      updatePayload.status = finalStatus;
+      updatePayload.data = updatedData;
+    }
     if (finalStatus && finalStatus !== existing.status) {
       const userLabel = (req as any).user?.name || (req as any).user?.email || 'System';
       const comments = [...(updatedData._comments || [])];
@@ -1534,13 +1539,13 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
     const formatted = {
       id: record.id,
       moduleId: record.moduleId,
-      status: record.status,
       associations: record.associations,
       path: record.path,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       createdBy: recordWithMember?.createdByMember ? `${recordWithMember.createdByMember.firstName || ''} ${recordWithMember.createdByMember.familyName || ''}`.trim() : 'System',
       ...applyFieldSecurityRead((record.data as any) || {}, module?.config, (req as any).user),
+      status: record.status,
       workflowState: record.workflowState
     };
     emitTenantUpdate(tenantId, 'record_updated', formatted);
@@ -1551,12 +1556,22 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
     // Enterprise Audit Activity Logging (PUT)
     const recKey = (record.data as any)?._record_key || (formatted as any).premises_name || (formatted as any).name || record.id;
     const recTitle = (record.data as any)?.premises_name || (record.data as any)?.name || (record.data as any)?.title || recKey;
-    const actorId = (req as any).user?.memberId || (req as any).user?.id || (req as any).user?.uid || 'system';
+    const user = (req as any).user;
+    const actorId = user?.memberId || user?.id || user?.uid || 'system';
+    const actor = user ? {
+      id: actorId,
+      name: user.name || user.email?.split('@')[0] || 'User',
+      email: user.email || '',
+      avatarUrl: user.avatarUrl,
+      role: user.roleId,
+      type: (user.isSynthetic ? 'AI_AGENT' : (actorId === 'system' ? 'SYSTEM' : 'USER')) as any
+    } : undefined;
 
     if (existing.status !== record.status) {
       logRecordActivity({
         tenantId,
         actorId,
+        actor,
         action: 'STATUS_CHANGED',
         category: 'STATUS',
         resourceId: record.id,
@@ -1579,6 +1594,7 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
       logRecordActivity({
         tenantId,
         actorId,
+        actor,
         action: 'ASSIGNMENT_CHANGED',
         category: 'ASSIGNMENT',
         resourceId: record.id,
@@ -1596,12 +1612,13 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
       }).catch(e => console.error(e));
     }
 
-    const layout = (module?.config as any)?.layout || [];
+    const layout = (module?.config as any)?.layout || (module as any)?.layout || [];
     const diffs = computeFieldDiff(oldData, newData, layout);
     if (diffs.length > 0) {
       logRecordActivity({
         tenantId,
         actorId,
+        actor,
         action: 'FIELD_UPDATED',
         category: 'FIELD',
         resourceId: record.id,
@@ -1795,6 +1812,11 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
     }
 
     const finalStatus = updatePayload.status || existing.status;
+    if (finalStatus) {
+      updatedData.status = finalStatus;
+      updatePayload.status = finalStatus;
+      updatePayload.data = updatedData;
+    }
     if (finalStatus && finalStatus !== existing.status) {
       const userLabel = (req as any).user?.name || (req as any).user?.email || 'System';
       const comments = [...(updatedData._comments || [])];
@@ -1872,13 +1894,13 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
     const formatted = {
       id: record.id,
       moduleId: record.moduleId,
-      status: record.status,
       associations: record.associations,
       path: record.path,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       createdBy: recordWithMember?.createdByMember ? `${recordWithMember.createdByMember.firstName || ''} ${recordWithMember.createdByMember.familyName || ''}`.trim() : 'System',
       ...applyFieldSecurityRead((record.data as any) || {}, module?.config, (req as any).user),
+      status: record.status,
       workflowState: record.workflowState
     };
     emitTenantUpdate(tenantId, 'record_updated', formatted);
@@ -1889,12 +1911,22 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
     // Enterprise Audit Activity Logging (PATCH)
     const recKey = (record.data as any)?._record_key || (formatted as any).premises_name || (formatted as any).name || record.id;
     const recTitle = (record.data as any)?.premises_name || (record.data as any)?.name || (record.data as any)?.title || recKey;
-    const actorId = (req as any).user?.memberId || (req as any).user?.id || (req as any).user?.uid || 'system';
+    const user = (req as any).user;
+    const actorId = user?.memberId || user?.id || user?.uid || 'system';
+    const actor = user ? {
+      id: actorId,
+      name: user.name || user.email?.split('@')[0] || 'User',
+      email: user.email || '',
+      avatarUrl: user.avatarUrl,
+      role: user.roleId,
+      type: (user.isSynthetic ? 'AI_AGENT' : (actorId === 'system' ? 'SYSTEM' : 'USER')) as any
+    } : undefined;
 
     if (existing.status !== record.status) {
       logRecordActivity({
         tenantId,
         actorId,
+        actor,
         action: 'STATUS_CHANGED',
         category: 'STATUS',
         resourceId: record.id,
@@ -1917,6 +1949,7 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
       logRecordActivity({
         tenantId,
         actorId,
+        actor,
         action: 'ASSIGNMENT_CHANGED',
         category: 'ASSIGNMENT',
         resourceId: record.id,
@@ -1934,12 +1967,13 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
       }).catch(e => console.error(e));
     }
 
-    const layout = (module?.config as any)?.layout || [];
+    const layout = (module?.config as any)?.layout || (module as any)?.layout || [];
     const diffs = computeFieldDiff(oldData, newData, layout);
     if (diffs.length > 0) {
       logRecordActivity({
         tenantId,
         actorId,
+        actor,
         action: 'FIELD_UPDATED',
         category: 'FIELD',
         resourceId: record.id,

@@ -205,7 +205,7 @@ router.get('/:resourceId', async (req: TenantRequest, res) => {
 });
 
 // 4. Post Timeline Comment to a Record's Activity Feed
-router.post('/:resourceId/comments', async (req: TenantRequest, res) => {
+router.post(['/:resourceId/comments', '/:resourceId/comment'], async (req: TenantRequest, res) => {
   try {
     const tenantId = req.tenantId!;
     const { resourceId } = req.params;
@@ -242,7 +242,8 @@ router.post('/:resourceId/comments', async (req: TenantRequest, res) => {
       }
     });
 
-    res.status(201).json(entry);
+    const formatted = entry ? formatLogEntry(entry, new Map([[actorId, req.user]])) : entry;
+    res.status(201).json(formatted);
   } catch (err: any) {
     console.error('[AuditRoutes POST comment error]:', err);
     res.status(500).json({ error: err.message });

@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   format, 
   addMonths, 
@@ -56,16 +57,35 @@ export const DatePicker: React.FC<DatePickerProps> = ({
   const [viewMode, setViewMode] = useState<'days' | 'months' | 'years'>('days');
   const [viewDate, setViewDate] = useState(new Date());
   const containerRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
 
   const [openUp, setOpenUp] = useState(false);
+  const [triggerRect, setTriggerRect] = useState<DOMRect | null>(null);
+
+  const updatePosition = useCallback(() => {
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      setTriggerRect(rect);
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setOpenUp(spaceBelow < 360 && rect.top > 360);
+    }
+  }, []);
 
   useEffect(() => {
-    if (isOpen && containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom;
-      setOpenUp(spaceBelow < 350 && rect.top > 350);
+    if (isOpen) {
+      updatePosition();
+      const handleScrollOrResize = (e: Event) => {
+        if (popoverRef.current && popoverRef.current.contains(e.target as Node)) return;
+        updatePosition();
+      };
+      window.addEventListener('resize', handleScrollOrResize);
+      window.addEventListener('scroll', handleScrollOrResize, true);
+      return () => {
+        window.removeEventListener('resize', handleScrollOrResize);
+        window.removeEventListener('scroll', handleScrollOrResize, true);
+      };
     }
-  }, [isOpen]);
+  }, [isOpen, updatePosition]);
 
   // Parse initial value
   const selectedDate = useMemo(() => {
@@ -87,7 +107,11 @@ export const DatePicker: React.FC<DatePickerProps> = ({
   // Handle click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        containerRef.current && !containerRef.current.contains(target) &&
+        (!popoverRef.current || !popoverRef.current.contains(target))
+      ) {
         setIsOpen(false);
         onBlur?.();
       }
@@ -135,6 +159,8 @@ export const DatePicker: React.FC<DatePickerProps> = ({
           if (!readonly) {
             if (isOpen) {
               onBlur?.();
+            } else {
+              updatePosition();
             }
             setIsOpen(!isOpen);
           }
@@ -145,6 +171,8 @@ export const DatePicker: React.FC<DatePickerProps> = ({
             e.preventDefault();
             if (isOpen) {
               onBlur?.();
+            } else {
+              updatePosition();
             }
             setIsOpen(!isOpen);
           }
@@ -171,17 +199,26 @@ export const DatePicker: React.FC<DatePickerProps> = ({
         )}
       </div>
 
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: openUp ? -10 : 10, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: openUp ? -10 : 10, scale: 0.95 }}
-            className={cn(
-              "absolute z-[100] left-0 w-72 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl p-4 overflow-hidden",
-              openUp ? "bottom-full mb-2" : "top-full mt-2"
-            )}
-          >
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {isOpen && triggerRect && (
+            <motion.div
+              ref={popoverRef}
+              initial={{ opacity: 0, y: openUp ? -8 : 8, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: openUp ? -8 : 8, scale: 0.96 }}
+              transition={{ duration: 0.14 }}
+              style={{
+                position: 'fixed',
+                ...(openUp 
+                  ? { bottom: Math.max(12, window.innerHeight - triggerRect.top + 6) } 
+                  : { top: Math.min(triggerRect.bottom + 6, window.innerHeight - 360) }
+                ),
+                left: Math.min(Math.max(12, triggerRect.left), window.innerWidth - 304),
+                zIndex: 99999
+              }}
+              className="w-72 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl p-4 overflow-hidden"
+            >
             {/* Header */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex flex-col">
@@ -373,8 +410,10 @@ export const DatePicker: React.FC<DatePickerProps> = ({
               </button>
             </div>
           </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   );
 };

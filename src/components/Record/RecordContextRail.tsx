@@ -37,6 +37,8 @@ import { cn } from '../../lib/utils';
 import { API_BASE_URL } from '../../config';
 import { useAuth } from '../../hooks/useAuth';
 import { usePlatform } from '../../hooks/usePlatform';
+import { getSharedSocket } from '../../lib/socketClient';
+import { ActivityEventCard, ActivityEvent } from '../Platform/ActivityEventCard';
 import { UserAvatarWithPresence } from '../Common/UserPresenceBadge';
 import { NotesClientService } from '../../services/notesService';
 import { RemindersClientService } from '../../services/remindersService';
@@ -71,6 +73,7 @@ interface RecordContextRailProps {
   onOpenShare?: () => void;
   statusOptions?: Array<string | StatusOptionItem>;
   workflowTransitions?: any[];
+  workflow?: any;
 }
 
 export const RecordContextRail: React.FC<RecordContextRailProps> = ({
@@ -87,7 +90,8 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
   onToggleCollapse,
   onOpenShare,
   statusOptions = ['Todo', 'In Progress', 'Done', 'Blocked'],
-  workflowTransitions = []
+  workflowTransitions = [],
+  workflow
 }) => {
   const { session, user: authUser } = useAuth();
   const { tenant, user: platformUser } = usePlatform();
@@ -110,9 +114,10 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
   const statusMenuRef = useRef<HTMLDivElement>(null);
 
   // Activity State
-  const [activities, setActivities] = useState<any[]>([]);
+  const [activities, setActivities] = useState<ActivityEvent[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
-  const [activityFilter, setActivityFilter] = useState<'ALL' | 'STATUS' | 'FIELD' | 'COMMENT'>('ALL');
+  const [activityFilter, setActivityFilter] = useState<'ALL' | 'FIELD' | 'STATUS' | 'ASSIGNMENT' | 'COMMENT'>('ALL');
+  const [isLiveConnected, setIsLiveConnected] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
 
@@ -236,23 +241,68 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
     }
   }, [recordId]);
 
-  // Real-time socket listener for activity
+  // Real-time socket listener for live activity feed
   useEffect(() => {
-    if (!recordId) return;
-    const socket = (window as any)._auroraSocket;
+    if (!recordId || !tenantId) return;
+    const socket = getSharedSocket(token, tenantId);
     if (!socket) return;
 
+    const handleConnect = () => {
+      setIsLiveConnected(true);
+      socket.emit('join_tenant', tenantId);
+    };
+
+    const handleDisconnect = () => {
+      setIsLiveConnected(false);
+    };
+
+    if (socket.connected) {
+      setIsLiveConnected(true);
+      socket.emit('join_tenant', tenantId);
+    }
+
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+
     const handleNewActivity = (activity: any) => {
-      if (activity.resourceId === recordId) {
-        setActivities(prev => [activity, ...prev]);
+      if (!activity) return;
+      if (activity.resourceId === recordId || (recordKey && activity.resourceKey === recordKey)) {
+        setActivities(prev => {
+          if (prev.some(a => a.id === activity.id)) return prev;
+          return [activity, ...prev];
+        });
       }
     };
 
     socket.on('RECORD_ACTIVITY', handleNewActivity);
     return () => {
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
       socket.off('RECORD_ACTIVITY', handleNewActivity);
     };
-  }, [recordId]);
+  }, [recordId, recordKey, tenantId, token]);
+
+  // Instant local synchronization when record is updated in the current window
+  useEffect(() => {
+    const handleRecordUpdated = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail?.recordId === recordId || (recordKey && detail?.record?._record_key === recordKey)) {
+        fetchActivity();
+      }
+    };
+
+    window.addEventListener('aurora:record-updated', handleRecordUpdated as EventListener);
+    return () => {
+      window.removeEventListener('aurora:record-updated', handleRecordUpdated as EventListener);
+    };
+  }, [recordId, recordKey, fetchActivity]);
+
+  // Re-fetch activities if parent updates the record prop
+  useEffect(() => {
+    if (record?.updatedAt && recordId) {
+      fetchActivity();
+    }
+  }, [record?.updatedAt, recordId, fetchActivity]);
 
   // Submit Activity Comment
   const handlePostComment = async (e: React.FormEvent) => {
@@ -260,18 +310,25 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
     if (!newComment.trim() || submittingComment || !recordId || !tenantId) return;
     setSubmittingComment(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/audit/${recordId}/comment`, {
+      const res = await fetch(`${API_BASE_URL}/api/audit/${recordId}/comments`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-tenant-id': tenantId,
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
-        body: JSON.stringify({ comment: newComment.trim() })
+        body: JSON.stringify({ 
+          comment: newComment.trim(),
+          moduleId,
+          resourceKey
+        })
       });
       if (res.ok) {
         const created = await res.json();
-        setActivities(prev => [created, ...prev]);
+        setActivities(prev => {
+          if (prev.some(a => a.id === created.id)) return prev;
+          return [created, ...prev];
+        });
         setNewComment('');
         toast.success('Comment added to timeline');
       } else {
@@ -415,8 +472,17 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
   const currentAssigneeId = editData.assigneeId !== undefined ? editData.assigneeId : record?.assigneeId;
   const currentAssignee = (members || []).find(m => m.id === currentAssigneeId);
 
-  // Resolve current Status (prioritize record.status as authoritative source for workflow status)
-  const currentStatus = record?.status || editData.status || 'Todo';
+  // Resolve active workflow node name if available
+  const activeWf = workflow || moduleData?.workflow || (moduleData?.workflows && moduleData.workflows[0]);
+  const activeWfNode = useMemo(() => {
+    if (!activeWf?.nodes) return null;
+    const currId = record?.workflowState?.currentNodeId || (record?.workflowState?.activeNodeIds?.[0]);
+    if (!currId) return null;
+    return activeWf.nodes.find((n: any) => n.id === currId);
+  }, [activeWf, record?.workflowState]);
+
+  // Resolve current Status (prioritize editData.status / record.status as authoritative source, or active workflow node)
+  const currentStatus = editData?.status || record?.status || activeWfNode?.name || 'Todo';
 
   // Normalize status options to StatusOptionItem objects
   const normalizedStatusOptions: StatusOptionItem[] = useMemo(() => {
@@ -451,6 +517,7 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
       if (activityFilter === 'STATUS') return a.category === 'STATUS' || a.category === 'WORKFLOW';
       if (activityFilter === 'FIELD') return a.category === 'FIELD';
       if (activityFilter === 'COMMENT') return a.category === 'COMMENT';
+      if (activityFilter === 'ASSIGNMENT') return a.category === 'ASSIGNMENT';
       return true;
     });
   }, [activities, activityFilter]);
@@ -511,8 +578,8 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
 
   return (
     <div className="w-80 xl:w-96 shrink-0 h-full border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col overflow-hidden transition-all duration-300">
-      {/* 1. Rail Top Bar (h-[52px] box-border to match tab line pixel-for-pixel) */}
-      <div className="h-[52px] box-border px-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shrink-0 bg-white dark:bg-zinc-900">
+      {/* 1. Rail Top Bar (h-10 box-border to match tab line pixel-for-pixel) */}
+      <div className="h-10 box-border px-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shrink-0 bg-white dark:bg-zinc-900">
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-900 dark:text-white">
             Details
@@ -522,10 +589,10 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
           <button
             type="button"
             onClick={onToggleCollapse}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+            className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
             title="Collapse Details [⌘\]"
           >
-            <PanelRightClose size={15} />
+            <PanelRightClose size={14} />
           </button>
         </div>
       </div>
@@ -799,22 +866,40 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
           {/* A. ACTIVITY TAB */}
           {activeTab === 'activity' && (
             <div className="space-y-3">
-              {/* Category Filter Pills */}
-              <div className="flex items-center gap-1 overflow-x-auto custom-scrollbar pb-1">
-                {(['ALL', 'STATUS', 'FIELD', 'COMMENT'] as const).map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => setActivityFilter(cat)}
-                    className={cn(
-                      "px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer shrink-0",
-                      activityFilter === cat
-                        ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30"
-                        : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
-                    )}
-                  >
-                    {cat}
-                  </button>
-                ))}
+              {/* Category Filter Pills & Live Status Indicator */}
+              <div className="flex items-center justify-between gap-1.5 pb-0.5">
+                <div className="flex items-center gap-1 overflow-x-auto custom-scrollbar">
+                  {(['ALL', 'FIELD', 'STATUS', 'ASSIGNMENT', 'COMMENT'] as const).map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setActivityFilter(cat)}
+                      className={cn(
+                        "px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer shrink-0",
+                        activityFilter === cat
+                          ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30"
+                          : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                      )}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+
+                <div 
+                  className={cn(
+                    "flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider shrink-0 transition-colors",
+                    isLiveConnected 
+                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20" 
+                      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"
+                  )}
+                  title={isLiveConnected ? "Connected to live activity stream" : "Connecting to live feed..."}
+                >
+                  <span className={cn(
+                    "w-1.5 h-1.5 rounded-full",
+                    isLiveConnected ? "bg-emerald-500 animate-pulse" : "bg-zinc-400"
+                  )} />
+                  <span>{isLiveConnected ? "Live" : "Offline"}</span>
+                </div>
               </div>
 
               {/* Comment Composer */}
@@ -838,32 +923,25 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
 
               {/* Activity Timeline List */}
               {activityLoading && activities.length === 0 ? (
-                <div className="py-8 flex justify-center text-zinc-400">
-                  <Loader2 size={16} className="animate-spin" />
+                <div className="py-8 flex flex-col items-center justify-center gap-2 text-zinc-400">
+                  <Loader2 size={16} className="animate-spin text-indigo-500" />
+                  <span className="text-[11px]">Loading live stream...</span>
                 </div>
               ) : filteredActivities.length === 0 ? (
                 <div className="py-8 text-center text-zinc-400 text-xs italic">
-                  No activity events recorded yet.
+                  {activityFilter === 'ALL'
+                    ? 'No activity events recorded yet. Field changes and updates will stream here live.'
+                    : `No ${activityFilter.toLowerCase()} events recorded yet.`}
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {filteredActivities.map((event: any, idx: number) => {
-                    const actorName = event.userName || event.actorName || event.user?.name || 'System';
-                    return (
-                      <div
-                        key={event.id || idx}
-                        className="p-3 bg-white dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800/60 rounded-xl space-y-1 text-xs shadow-2xs"
-                      >
-                        <div className="flex items-center justify-between text-[10px] text-zinc-400">
-                          <span className="font-semibold text-zinc-700 dark:text-zinc-300">{actorName}</span>
-                          <span>{formatTimeAgo(event.createdAt)}</span>
-                        </div>
-                        <p className="text-zinc-800 dark:text-zinc-200 leading-snug">
-                          {event.description || event.message || event.action}
-                        </p>
-                      </div>
-                    );
-                  })}
+                <div className="space-y-2.5">
+                  {filteredActivities.map((event: any, idx: number) => (
+                    <ActivityEventCard
+                      key={event.id || idx}
+                      event={event}
+                      showResourceLink={false}
+                    />
+                  ))}
                 </div>
               )}
             </div>
