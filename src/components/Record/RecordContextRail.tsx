@@ -4,16 +4,10 @@ import {
   StickyNote, 
   Files, 
   Calendar, 
-  User, 
-  ChevronDown, 
-  Share2, 
-  Copy, 
-  Check, 
   Send, 
   Plus, 
   Trash2, 
   Download, 
-  Eye, 
   Clock, 
   PanelRightClose, 
   PanelRightOpen,
@@ -21,25 +15,15 @@ import {
   CheckCircle2,
   Circle,
   UploadCloud,
-  Loader2,
-  Search,
-  Filter,
-  UserCheck,
-  UserMinus,
-  ExternalLink,
-  Tag,
-  Zap,
-  GitFork
+  Loader2
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
-import { cn } from '../../lib/utils';
+import { cn, formatLocalizedDate } from '../../lib/utils';
 import { API_BASE_URL } from '../../config';
 import { useAuth } from '../../hooks/useAuth';
 import { usePlatform } from '../../hooks/usePlatform';
 import { getSharedSocket } from '../../lib/socketClient';
 import { ActivityEventCard, ActivityEvent } from '../Platform/ActivityEventCard';
-import { UserAvatarWithPresence } from '../Common/UserPresenceBadge';
 import { NotesClientService } from '../../services/notesService';
 import { RemindersClientService } from '../../services/remindersService';
 import { DocumentClientService } from '../../services/documentClientService';
@@ -62,12 +46,12 @@ interface RecordContextRailProps {
   record: any;
   moduleId?: string;
   moduleData?: any;
-  editData: Record<string, any>;
-  onUpdateField: (fieldId: string, val: any) => void;
-  onUpdateAssignee: (assigneeId: string | null) => void;
-  onUpdateStatus: (newStatus: string, targetNodeId?: string) => void;
-  members: any[];
-  allFields: any[];
+  editData?: Record<string, any>;
+  onUpdateField?: (fieldId: string, val: any) => void;
+  onUpdateAssignee?: (assigneeId: string | null) => void;
+  onUpdateStatus?: (newStatus: string, targetNodeId?: string) => void;
+  members?: any[];
+  allFields?: any[];
   isCollapsed: boolean;
   onToggleCollapse: () => void;
   onOpenShare?: () => void;
@@ -76,27 +60,37 @@ interface RecordContextRailProps {
   workflow?: any;
 }
 
+interface RailCacheEntry {
+  activities?: ActivityEvent[];
+  notes?: UniversalNote[];
+  files?: UniversalDocument[];
+  tasks?: UniversalReminder[];
+}
+
+const railRecordCache = new Map<string, RailCacheEntry>();
+
 export const RecordContextRail: React.FC<RecordContextRailProps> = ({
   record,
   moduleId,
-  moduleData,
-  editData,
-  onUpdateField,
-  onUpdateAssignee,
-  onUpdateStatus,
-  members,
-  allFields,
+  moduleData: _moduleData,
+  editData: _editData = {},
+  onUpdateField: _onUpdateField,
+  onUpdateAssignee: _onUpdateAssignee,
+  onUpdateStatus: _onUpdateStatus,
+  members: _members = [],
+  allFields: _allFields,
   isCollapsed,
   onToggleCollapse,
   onOpenShare,
-  statusOptions = ['Todo', 'In Progress', 'Done', 'Blocked'],
-  workflowTransitions = [],
-  workflow
+  statusOptions: _statusOptions = ['Todo', 'In Progress', 'Done', 'Blocked'],
+  workflowTransitions: _workflowTransitions = [],
+  workflow: _workflow
 }) => {
-  const { session, user: authUser } = useAuth();
-  const { tenant, user: platformUser } = usePlatform();
+  const { session } = useAuth();
+  const { tenant } = usePlatform();
   const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';
   const tenantId = tenant?.id || '';
+  const dateFormat = tenant?.localization?.dateFormat || 'DD/MM/YYYY';
 
   const recordId = record?.id || '';
   const recordKey = record?._record_key || recordId.slice(0, 8);
@@ -104,20 +98,10 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
   // Active rail tab
   const [activeTab, setActiveTab] = useState<ContextRailTab>('activity');
 
-  // Menus
-  const [showAssigneeMenu, setShowAssigneeMenu] = useState(false);
-  const [showStatusMenu, setShowStatusMenu] = useState(false);
-  const [assigneeSearch, setAssigneeSearch] = useState('');
-  const [copiedKey, setCopiedKey] = useState(false);
-  const [copiedLink, setCopiedLink] = useState(false);
-  const assigneeMenuRef = useRef<HTMLDivElement>(null);
-  const statusMenuRef = useRef<HTMLDivElement>(null);
-
   // Activity State
   const [activities, setActivities] = useState<ActivityEvent[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityFilter, setActivityFilter] = useState<'ALL' | 'FIELD' | 'STATUS' | 'ASSIGNMENT' | 'COMMENT'>('ALL');
-  const [isLiveConnected, setIsLiveConnected] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
 
@@ -144,26 +128,16 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
   const [isTaskComposerOpen, setIsTaskComposerOpen] = useState(false);
   const [submittingTask, setSubmittingTask] = useState(false);
 
-  // Close menus on outside click
-  useEffect(() => {
-    const handleOutside = (e: MouseEvent) => {
-      if (assigneeMenuRef.current && !assigneeMenuRef.current.contains(e.target as Node)) {
-        setShowAssigneeMenu(false);
-      }
-      if (statusMenuRef.current && !statusMenuRef.current.contains(e.target as Node)) {
-        setShowStatusMenu(false);
-      }
-    };
-    document.addEventListener('mousedown', handleOutside);
-    return () => document.removeEventListener('mousedown', handleOutside);
-  }, []);
+  // Active record tracking to prevent out-of-order race conditions
+  const activeRecordIdRef = useRef(recordId);
+  activeRecordIdRef.current = recordId;
 
   // Fetch Activity Timeline
-  const fetchActivity = useCallback(async () => {
-    if (!recordId || !tenantId) return;
+  const fetchActivity = useCallback(async (targetId: string = recordId) => {
+    if (!targetId || !tenantId) return;
     setActivityLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/audit/${recordId}?order=desc`, {
+      const res = await fetch(`${API_BASE_URL}/api/audit/${targetId}?order=desc`, {
         headers: {
           'x-tenant-id': tenantId,
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -171,75 +145,123 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
       });
       if (res.ok) {
         const data = await res.json();
-        setActivities(Array.isArray(data) ? data : []);
+        const list = Array.isArray(data) ? data : [];
+        if (activeRecordIdRef.current === targetId) {
+          setActivities(list);
+        }
+        const existing = railRecordCache.get(targetId) || {};
+        railRecordCache.set(targetId, { ...existing, activities: list });
       }
     } catch (err) {
       console.error('[RecordContextRail] Failed to fetch activity:', err);
     } finally {
-      setActivityLoading(false);
+      if (activeRecordIdRef.current === targetId) {
+        setActivityLoading(false);
+      }
     }
   }, [recordId, tenantId, token]);
 
   // Fetch Notes
-  const fetchNotes = useCallback(async () => {
-    if (!recordId || !tenantId) return;
+  const fetchNotes = useCallback(async (targetId: string = recordId) => {
+    if (!targetId || !tenantId) return;
     setNotesLoading(true);
     try {
-      const data = await NotesClientService.getNotes({ recordId, moduleId }, token, tenantId);
-      setNotes(data || []);
+      const data = await NotesClientService.getNotes({ recordId: targetId, moduleId }, token, tenantId);
+      const list = data || [];
+      if (activeRecordIdRef.current === targetId) {
+        setNotes(list);
+      }
+      const existing = railRecordCache.get(targetId) || {};
+      railRecordCache.set(targetId, { ...existing, notes: list });
     } catch (err) {
       console.error('[RecordContextRail] Failed to fetch notes:', err);
     } finally {
-      setNotesLoading(false);
+      if (activeRecordIdRef.current === targetId) {
+        setNotesLoading(false);
+      }
     }
   }, [recordId, moduleId, token, tenantId]);
 
   // Fetch Files
-  const fetchFiles = useCallback(async () => {
-    if (!recordId) return;
+  const fetchFiles = useCallback(async (targetId: string = recordId) => {
+    if (!targetId) return;
     setFilesLoading(true);
     try {
-      const docs = await DocumentClientService.getDocumentsByRecord(recordId);
-      setFiles(docs || []);
+      const docs = await DocumentClientService.getRecordDocuments(targetId);
+      const list = docs || [];
+      if (activeRecordIdRef.current === targetId) {
+        setFiles(list);
+      }
+      const existing = railRecordCache.get(targetId) || {};
+      railRecordCache.set(targetId, { ...existing, files: list });
     } catch (err) {
       console.error('[RecordContextRail] Failed to fetch documents:', err);
     } finally {
-      setFilesLoading(false);
+      if (activeRecordIdRef.current === targetId) {
+        setFilesLoading(false);
+      }
     }
   }, [recordId]);
 
   // Fetch Tasks / Reminders
-  const fetchTasks = useCallback(async () => {
-    if (!recordId || !tenantId) return;
+  const fetchTasks = useCallback(async (targetId: string = recordId) => {
+    if (!targetId || !tenantId) return;
     setTasksLoading(true);
     try {
-      const data = await RemindersClientService.getReminders({ recordId, moduleId }, token, tenantId);
-      setTasks(data || []);
+      const data = await RemindersClientService.getReminders({ recordId: targetId, moduleId }, token, tenantId);
+      const list = data || [];
+      if (activeRecordIdRef.current === targetId) {
+        setTasks(list);
+      }
+      const existing = railRecordCache.get(targetId) || {};
+      railRecordCache.set(targetId, { ...existing, tasks: list });
     } catch (err) {
       console.error('[RecordContextRail] Failed to fetch tasks:', err);
     } finally {
-      setTasksLoading(false);
+      if (activeRecordIdRef.current === targetId) {
+        setTasksLoading(false);
+      }
     }
   }, [recordId, moduleId, token, tenantId]);
 
-  // Load active tab data on record change or tab switch
+  // Load record data and reset previous record's state immediately when record switches
   useEffect(() => {
-    if (!recordId) return;
-    if (activeTab === 'activity') fetchActivity();
-    if (activeTab === 'notes') fetchNotes();
-    if (activeTab === 'files') fetchFiles();
-    if (activeTab === 'tasks') fetchTasks();
-  }, [recordId, activeTab, fetchActivity, fetchNotes, fetchFiles, fetchTasks]);
-
-  // Initial eager count load
-  useEffect(() => {
-    if (recordId) {
-      fetchActivity();
-      fetchNotes();
-      fetchFiles();
-      fetchTasks();
+    if (!recordId) {
+      setActivities([]);
+      setNotes([]);
+      setFiles([]);
+      setTasks([]);
+      return;
     }
-  }, [recordId]);
+
+    const cached = railRecordCache.get(recordId);
+    if (cached) {
+      setActivities(cached.activities || []);
+      setNotes(cached.notes || []);
+      setFiles(cached.files || []);
+      setTasks(cached.tasks || []);
+      setActivityLoading(!cached.activities);
+      setNotesLoading(!cached.notes);
+      setFilesLoading(!cached.files);
+      setTasksLoading(!cached.tasks);
+    } else {
+      // Clear out the previous record's content immediately so stale data is never displayed
+      setActivities([]);
+      setNotes([]);
+      setFiles([]);
+      setTasks([]);
+      setActivityLoading(true);
+      setNotesLoading(true);
+      setFilesLoading(true);
+      setTasksLoading(true);
+    }
+
+    // Always fetch fresh data in background/foreground for the active record
+    fetchActivity(recordId);
+    fetchNotes(recordId);
+    fetchFiles(recordId);
+    fetchTasks(recordId);
+  }, [recordId, fetchActivity, fetchNotes, fetchFiles, fetchTasks]);
 
   // Real-time socket listener for live activity feed
   useEffect(() => {
@@ -248,28 +270,26 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
     if (!socket) return;
 
     const handleConnect = () => {
-      setIsLiveConnected(true);
       socket.emit('join_tenant', tenantId);
     };
 
-    const handleDisconnect = () => {
-      setIsLiveConnected(false);
-    };
-
     if (socket.connected) {
-      setIsLiveConnected(true);
       socket.emit('join_tenant', tenantId);
     }
 
     socket.on('connect', handleConnect);
-    socket.on('disconnect', handleDisconnect);
 
     const handleNewActivity = (activity: any) => {
       if (!activity) return;
       if (activity.resourceId === recordId || (recordKey && activity.resourceKey === recordKey)) {
         setActivities(prev => {
           if (prev.some(a => a.id === activity.id)) return prev;
-          return [activity, ...prev];
+          const next = [activity, ...prev];
+          const cached = railRecordCache.get(recordId);
+          if (cached) {
+            railRecordCache.set(recordId, { ...cached, activities: next });
+          }
+          return next;
         });
       }
     };
@@ -277,7 +297,6 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
     socket.on('RECORD_ACTIVITY', handleNewActivity);
     return () => {
       socket.off('connect', handleConnect);
-      socket.off('disconnect', handleDisconnect);
       socket.off('RECORD_ACTIVITY', handleNewActivity);
     };
   }, [recordId, recordKey, tenantId, token]);
@@ -320,14 +339,19 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
         body: JSON.stringify({ 
           comment: newComment.trim(),
           moduleId,
-          resourceKey
+          resourceKey: recordKey
         })
       });
       if (res.ok) {
         const created = await res.json();
         setActivities(prev => {
           if (prev.some(a => a.id === created.id)) return prev;
-          return [created, ...prev];
+          const next = [created, ...prev];
+          const cached = railRecordCache.get(recordId);
+          if (cached) {
+            railRecordCache.set(recordId, { ...cached, activities: next });
+          }
+          return next;
         });
         setNewComment('');
         toast.success('Comment added to timeline');
@@ -446,53 +470,12 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
     const nextStatus = task.status === 'COMPLETED' ? 'PENDING' : 'COMPLETED';
     setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: nextStatus } : t));
     try {
-      await RemindersClientService.updateReminder(task.id, { status: nextStatus }, token, tenantId);
+      await (RemindersClientService.updateReminder as any)(task.id, { status: nextStatus }, token, tenantId);
     } catch (err) {
       setTasks(prev => prev.map(t => t.id === task.id ? task : t));
       toast.error('Failed to update task');
     }
   };
-
-  const handleCopyKey = () => {
-    navigator.clipboard.writeText(recordKey);
-    setCopiedKey(true);
-    toast.success(`Copied key "${recordKey}"`);
-    setTimeout(() => setCopiedKey(false), 2000);
-  };
-
-  const handleCopyLink = () => {
-    const url = window.location.href;
-    navigator.clipboard.writeText(url);
-    setCopiedLink(true);
-    toast.success('Copied record URL to clipboard');
-    setTimeout(() => setCopiedLink(false), 2000);
-  };
-
-  // Resolve current Assignee
-  const currentAssigneeId = editData.assigneeId !== undefined ? editData.assigneeId : record?.assigneeId;
-  const currentAssignee = (members || []).find(m => m.id === currentAssigneeId);
-
-  // Resolve active workflow node name if available
-  const activeWf = workflow || moduleData?.workflow || (moduleData?.workflows && moduleData.workflows[0]);
-  const activeWfNode = useMemo(() => {
-    if (!activeWf?.nodes) return null;
-    const currId = record?.workflowState?.currentNodeId || (record?.workflowState?.activeNodeIds?.[0]);
-    if (!currId) return null;
-    return activeWf.nodes.find((n: any) => n.id === currId);
-  }, [activeWf, record?.workflowState]);
-
-  // Resolve current Status (prioritize editData.status / record.status as authoritative source, or active workflow node)
-  const currentStatus = editData?.status || record?.status || activeWfNode?.name || 'Todo';
-
-  // Normalize status options to StatusOptionItem objects
-  const normalizedStatusOptions: StatusOptionItem[] = useMemo(() => {
-    return (statusOptions || []).map(opt => {
-      if (typeof opt === 'string') {
-        return { id: opt, name: opt };
-      }
-      return opt;
-    });
-  }, [statusOptions]);
 
   // Relative time helper
   const formatTimeAgo = (dateStr?: string) => {
@@ -507,20 +490,25 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
     if (diffHour < 24) return `${diffHour}h ago`;
     const diffDays = Math.floor(diffHour / 24);
     if (diffDays < 7) return `${diffDays}d ago`;
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return formatLocalizedDate(d, dateFormat);
   };
+
+  // Meaningful activities (exclude passive record view/access spam from workspace rail)
+  const meaningfulActivities = useMemo(() => {
+    return activities.filter(a => a.category !== 'ACCESS');
+  }, [activities]);
 
   // Filtered Activities
   const filteredActivities = useMemo(() => {
-    if (activityFilter === 'ALL') return activities;
-    return activities.filter(a => {
+    if (activityFilter === 'ALL') return meaningfulActivities;
+    return meaningfulActivities.filter(a => {
       if (activityFilter === 'STATUS') return a.category === 'STATUS' || a.category === 'WORKFLOW';
       if (activityFilter === 'FIELD') return a.category === 'FIELD';
       if (activityFilter === 'COMMENT') return a.category === 'COMMENT';
       if (activityFilter === 'ASSIGNMENT') return a.category === 'ASSIGNMENT';
       return true;
     });
-  }, [activities, activityFilter]);
+  }, [meaningfulActivities, activityFilter]);
 
   if (isCollapsed) {
     return (
@@ -578,14 +566,51 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
 
   return (
     <div className="w-80 xl:w-96 shrink-0 h-full border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col overflow-hidden transition-all duration-300">
-      {/* 1. Rail Top Bar (h-10 box-border to match tab line pixel-for-pixel) */}
-      <div className="h-10 box-border px-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shrink-0 bg-white dark:bg-zinc-900">
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-900 dark:text-white">
-            Details
-          </span>
+      {/* 1. Rail Top Bar: Primary Collaboration Tabs + Collapse Button */}
+      <div className="h-10 box-border px-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shrink-0 bg-white dark:bg-zinc-900 select-none">
+        {/* Navigation Tabs */}
+        <div className="flex items-center gap-0.5 overflow-x-auto no-scrollbar">
+          {(
+            [
+              { id: 'activity', label: 'Activity', icon: History, count: meaningfulActivities.length, isLoading: activityLoading && activities.length === 0 },
+              { id: 'notes', label: 'Notes', icon: StickyNote, count: notes.length, isLoading: notesLoading && notes.length === 0 },
+              { id: 'files', label: 'Files', icon: Files, count: files.length, isLoading: filesLoading && files.length === 0 },
+              { id: 'tasks', label: 'Tasks', icon: Calendar, count: tasks.filter(t => t.status !== 'COMPLETED').length, isLoading: tasksLoading && tasks.length === 0 }
+            ] as const
+          ).map(tab => {
+            const TabIcon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "relative flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0",
+                  isActive
+                    ? "bg-zinc-100 dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 font-bold shadow-2xs"
+                    : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                )}
+              >
+                <TabIcon size={12} className={cn(isActive ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-400")} />
+                <span>{tab.label}</span>
+                {tab.isLoading ? (
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse shrink-0" />
+                ) : tab.count > 0 ? (
+                  <span className={cn(
+                    "text-[9px] px-1 rounded-full font-bold leading-tight",
+                    isActive ? "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400" : "bg-zinc-200 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400"
+                  )}>
+                    {tab.count}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
         </div>
-        <div className="flex items-center gap-1">
+
+        {/* Rail Controls */}
+        <div className="flex items-center gap-1 shrink-0 ml-1">
           <button
             type="button"
             onClick={onToggleCollapse}
@@ -597,357 +622,92 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
         </div>
       </div>
 
-      {/* Rail Scrollable Body */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4 bg-zinc-50/50 dark:bg-zinc-900/40">
-        {/* 2. Vital Controls: Ownership & Status Card */}
-        <div className="bg-white dark:bg-zinc-950/60 border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl p-4 shadow-2xs space-y-3.5">
-          {/* Top Row: Record Key Pill + Quick Toolbar */}
-          <div className="flex items-center justify-between gap-2">
-            <button
-              onClick={handleCopyKey}
-              className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-[10px] font-mono font-bold text-zinc-600 dark:text-zinc-300 transition-colors cursor-pointer"
-              title="Copy Record Key"
-            >
-              <span>{recordKey}</span>
-              {copiedKey ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} className="text-zinc-400" />}
-            </button>
-
-            <div className="flex items-center gap-1">
+      {/* Tab Body Area */}
+      {activeTab === 'activity' ? (
+        <div className="flex-1 flex flex-col min-h-0 bg-zinc-50/50 dark:bg-zinc-900/40">
+          {/* Category Filter Pills */}
+          <div className="px-3 py-1.5 border-b border-zinc-200/60 dark:border-zinc-800/60 flex items-center gap-1 shrink-0 bg-white/60 dark:bg-zinc-900/60 backdrop-blur-xs overflow-x-auto no-scrollbar">
+            {(['ALL', 'FIELD', 'STATUS', 'ASSIGNMENT', 'COMMENT'] as const).map(cat => (
               <button
-                onClick={handleCopyLink}
-                className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-                title="Copy Record Link"
-              >
-                {copiedLink ? <Check size={12} className="text-emerald-500" /> : <ExternalLink size={12} />}
-              </button>
-              {onOpenShare && (
-                <button
-                  onClick={onOpenShare}
-                  className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-                  title="Share Record"
-                >
-                  <Share2 size={12} />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Assignee Control */}
-          <div className="space-y-1 relative" ref={assigneeMenuRef}>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block">
-              Assignee
-            </span>
-            <button
-              type="button"
-              onClick={() => setShowAssigneeMenu(prev => !prev)}
-              className="w-full flex items-center justify-between p-2 rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-950/40 text-xs font-medium transition-all cursor-pointer group"
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                {currentAssignee ? (
-                  <>
-                    <UserAvatarWithPresence
-                      avatarUrl={currentAssignee.avatarUrl}
-                      name={currentAssignee.name}
-                      status={(currentAssignee as any).status || (currentAssignee as any).presenceStatus || 'AVAILABLE'}
-                      size="xs"
-                    />
-                    <div className="text-left min-w-0">
-                      <p className="font-semibold text-zinc-900 dark:text-zinc-100 truncate leading-none">{currentAssignee.name}</p>
-                      <p className="text-[9px] text-zinc-400 truncate mt-0.5">{currentAssignee.email}</p>
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex items-center gap-2 text-zinc-400">
-                    <div className="w-5 h-5 rounded-full border border-dashed border-zinc-300 dark:border-zinc-700 flex items-center justify-center">
-                      <User size={10} />
-                    </div>
-                    <span>Unassigned</span>
-                  </div>
-                )}
-              </div>
-              <ChevronDown size={12} className={cn("text-zinc-400 transition-transform", showAssigneeMenu && "rotate-180")} />
-            </button>
-
-            {/* Assignee Selection Popover */}
-            <AnimatePresence>
-              {showAssigneeMenu && (
-                <motion.div
-                  initial={{ opacity: 0, y: 4, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 4, scale: 0.96 }}
-                  transition={{ duration: 0.12 }}
-                  className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl z-50 overflow-hidden"
-                >
-                  <div className="p-1.5 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/30 flex gap-1">
-                    <button
-                      onClick={() => {
-                        const me = members.find(m => m.id === platformUser?.memberId || m.id === platformUser?.cuid);
-                        if (me) onUpdateAssignee(me.id);
-                        setShowAssigneeMenu(false);
-                      }}
-                      className="flex-1 py-1 px-2 rounded-lg text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                    >
-                      <UserCheck size={11} />
-                      <span>Assign to me</span>
-                    </button>
-                    {currentAssignee && (
-                      <button
-                        onClick={() => {
-                          onUpdateAssignee(null);
-                          setShowAssigneeMenu(false);
-                        }}
-                        className="py-1 px-2 rounded-lg text-[10px] font-bold text-rose-500 hover:bg-rose-500/10 transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                        title="Clear Assignee"
-                      >
-                        <UserMinus size={11} />
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="p-1.5 border-b border-zinc-100 dark:border-zinc-800 relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" size={11} />
-                    <input
-                      type="text"
-                      placeholder="Search team..."
-                      value={assigneeSearch}
-                      onChange={(e) => setAssigneeSearch(e.target.value)}
-                      className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg pl-7 pr-2 py-1 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-
-                  <div className="max-h-44 overflow-y-auto p-1 space-y-0.5 custom-scrollbar">
-                    {members
-                      .filter(m => !m.isSynthetic && m.name.toLowerCase().includes(assigneeSearch.toLowerCase()))
-                      .map(m => {
-                        const isSelected = m.id === currentAssigneeId;
-                        return (
-                          <button
-                            key={m.id}
-                            onClick={() => {
-                              onUpdateAssignee(m.id);
-                              setShowAssigneeMenu(false);
-                            }}
-                            className={cn(
-                              "w-full flex items-center justify-between p-2 rounded-lg text-xs transition-colors cursor-pointer",
-                              isSelected ? "bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 font-semibold" : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                            )}
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <UserAvatarWithPresence avatarUrl={m.avatarUrl} name={m.name} size="xs" />
-                              <span className="truncate">{m.name}</span>
-                            </div>
-                            {isSelected && <Check size={12} className="text-indigo-600 dark:text-indigo-400 shrink-0" />}
-                          </button>
-                        );
-                      })}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* Status & Stage Control */}
-          <div className="space-y-1 relative" ref={statusMenuRef}>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block">
-              Status & Stage
-            </span>
-            <button
-              type="button"
-              onClick={() => setShowStatusMenu(prev => !prev)}
-              className="w-full flex items-center justify-between p-2 rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-950/40 text-xs font-semibold transition-all cursor-pointer group"
-            >
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
-                <span className="text-zinc-900 dark:text-white">{currentStatus}</span>
-              </div>
-              <ChevronDown size={12} className={cn("text-zinc-400 transition-transform", showStatusMenu && "rotate-180")} />
-            </button>
-
-            {/* Status Dropdown */}
-            <AnimatePresence>
-              {showStatusMenu && (
-                <motion.div
-                  initial={{ opacity: 0, y: 4, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 4, scale: 0.96 }}
-                  transition={{ duration: 0.12 }}
-                  className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl z-50 p-1 space-y-0.5 max-h-64 overflow-y-auto custom-scrollbar"
-                >
-                  {normalizedStatusOptions.map((st) => {
-                    const isSelected = st.name.toLowerCase() === currentStatus.toLowerCase();
-                    const hasAutomations = Boolean(st.automatedActions && st.automatedActions.length > 0);
-                    return (
-                      <button
-                        key={st.id || st.name}
-                        type="button"
-                        onClick={() => {
-                          onUpdateStatus(st.name, st.id);
-                          setShowStatusMenu(false);
-                        }}
-                        className={cn(
-                          "w-full flex items-center justify-between p-2 rounded-lg text-xs font-semibold transition-colors cursor-pointer text-left",
-                          isSelected ? "bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400" : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                        )}
-                        title={st.condition ? `Rule: ${st.condition}` : undefined}
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className={cn(
-                            "w-1.5 h-1.5 rounded-full shrink-0", 
-                            isSelected ? "bg-indigo-600 dark:bg-indigo-400 ring-2 ring-indigo-500/20 animate-pulse" : "bg-zinc-400 dark:bg-zinc-600"
-                          )} />
-                          <span className="truncate">{st.name}</span>
-                          {hasAutomations && (
-                            <span className="flex items-center text-amber-500 dark:text-amber-400 shrink-0 ml-0.5" title={`${st.automatedActions!.length} action(s)`}>
-                              <Zap size={10} className="fill-amber-400/40" />
-                            </span>
-                          )}
-                          {st.condition && !hasAutomations && (
-                            <span className="flex items-center text-indigo-400 dark:text-indigo-400 shrink-0 ml-0.5 opacity-80" title={st.condition}>
-                              <GitFork size={10} />
-                            </span>
-                          )}
-                        </div>
-                        {isSelected && <Check size={12} className="text-indigo-600 dark:text-indigo-400 shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* Timestamps */}
-          <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/60 flex items-center justify-between text-[10px] text-zinc-400">
-            <span>Created {formatTimeAgo(record?.createdAt)}</span>
-            <span>Updated {formatTimeAgo(record?.updatedAt || record?.createdAt)}</span>
-          </div>
-        </div>
-
-        {/* 3. Segmented Collaboration Tabs Switcher */}
-        <div className="flex items-center p-1 bg-zinc-200/60 dark:bg-zinc-900/80 border border-zinc-200 dark:border-zinc-800 rounded-xl">
-          {(
-            [
-              { id: 'activity', label: 'Activity', icon: History, count: activities.length },
-              { id: 'notes', label: 'Notes', icon: StickyNote, count: notes.length },
-              { id: 'files', label: 'Files', icon: Files, count: files.length },
-              { id: 'tasks', label: 'Tasks', icon: Calendar, count: tasks.filter(t => t.status !== 'COMPLETED').length }
-            ] as const
-          ).map(tab => {
-            const TabIcon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                key={cat}
+                type="button"
+                onClick={() => setActivityFilter(cat)}
                 className={cn(
-                  "flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer select-none",
-                  isActive
-                    ? "bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 shadow-2xs font-bold"
-                    : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+                  "px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer shrink-0",
+                  activityFilter === cat
+                    ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30"
+                    : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
                 )}
               >
-                <TabIcon size={12} />
-                <span>{tab.label}</span>
-                {tab.count > 0 && (
-                  <span className={cn(
-                    "text-[9px] px-1 py-0.2 rounded-full font-bold",
-                    isActive ? "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400" : "bg-zinc-300/60 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-400"
-                  )}>
-                    {tab.count}
-                  </span>
-                )}
+                {cat}
               </button>
-            );
-          })}
-        </div>
+            ))}
+          </div>
 
-        {/* 4. Tab Panels */}
-        <div className="space-y-3">
-          {/* A. ACTIVITY TAB */}
-          {activeTab === 'activity' && (
-            <div className="space-y-3">
-              {/* Category Filter Pills & Live Status Indicator */}
-              <div className="flex items-center justify-between gap-1.5 pb-0.5">
-                <div className="flex items-center gap-1 overflow-x-auto custom-scrollbar">
-                  {(['ALL', 'FIELD', 'STATUS', 'ASSIGNMENT', 'COMMENT'] as const).map(cat => (
-                    <button
-                      key={cat}
-                      onClick={() => setActivityFilter(cat)}
-                      className={cn(
-                        "px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer shrink-0",
-                        activityFilter === cat
-                          ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30"
-                          : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
-                      )}
-                    >
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-
-                <div 
-                  className={cn(
-                    "flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider shrink-0 transition-colors",
-                    isLiveConnected 
-                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20" 
-                      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"
-                  )}
-                  title={isLiveConnected ? "Connected to live activity stream" : "Connecting to live feed..."}
-                >
-                  <span className={cn(
-                    "w-1.5 h-1.5 rounded-full",
-                    isLiveConnected ? "bg-emerald-500 animate-pulse" : "bg-zinc-400"
-                  )} />
-                  <span>{isLiveConnected ? "Live" : "Offline"}</span>
-                </div>
+          {/* Activity Timeline List (Scrollable) */}
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2.5">
+            {activityLoading && activities.length === 0 ? (
+              <div className="space-y-2.5 p-0.5">
+                {[1, 2, 3, 4].map(idx => (
+                  <div
+                    key={idx}
+                    className="p-3 rounded-xl border border-zinc-200/60 dark:border-zinc-800/60 bg-white/60 dark:bg-zinc-900/40 space-y-2.5 animate-pulse"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-full bg-zinc-200 dark:bg-zinc-800" />
+                        <div className="h-3 w-24 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                      </div>
+                      <div className="h-2 w-10 bg-zinc-100 dark:bg-zinc-800/60 rounded" />
+                    </div>
+                    <div className="h-3.5 w-4/5 bg-zinc-100 dark:bg-zinc-800/70 rounded" />
+                  </div>
+                ))}
               </div>
+            ) : filteredActivities.length === 0 ? (
+              <div className="py-8 text-center text-zinc-400 text-xs italic">
+                {activityFilter === 'ALL'
+                  ? 'No activity events recorded yet. Field changes and updates will stream here live.'
+                  : `No ${activityFilter.toLowerCase()} events recorded yet.`}
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {filteredActivities.map((event: any, idx: number) => (
+                  <ActivityEventCard
+                    key={event.id || idx}
+                    event={event}
+                    showResourceLink={false}
+                    members={_members}
+                    allFields={_allFields}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
 
-              {/* Comment Composer */}
-              <form onSubmit={handlePostComment} className="relative">
-                <input
-                  type="text"
-                  placeholder="Leave an activity update..."
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  disabled={submittingComment}
-                  className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-3 pr-8 py-2 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:border-indigo-500 transition-colors shadow-2xs"
-                />
-                <button
-                  type="submit"
-                  disabled={!newComment.trim() || submittingComment}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-zinc-400 hover:text-indigo-600 disabled:opacity-30 cursor-pointer"
-                >
-                  <Send size={12} />
-                </button>
-              </form>
-
-              {/* Activity Timeline List */}
-              {activityLoading && activities.length === 0 ? (
-                <div className="py-8 flex flex-col items-center justify-center gap-2 text-zinc-400">
-                  <Loader2 size={16} className="animate-spin text-indigo-500" />
-                  <span className="text-[11px]">Loading live stream...</span>
-                </div>
-              ) : filteredActivities.length === 0 ? (
-                <div className="py-8 text-center text-zinc-400 text-xs italic">
-                  {activityFilter === 'ALL'
-                    ? 'No activity events recorded yet. Field changes and updates will stream here live.'
-                    : `No ${activityFilter.toLowerCase()} events recorded yet.`}
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  {filteredActivities.map((event: any, idx: number) => (
-                    <ActivityEventCard
-                      key={event.id || idx}
-                      event={event}
-                      showResourceLink={false}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* B. NOTES TAB */}
+          {/* Docked Bottom Comment Composer */}
+          <div className="p-2.5 border-t border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0">
+            <form onSubmit={handlePostComment} className="relative">
+              <input
+                type="text"
+                placeholder="Leave an activity update..."
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                disabled={submittingComment}
+                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-3 pr-8 py-2 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:border-indigo-500 transition-colors shadow-2xs"
+              />
+              <button
+                type="submit"
+                disabled={!newComment.trim() || submittingComment}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-zinc-400 hover:text-indigo-600 disabled:opacity-30 cursor-pointer"
+              >
+                <Send size={12} />
+              </button>
+            </form>
+          </div>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-3 bg-zinc-50/50 dark:bg-zinc-900/40">
           {activeTab === 'notes' && (
             <div className="space-y-3">
               {/* Quick Add Note Header Button */}
@@ -1010,8 +770,19 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
 
               {/* Notes List */}
               {notesLoading && notes.length === 0 ? (
-                <div className="py-8 flex justify-center text-zinc-400">
-                  <Loader2 size={16} className="animate-spin" />
+                <div className="space-y-2 p-0.5">
+                  {[1, 2].map(idx => (
+                    <div
+                      key={idx}
+                      className="p-3 bg-white/60 dark:bg-zinc-900/40 border border-zinc-200/60 dark:border-zinc-800/60 rounded-xl space-y-2 animate-pulse"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="h-3 w-24 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                        <div className="h-2 w-10 bg-zinc-100 dark:bg-zinc-800/60 rounded" />
+                      </div>
+                      <div className="h-3 w-4/5 bg-zinc-100 dark:bg-zinc-800/60 rounded" />
+                    </div>
+                  ))}
                 </div>
               ) : notes.length === 0 ? (
                 <div className="py-8 text-center text-zinc-400 text-xs italic">
@@ -1080,8 +851,19 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
 
               {/* Files List */}
               {filesLoading && files.length === 0 ? (
-                <div className="py-8 flex justify-center text-zinc-400">
-                  <Loader2 size={16} className="animate-spin" />
+                <div className="space-y-1.5 p-0.5">
+                  {[1, 2].map(idx => (
+                    <div
+                      key={idx}
+                      className="p-2.5 bg-white/60 dark:bg-zinc-900/40 border border-zinc-200/60 dark:border-zinc-800/60 rounded-xl flex items-center gap-2 animate-pulse"
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-zinc-200 dark:bg-zinc-800 shrink-0" />
+                      <div className="flex-1 space-y-1">
+                        <div className="h-3 w-28 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                        <div className="h-2 w-16 bg-zinc-100 dark:bg-zinc-800/60 rounded" />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : files.length === 0 ? (
                 <div className="py-8 text-center text-zinc-400 text-xs italic">
@@ -1090,8 +872,11 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
               ) : (
                 <div className="space-y-1.5">
                   {files.map(doc => {
-                    const ext = doc.fileName?.split('.').pop()?.toUpperCase() || 'DOC';
-                    const sizeStr = doc.fileSize ? `${Math.round(doc.fileSize / 1024)} KB` : '';
+                    const docName = doc.name || (doc as any).originalFilename || (doc as any).fileName || 'Document';
+                    const ext = docName.split('.').pop()?.toUpperCase() || 'DOC';
+                    const size = doc.sizeBytes || (doc as any).fileSize;
+                    const sizeStr = size ? `${Math.round(size / 1024)} KB` : '';
+                    const fileUrl = doc.url || (doc as any).fileUrl;
                     return (
                       <div
                         key={doc.id}
@@ -1103,20 +888,20 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
                           </span>
                           <div className="min-w-0">
                             <p className="text-xs font-semibold text-zinc-900 dark:text-white truncate leading-tight">
-                              {doc.title || doc.fileName}
+                              {docName}
                             </p>
                             <p className="text-[9px] text-zinc-400 mt-0.5 truncate">
-                              {sizeStr} • {formatTimeAgo(doc.createdAt)}
+                              {sizeStr}{sizeStr ? ' • ' : ''}{formatTimeAgo(doc.createdAt)}
                             </p>
                           </div>
                         </div>
 
-                        {doc.fileUrl && (
+                        {fileUrl && (
                           <a
-                            href={doc.fileUrl}
+                            href={fileUrl}
                             target="_blank"
                             rel="noreferrer"
-                            download={doc.fileName}
+                            download={docName}
                             className="p-1.5 rounded-lg text-zinc-400 hover:text-indigo-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                             title="Download file"
                           >
@@ -1193,8 +978,19 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
 
               {/* Tasks List */}
               {tasksLoading && tasks.length === 0 ? (
-                <div className="py-8 flex justify-center text-zinc-400">
-                  <Loader2 size={16} className="animate-spin" />
+                <div className="space-y-1.5 p-0.5">
+                  {[1, 2].map(idx => (
+                    <div
+                      key={idx}
+                      className="p-2.5 bg-white/60 dark:bg-zinc-900/40 border border-zinc-200/60 dark:border-zinc-800/60 rounded-xl flex items-center gap-2.5 animate-pulse"
+                    >
+                      <div className="w-3.5 h-3.5 rounded-full bg-zinc-200 dark:bg-zinc-800 shrink-0" />
+                      <div className="flex-1 space-y-1">
+                        <div className="h-3 w-36 bg-zinc-200 dark:bg-zinc-800 rounded" />
+                        <div className="h-2 w-16 bg-zinc-100 dark:bg-zinc-800/60 rounded" />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : tasks.length === 0 ? (
                 <div className="py-8 text-center text-zinc-400 text-xs italic">
@@ -1235,7 +1031,7 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
                           {task.dueAt && (
                             <div className="flex items-center gap-1 text-[9px] text-zinc-400 mt-1">
                               <Clock size={10} />
-                              <span>Due {new Date(task.dueAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
+                              <span>Due {formatLocalizedDate(task.dueAt, dateFormat)}</span>
                             </div>
                           )}
                         </div>
@@ -1247,7 +1043,7 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
             </div>
           )}
         </div>
-      </div>
+      )}
     </div>
   );
 };

@@ -86,6 +86,7 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
         id: user.id,
         memberId: primaryMembership?.id,
         email: user.email,
+        name: `${primaryMembership?.firstName || ''} ${primaryMembership?.familyName || ''}`.trim() || user.email,
         firstName: primaryMembership?.firstName,
         lastName: primaryMembership?.familyName,
         isSuperAdmin: user.isSuperAdmin,

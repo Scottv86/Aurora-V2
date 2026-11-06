@@ -26,7 +26,8 @@ import {
   X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn } from '../../lib/utils';
+import { cn, formatLocalizedDate } from '../../lib/utils';
+import { usePlatform } from '../../hooks/usePlatform';
 
 interface DatePickerProps {
   value: string; // ISO or YYYY-MM-DD
@@ -48,11 +49,14 @@ export const DatePicker: React.FC<DatePickerProps> = ({
   readonly = false,
   className,
   onBlur,
-  dateFormat = 'PPP',
+  dateFormat,
   excludeWeekends = false,
   min,
   max
 }) => {
+  const { tenant } = usePlatform();
+  const effectiveFormat = dateFormat || tenant?.localization?.dateFormat || 'DD/MM/YYYY';
+
   const [isOpen, setIsOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'days' | 'months' | 'years'>('days');
   const [viewDate, setViewDate] = useState(new Date());
@@ -87,9 +91,16 @@ export const DatePicker: React.FC<DatePickerProps> = ({
     }
   }, [isOpen, updatePosition]);
 
-  // Parse initial value
+  // Parse initial value without timezone skew for YYYY-MM-DD
   const selectedDate = useMemo(() => {
     if (!value) return null;
+    if (typeof value === 'string') {
+      const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (match) {
+        const d = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+        return isValid(d) ? d : null;
+      }
+    }
     const date = new Date(value);
     return isValid(date) ? date : null;
   }, [value]);
@@ -186,7 +197,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
         <div className="flex items-center gap-2">
           <CalendarIcon size={14} className={cn("text-zinc-400", isOpen && "text-indigo-500")} />
           <span className={cn(!value && "text-zinc-400")}>
-            {selectedDate ? format(selectedDate, dateFormat) : placeholder}
+            {selectedDate ? formatLocalizedDate(selectedDate, effectiveFormat) : placeholder}
           </span>
         </div>
         {!readonly && value && (

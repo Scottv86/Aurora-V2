@@ -592,3 +592,89 @@ export const evaluateFormattingRules = (
   };
 };
 
+
+
+/**
+ * Formats a date string, timestamp, or Date object according to the tenant's configured
+ * localization dateFormat (e.g. 'DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD', 'MMM D, YYYY').
+ */
+export function formatLocalizedDate(
+  dateInput: any,
+  formatPattern?: string,
+  includeTime: boolean = false
+): string {
+  if (!dateInput && dateInput !== 0) return '';
+  
+  let date: Date;
+  let isDateOnly = false;
+  let year = '';
+  let month = '';
+  let day = '';
+
+  if (typeof dateInput === 'string') {
+    const trimmed = dateInput.trim();
+    // YYYY-MM-DD date-only strings should not shift across timezones
+    const dateOnlyMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (dateOnlyMatch) {
+      isDateOnly = true;
+      year = dateOnlyMatch[1];
+      month = dateOnlyMatch[2];
+      day = dateOnlyMatch[3];
+      date = new Date(Number(year), Number(month) - 1, Number(day));
+    } else {
+      date = new Date(trimmed);
+    }
+  } else if (dateInput instanceof Date) {
+    date = dateInput;
+  } else if (typeof dateInput === 'number') {
+    date = new Date(dateInput);
+  } else {
+    return String(dateInput);
+  }
+
+  if (isNaN(date.getTime())) return String(dateInput);
+
+  if (!isDateOnly) {
+    year = String(date.getFullYear());
+    month = String(date.getMonth() + 1).padStart(2, '0');
+    day = String(date.getDate()).padStart(2, '0');
+  }
+
+  const pattern = (formatPattern || 'DD/MM/YYYY').toUpperCase();
+  const dayNum = Number(day);
+  const monthShort = date.toLocaleDateString('en-US', { month: 'short' });
+
+  let formatted = '';
+  if (pattern === 'PPP' || pattern.includes('PPP')) {
+    const monthLong = date.toLocaleDateString('en-US', { month: 'long' });
+    const suffix = (d: number) => {
+      if (d > 3 && d < 21) return 'th';
+      switch (d % 10) {
+        case 1: return 'st';
+        case 2: return 'nd';
+        case 3: return 'rd';
+        default: return 'th';
+      }
+    };
+    formatted = `${monthLong} ${dayNum}${suffix(dayNum)}, ${year}`;
+  } else if (pattern.includes('MMM D, YYYY') || pattern.includes('MMM DD, YYYY')) {
+    formatted = `${monthShort} ${dayNum}, ${year}`;
+  } else if (pattern.includes('D MMM YYYY') || pattern.includes('DD MMM YYYY')) {
+    formatted = `${dayNum} ${monthShort} ${year}`;
+  } else if (pattern.includes('MM/DD/YYYY') || pattern.includes('MM-DD-YYYY')) {
+    formatted = `${month}/${day}/${year}`;
+  } else if (pattern.includes('YYYY-MM-DD') || pattern.includes('YYYY/MM/DD')) {
+    formatted = `${year}-${month}-${day}`;
+  } else {
+    // Default to DD/MM/YYYY
+    formatted = `${day}/${month}/${year}`;
+  }
+
+  if (includeTime && !isDateOnly) {
+    const hours = String(date.getHours()).padStart(2, '0');
+    const mins = String(date.getMinutes()).padStart(2, '0');
+    formatted += ` ${hours}:${mins}`;
+  }
+
+  return formatted;
+}

@@ -1,4 +1,12 @@
-import { Workflow, WorkflowNode, WorkflowEdge, ModuleField } from '../types/platform';
+import { 
+  Workflow, 
+  WorkflowNode, 
+  WorkflowEdge, 
+  ModuleField, 
+  WorkflowSubstep, 
+  SubstepStatus, 
+  SubstepProgressItem 
+} from '../types/platform';
 
 export interface NextStepAction {
   edgeId?: string;
@@ -8,6 +16,23 @@ export interface NextStepAction {
   variant?: 'primary' | 'success' | 'destructive' | 'outline';
   isStart?: boolean;
   requiredFieldIds?: string[];
+}
+
+export interface StageSubstepItem extends WorkflowSubstep {
+  status: SubstepStatus;
+  updatedBy?: string;
+  updatedAt?: string;
+  note?: string;
+}
+
+export interface StageSubstepsSummary {
+  total: number;
+  completed: number;
+  waived: number;
+  pending: number;
+  requiredRemaining: number;
+  isSatisfied: boolean;
+  items: StageSubstepItem[];
 }
 
 export type ScheduledActivityType = 'call' | 'email' | 'meeting' | 'todo' | 'document' | 'reminder';
@@ -54,6 +79,9 @@ export interface ProcessStage {
   condition?: string;
   decisionName?: string;
   automatedActions?: Array<{ id: string; name: string; type: string }>;
+  // Subtasks checklist metadata
+  substeps?: WorkflowSubstep[];
+  substepsSummary?: StageSubstepsSummary;
 }
 
 export interface PipelineStep {
@@ -81,6 +109,8 @@ export interface NextStepResolution {
   isStarted: boolean;
   isCompleted: boolean;
   currentStageName: string;
+  currentStageNode?: WorkflowNode | null;
+  currentStageSubsteps?: StageSubstepsSummary;
   activeNodeIds: string[];
   primaryAction: NextStepAction | null;
   alternativeActions: NextStepAction[];
@@ -88,6 +118,84 @@ export interface NextStepResolution {
   forkBranches: ForkBranch[];
   stages: ProcessStage[];
   steps: PipelineStep[];
+}
+
+/**
+ * Resolves the substeps for a stage node against the execution record state.
+ */
+export function resolveStageSubsteps(
+  node: WorkflowNode | undefined,
+  record: any
+): StageSubstepsSummary {
+  const substeps: WorkflowSubstep[] = node?.substeps || [];
+  if (substeps.length === 0) {
+    return {
+      total: 0,
+      completed: 0,
+      waived: 0,
+      pending: 0,
+      requiredRemaining: 0,
+      isSatisfied: true,
+      items: []
+    };
+  }
+
+  const idSubsteps = (node && record?.workflowState?.substeps?.[node.id]) || (node && record?.substeps?.[node.id]) || {};
+  const nameSubsteps = (node && record?.workflowState?.substeps?.[node.name]) || (node && record?.substeps?.[node.name]) || {};
+  const recordSubsteps = { ...nameSubsteps, ...idSubsteps } as Record<string, SubstepProgressItem>;
+
+  let completed = 0;
+  let waived = 0;
+  let pending = 0;
+  let requiredRemaining = 0;
+
+  const items: StageSubstepItem[] = substeps.map(step => {
+    const progress = recordSubsteps[step.id];
+    const status: SubstepStatus = progress?.status || 'pending';
+    if (status === 'completed') {
+      completed++;
+    } else if (status === 'waived') {
+      waived++;
+    } else {
+      pending++;
+      if (step.required) {
+        requiredRemaining++;
+      }
+    }
+
+    return {
+      ...step,
+      status,
+      updatedBy: progress?.updatedBy,
+      updatedAt: progress?.updatedAt,
+      note: progress?.note
+    };
+  });
+
+  return {
+    total: substeps.length,
+    completed,
+    waived,
+    pending,
+    requiredRemaining,
+    isSatisfied: requiredRemaining === 0,
+    items
+  };
+}
+
+/**
+ * Checks whether all required substeps of a stage node are satisfied (either completed or waived).
+ */
+export function checkStageSubstepsSatisfied(
+  node: WorkflowNode | undefined,
+  record: any
+): { isSatisfied: boolean; incompleteRequired: StageSubstepItem[] } {
+  const summary = resolveStageSubsteps(node, record);
+  const incompleteRequired = summary.items.filter(i => i.required && i.status === 'pending');
+  return {
+    isSatisfied: incompleteRequired.length === 0,
+    incompleteRequired
+  };
 }
 
 function isStageNode(node: WorkflowNode | undefined): boolean {
@@ -205,7 +313,8 @@ function getDownstreamStageTargets(
 
 function mapNodeToProcessStage(
   node: WorkflowNode,
-  workflow: Workflow
+  workflow: Workflow,
+  record?: any
 ): ProcessStage {
   const incomingEdges = workflow.edges.filter(e => e.target === node.id);
   const primaryIncoming = incomingEdges.find(e => e.isPrimary) || incomingEdges[0];
@@ -232,6 +341,8 @@ function mapNodeToProcessStage(
     index === self.findIndex(a => a.id === act.id)
   );
 
+  const substepsSummary = resolveStageSubsteps(node, record);
+
   return {
     id: node.id,
     name: node.name,
@@ -243,7 +354,9 @@ function mapNodeToProcessStage(
     condition,
     decisionName,
     automatedActions: uniqueActions.length > 0 ? uniqueActions : undefined,
-    requiredFieldIds: primaryIncoming?.requiredFieldIds || []
+    requiredFieldIds: primaryIncoming?.requiredFieldIds || [],
+    substeps: node.substeps || [],
+    substepsSummary
   };
 }
 
@@ -338,7 +451,8 @@ export function buildPipelineSteps(
   workflow: Workflow,
   currentStageIds: Set<string>,
   availableActionTargetIds: Set<string>,
-  isCompletedWorkflow: boolean
+  isCompletedWorkflow: boolean,
+  record?: any
 ): { steps: PipelineStep[]; stages: ProcessStage[] } {
   const stageNodes = workflow.nodes.filter(isStageNode);
   if (stageNodes.length === 0) {
@@ -427,7 +541,7 @@ export function buildPipelineSteps(
     const isFork = nodesInLevel.length > 1;
 
     const stepStages: ProcessStage[] = nodesInLevel.map(node => {
-      const mapped = mapNodeToProcessStage(node, workflow);
+      const mapped = mapNodeToProcessStage(node, workflow, record);
       const isCurrent = currentStageIds.has(node.id);
       const isCompletedStage = isCompletedWorkflow || (currentLevel !== -1 && lvl < currentLevel);
       const isUpcoming = !isCurrent && !isCompletedStage;
@@ -490,7 +604,8 @@ export function resolveRecordNextStep(
       workflow,
       new Set(startNode ? [startNode.id] : []),
       new Set(),
-      false
+      false,
+      record
     );
 
     return {
@@ -498,6 +613,8 @@ export function resolveRecordNextStep(
       isStarted: false,
       isCompleted: false,
       currentStageName: 'Not Started',
+      currentStageNode: startNode || null,
+      currentStageSubsteps: startNode ? resolveStageSubsteps(startNode, record) : undefined,
       activeNodeIds: [],
       primaryAction: startNode ? {
         targetNodeId: startNode.id,
@@ -642,12 +759,16 @@ export function resolveRecordNextStep(
     }
   }
 
+  const currentStageNode = currentStageNodes[0] || null;
+  const currentStageSubsteps = currentStageNode ? resolveStageSubsteps(currentStageNode, record) : undefined;
+
   const availableActionTargetIds = new Set(actions.map(a => a.targetNodeId));
   const { steps, stages } = buildPipelineSteps(
     workflow,
     currentStageIds,
     availableActionTargetIds,
-    isCompleted
+    isCompleted,
+    record
   );
 
   return {
@@ -655,6 +776,8 @@ export function resolveRecordNextStep(
     isStarted: true,
     isCompleted,
     currentStageName,
+    currentStageNode,
+    currentStageSubsteps,
     activeNodeIds: rawActiveIds,
     primaryAction,
     alternativeActions: nonPrimaryActions,

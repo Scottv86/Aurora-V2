@@ -323,6 +323,25 @@ export interface Module {
 
 export type WorkflowNodeType = 'STATUS' | 'DECISION' | 'ACTION' | 'DELAY' | 'START' | 'END' | 'ZONE';
 
+export interface WorkflowSubstep {
+  id: string;
+  label: string;
+  description?: string;
+  required?: boolean;        // Blocks normal advance if not satisfied
+  allowOverride?: boolean;   // Whether operators can bypass with reason
+}
+
+export type SubstepStatus = 'pending' | 'completed' | 'waived';
+
+export interface SubstepProgressItem {
+  status: SubstepStatus;
+  updatedBy?: string;
+  updatedAt?: string;
+  note?: string; // Reason if waived or bypassed
+}
+
+export type RecordSubstepProgress = Record<string, Record<string, SubstepProgressItem>>;
+
 export interface WorkflowNode {
   id: string;
   type: WorkflowNodeType;
@@ -332,6 +351,7 @@ export interface WorkflowNode {
   stageOrder?: number;
   isStage?: boolean;
   stageDescription?: string;
+  substeps?: WorkflowSubstep[];
 }
 
 export interface WorkflowEdge {

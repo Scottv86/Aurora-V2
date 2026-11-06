@@ -173,7 +173,8 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
     // Strictly derive verified tenant memberships from database - never trust x-tenant-id header
     const verifiedTenantIds = Array.from(new Set((dbMemberships || []).map(m => m.tenantId).filter(Boolean)));
 
-    const membership = (dbMemberships || [])[0];
+    const requestedTenantId = req.headers['x-tenant-id'] as string;
+    const membership = (requestedTenantId && (dbMemberships || []).find(m => m.tenantId === requestedTenantId)) || (dbMemberships || [])[0];
     const name = membership 
       ? `${membership.firstName || ''} ${membership.familyName || ''}`.trim() 
       : (supabaseUser as any).user_metadata?.full_name || email || 'User';

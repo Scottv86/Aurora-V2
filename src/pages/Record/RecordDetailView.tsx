@@ -34,6 +34,7 @@ import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { UserAvatarWithPresence } from '../../components/Common/UserPresenceBadge';
 import { ShareRecordModal } from '../../components/Platform/ShareRecordModal';
+import { MoveRecordModal } from '../../components/Platform/MoveRecordModal';
 import { RecordContextRail } from '../../components/Record/RecordContextRail';
 import { RecordActivityDrawer } from '../../components/Platform/RecordActivityDrawer';
 import { RecordDocumentsDrawer } from '../../components/Platform/RecordDocumentsDrawer';
@@ -91,6 +92,7 @@ const isDirectInteractableField = (type?: string) =>
 export const RecordDetailView = ({
   moduleIdProp,
   recordIdProp,
+  initialRecordProp,
   isModal = false,
   isEmbedded = false,
   onRecordUpdate,
@@ -98,6 +100,7 @@ export const RecordDetailView = ({
 }: {
   moduleIdProp?: string;
   recordIdProp?: string;
+  initialRecordProp?: Record<string, any> | null;
   isModal?: boolean;
   isEmbedded?: boolean;
   onRecordUpdate?: (record: any) => void;
@@ -120,8 +123,15 @@ export const RecordDetailView = ({
 
   const recordId = recordIdProp || routeRecordId;
   const recordCacheKey = `record_${tenant?.id || 'default'}_${recordId || 'none'}`;
-  const [record, setRecord] = useState<Record<string, any> | null>(() => builderCache.get(recordCacheKey) || getCachedRecordById(recordId || '') || null);
-  const moduleId = moduleIdProp || resolvedRouteModuleId || record?.moduleId || '';
+
+  const getImmediateRecord = useCallback((id?: string) => {
+    if (!id) return null;
+    if (initialRecordProp && initialRecordProp.id === id) return initialRecordProp;
+    return builderCache.get<Record<string, any>>(`record_${tenant?.id || 'default'}_${id}`) || getCachedRecordById(id) || null;
+  }, [initialRecordProp, tenant?.id]);
+
+  const [record, setRecord] = useState<Record<string, any> | null>(() => getImmediateRecord(recordId));
+  const moduleId = moduleIdProp || resolvedRouteModuleId || record?.moduleId || initialRecordProp?.moduleId || '';
   const [moduleData, setModuleData] = useState<Module | null>(() => modules?.find((m: any) => m.id === moduleId || slugify(m.name) === moduleId) || null);
   const [syncingConnectors, setSyncingConnectors] = useState<Record<string, boolean>>({});
   const [quickActionAutomations, setQuickActionAutomations] = useState<any[]>([]);
@@ -130,13 +140,20 @@ export const RecordDetailView = ({
   // Synchronously update from cache when recordId changes (e.g. Prev/Next stepper or Split View click)
   useEffect(() => {
     if (!recordId) return;
-    const cached = builderCache.get<Record<string, any>>(recordCacheKey) || getCachedRecordById(recordId);
+    const cached = getImmediateRecord(recordId);
     if (cached && cached.id === recordId) {
       setRecord(cached);
       setEditData(cached);
       setLoading(false);
     }
-  }, [recordId, recordCacheKey]);
+  }, [recordId, getImmediateRecord]);
+
+  useEffect(() => {
+    if (initialRecordProp && initialRecordProp.id === recordId) {
+      setRecord(prev => (prev?.id === recordId ? { ...prev, ...initialRecordProp } : initialRecordProp));
+      setEditData(prev => ({ ...initialRecordProp, ...prev }));
+    }
+  }, [initialRecordProp, recordId]);
 
   const siblingRecordIds = useMemo<string[]>(() => {
     if (!moduleId) return [];
@@ -278,13 +295,28 @@ export const RecordDetailView = ({
     return LucideIcons.Layers;
   }, [moduleData]);
 
-  const [loading, setLoading] = useState(() => !(builderCache.has(recordCacheKey) || getCachedRecordById(recordId || '')));
+  const [loading, setLoading] = useState(() => !getImmediateRecord(recordId));
   const [activeFieldId, setActiveFieldId] = useState<string | null>(null);
   const [savingFieldId, setSavingFieldId] = useState<string | null>(null);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [hoveredTabId, setHoveredTabId] = useState<string | null>(null);
   const [hoveredTabRect, setHoveredTabRect] = useState<{ bottom: number, left: number } | null>(null);
-  const [editData, setEditData] = useState<Record<string, any>>(() => builderCache.get(recordCacheKey) || getCachedRecordById(recordId || '') || {});
+  const initialImmediate = getImmediateRecord(recordId) || {};
+  const [editData, setEditData] = useState<Record<string, any>>(() => initialImmediate);
+  const editDataRef = useRef<Record<string, any>>(initialImmediate);
+  const [prevRecordId, setPrevRecordId] = useState<string | undefined>(recordId);
+
+  // Synchronously adjust record and editData during render when recordId changes
+  if (recordId !== prevRecordId) {
+    setPrevRecordId(recordId);
+    const immediate = getImmediateRecord(recordId);
+    if (immediate) {
+      setRecord(immediate);
+      setEditData(immediate);
+      editDataRef.current = immediate;
+      setLoading(false);
+    }
+  }
   const [isRailCollapsed, setIsRailCollapsed] = useState<boolean>(() => {
     try {
       return localStorage.getItem('aurora_record_rail_collapsed') === 'true';
@@ -292,6 +324,7 @@ export const RecordDetailView = ({
       return false;
     }
   });
+  const effectiveRecordId = recordId || record?.id || 'current';
 
   const toggleRail = useCallback(() => {
     setIsRailCollapsed(prev => {
@@ -316,6 +349,8 @@ export const RecordDetailView = ({
   }, [toggleRail]);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showMoveModal, setShowMoveModal] = useState(false);
+  const [isCloning, setIsCloning] = useState(false);
   const [showActivityDrawer, setShowActivityDrawer] = useState(false);
   const [showScheduleActivityModal, setShowScheduleActivityModal] = useState(false);
   const [showDocumentsDrawer, setShowDocumentsDrawer] = useState(false);
@@ -362,7 +397,6 @@ export const RecordDetailView = ({
 
   const isSavingRef = useRef(false);
   const pendingUpdateRef = useRef<{ data: any, fieldId: string | null } | null>(null);
-  const editDataRef = useRef<Record<string, any>>({});
 
   // Keep ref in sync for use in handlers that shouldn't wait for re-renders
   useEffect(() => {
@@ -462,6 +496,180 @@ export const RecordDetailView = ({
     } catch (error: any) {
       console.error("Participant Update Error:", error);
       toast.error(error.message || "Failed to clear participants");
+    }
+  };
+
+  const resolvedCurrentUserId = platformUser?.id || session?.user?.id || supabaseUser?.id || '';
+  const currentMember = useMemo(() => {
+    if (!members) return null;
+    return members.find((m: any) => 
+      m.id === platformUser?.memberId || 
+      m.id === platformUser?.cuid || 
+      m.id === resolvedCurrentUserId || 
+      m.userId === resolvedCurrentUserId || 
+      m.user?.id === resolvedCurrentUserId || 
+      (m.email && (m.email === platformUser?.email || m.email === session?.user?.email))
+    ) || null;
+  }, [members, platformUser, session, resolvedCurrentUserId]);
+
+  const effectiveCurrentUserName = useMemo(() => {
+    if (currentMember) {
+      const memName = `${currentMember.firstName || ''} ${currentMember.familyName || ''}`.trim() || currentMember.name;
+      if (memName) return memName;
+    }
+    if (platformUser) {
+      const uName = platformUser.name || `${platformUser.firstName || ''} ${platformUser.lastName || ''}`.trim();
+      if (uName) return uName;
+    }
+    const sbName = (supabaseUser as any)?.user_metadata?.full_name || (supabaseUser as any)?.user_metadata?.name;
+    if (sbName) return sbName;
+    return session?.user?.email || 'User';
+  }, [currentMember, platformUser, supabaseUser, session]);
+
+  const currentMemberId = currentMember?.id || platformUser?.memberId || platformUser?.cuid || resolvedCurrentUserId;
+
+  const isAssignedToCurrent = useMemo(() => {
+    const curAssigneeId = editData.assigneeId !== undefined ? editData.assigneeId : record?.assigneeId;
+    if (!curAssigneeId) return false;
+    return curAssigneeId === currentMemberId || curAssigneeId === resolvedCurrentUserId;
+  }, [editData.assigneeId, record?.assigneeId, currentMemberId, resolvedCurrentUserId]);
+
+  const isStarred = Boolean(
+    (record?._starredUserIds || []).includes(resolvedCurrentUserId) || 
+    (currentMemberId && (record?._starredUserIds || []).includes(currentMemberId)) ||
+    record?.is_starred || 
+    record?._is_starred
+  );
+
+  const handleToggleStar = async () => {
+    if (!recordId || !record) return;
+    const nextStarred = !isStarred;
+
+    // Optimistic UI update
+    const list = Array.isArray(record._starredUserIds) ? [...record._starredUserIds] : [];
+    const idToUse = resolvedCurrentUserId || currentMemberId;
+    const updatedList = nextStarred 
+      ? Array.from(new Set([...list, idToUse].filter(Boolean)))
+      : list.filter(uid => uid !== resolvedCurrentUserId && uid !== currentMemberId);
+    const updatedRecord = { ...record, _starredUserIds: updatedList, is_starred: nextStarred };
+    setRecord(updatedRecord);
+    builderCache.set(recordCacheKey, updatedRecord);
+    onRecordUpdate?.(updatedRecord);
+
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      await fetch(`${DATA_API_URL}/records/${record.id}/star`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant?.id || ''
+        },
+        body: JSON.stringify({ starred: nextStarred })
+      });
+
+      toast.success(nextStarred ? `Starred ${record._record_key || 'record'}` : `Unstarred ${record._record_key || 'record'}`);
+      queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+      queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
+    } catch (err: any) {
+      setRecord(record);
+      builderCache.set(recordCacheKey, record);
+      toast.error(err.message || 'Failed to update star');
+    }
+  };
+
+  const handleCopyRecordLink = () => {
+    const url = `${window.location.origin}/workspace/modules/${routeModuleId || moduleId}/records/${recordId}`;
+    navigator.clipboard.writeText(url);
+    toast.success('Copied record link to clipboard');
+  };
+
+  const handleDuplicateRecord = async () => {
+    if (!record || !tenant?.id || !moduleId || isCloning) return;
+    setIsCloning(true);
+    const recordLabel = record._record_key || record.name || record.title || 'record';
+    const toastId = toast.loading(`Cloning ${recordLabel}...`);
+
+    try {
+      const duplicateData: Record<string, any> = {};
+
+      // 1. Copy values for all fields configured in the module
+      (allFields || []).forEach((f: any) => {
+        const val = record[f.id] !== undefined ? record[f.id] : (record.data ? record.data[f.id] : undefined);
+        if (val !== undefined && val !== null) {
+          duplicateData[f.id] = typeof val === 'object' ? JSON.parse(JSON.stringify(val)) : val;
+        }
+      });
+
+      // 2. Also copy all other custom properties present on the record
+      const systemKeys = new Set([
+        'id', '_record_key', 'createdAt', 'updatedAt', 'createdBy', 'createdByMember',
+        'module', 'moduleName', 'moduleIcon', 'workflowState', 'slaDeadline', 'data'
+      ]);
+
+      Object.entries(record).forEach(([key, val]) => {
+        if (!systemKeys.has(key) && !key.startsWith('_') && val !== undefined && val !== null) {
+          if (duplicateData[key] === undefined) {
+            duplicateData[key] = typeof val === 'object' ? JSON.parse(JSON.stringify(val)) : val;
+          }
+        }
+      });
+
+      // 3. Update title or name with (Copy) if present
+      if (duplicateData.name && typeof duplicateData.name === 'string') {
+        duplicateData.name = `${duplicateData.name} (Copy)`;
+      }
+      if (duplicateData.title && typeof duplicateData.title === 'string') {
+        duplicateData.title = `${duplicateData.title} (Copy)`;
+      }
+
+      // 4. Carry over assignee and status if defined
+      if (record.assigneeId) {
+        duplicateData.assigneeId = record.assigneeId;
+      }
+      if (record.status) {
+        duplicateData.status = record.status;
+      }
+
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+      const res = await fetch(`${DATA_API_URL}/records`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant?.id || ''
+        },
+        body: JSON.stringify({
+          moduleId: moduleId,
+          ...duplicateData
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to clone record');
+      }
+
+      const newRecord = await res.json();
+      queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+      queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
+
+      toast.success(`Successfully duplicated ${recordLabel}`, { 
+        id: toastId,
+        action: {
+          label: 'Open',
+          onClick: () => {
+            if (isModal && onClose) {
+              onClose();
+            }
+            navigate(`/workspace/modules/${routeModuleId || moduleId}/records/${newRecord.id}`);
+          }
+        }
+      });
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to clone record', { id: toastId });
+    } finally {
+      setIsCloning(false);
     }
   };
 
@@ -894,7 +1102,10 @@ export const RecordDetailView = ({
     }
 
     const fetchModAndRecord = async () => {
-      setLoading(true);
+      const hasImmediate = Boolean(getImmediateRecord(recordId));
+      if (!hasImmediate) {
+        setLoading(true);
+      }
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || localStorage.getItem('aurora_token');
       if (!token || token === 'undefined') {
         setLoading(false);
@@ -1719,20 +1930,39 @@ export const RecordDetailView = ({
           nodeId: targetNode.id,
           timestamp: new Date().toISOString(),
           action: 'Transitioned',
-          triggeredBy: platformUser?.name || session?.user?.email || 'User'
+          triggeredBy: platformUser?.name || session?.user?.email || 'User',
+          ...(additionalData?._overrideReason ? { overrideReason: additionalData._overrideReason } : {}),
+          ...(additionalData?._bypassedSubstepIds ? { bypassedSubsteps: additionalData._bypassedSubstepIds } : {})
         }
       ]
     } : record.workflowState;
+
+    // Filter out internal workflow transition controls from record data so they never contaminate form data or create diffs
+    const cleanFormFields: Record<string, any> = {};
+    if (additionalData) {
+      for (const [k, v] of Object.entries(additionalData)) {
+        const lowerKey = k.toLowerCase();
+        if (
+          !k.startsWith('_') &&
+          lowerKey !== 'completedsubstepids' &&
+          lowerKey !== 'bypassedsubstepids' &&
+          lowerKey !== 'bypassedsubsteplabels' &&
+          lowerKey !== 'overridereason'
+        ) {
+          cleanFormFields[k] = v;
+        }
+      }
+    }
 
     const optimisticRecord = {
       ...record,
       status: resolvedStatus,
       workflowState: optimisticWorkflowState,
-      ...(additionalData || {}),
+      ...cleanFormFields,
       data: {
         ...(record.data || {}),
         status: resolvedStatus,
-        ...(additionalData || {})
+        ...cleanFormFields
       }
     };
 
@@ -1742,12 +1972,12 @@ export const RecordDetailView = ({
       ...editDataRef.current,
       ...editData,
       status: resolvedStatus,
-      ...(additionalData || {})
+      ...cleanFormFields
     };
     setEditData(prev => ({
       ...prev,
       status: resolvedStatus,
-      ...(additionalData || {})
+      ...cleanFormFields
     }));
     builderCache.set(recordCacheKey, optimisticRecord);
 
@@ -1812,6 +2042,9 @@ export const RecordDetailView = ({
           moduleId,
           status: resolvedStatus,
           transitionTo: effectiveTransitionTo,
+          overrideReason: additionalData?._overrideReason,
+          bypassedSubstepIds: additionalData?._bypassedSubstepIds,
+          bypassedSubstepLabels: additionalData?._bypassedSubstepLabels,
           ...(additionalData || {})
         })
       });
@@ -1828,8 +2061,8 @@ export const RecordDetailView = ({
       invalidateModuleRecordsCache(moduleId);
 
       setRecord(updatedRecord);
-      editDataRef.current = { ...editDataRef.current, ...updatedRecord, ...(additionalData || {}) };
-      setEditData(prev => ({ ...prev, ...updatedRecord, ...(additionalData || {}) }));
+      editDataRef.current = { ...editDataRef.current, ...updatedRecord, ...cleanFormFields };
+      setEditData(prev => ({ ...prev, ...updatedRecord, ...cleanFormFields }));
       onRecordUpdate?.(updatedRecord);
 
       queryClient.setQueriesData(
@@ -2006,6 +2239,103 @@ export const RecordDetailView = ({
     } catch (err) {
       console.error('Error removing activity:', err);
       toast.error('Error removing activity');
+    }
+  };
+
+  const handleUpdateSubstep = async (nodeId: string, substepId: string, status: 'completed' | 'waived' | 'pending', note?: string) => {
+    if (!tenant?.id || !moduleId || !recordId || !record) return;
+
+    const currentWfState = (record.workflowState as any) || {};
+    const currentSubsteps = currentWfState.substeps || {};
+    const activeNode = activeWorkflow?.nodes?.find((n: any) => n.id === nodeId || n.name === nodeId);
+    const resolvedNodeId = activeNode?.id || nodeId;
+    const resolvedNodeName = activeNode?.name || '';
+    const nodeSubsteps = {
+      ...(resolvedNodeName ? currentSubsteps[resolvedNodeName] : {}),
+      ...(currentSubsteps[resolvedNodeId] || {})
+    };
+
+    const updatedNodeSubsteps = {
+      ...nodeSubsteps,
+      [substepId]: {
+        status,
+        updatedBy: effectiveCurrentUserName,
+        updatedAt: new Date().toISOString(),
+        ...(note ? { note } : {})
+      }
+    };
+
+    const updatedWorkflowState = {
+      ...currentWfState,
+      substeps: {
+        ...currentSubsteps,
+        [resolvedNodeId]: updatedNodeSubsteps,
+        ...(resolvedNodeName ? { [resolvedNodeName]: updatedNodeSubsteps } : {})
+      }
+    };
+
+    const optimisticRecord = {
+      ...record,
+      workflowState: updatedWorkflowState
+    };
+
+    // 1. Optimistic updates
+    setRecord(optimisticRecord);
+    builderCache.set(recordCacheKey, optimisticRecord);
+    updateCachedRecordInModule(moduleId, optimisticRecord);
+
+    // 2. Query Client cache
+    queryClient.setQueriesData(
+      {
+        predicate: (query) => {
+          const key = query.queryKey;
+          return Array.isArray(key) && key[0] === 'records';
+        }
+      },
+      (old: any) => {
+        if (!old || !Array.isArray(old.records)) return old;
+        return {
+          ...old,
+          records: old.records.map((r: any) =>
+            r.id === recordId ? { ...r, ...optimisticRecord } : r
+          )
+        };
+      }
+    );
+
+    // 3. Dispatch global window event
+    window.dispatchEvent(new CustomEvent('aurora:record-updated', {
+      detail: {
+        recordId,
+        moduleId,
+        record: optimisticRecord
+      }
+    }));
+
+    // 4. Remote PUT
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token || localStorage.getItem('aurora_token');
+      const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant.id
+        },
+        body: JSON.stringify({
+          moduleId,
+          workflowState: updatedWorkflowState
+        })
+      });
+
+      if (res.ok) {
+        const updatedRecord = await res.json();
+        setRecord(updatedRecord);
+        builderCache.set(recordCacheKey, updatedRecord);
+        updateCachedRecordInModule(moduleId, updatedRecord);
+      }
+    } catch (err) {
+      console.error('Error updating substep:', err);
     }
   };
 
@@ -2453,11 +2783,17 @@ export const RecordDetailView = ({
 
               return (
                 <motion.div
-                  key={fObj.id}
+                  key={`${effectiveRecordId}_${fObj.id}`}
                   layout
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ 
+                    type: "spring",
+                    stiffness: 300,
+                    damping: 30,
+                    layout: { duration: 0.3 }
+                  }}
                   className={cn(
                     "group/field transition-all relative min-w-0 focus-within:z-30 hover:z-20",
                     activeFieldId === fObj.id && "z-30",
@@ -2587,9 +2923,21 @@ export const RecordDetailView = ({
 
     if (visibleFields.length === 0) {
       return (
-        <div className="col-span-12 text-center py-12 text-xs font-bold uppercase tracking-widest text-zinc-400">
+        <motion.div 
+          key={`${effectiveRecordId}_empty_${tabId}`}
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          transition={{ 
+            type: "spring",
+            stiffness: 300,
+            damping: 30,
+            layout: { duration: 0.3 }
+          }}
+          className="col-span-12 text-center py-12 text-xs font-bold uppercase tracking-widest text-zinc-400"
+        >
           No fields configured for this section
-        </div>
+        </motion.div>
       );
     }
 
@@ -2650,7 +2998,7 @@ export const RecordDetailView = ({
 
             return (
               <motion.div 
-                key={field.id} 
+                key={`${effectiveRecordId}_${field.id}`} 
                 layout
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -3187,7 +3535,13 @@ export const RecordDetailView = ({
             </div>
           )}
 
-          <div className="min-w-0 flex flex-col justify-center">
+          <motion.div 
+            key={effectiveRecordId}
+            initial={{ opacity: 0, y: 1 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.16, ease: "easeOut" }}
+            className="min-w-0 flex flex-col justify-center"
+          >
             {/* Title Row: Monospace Key Badge + Descriptive Title */}
             <div className="flex items-center gap-2 min-w-0">
               {recKey && (
@@ -3245,7 +3599,7 @@ export const RecordDetailView = ({
                 Created {record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'Just now'}
               </span>
             </div>
-          </div>
+          </motion.div>
         </div>
 
         {/* Right: Actions Cluster */}
@@ -3483,6 +3837,24 @@ export const RecordDetailView = ({
             </div>
           </div>
 
+          {/* Quick Star Button */}
+          <button
+            type="button"
+            onClick={handleToggleStar}
+            title={isStarred ? "Unstar Record" : "Star Record"}
+            className={cn(
+              "w-8 h-8 rounded-lg border transition-all flex items-center justify-center shadow-xs cursor-pointer",
+              isStarred
+                ? "bg-amber-500/10 border-amber-500/30 text-amber-500 dark:text-amber-400 hover:bg-amber-500/20"
+                : "bg-zinc-100/80 hover:bg-amber-50 dark:bg-zinc-800/80 dark:hover:bg-amber-950/20 border-zinc-200/60 dark:border-zinc-700/60 text-zinc-400 hover:text-amber-500 dark:hover:text-amber-400"
+            )}
+          >
+            <LucideIcons.Star 
+              size={14} 
+              className={cn(isStarred ? "fill-amber-400 text-amber-500" : "text-zinc-400 hover:text-amber-500 transition-colors")} 
+            />
+          </button>
+
           {/* More Options Menu (•••) */}
           <div className="relative" ref={moreMenuRef}>
             <button
@@ -3505,44 +3877,160 @@ export const RecordDetailView = ({
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 6, scale: 0.95 }}
                   transition={{ duration: 0.15 }}
-                  className="absolute right-0 mt-1.5 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl z-50 overflow-hidden p-1 space-y-0.5"
+                  className="absolute right-0 mt-1.5 w-52 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl z-50 overflow-hidden p-1.5 space-y-0.5 text-xs text-zinc-700 dark:text-zinc-200 backdrop-blur-xl"
                 >
-                  {/* Documents & Vault Option */}
-                  <button
-                    onClick={() => {
-                      setShowDocumentsDrawer(true);
-                      setShowMoreMenu(false);
-                    }}
-                    className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-2 transition-all cursor-pointer"
-                  >
-                    <LucideIcons.FolderLock size={13} className="text-indigo-500 shrink-0" />
-                    <span>Documents & Vault</span>
-                  </button>
+                  {/* Header info */}
+                  <div className="px-2.5 py-1.5 mb-1 border-b border-zinc-100 dark:border-zinc-800 text-[10px] uppercase font-bold tracking-wider text-zinc-400">
+                    {record?._record_key || 'Record Actions'}
+                  </div>
 
                   {/* Activity & Audit Trail Option */}
                   <button
+                    type="button"
                     onClick={() => {
                       setShowActivityDrawer(true);
                       setShowMoreMenu(false);
                     }}
-                    className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-2 transition-all cursor-pointer"
+                    className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80 flex items-center gap-2 transition-all cursor-pointer"
                   >
                     <History size={13} className="text-indigo-500 shrink-0" />
-                    <span>Activity & Audit Trail</span>
+                    <span>View Activity Feed</span>
+                  </button>
+
+                  {/* Star / Unstar Record */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMoreMenu(false);
+                      handleToggleStar();
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80 flex items-center gap-2 transition-all cursor-pointer"
+                  >
+                    <LucideIcons.Star size={13} className={cn("shrink-0", isStarred ? "fill-amber-400 text-amber-400" : "text-zinc-400")} />
+                    <span>{isStarred ? "Unstar Record" : "Star Record"}</span>
+                  </button>
+
+                  {/* Duplicate Record */}
+                  <button
+                    type="button"
+                    disabled={isCloning}
+                    onClick={() => {
+                      setShowMoreMenu(false);
+                      handleDuplicateRecord();
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80 flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {isCloning ? (
+                      <Loader2 size={13} className="animate-spin text-zinc-400 shrink-0" />
+                    ) : (
+                      <LucideIcons.CopyPlus size={13} className="text-zinc-400 shrink-0" />
+                    )}
+                    <span>Duplicate Record</span>
+                  </button>
+
+                  {/* Move to Another Module */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMoreMenu(false);
+                      setShowMoveModal(true);
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80 flex items-center gap-2 transition-all cursor-pointer"
+                  >
+                    <LucideIcons.FolderInput size={13} className="text-zinc-400 shrink-0" />
+                    <span>Move to Another Module</span>
+                  </button>
+
+                  {/* Copy Record Link */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMoreMenu(false);
+                      handleCopyRecordLink();
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80 flex items-center gap-2 transition-all cursor-pointer"
+                  >
+                    <LucideIcons.Link2 size={13} className="text-zinc-400 shrink-0" />
+                    <span>Copy Record Link</span>
+                  </button>
+
+                  {/* Assign to Me */}
+                  {currentMemberId && !isAssignedToCurrent && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowMoreMenu(false);
+                        handleUpdateAssignee(currentMemberId);
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80 flex items-center gap-2 transition-all cursor-pointer"
+                    >
+                      <LucideIcons.UserCheck size={13} className="text-indigo-400 shrink-0" />
+                      <span>Assign to Me</span>
+                    </button>
+                  )}
+
+                  {/* Quick Change Status Submenu */}
+                  {statusOptions && statusOptions.length > 0 && (
+                    <div className="my-1 pt-1 border-t border-zinc-100 dark:border-zinc-800">
+                      <div className="px-2.5 py-1 text-[9px] uppercase font-semibold tracking-wider text-zinc-400">
+                        Change Status
+                      </div>
+                      <div className="flex flex-wrap gap-1 px-1.5 py-1">
+                        {statusOptions.slice(0, 5).map((opt: any, idx: number) => {
+                          const optVal = typeof opt === 'string' ? opt : opt.name || opt.value || opt.label;
+                          const optId = typeof opt === 'string' ? opt : opt.id || optVal;
+                          const currentStatus = record?.status || editData.status || '';
+                          const isCurrent = currentStatus.toLowerCase() === optVal.toLowerCase();
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => {
+                                setShowMoreMenu(false);
+                                handleStatusTransition(optVal, optId);
+                              }}
+                              className={cn(
+                                "px-2 py-0.5 rounded-md text-[10.5px] font-medium transition-colors cursor-pointer",
+                                isCurrent 
+                                  ? "bg-indigo-600 text-white font-semibold"
+                                  : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                              )}
+                            >
+                              {optVal}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="border-t border-zinc-100 dark:border-zinc-800 my-1" />
+
+                  {/* Documents & Vault Option */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowDocumentsDrawer(true);
+                      setShowMoreMenu(false);
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80 flex items-center gap-2 transition-all cursor-pointer"
+                  >
+                    <LucideIcons.FolderLock size={13} className="text-zinc-400 shrink-0" />
+                    <span>Documents & Vault</span>
                   </button>
 
                   {/* Share Record Option */}
                   <button
+                    type="button"
                     onClick={() => {
                       setShowShareModal(true);
                       setShowMoreMenu(false);
                     }}
-                    className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-2 transition-all cursor-pointer"
+                    className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80 flex items-center gap-2 transition-all cursor-pointer"
                   >
-                    <Share2 size={13} className="text-indigo-500 shrink-0" />
+                    <Share2 size={13} className="text-zinc-400 shrink-0" />
                     <span>Share Record</span>
                   </button>
-
 
                   {/* Export PDF & Custom Module Actions */}
                   {interfaceSettings.actions && interfaceSettings.actions.length > 0 ? (
@@ -3551,6 +4039,7 @@ export const RecordDetailView = ({
                       return (
                         <button
                           key={act.id}
+                          type="button"
                           onClick={() => {
                             setShowMoreMenu(false);
                             const form = (moduleData as any)?.forms?.find((f: any) => f.usage === 'action_trigger');
@@ -3579,7 +4068,7 @@ export const RecordDetailView = ({
                               window.print();
                             }
                           }}
-                          className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-2 transition-all cursor-pointer"
+                          className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80 flex items-center gap-2 transition-all cursor-pointer"
                         >
                           <ActionIcon size={13} className="text-zinc-500 dark:text-zinc-400 shrink-0" />
                           <span>{act.label}</span>
@@ -3588,13 +4077,14 @@ export const RecordDetailView = ({
                     })
                   ) : (
                     <button
+                      type="button"
                       onClick={() => {
                         setShowMoreMenu(false);
                         window.print();
                       }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-2 transition-all cursor-pointer"
+                      className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80 flex items-center gap-2 transition-all cursor-pointer"
                     >
-                      <LucideIcons.FileText size={13} className="text-zinc-500 dark:text-zinc-400 shrink-0" />
+                      <LucideIcons.FileText size={13} className="text-zinc-400 shrink-0" />
                       <span>Export PDF</span>
                     </button>
                   )}
@@ -3602,22 +4092,24 @@ export const RecordDetailView = ({
                   {activeWorkflow && (
                     <>
                       <button
+                        type="button"
                         onClick={() => {
                           setShowVisualizer(true);
                           setShowMoreMenu(false);
                         }}
-                        className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-2 transition-all cursor-pointer"
+                        className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80 flex items-center gap-2 transition-all cursor-pointer"
                       >
                         <GitFork size={13} className="text-indigo-500 shrink-0" />
                         <span>Workflow Diagram</span>
                       </button>
 
                       <button
+                        type="button"
                         onClick={() => {
                           setShowHistoryMenu(true);
                           setShowMoreMenu(false);
                         }}
-                        className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-2 transition-all cursor-pointer"
+                        className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80 flex items-center gap-2 transition-all cursor-pointer"
                       >
                         <History size={13} className="text-indigo-500 shrink-0" />
                         <span>Workflow History</span>
@@ -3627,15 +4119,17 @@ export const RecordDetailView = ({
 
                   <div className="border-t border-zinc-100 dark:border-zinc-800 my-1" />
 
+                  {/* Move to Recycling Bin */}
                   <button
+                    type="button"
                     onClick={() => {
                       setShowDeleteModal(true);
                       setShowMoreMenu(false);
                     }}
-                    className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 flex items-center gap-2 transition-all cursor-pointer"
+                    className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 flex items-center gap-2 transition-all cursor-pointer"
                   >
                     <Trash2 size={13} className="shrink-0" />
-                    <span>Delete Record</span>
+                    <span>Move to Recycling Bin</span>
                   </button>
                 </motion.div>
               )}
@@ -3677,8 +4171,10 @@ export const RecordDetailView = ({
           onStartWorkflow={handleStartWorkflow}
           onScheduleActivity={handleScheduleActivity}
           onCompleteActivity={handleCompleteActivity}
-          currentUserName={platformUser?.name || session?.user?.email}
+          onUpdateSubstep={handleUpdateSubstep}
+          currentUserName={effectiveCurrentUserName}
           currentUserId={session?.user?.id}
+          members={members}
           onOpenVisualizer={() => setShowVisualizer(true)}
           className={cn(
             "w-full px-5 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 shrink-0 box-border h-[46px]"
@@ -4067,6 +4563,27 @@ export const RecordDetailView = ({
         moduleName={moduleData?.name}
       />
 
+      {/* Move Record to Another Module Modal */}
+      <MoveRecordModal
+        isOpen={showMoveModal}
+        onClose={() => setShowMoveModal(false)}
+        sourceRecords={record ? [record] : []}
+        sourceModuleId={moduleData?.id || (typeof moduleId === 'string' ? moduleId : '')}
+        sourceModuleName={moduleData?.name}
+        sourceFields={allFields}
+        onSuccess={({ targetModuleId }) => {
+          queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+          queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, targetModuleId] });
+          setShowMoveModal(false);
+          toast.success("Record moved successfully");
+          if (!isEmbedded && !isModal) {
+            navigate(`/workspace/modules/${targetModuleId}`);
+          } else if (onClose) {
+            onClose();
+          }
+        }}
+      />
+
       {/* Enterprise Record Activity & Audit Drawer */}
       <RecordActivityDrawer
         isOpen={showActivityDrawer && !!record}
@@ -4088,7 +4605,7 @@ export const RecordDetailView = ({
         moduleName={moduleData?.name}
         moduleData={moduleData}
         activities={record?._activities || record?.data?._activities || []}
-        currentUserName={platformUser?.name || session?.user?.email}
+        currentUserName={effectiveCurrentUserName}
         currentUserId={session?.user?.id}
         onSchedule={async (act) => {
           await handleScheduleActivity(act);

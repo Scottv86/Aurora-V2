@@ -58,7 +58,20 @@ export const getAllCachedRecordsAcrossWorkspace = (): { record: any; moduleId: s
 
 export const getCachedRecordById = (recordId: string): any | null => {
   if (!recordId) return null;
-  return recordByIdCache.get(recordId)?.data || null;
+  const direct = recordByIdCache.get(recordId)?.data;
+  if (direct) return direct;
+
+  // Search across cached module records
+  for (const entry of recordsCache.values()) {
+    if (Array.isArray(entry.data?.records)) {
+      const found = entry.data.records.find((r: any) => r?.id === recordId);
+      if (found) {
+        primeRecordCache(found);
+        return found;
+      }
+    }
+  }
+  return null;
 };
 
 export const primeRecordCache = (record: any) => {

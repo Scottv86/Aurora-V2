@@ -1617,9 +1617,10 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
         {effectiveSplitRecord ? (
           <div className="flex-1 w-full h-full min-h-0 overflow-hidden">
             <RecordDetailView
-              key={`split_detail_${effectiveSplitRecord.id}`}
+              key="queue_split_detail_view"
               moduleIdProp={effectiveSplitRecord.moduleId}
               recordIdProp={effectiveSplitRecord.id}
+              initialRecordProp={effectiveSplitRecord}
               isEmbedded={true}
             />
           </div>
@@ -2083,10 +2084,11 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
                 </div>
                 <div className="flex-1 w-full h-full min-h-0 overflow-hidden">
                   <RecordDetailView
-                    key={`modal_detail_${modalRecord.id}`}
+                    key="queue_modal_detail_view"
                     isModal={true}
                     recordIdProp={modalRecord.id}
                     moduleIdProp={modalRecord.moduleId}
+                    initialRecordProp={modalRecord}
                     onClose={() => setModalRecord(null)}
                   />
                 </div>

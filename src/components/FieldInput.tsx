@@ -253,7 +253,7 @@ const SearchableLookup = ({
           ref={inputRef}
           type="text"
           placeholder={displayLoading ? 'Loading...' : placeholder || `Search ${platformEntity || 'records'}...`}
-          value={isOpen ? search : localName}
+          value={isOpen ? search : (localName || selectedItem?.name || (typeof value === 'string' ? value : (value?.name || value?.label || '')))}
           onChange={(e) => setSearch(e.target.value)}
           onFocus={() => {
             if (readonly) return;
@@ -400,6 +400,7 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
 }) => {
   const { type, label, placeholder, options, min, max, variant, optionsSource, lookupSource, optionLayout } = field;
   const effectiveSource = lookupSource || optionsSource;
+  const { tenant } = usePlatform();
 
   const getDensityClasses = (d: 'compact' | 'standard' | 'spacious') => {
     switch (d) {
@@ -489,6 +490,14 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
   const localValueRef = React.useRef(value);
   const [isFocused, setIsFocused] = React.useState(false);
   const lastSentValueRef = React.useRef<any>(null);
+
+  // Synchronously update localValue during render when value prop changes externally (e.g. switching records)
+  const [prevPropValue, setPrevPropValue] = React.useState(value);
+  if (value !== prevPropValue && !isFocused) {
+    setPrevPropValue(value);
+    setLocalValue(value);
+    localValueRef.current = value;
+  }
 
   const updateLocalValue = (val: any) => {
     localValueRef.current = val;
@@ -649,6 +658,15 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
 
   // Data Input Components
   if (type === 'select') {
+    const hasLocalOption = localValue !== undefined && localValue !== null && localValue !== '' && (
+      effectiveSource === 'connector' 
+        ? lookupResults?.some((opt: any) => String(opt.id) === String(localValue) || String(opt.name) === String(localValue))
+        : resolvedOptions?.some((opt: any) => {
+            const val = typeof opt === 'string' ? opt : opt.value !== undefined ? opt.value : (opt.id || opt.label);
+            return String(val) === String(localValue);
+          })
+    );
+
     return (
       <div className="relative w-full">
         <select 
@@ -666,15 +684,26 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
           autoFocus={autoFocus}
           className={cn(inputClasses, "appearance-none cursor-pointer")}
         >
-          <option value="" className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">Select...</option>
+          <option value="" className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">
+            {placeholder || 'Select...'}
+          </option>
+          {localValue && !hasLocalOption && (
+            <option value={localValue} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">
+              {String(localValue)}
+            </option>
+          )}
           {effectiveSource === 'connector' ? (
             lookupResults?.map((opt: any, j: number) => (
               <option key={j} value={opt.id} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">{opt.name}</option>
             ))
           ) : (
-            resolvedOptions?.map((opt: string, j: number) => (
-              <option key={j} value={opt} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">{opt}</option>
-            ))
+            resolvedOptions?.map((opt: any, j: number) => {
+              const val = typeof opt === 'string' ? opt : opt.value !== undefined ? opt.value : (opt.id || opt.label);
+              const optLabel = typeof opt === 'string' ? opt : opt.label || opt.name || opt.value || opt.id;
+              return (
+                <option key={j} value={val} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">{optLabel}</option>
+              );
+            })
           )}
         </select>
         <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
@@ -1275,7 +1304,7 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
       }} 
       readonly={readonly} 
       onBlur={handleBlur} 
-      dateFormat={field.dateFormat} 
+      dateFormat={field.dateFormat || tenant?.localization?.dateFormat} 
       excludeWeekends={field.excludeWeekends} 
       min={minConstraint} 
       max={maxConstraint} 

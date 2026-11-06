@@ -904,8 +904,14 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       const newTenantStr = JSON.stringify(data.tenant);
 
       if (currentUserStr !== newUserStr) {
+        const resolvedName = data.user?.name || 
+          `${data.user?.firstName || ''} ${data.user?.lastName || ''}`.trim() || 
+          data.member?.name || 
+          `${data.member?.firstName || ''} ${data.member?.familyName || ''}`.trim();
+
         const synchronizedUser = data.user ? {
           ...data.user,
+          name: resolvedName || data.user.name || data.user.email,
           // Extract memberId and organizational details from the nested member object or top-level fallbacks
           memberId: data.user.memberId || data.member?.id || data.membership?.id || data.tenantMember?.id,
           cuid: data.user.memberId || data.member?.id || data.membership?.id || data.tenantMember?.id,

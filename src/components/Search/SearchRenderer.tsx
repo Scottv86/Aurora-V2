@@ -1128,10 +1128,11 @@ export const SearchRenderer: React.FC<SearchRendererProps> = ({
                 {/* Drawer Content */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar">
                   <RecordDetailView
-                    key={`search_drawer_${drawerRecord.id}`}
+                    key="search_drawer_detail_view"
                     isModal={true}
                     recordIdProp={drawerRecord.id}
                     moduleIdProp={drawerRecord.module_id}
+                    initialRecordProp={drawerRecord}
                     onClose={() => setDrawerRecord(null)}
                   />
                 </div>

@@ -17,9 +17,9 @@ import '@xyflow/react/dist/style.css';
 import { 
   GitFork, Zap, Activity, Clock, Play, Settings2, Trash2, Bug, Info, ChevronRight, 
   Search, Layout as LayoutIcon, Wand2, Mail, MessageSquare, RefreshCw, FileText, Globe, Sparkles as SparklesIcon, X as CloseIcon,
-  Bot, Target
+  Bot, Target, CheckSquare, Plus, ChevronUp, ChevronDown
 } from 'lucide-react';
-import { Workflow, WorkflowNodeType } from '../../../types/platform';
+import { Workflow, WorkflowNodeType, WorkflowSubstep } from '../../../types/platform';
 import { WorkflowDebugger } from './WorkflowDebugger';
 import { CustomWorkflowNode } from './CustomNode';
 import { CustomWorkflowEdge } from './CustomEdge';
@@ -556,6 +556,78 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
   const { tenant } = usePlatform();
   const { session } = useAuth();
   const [automations, setAutomations] = React.useState<any[]>([]);
+  const [newSubstepText, setNewSubstepText] = React.useState('');
+  const [isNewSubstepRequired, setIsNewSubstepRequired] = React.useState(true);
+
+  const handleAddSubstep = (nodeId: string) => {
+    if (!newSubstepText.trim()) return;
+    const newStep: WorkflowSubstep = {
+      id: `sub_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      label: newSubstepText.trim(),
+      required: isNewSubstepRequired,
+      allowOverride: true
+    };
+
+    setNodes(nds => nds.map(node => {
+      if (node.id !== nodeId) return node;
+      const existing = (node.data.substeps as WorkflowSubstep[]) || [];
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          substeps: [...existing, newStep]
+        }
+      };
+    }));
+
+    setNewSubstepText('');
+  };
+
+  const handleUpdateSubstep = (nodeId: string, substepId: string, updates: Partial<WorkflowSubstep>) => {
+    setNodes(nds => nds.map(node => {
+      if (node.id !== nodeId) return node;
+      const existing = (node.data.substeps as WorkflowSubstep[]) || [];
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          substeps: existing.map(s => s.id === substepId ? { ...s, ...updates } : s)
+        }
+      };
+    }));
+  };
+
+  const handleDeleteSubstep = (nodeId: string, substepId: string) => {
+    setNodes(nds => nds.map(node => {
+      if (node.id !== nodeId) return node;
+      const existing = (node.data.substeps as WorkflowSubstep[]) || [];
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          substeps: existing.filter(s => s.id !== substepId)
+        }
+      };
+    }));
+  };
+
+  const handleReorderSubstep = (nodeId: string, index: number, direction: 'up' | 'down') => {
+    setNodes(nds => nds.map(node => {
+      if (node.id !== nodeId) return node;
+      const existing = [...((node.data.substeps as WorkflowSubstep[]) || [])];
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= existing.length) return node;
+      const [moved] = existing.splice(index, 1);
+      existing.splice(targetIndex, 0, moved);
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          substeps: existing
+        }
+      };
+    }));
+  };
 
   React.useEffect(() => {
     const loadAutomations = async () => {
@@ -608,6 +680,7 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
         isStage: n.isStage,
         stageDescription: n.stageDescription,
         stageOrder: n.stageOrder,
+        substeps: n.substeps || [],
         onDelete: (id: string) => setNodes((nds) => nds.filter(node => node.id !== id))
       },
       position: n.position || { x: 0, y: 0 },
@@ -835,6 +908,7 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
         isStage: n.data.isStage,
         stageDescription: n.data.stageDescription,
         stageOrder: n.data.stageOrder,
+        substeps: n.data.substeps || [],
         config: {
           ...(n.data.config || {}),
           actionType: n.data.actionType,
@@ -882,6 +956,7 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
           isStage: n.isStage,
           stageDescription: n.stageDescription,
           stageOrder: n.stageOrder,
+          substeps: n.substeps || [],
           onDelete: (id: string) => setNodes((nds) => nds.filter(node => node.id !== id))
         },
         position: n.position || { x: 0, y: 0 },
@@ -1312,6 +1387,143 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
                                   placeholder="e.g. Awaiting client review and signature"
                                   className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
                                 />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Stage Subtasks Checklist Section */}
+                          {(nodes.find(n => n.id === selectedNodeId)?.data.type === 'STATUS' || nodes.find(n => n.id === selectedNodeId)?.data.type === 'START') && (
+                            <div className="p-3.5 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-3">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5">
+                                  <CheckSquare size={13} className="text-indigo-500" />
+                                  <label className="text-xs font-bold text-zinc-900 dark:text-white">
+                                    Stage Subtasks (Checklist)
+                                  </label>
+                                </div>
+                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                                  {((nodes.find(n => n.id === selectedNodeId)?.data.substeps as WorkflowSubstep[]) || []).length} items
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-zinc-500 leading-relaxed">
+                                Define discrete checklist tasks required within this stage before advancing.
+                              </p>
+
+                              {/* Existing Substeps List */}
+                              <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar">
+                                {((nodes.find(n => n.id === selectedNodeId)?.data.substeps as WorkflowSubstep[]) || []).map((step, idx, arr) => (
+                                  <div
+                                    key={step.id}
+                                    className="p-2.5 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-2 shadow-2xs group"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px] font-bold text-zinc-400 w-4 text-center shrink-0">
+                                        {idx + 1}
+                                      </span>
+                                      <input
+                                        type="text"
+                                        value={step.label}
+                                        onChange={(e) => handleUpdateSubstep(selectedNodeId!, step.id, { label: e.target.value })}
+                                        placeholder="Subtask title..."
+                                        className="flex-1 bg-transparent text-xs font-medium text-zinc-900 dark:text-white border-b border-transparent focus:border-indigo-500 focus:outline-none"
+                                      />
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        {idx > 0 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleReorderSubstep(selectedNodeId!, idx, 'up')}
+                                            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-0.5 rounded cursor-pointer"
+                                            title="Move up"
+                                          >
+                                            <ChevronUp size={11} />
+                                          </button>
+                                        )}
+                                        {idx < arr.length - 1 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleReorderSubstep(selectedNodeId!, idx, 'down')}
+                                            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-0.5 rounded cursor-pointer"
+                                            title="Move down"
+                                          >
+                                            <ChevronDown size={11} />
+                                          </button>
+                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteSubstep(selectedNodeId!, step.id)}
+                                          className="text-zinc-400 hover:text-rose-500 p-0.5 rounded cursor-pointer transition-colors"
+                                          title="Delete subtask"
+                                        >
+                                          <Trash2 size={11} />
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-between pt-1 border-t border-zinc-100 dark:border-zinc-900 text-[10px]">
+                                      <label className="flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={step.required !== false}
+                                          onChange={(e) => handleUpdateSubstep(selectedNodeId!, step.id, { required: e.target.checked })}
+                                          className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 border-zinc-300 dark:border-zinc-700 cursor-pointer"
+                                        />
+                                        <span className={step.required !== false ? "font-bold text-rose-500 dark:text-rose-400" : ""}>
+                                          Required to advance
+                                        </span>
+                                      </label>
+
+                                      <label className="flex items-center gap-1.5 text-zinc-500 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={step.allowOverride !== false}
+                                          onChange={(e) => handleUpdateSubstep(selectedNodeId!, step.id, { allowOverride: e.target.checked })}
+                                          className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500 border-zinc-300 dark:border-zinc-700 cursor-pointer"
+                                        />
+                                        <span>Allow bypass</span>
+                                      </label>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Add New Subtask Input */}
+                              <div className="pt-2 border-t border-zinc-200/50 dark:border-zinc-800/50 space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    value={newSubstepText}
+                                    onChange={(e) => setNewSubstepText(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        handleAddSubstep(selectedNodeId!);
+                                      }
+                                    }}
+                                    placeholder="+ Add subtask checklist item..."
+                                    className="flex-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:border-indigo-500"
+                                  />
+                                  <button
+                                    type="button"
+                                    disabled={!newSubstepText.trim()}
+                                    onClick={() => handleAddSubstep(selectedNodeId!)}
+                                    className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
+                                  >
+                                    <Plus size={12} />
+                                    <span>Add</span>
+                                  </button>
+                                </div>
+
+                                <div className="flex items-center gap-2 px-1">
+                                  <label className="flex items-center gap-1.5 text-[10px] text-zinc-500 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={isNewSubstepRequired}
+                                      onChange={(e) => setIsNewSubstepRequired(e.target.checked)}
+                                      className="w-3 h-3 rounded text-indigo-600 border-zinc-300 dark:border-zinc-700 cursor-pointer"
+                                    />
+                                    <span>Make required by default</span>
+                                  </label>
+                                </div>
                               </div>
                             </div>
                           )}

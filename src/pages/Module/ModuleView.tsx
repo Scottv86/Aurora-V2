@@ -3124,9 +3124,10 @@ export const ModuleView = () => {
           {effectiveSelectedSplitRecordId ? (
             <div className="flex-1 w-full h-full min-h-0 overflow-hidden">
               <RecordDetailView
-                key={`split_detail_${effectiveSelectedSplitRecordId}`}
+                key="split_detail_view"
                 moduleIdProp={moduleId}
                 recordIdProp={effectiveSelectedSplitRecordId}
+                initialRecordProp={records.find(r => r.id === effectiveSelectedSplitRecordId)}
                 isEmbedded={true}
                 onRecordUpdate={handleEmbeddedRecordUpdate}
                 onClose={() => {
@@ -6996,6 +6997,7 @@ export const ModuleView = () => {
                 <RecordDetailView 
                   moduleIdProp={moduleId} 
                   recordIdProp={activeDetailRecordId} 
+                  initialRecordProp={records.find(r => r.id === activeDetailRecordId)}
                   isModal={true} 
                   onRecordUpdate={handleEmbeddedRecordUpdate}
                   onClose={() => {

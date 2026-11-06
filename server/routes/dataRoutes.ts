@@ -1281,13 +1281,70 @@ router.post('/records/star-batch', async (req: TenantRequest, res) => {
   }
 });
 
+function resolveWorkflowSubstepInfo(workflow: any, substepId: string, fallbackStatus?: string): { label: string; stageName: string } {
+  if (workflow?.nodes && Array.isArray(workflow.nodes)) {
+    for (const n of workflow.nodes) {
+      if (Array.isArray(n.substeps)) {
+        const match = n.substeps.find((s: any) => s.id === substepId);
+        if (match) {
+          return { label: match.label || substepId, stageName: n.name || 'Current Stage' };
+        }
+      }
+    }
+  }
+  return { label: substepId, stageName: fallbackStatus || 'Stage' };
+}
+
 // UPDATE record
 router.put('/records/:id', async (req: TenantRequest, res) => {
   try {
     const db = req.db!;
     const tenantId = req.tenantId!;
     const { id } = req.params;
-    const { moduleId, status, associations, path, transitionTo, ...data } = req.body;
+    const { 
+      moduleId, 
+      status, 
+      associations, 
+      path, 
+      transitionTo, 
+      workflowState, 
+      overrideReason: rawOverrideReason,
+      _overrideReason,
+      bypassedSubstepIds: rawBypassedSubstepIds,
+      _bypassedSubstepIds,
+      bypassedSubstepLabels: rawBypassedSubstepLabels,
+      _bypassedSubstepLabels,
+      completedSubstepIds: rawCompletedSubstepIds,
+      _completedSubstepIds,
+      ...data 
+    } = req.body;
+
+    const overrideReason = rawOverrideReason || _overrideReason;
+    const bypassedSubstepIds = rawBypassedSubstepIds || _bypassedSubstepIds;
+    const bypassedSubstepLabels = rawBypassedSubstepLabels || _bypassedSubstepLabels;
+    const completedSubstepIds = rawCompletedSubstepIds || _completedSubstepIds;
+
+    // Filter out internal metadata from data so it never creates raw field diffs
+    const internalKeysToStrip = [
+      'completedSubstepIds',
+      '_completedSubstepIds',
+      'bypassedSubstepIds',
+      '_bypassedSubstepIds',
+      'bypassedSubstepLabels',
+      '_bypassedSubstepLabels',
+      'overrideReason',
+      '_overrideReason',
+      'substeps',
+      '_substeps'
+    ];
+    for (const k of internalKeysToStrip) {
+      delete (data as any)[k];
+    }
+    for (const k of Object.keys(data)) {
+      if (k.startsWith('_') && k !== '_comments' && k !== '_activities' && k !== '_record_key') {
+        delete (data as any)[k];
+      }
+    }
 
     // 1. Fetch existing (using scoped client, extension handles RLS)
     const existing = await db.record.findUnique({ where: { id } });
@@ -1297,6 +1354,19 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
       ...(existing.data as any),
       ...data
     };
+
+    for (const k of internalKeysToStrip) {
+      delete (updatedData as any)[k];
+    }
+    for (const k of Object.keys(updatedData)) {
+      if (
+        (k.startsWith('_') && k !== '_comments' && k !== '_activities' && k !== '_record_key') ||
+        k.toLowerCase().includes('completedsubstep') ||
+        k.toLowerCase().includes('bypassedsubstep')
+      ) {
+        delete (updatedData as any)[k];
+      }
+    }
 
     // 2. Validation for required fields
     const module = await db.module.findUnique({ 
@@ -1375,12 +1445,14 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
       data: updatedData,
       status: status || existing.status,
       associations: associations !== undefined ? associations : existing.associations,
-      path: path !== undefined ? path : existing.path
+      path: path !== undefined ? path : existing.path,
+      ...(workflowState !== undefined ? { workflowState } : {})
     };
 
+    let workflow: any = null;
     if (module) {
       const config = module.config as any;
-      const workflow = await getActiveWorkflowForModule(db, tenantId, module.id, config);
+      workflow = await getActiveWorkflowForModule(db, tenantId, module.id, config);
       
       if (workflow) {
         try {
@@ -1398,17 +1470,60 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
             const targetNode = workflow.nodes.find((n: any) => n.id === effectiveTransitionTo || n.name?.toLowerCase() === effectiveTransitionTo.toLowerCase());
             if (targetNode) {
               const currentWorkflowState = (existing.workflowState as any) || { history: [] };
+              const overrideReason = req.body.overrideReason || req.body._overrideReason;
+              const bypassedSubsteps = req.body.bypassedSubstepIds || req.body._bypassedSubstepIds;
+
+              const transitionHistoryItem: any = {
+                nodeId: targetNode.id,
+                timestamp: new Date().toISOString(),
+                action: 'Transitioned',
+                triggeredBy: (req as any).user?.name || (req as any).user?.email || 'System'
+              };
+              if (overrideReason) {
+                transitionHistoryItem.overrideReason = overrideReason;
+              }
+              if (bypassedSubsteps && Array.isArray(bypassedSubsteps) && bypassedSubsteps.length > 0) {
+                transitionHistoryItem.bypassedSubsteps = bypassedSubsteps;
+              }
+
+              const completedSubsteps = req.body.completedSubstepIds || req.body._completedSubstepIds;
+              const mergedSubsteps = {
+                ...((currentWorkflowState as any).substeps || {}),
+                ...((workflowState as any)?.substeps || {})
+              };
+
+              if (completedSubsteps && Array.isArray(completedSubsteps) && completedSubsteps.length > 0) {
+                const userLabel = (req as any).user?.name || (req as any).user?.email || 'User';
+                const now = new Date().toISOString();
+                for (const sid of completedSubsteps) {
+                  // Accurately locate which node actually owns this substep
+                  const ownerNode = workflow.nodes.find((n: any) => 
+                    Array.isArray(n.substeps) && n.substeps.some((s: any) => s.id === sid)
+                  );
+                  const ownerNodeId = ownerNode?.id || currentWorkflowState.currentNodeId || existing.status;
+                  // Substeps can only belong to their owner node, and NEVER to the targetNode being entered
+                  if (ownerNodeId && ownerNodeId !== targetNode.id) {
+                    if (!mergedSubsteps[ownerNodeId]) {
+                      mergedSubsteps[ownerNodeId] = {};
+                    }
+                    mergedSubsteps[ownerNodeId][sid] = {
+                      status: 'completed',
+                      updatedBy: userLabel,
+                      updatedAt: now
+                    };
+                  }
+                }
+              }
+
               const intermediateState = {
+                ...currentWorkflowState,
+                ...(workflowState || {}),
                 currentNodeId: targetNode.id,
                 activeNodeIds: [targetNode.id],
+                substeps: mergedSubsteps,
                 history: [
                   ...(currentWorkflowState.history || []),
-                  {
-                    nodeId: targetNode.id,
-                    timestamp: new Date().toISOString(),
-                    action: 'Transitioned',
-                    triggeredBy: (req as any).user?.name || (req as any).user?.email || 'System'
-                  }
+                  transitionHistoryItem
                 ]
               };
               
@@ -1430,10 +1545,16 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
               : null;
             const fallbackStartId = matchingStatusNode?.id || workflow.nodes.find((n: any) => n.type === 'START')?.id || workflow.nodes[0]?.id;
 
-            const currentWorkflowState = (existing.workflowState as any) || {
-              currentNodeId: fallbackStartId,
-              activeNodeIds: [fallbackStartId],
-              history: []
+            const currentWorkflowState = {
+              ...((existing.workflowState as any) || {}),
+              ...(workflowState || {}),
+              currentNodeId: (existing.workflowState as any)?.currentNodeId || fallbackStartId,
+              activeNodeIds: (existing.workflowState as any)?.activeNodeIds || [fallbackStartId],
+              substeps: {
+                ...((existing.workflowState as any)?.substeps || {}),
+                ...((workflowState as any)?.substeps || {})
+              },
+              history: (existing.workflowState as any)?.history || []
             };
             const evaluatedState = await WorkflowEngine.evaluate(
               { id, ...updatedData },
@@ -1448,6 +1569,12 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
             ) {
               updatePayload.workflowState = evaluatedState;
               updatePayload.status = getStatusFromState(evaluatedState, workflow, existing.status || 'New');
+            } else {
+              // Preserve merged workflowState (including any substep changes)
+              updatePayload.workflowState = {
+                ...evaluatedState,
+                substeps: currentWorkflowState.substeps
+              };
             }
           }
         } catch (err) {
@@ -1471,6 +1598,18 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
         author: userLabel === 'System' ? 'System Workflow' : userLabel,
         timestamp: new Date().toISOString()
       });
+
+      const overrideReason = req.body.overrideReason || req.body._overrideReason;
+      const bypassedLabels = req.body.bypassedSubstepLabels || req.body._bypassedSubstepLabels || [];
+      if (overrideReason) {
+        comments.push({
+          id: `comm_${Math.random().toString(36).substr(2, 9)}`,
+          body: `Stage transition override reason: "${overrideReason}"${bypassedLabels.length > 0 ? ` (Bypassed required subtasks: ${bypassedLabels.join(', ')})` : ''}`,
+          author: userLabel === 'System' ? 'System Workflow' : userLabel,
+          timestamp: new Date().toISOString()
+        });
+      }
+
       updatedData._comments = comments;
       updatePayload.data = updatedData;
     }
@@ -1637,6 +1776,101 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
       }).catch(e => console.error(e));
     }
 
+    // Human-readable Substep Activity Logging
+    if (workflow) {
+      if (completedSubstepIds && Array.isArray(completedSubstepIds) && completedSubstepIds.length > 0) {
+        const completedInfoList = completedSubstepIds.map((sid: string) => resolveWorkflowSubstepInfo(workflow, sid, existing.status));
+        const stageName = completedInfoList[0]?.stageName || existing.status || 'Workflow';
+        const labelListStr = completedInfoList.map((i: any) => `"${i.label}"`).join(', ');
+
+        logRecordActivity({
+          tenantId,
+          actorId,
+          actor,
+          action: 'SUBSTEP_COMPLETED',
+          category: 'WORKFLOW',
+          resourceId: record.id,
+          moduleId: record.moduleId,
+          moduleName: module?.name,
+          resourceKey: (record.data as any)?._record_key,
+          resourceTitle: String(recTitle),
+          description: `Completed checklist ${completedInfoList.length > 1 ? 'items' : 'item'} in "${stageName}": ${labelListStr}`,
+          metadata: {
+            substepLabels: completedInfoList.map((i: any) => i.label),
+            stageName
+          }
+        }).catch(e => console.error(e));
+      }
+
+      if (overrideReason && bypassedSubstepIds && Array.isArray(bypassedSubstepIds) && bypassedSubstepIds.length > 0) {
+        const bypassedInfoList = bypassedSubstepIds.map((sid: string) => resolveWorkflowSubstepInfo(workflow, sid, existing.status));
+        const stageName = bypassedInfoList[0]?.stageName || existing.status || 'Workflow';
+        const bypassedLabelListStr = bypassedInfoList.map((i: any) => `"${i.label}"`).join(', ');
+
+        logRecordActivity({
+          tenantId,
+          actorId,
+          actor,
+          action: 'SUBSTEP_BYPASSED',
+          category: 'WORKFLOW',
+          resourceId: record.id,
+          moduleId: record.moduleId,
+          moduleName: module?.name,
+          resourceKey: (record.data as any)?._record_key,
+          resourceTitle: String(recTitle),
+          description: `Bypassed checklist items in "${stageName}": ${bypassedLabelListStr} (Reason: "${overrideReason}")`,
+          metadata: {
+            bypassedSubstepLabels: bypassedInfoList.map((i: any) => i.label),
+            overrideReason,
+            stageName
+          }
+        }).catch(e => console.error(e));
+      }
+
+      // If substep toggles came through workflowState.substeps without transitionTo:
+      if (!transitionTo && workflowState?.substeps) {
+        const oldSubsteps = (existing.workflowState as any)?.substeps || {};
+        const newSubsteps = workflowState?.substeps || {};
+        for (const [nodeId, steps] of Object.entries(newSubsteps as Record<string, Record<string, any>>)) {
+          for (const [subId, progress] of Object.entries(steps || {})) {
+            const oldProg = oldSubsteps[nodeId]?.[subId];
+            if (progress.status !== oldProg?.status) {
+              const { label, stageName } = resolveWorkflowSubstepInfo(workflow, subId, existing.status);
+              let desc = '';
+              if (progress.status === 'completed') {
+                desc = `Completed checklist item "${label}" in "${stageName}"`;
+              } else if (progress.status === 'waived') {
+                desc = `Waived checklist item "${label}" in "${stageName}"${progress.note ? ` (Reason: "${progress.note}")` : ''}`;
+              } else {
+                desc = `Reset checklist item "${label}" in "${stageName}" to pending`;
+              }
+
+              logRecordActivity({
+                tenantId,
+                actorId,
+                actor,
+                action: progress.status === 'waived' ? 'SUBSTEP_WAIVED' : 'SUBSTEP_UPDATED',
+                category: 'WORKFLOW',
+                resourceId: record.id,
+                moduleId: record.moduleId,
+                moduleName: module?.name,
+                resourceKey: (record.data as any)?._record_key,
+                resourceTitle: String(recTitle),
+                description: desc,
+                metadata: {
+                  substepId: subId,
+                  substepLabel: label,
+                  stageName,
+                  status: progress.status,
+                  note: progress.note
+                }
+              }).catch(e => console.error(e));
+            }
+          }
+        }
+      }
+    }
+
     res.json(formatted);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1649,7 +1883,50 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
     const db = req.db!;
     const tenantId = req.tenantId!;
     const { id } = req.params;
-    const { moduleId, status, associations, path, transitionTo, ...data } = req.body;
+    const { 
+      moduleId, 
+      status, 
+      associations, 
+      path, 
+      transitionTo, 
+      workflowState, 
+      overrideReason: rawOverrideReason,
+      _overrideReason,
+      bypassedSubstepIds: rawBypassedSubstepIds,
+      _bypassedSubstepIds,
+      bypassedSubstepLabels: rawBypassedSubstepLabels,
+      _bypassedSubstepLabels,
+      completedSubstepIds: rawCompletedSubstepIds,
+      _completedSubstepIds,
+      ...data 
+    } = req.body;
+
+    const overrideReason = rawOverrideReason || _overrideReason;
+    const bypassedSubstepIds = rawBypassedSubstepIds || _bypassedSubstepIds;
+    const bypassedSubstepLabels = rawBypassedSubstepLabels || _bypassedSubstepLabels;
+    const completedSubstepIds = rawCompletedSubstepIds || _completedSubstepIds;
+
+    // Filter out internal metadata from data so it never creates raw field diffs
+    const internalPatchKeysToStrip = [
+      'completedSubstepIds',
+      '_completedSubstepIds',
+      'bypassedSubstepIds',
+      '_bypassedSubstepIds',
+      'bypassedSubstepLabels',
+      '_bypassedSubstepLabels',
+      'overrideReason',
+      '_overrideReason',
+      'substeps',
+      '_substeps'
+    ];
+    for (const k of internalPatchKeysToStrip) {
+      delete (data as any)[k];
+    }
+    for (const k of Object.keys(data)) {
+      if (k.startsWith('_') && k !== '_comments' && k !== '_activities' && k !== '_record_key') {
+        delete (data as any)[k];
+      }
+    }
 
     // 1. Fetch existing (using scoped client, handles RLS)
     const existing = await db.record.findUnique({ where: { id } });
@@ -1659,6 +1936,19 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
       ...(existing.data as any),
       ...data
     };
+
+    for (const k of internalPatchKeysToStrip) {
+      delete (updatedData as any)[k];
+    }
+    for (const k of Object.keys(updatedData)) {
+      if (
+        (k.startsWith('_') && k !== '_comments' && k !== '_activities' && k !== '_record_key') ||
+        k.toLowerCase().includes('completedsubstep') ||
+        k.toLowerCase().includes('bypassedsubstep')
+      ) {
+        delete (updatedData as any)[k];
+      }
+    }
 
     // 2. Validation (Minimal check for fields provided in PATCH)
     const module = await db.module.findUnique({ 
@@ -1730,12 +2020,14 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
       data: updatedData,
       status: status || existing.status,
       associations: associations !== undefined ? associations : existing.associations,
-      path: path !== undefined ? path : existing.path
+      path: path !== undefined ? path : existing.path,
+      ...(workflowState !== undefined ? { workflowState } : {})
     };
 
+    let workflow: any = null;
     if (module) {
       const config = module.config as any;
-      const workflow = await getActiveWorkflowForModule(db, tenantId, module.id, config);
+      workflow = await getActiveWorkflowForModule(db, tenantId, module.id, config);
       
       if (workflow) {
         try {
@@ -1753,17 +2045,60 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
             const targetNode = workflow.nodes.find((n: any) => n.id === effectiveTransitionTo || n.name?.toLowerCase() === effectiveTransitionTo.toLowerCase());
             if (targetNode) {
               const currentWorkflowState = (existing.workflowState as any) || { history: [] };
+              const overrideReason = req.body.overrideReason || req.body._overrideReason;
+              const bypassedSubsteps = req.body.bypassedSubstepIds || req.body._bypassedSubstepIds;
+
+              const transitionHistoryItem: any = {
+                nodeId: targetNode.id,
+                timestamp: new Date().toISOString(),
+                action: 'Transitioned',
+                triggeredBy: (req as any).user?.name || (req as any).user?.email || 'System'
+              };
+              if (overrideReason) {
+                transitionHistoryItem.overrideReason = overrideReason;
+              }
+              if (bypassedSubsteps && Array.isArray(bypassedSubsteps) && bypassedSubsteps.length > 0) {
+                transitionHistoryItem.bypassedSubsteps = bypassedSubsteps;
+              }
+
+              const completedSubsteps = req.body.completedSubstepIds || req.body._completedSubstepIds;
+              const mergedSubsteps = {
+                ...((currentWorkflowState as any).substeps || {}),
+                ...((workflowState as any)?.substeps || {})
+              };
+
+              if (completedSubsteps && Array.isArray(completedSubsteps) && completedSubsteps.length > 0) {
+                const userLabel = (req as any).user?.name || (req as any).user?.email || 'User';
+                const now = new Date().toISOString();
+                for (const sid of completedSubsteps) {
+                  // Accurately locate which node actually owns this substep
+                  const ownerNode = workflow.nodes.find((n: any) => 
+                    Array.isArray(n.substeps) && n.substeps.some((s: any) => s.id === sid)
+                  );
+                  const ownerNodeId = ownerNode?.id || currentWorkflowState.currentNodeId || existing.status;
+                  // Substeps can only belong to their owner node, and NEVER to the targetNode being entered
+                  if (ownerNodeId && ownerNodeId !== targetNode.id) {
+                    if (!mergedSubsteps[ownerNodeId]) {
+                      mergedSubsteps[ownerNodeId] = {};
+                    }
+                    mergedSubsteps[ownerNodeId][sid] = {
+                      status: 'completed',
+                      updatedBy: userLabel,
+                      updatedAt: now
+                    };
+                  }
+                }
+              }
+
               const intermediateState = {
+                ...currentWorkflowState,
+                ...(workflowState || {}),
                 currentNodeId: targetNode.id,
                 activeNodeIds: [targetNode.id],
+                substeps: mergedSubsteps,
                 history: [
                   ...(currentWorkflowState.history || []),
-                  {
-                    nodeId: targetNode.id,
-                    timestamp: new Date().toISOString(),
-                    action: 'Transitioned',
-                    triggeredBy: (req as any).user?.name || (req as any).user?.email || 'System'
-                  }
+                  transitionHistoryItem
                 ]
               };
               
@@ -1785,10 +2120,16 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
               : null;
             const fallbackStartId = matchingStatusNode?.id || workflow.nodes.find((n: any) => n.type === 'START')?.id || workflow.nodes[0]?.id;
 
-            const currentWorkflowState = (existing.workflowState as any) || {
-              currentNodeId: fallbackStartId,
-              activeNodeIds: [fallbackStartId],
-              history: []
+            const currentWorkflowState = {
+              ...((existing.workflowState as any) || {}),
+              ...(workflowState || {}),
+              currentNodeId: (existing.workflowState as any)?.currentNodeId || fallbackStartId,
+              activeNodeIds: (existing.workflowState as any)?.activeNodeIds || [fallbackStartId],
+              substeps: {
+                ...((existing.workflowState as any)?.substeps || {}),
+                ...((workflowState as any)?.substeps || {})
+              },
+              history: (existing.workflowState as any)?.history || []
             };
             const evaluatedState = await WorkflowEngine.evaluate(
               { id, ...updatedData },
@@ -1803,6 +2144,12 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
             ) {
               updatePayload.workflowState = evaluatedState;
               updatePayload.status = getStatusFromState(evaluatedState, workflow, existing.status || 'New');
+            } else {
+              // Preserve merged workflowState (including any substep changes)
+              updatePayload.workflowState = {
+                ...evaluatedState,
+                substeps: currentWorkflowState.substeps
+              };
             }
           }
         } catch (err) {
@@ -1826,6 +2173,18 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
         author: userLabel === 'System' ? 'System Workflow' : userLabel,
         timestamp: new Date().toISOString()
       });
+
+      const overrideReason = req.body.overrideReason || req.body._overrideReason;
+      const bypassedLabels = req.body.bypassedSubstepLabels || req.body._bypassedSubstepLabels || [];
+      if (overrideReason) {
+        comments.push({
+          id: `comm_${Math.random().toString(36).substr(2, 9)}`,
+          body: `Stage transition override reason: "${overrideReason}"${bypassedLabels.length > 0 ? ` (Bypassed required subtasks: ${bypassedLabels.join(', ')})` : ''}`,
+          author: userLabel === 'System' ? 'System Workflow' : userLabel,
+          timestamp: new Date().toISOString()
+        });
+      }
+
       updatedData._comments = comments;
       updatePayload.data = updatedData;
     }

@@ -96,6 +96,17 @@ export function computeFieldDiff(
 
   for (const key of keys) {
     if (ignoredKeys.has(key)) continue;
+    const lowerKey = key.toLowerCase();
+    if (lowerKey.startsWith('_')) continue;
+    if (
+      lowerKey === 'completedsubstepids' ||
+      lowerKey === 'bypassedsubstepids' ||
+      lowerKey === 'bypassedsubsteplabels' ||
+      lowerKey === 'overridereason' ||
+      lowerKey === 'substeps' ||
+      lowerKey.includes('completedsubstep') ||
+      lowerKey.includes('bypassedsubstep')
+    ) continue;
 
     const oldVal = oldData ? oldData[key] : undefined;
     const newVal = newData ? newData[key] : undefined;
@@ -108,6 +119,17 @@ export function computeFieldDiff(
     // Deep equality check for primitives, arrays, objects
     if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
       const fieldDef = fieldMap.get(key);
+      const isGroupType = fieldDef?.type === 'group' || fieldDef?.type === 'fieldGroup' || fieldDef?.type === 'section' || fieldDef?.type === 'card' || (Array.isArray(fieldDef?.fields) && fieldDef.fields.length > 0);
+      if (isGroupType) continue;
+
+      // Skip composite objects whose sub-keys are already tracked as separate fields in data
+      const nonNullVal = newVal !== undefined ? newVal : oldVal;
+      if (nonNullVal && typeof nonNullVal === 'object' && !Array.isArray(nonNullVal)) {
+        const childKeys = Object.keys(nonNullVal);
+        const hasSeparateChildKeys = childKeys.some(ck => keys.has(ck) && !ignoredKeys.has(ck));
+        if (hasSeparateChildKeys) continue;
+      }
+
       const label = fieldDef?.label || fieldDef?.name || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
       const displayType = fieldDef?.type || typeof (newVal !== undefined ? newVal : oldVal);
 

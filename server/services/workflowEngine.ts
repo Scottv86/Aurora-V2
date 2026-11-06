@@ -6,6 +6,7 @@ import { emitTenantUpdate } from '../socket';
 export interface WorkflowState {
   currentNodeId: string;
   activeNodeIds?: string[];
+  substeps?: Record<string, Record<string, any>>;
   history: {
     nodeId: string;
     timestamp: string;
@@ -13,6 +14,8 @@ export interface WorkflowState {
     result?: any;
     triggerCondition?: string;
     triggeredBy?: string;
+    overrideReason?: string;
+    bypassedSubsteps?: string[];
   }[];
 }
 
@@ -28,9 +31,11 @@ export class WorkflowEngine {
   ): Promise<WorkflowState> {
     const state: WorkflowState = currentState
       ? {
+          ...currentState,
           currentNodeId: currentState.currentNodeId,
           activeNodeIds: currentState.activeNodeIds || [currentState.currentNodeId],
-          history: [...(currentState.history || [])]
+          history: [...(currentState.history || [])],
+          substeps: currentState.substeps || {}
         }
       : {
           currentNodeId: this.findStartNode(workflow).id,

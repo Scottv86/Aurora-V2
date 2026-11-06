@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Sparkles, 
@@ -12,9 +12,11 @@ import {
   ExternalLink, 
   ChevronDown, 
   ChevronUp, 
-  FileText
+  FileText,
+  CheckSquare
 } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { cn, formatLocalizedDate } from '../../lib/utils';
+import { usePlatform } from '../../hooks/usePlatform';
 import { UserAvatarWithPresence } from '../Common/UserPresenceBadge';
 
 export interface ActivityChange {
@@ -61,9 +63,12 @@ interface ActivityEventCardProps {
   event: ActivityEvent;
   showResourceLink?: boolean; // True when rendered in tenant-wide 'Feed' App
   onNavigateToRecord?: (moduleId: string, recordId: string) => void;
+  showTechnicalMeta?: boolean; // Whether to show IP, client browser, and raw view mode tags (defaults to false)
+  members?: any[];
+  allFields?: any[];
 }
 
-function formatRelativeTime(isoString: string): string {
+function formatRelativeTime(isoString: string, dateFormat?: string): string {
   try {
     const date = new Date(isoString);
     const now = new Date();
@@ -78,7 +83,7 @@ function formatRelativeTime(isoString: string): string {
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays === 1) return 'Yesterday';
     if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return formatLocalizedDate(date, dateFormat);
   } catch {
     return 'Recently';
   }
@@ -102,15 +107,94 @@ function formatUserAgent(ua?: string): string {
   return os ? `${browser} on ${os}` : browser;
 }
 
-function renderValue(val: any): string {
+function parseIfJson(val: any): any {
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        return val;
+      }
+    }
+  }
+  return val;
+}
+
+function renderValue(
+  rawVal: any,
+  entityMap?: Map<string, string>,
+  fieldDef?: any,
+  dateFormat?: string
+): string {
+  const val = parseIfJson(rawVal);
   if (val === null || val === undefined || val === '') return 'None';
   if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+  if (val instanceof Date) return formatLocalizedDate(val, dateFormat, false);
+
+  if (typeof val === 'number') {
+    if (fieldDef?.type === 'date' || fieldDef?.type === 'datetime') {
+      return formatLocalizedDate(val, dateFormat, fieldDef?.type === 'datetime');
+    }
+    return String(val);
+  }
+
+  if (typeof val === 'string') {
+    // 1. Check if it matches a known member, user or team ID
+    if (entityMap && entityMap.has(val)) {
+      return entityMap.get(val)!;
+    }
+    // 2. Check if field has option choices matching this value
+    if (fieldDef?.options && Array.isArray(fieldDef.options)) {
+      const opt = fieldDef.options.find((o: any) => o.id === val || o.value === val);
+      if (opt?.label || opt?.name) return opt.label || opt.name;
+    }
+    // 3. Check for dates
+    const trimmed = val.trim();
+    if (
+      fieldDef?.type === 'date' || 
+      fieldDef?.type === 'datetime' || 
+      /^\d{4}-\d{2}-\d{2}$/.test(trimmed) || 
+      /^\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}/.test(trimmed)
+    ) {
+      const isDateTime = fieldDef?.type === 'datetime' || trimmed.includes('T') || (trimmed.includes(':') && trimmed.includes(' '));
+      const formatted = formatLocalizedDate(trimmed, dateFormat, isDateTime);
+      if (formatted && formatted !== trimmed) return formatted;
+    }
+    return val;
+  }
+
   if (typeof val === 'object') {
     if (Array.isArray(val)) {
       if (val.length === 0) return 'None';
-      return val.map(item => (typeof item === 'object' ? item.name || item.label || item.id || JSON.stringify(item) : String(item))).join(', ');
+      const items = val.map(item => renderValue(item, entityMap, fieldDef, dateFormat)).filter(v => v && v !== 'None');
+      return items.length > 0 ? items.join(', ') : 'None';
     }
-    return val.name || val.label || val.title || JSON.stringify(val);
+
+    // If object with member/user ID
+    if (entityMap) {
+      if (val.id && entityMap.has(val.id)) return entityMap.get(val.id)!;
+      if (val.userId && entityMap.has(val.userId)) return entityMap.get(val.userId)!;
+      if (val.memberId && entityMap.has(val.memberId)) return entityMap.get(val.memberId)!;
+    }
+
+    // If object with common descriptive fields:
+    if (val.name) return String(val.name);
+    if (val.label) return String(val.label);
+    if (val.title) return String(val.title);
+    if (val.value !== undefined) return renderValue(val.value, entityMap, fieldDef, dateFormat);
+    
+    // If it's a field-values object like { "field-9w2k31wo": "Mr" }
+    const values = Object.values(val);
+    if (values.length > 0) {
+      const cleanValues = values
+        .map(v => renderValue(v, entityMap, fieldDef, dateFormat))
+        .filter(v => v && v !== 'None');
+      if (cleanValues.length > 0) {
+        return cleanValues.join(', ');
+      }
+    }
+    return 'None';
   }
   return String(val);
 }
@@ -118,9 +202,55 @@ function renderValue(val: any): string {
 export const ActivityEventCard: React.FC<ActivityEventCardProps> = ({
   event,
   showResourceLink = false,
-  onNavigateToRecord
+  onNavigateToRecord,
+  showTechnicalMeta = false,
+  members: propMembers,
+  allFields: propAllFields
 }) => {
   const [expanded, setExpanded] = useState(false);
+  const { members: platformMembers, teams: platformTeams, tenant } = usePlatform();
+  const dateFormat = tenant?.localization?.dateFormat || 'DD/MM/YYYY';
+
+  // Unified lookup map for users/members and teams
+  const entityMap = useMemo(() => {
+    const map = new Map<string, string>();
+    const membersList = [...(propMembers || []), ...(platformMembers || [])];
+
+    for (const m of membersList) {
+      const name = m?.name || (m?.firstName && m?.familyName ? `${m.firstName} ${m.familyName}` : m?.firstName || m?.email);
+      if (name) {
+        if (m.id) map.set(m.id, name);
+        if (m.userId) map.set(m.userId, name);
+        if (m.cuid) map.set(m.cuid, name);
+        if (m.memberId) map.set(m.memberId, name);
+        if (m.user?.id) map.set(m.user.id, name);
+        if (m.user?.email) map.set(m.user.email, name);
+      }
+    }
+
+    // Teams
+    for (const t of (platformTeams || [])) {
+      if (t?.id && t?.name) map.set(t.id, t.name);
+    }
+
+    // Event actor
+    if (event.actor?.id && event.actor?.name) {
+      map.set(event.actor.id, event.actor.name);
+    }
+
+    return map;
+  }, [propMembers, platformMembers, platformTeams, event.actor]);
+
+  // Fields lookup map for options / types
+  const fieldMap = useMemo(() => {
+    const map = new Map<string, any>();
+    if (Array.isArray(propAllFields)) {
+      for (const f of propAllFields) {
+        if (f?.id) map.set(f.id, f);
+      }
+    }
+    return map;
+  }, [propAllFields]);
 
   // Category-specific visual icon and accents
   const getCategoryConfig = () => {
@@ -148,10 +278,10 @@ export const ActivityEventCard: React.FC<ActivityEventCardProps> = ({
         };
       case 'WORKFLOW':
         return {
-          icon: GitFork,
-          color: 'text-purple-500 dark:text-purple-400',
-          bg: 'bg-purple-500/10 dark:bg-purple-500/15 border-purple-500/20',
-          pillBg: 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300'
+          icon: event.action?.includes('SUBSTEP') ? CheckSquare : GitFork,
+          color: event.action?.includes('SUBSTEP') ? 'text-emerald-500 dark:text-emerald-400' : 'text-purple-500 dark:text-purple-400',
+          bg: event.action?.includes('SUBSTEP') ? 'bg-emerald-500/10 dark:bg-emerald-500/15 border-emerald-500/20' : 'bg-purple-500/10 dark:bg-purple-500/15 border-purple-500/20',
+          pillBg: event.action?.includes('SUBSTEP') ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300'
         };
       case 'COMMENT':
         return {
@@ -176,6 +306,14 @@ export const ActivityEventCard: React.FC<ActivityEventCardProps> = ({
         };
       case 'FIELD':
       default:
+        if (event.action?.includes('SUBSTEP')) {
+          return {
+            icon: CheckSquare,
+            color: 'text-emerald-500 dark:text-emerald-400',
+            bg: 'bg-emerald-500/10 dark:bg-emerald-500/15 border-emerald-500/20',
+            pillBg: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+          };
+        }
         return {
           icon: Edit3,
           color: 'text-cyan-500 dark:text-cyan-400',
@@ -187,7 +325,67 @@ export const ActivityEventCard: React.FC<ActivityEventCardProps> = ({
 
   const config = getCategoryConfig();
   const IconComponent = config.icon;
-  const changes = event.changes || [];
+  // Filter out changes where old and new values are effectively identical,
+  // and eliminate redundant parent group/container changes when child field changes exist
+  const changes = useMemo(() => {
+    const valid = (event.changes || []).filter(c => {
+      // Hide internal workflow/substep metadata from field diff badges
+      if (
+        c.fieldId.startsWith('_') ||
+        c.fieldId === 'completedSubstepIds' ||
+        c.fieldId === 'bypassedSubstepIds' ||
+        c.fieldId === 'bypassedSubstepLabels' ||
+        c.fieldId === 'overrideReason' ||
+        c.fieldId === 'substeps' ||
+        c.fieldLabel?.toLowerCase().includes('substep')
+      ) {
+        return false;
+      }
+      const fDef = fieldMap.get(c.fieldId);
+      const oldVal = renderValue(c.oldValue, entityMap, fDef, dateFormat);
+      const newVal = renderValue(c.newValue, entityMap, fDef, dateFormat);
+      return oldVal !== newVal;
+    });
+
+    if (valid.length <= 1) return valid;
+
+    return valid.filter(c => {
+      const isGroupType = c.displayType === 'group' || c.displayType === 'fieldGroup' || c.displayType === 'section' || c.displayType === 'card';
+      if (isGroupType) return false;
+
+      const rawVal = c.newValue !== null && c.newValue !== undefined ? c.newValue : c.oldValue;
+      const parsed = parseIfJson(rawVal);
+
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const parsedKeys = Object.keys(parsed);
+        const hasChildDiff = valid.some(other => other !== c && parsedKeys.includes(other.fieldId));
+        if (hasChildDiff) return false;
+
+        const renderedThis = renderValue(rawVal, entityMap, undefined, dateFormat);
+        const otherRendered = valid.filter(other => other !== c).map(o => renderValue(o.newValue || o.oldValue, entityMap, undefined, dateFormat));
+        const matchesOther = otherRendered.some(ov => ov !== 'None' && renderedThis.includes(ov));
+        if (matchesOther && parsedKeys.length > 1) return false;
+      }
+
+      return true;
+    });
+  }, [event.changes, entityMap, fieldMap, dateFormat]);
+
+  // Dynamic description that reflects only actual visible changes
+  const displayDescription = useMemo(() => {
+    let desc = event.description || event.action;
+    if (desc && (desc.includes('CompletedSubstepIds') || desc.includes('bypassedSubstepIds') || desc.includes('sub_'))) {
+      desc = 'Completed workflow checklist items';
+    }
+    if (event.category === 'FIELD' && changes.length > 0 && changes.length !== (event.changes?.length || 0)) {
+      if (changes.length === 1) {
+        return `Updated ${changes[0].fieldLabel}`;
+      }
+      return `Updated ${changes.length} fields (${changes.map(c => c.fieldLabel).slice(0, 3).join(', ')}${changes.length > 3 ? '...' : ''})`;
+    }
+    return desc;
+  }, [event.description, event.action, event.category, event.changes, changes]);
+
   const hasDiffs = changes.length > 0;
   const visibleDiffs = expanded ? changes : changes.slice(0, 3);
   const remainingDiffsCount = changes.length - 3;
@@ -244,8 +442,8 @@ export const ActivityEventCard: React.FC<ActivityEventCardProps> = ({
           </div>
 
           <div className="flex items-center gap-2 text-[11px] text-zinc-400 shrink-0">
-            <span title={new Date(event.timestamp).toLocaleString()}>
-              {formatRelativeTime(event.timestamp)}
+            <span title={formatLocalizedDate(event.timestamp, dateFormat, true)}>
+              {formatRelativeTime(event.timestamp, dateFormat)}
             </span>
           </div>
         </div>
@@ -274,7 +472,7 @@ export const ActivityEventCard: React.FC<ActivityEventCardProps> = ({
 
         {/* Event Main Description */}
         <p className="text-xs text-zinc-700 dark:text-zinc-300 font-medium leading-relaxed">
-          {event.description || event.action}
+          {displayDescription}
         </p>
 
         {/* Comment Note Callout */}
@@ -284,8 +482,8 @@ export const ActivityEventCard: React.FC<ActivityEventCardProps> = ({
           </div>
         )}
 
-        {/* Access Audit Trail (IP, Client, Access Method) */}
-        {(event.category === 'ACCESS' || event.metadata?.ip || event.metadata?.userAgent) && (
+        {/* Access Audit Trail (IP, Client, Access Method) - only displayed when technical metadata is explicitly requested */}
+        {showTechnicalMeta && (event.category === 'ACCESS' || event.metadata?.ip || event.metadata?.userAgent) && (
           <div className="flex items-center gap-1.5 pt-0.5 flex-wrap text-[10px] text-zinc-500 dark:text-zinc-400">
             {event.metadata?.source && (
               <span className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-medium border border-zinc-200/50 dark:border-zinc-700/50">
@@ -326,26 +524,32 @@ export const ActivityEventCard: React.FC<ActivityEventCardProps> = ({
         {hasDiffs && (
           <div className="pt-1.5 space-y-1.5">
             <div className="space-y-1">
-              {visibleDiffs.map((diff, idx) => (
-                <div 
-                  key={idx}
-                  className="flex items-center gap-2 text-[11px] p-2 rounded-xl bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200/80 dark:border-zinc-800/80 flex-wrap"
-                >
-                  <span className="font-semibold text-zinc-600 dark:text-zinc-400 shrink-0">
-                    {diff.fieldLabel}:
-                  </span>
+              {visibleDiffs.map((diff, idx) => {
+                const fDef = fieldMap.get(diff.fieldId);
+                const oldDisplay = renderValue(diff.oldValue, entityMap, fDef, dateFormat);
+                const newDisplay = renderValue(diff.newValue, entityMap, fDef, dateFormat);
 
-                  <span className="line-through text-rose-500 dark:text-rose-400/90 font-mono text-[10px] px-1 py-0.2 rounded bg-rose-50 dark:bg-rose-950/30 border border-rose-200/50 dark:border-rose-900/30 max-w-[160px] truncate">
-                    {renderValue(diff.oldValue)}
-                  </span>
+                return (
+                  <div 
+                    key={idx}
+                    className="flex items-center gap-2 text-[11px] p-2 rounded-xl bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200/80 dark:border-zinc-800/80 flex-wrap"
+                  >
+                    <span className="font-semibold text-zinc-600 dark:text-zinc-400 shrink-0">
+                      {diff.fieldLabel}:
+                    </span>
 
-                  <span className="text-zinc-400 text-xs">→</span>
+                    <span className="line-through text-rose-500 dark:text-rose-400/90 font-mono text-[10px] px-1 py-0.2 rounded bg-rose-50 dark:bg-rose-950/30 border border-rose-200/50 dark:border-rose-900/30 max-w-[160px] truncate">
+                      {oldDisplay}
+                    </span>
 
-                  <span className="text-emerald-600 dark:text-emerald-400 font-mono text-[10px] font-semibold px-1 py-0.2 rounded bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/50 dark:border-emerald-900/30 max-w-[180px] truncate">
-                    {renderValue(diff.newValue)}
-                  </span>
-                </div>
-              ))}
+                    <span className="text-zinc-400 text-xs">→</span>
+
+                    <span className="text-emerald-600 dark:text-emerald-400 font-mono text-[10px] font-semibold px-1 py-0.2 rounded bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/50 dark:border-emerald-900/30 max-w-[180px] truncate">
+                      {newDisplay}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
 
             {remainingDiffsCount > 0 && (
