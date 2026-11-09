@@ -6,7 +6,6 @@ import {
   AnimatePresence 
 } from 'motion/react';
 import { 
-  Trash2, 
   Edit2, 
   Loader2,
   ArrowLeft, 
@@ -23,19 +22,14 @@ import {
   CheckCircle2,
   Lock,
   HelpCircle,
-  MoreHorizontal,
-  Share2,
-  Calendar,
-  StickyNote,
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
-import { UserAvatarWithPresence } from '../../components/Common/UserPresenceBadge';
 import { ShareRecordModal } from '../../components/Platform/ShareRecordModal';
 import { MoveRecordModal } from '../../components/Platform/MoveRecordModal';
-import { RecordContextRail } from '../../components/Record/RecordContextRail';
+import { RecordContextRail, ContextRailTab } from '../../components/Record/RecordContextRail';
 import { RecordActivityDrawer } from '../../components/Platform/RecordActivityDrawer';
 import { RecordDocumentsDrawer } from '../../components/Platform/RecordDocumentsDrawer';
 import { RecordNotesRemindersDrawer } from '../../components/Platform/RecordNotesRemindersDrawer';
@@ -57,7 +51,6 @@ import { calculateDefaultValue } from '../../services/fieldService';
 import { getCachedRecordById, getCachedRecords, primeRecordCache, invalidateModuleRecordsCache, updateCachedRecordInModule } from '../../services/dataService';
 import { CollapsibleFieldGroup } from '../../components/UI/CollapsibleFieldGroup';
 import { WorkflowPreview } from '../../components/Builder/Workflow/WorkflowPreview';
-import { WorkflowStatusBar } from '../../components/Platform/WorkflowStatusBar';
 import { ScheduleActivityModal } from '../../components/Platform/ScheduleActivityModal';
 import { ScheduledActivity, buildPipelineSteps } from '../../lib/workflowProcessUtils';
 import { RepeatableGroupBlock } from '../../components/Platform/RepeatableGroupBlock';
@@ -324,6 +317,7 @@ export const RecordDetailView = ({
       return false;
     }
   });
+  const [activeRailTab, setActiveRailTab] = useState<ContextRailTab>('overview');
   const effectiveRecordId = recordId || record?.id || 'current';
 
   const toggleRail = useCallback(() => {
@@ -355,8 +349,8 @@ export const RecordDetailView = ({
   const [showScheduleActivityModal, setShowScheduleActivityModal] = useState(false);
   const [showDocumentsDrawer, setShowDocumentsDrawer] = useState(false);
   const [showNotesRemindersDrawer, setShowNotesRemindersDrawer] = useState(false);
-  const [docCount, setDocCount] = useState(0);
-  const [notesRemindersCount, setNotesRemindersCount] = useState(0);
+  const [_docCount, setDocCount] = useState(0);
+  const [_notesRemindersCount, setNotesRemindersCount] = useState(0);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [showVisualizer, setShowVisualizer] = useState(false);
   const [lookupData, setLookupData] = useState<Record<string, any[]>>({});
@@ -403,47 +397,8 @@ export const RecordDetailView = ({
     editDataRef.current = editData;
   }, [editData]);
 
-  // Dropdown menus states and refs for toolbar
-  const [showAssigneeMenu, setShowAssigneeMenu] = useState(false);
-  const [showParticipantMenu, setShowParticipantMenu] = useState(false);
+  // History modal state
   const [showHistoryMenu, setShowHistoryMenu] = useState(false);
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const [assigneeSearch, setAssigneeSearch] = useState('');
-  const [participantSearch, setParticipantSearch] = useState('');
-
-  const assigneeMenuRef = useRef<HTMLDivElement>(null);
-  const participantMenuRef = useRef<HTMLDivElement>(null);
-  const moreMenuRef = useRef<HTMLDivElement>(null);
-
-  // Click outside hook for toolbar dropdowns
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (assigneeMenuRef.current && !assigneeMenuRef.current.contains(target)) {
-        setShowAssigneeMenu(false);
-      }
-      if (participantMenuRef.current && !participantMenuRef.current.contains(target)) {
-        setShowParticipantMenu(false);
-      }
-      if (moreMenuRef.current && !moreMenuRef.current.contains(target)) {
-        setShowMoreMenu(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const currentAssignee = useMemo(() => {
-    const assigneeId = editData.assigneeId !== undefined ? editData.assigneeId : record?.assigneeId;
-    if (!assigneeId) return null;
-    return (members || []).find(m => m.id === assigneeId) || null;
-  }, [editData.assigneeId, record?.assigneeId, members]);
-
-  const currentParticipants = useMemo(() => {
-    const ids: string[] = editData.participantIds !== undefined ? (editData.participantIds || []) : (record?.participantIds || []);
-    if (!Array.isArray(ids)) return [];
-    return (members || []).filter(m => ids.includes(m.id));
-  }, [editData.participantIds, record?.participantIds, members]);
 
   const handleUpdateAssignee = async (newAssigneeId: string | null) => {
     if (!tenant?.id || !moduleId || !recordId) return;
@@ -527,12 +482,6 @@ export const RecordDetailView = ({
   }, [currentMember, platformUser, supabaseUser, session]);
 
   const currentMemberId = currentMember?.id || platformUser?.memberId || platformUser?.cuid || resolvedCurrentUserId;
-
-  const isAssignedToCurrent = useMemo(() => {
-    const curAssigneeId = editData.assigneeId !== undefined ? editData.assigneeId : record?.assigneeId;
-    if (!curAssigneeId) return false;
-    return curAssigneeId === currentMemberId || curAssigneeId === resolvedCurrentUserId;
-  }, [editData.assigneeId, record?.assigneeId, currentMemberId, resolvedCurrentUserId]);
 
   const isStarred = Boolean(
     (record?._starredUserIds || []).includes(resolvedCurrentUserId) || 
@@ -3558,6 +3507,8 @@ export const RecordDetailView = ({
                   {recordTitle || 'Record Details'}
                 </h1>
               ) : null}
+
+
             </div>
 
             {/* Subtitle Row: Custom Subtitle Fields + Created Date */}
@@ -3621,532 +3572,6 @@ export const RecordDetailView = ({
             </button>
           ))}
 
-
-
-          {/* People & Collaboration Group */}
-          <div className="flex items-center gap-1.5">
-            {/* Assignee Picker */}
-            <div className="relative" ref={assigneeMenuRef}>
-              <button
-                onClick={() => setShowAssigneeMenu(!showAssigneeMenu)}
-                className="h-8 px-2.5 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg transition-all flex items-center gap-1.5 group text-xs font-semibold text-zinc-700 dark:text-zinc-200 shadow-xs"
-                title={currentAssignee ? `Assignee: ${currentAssignee.name}` : 'Assign Member'}
-              >
-                {currentAssignee ? (
-                  <>
-                    <UserAvatarWithPresence
-                      avatarUrl={currentAssignee.avatarUrl}
-                      name={currentAssignee.name}
-                      status={(currentAssignee as any).status || (currentAssignee as any).presenceStatus || 'AVAILABLE'}
-                      size="xs"
-                    />
-                    <span className="max-w-[140px] truncate">{currentAssignee.name}</span>
-                  </>
-                ) : (
-                  <>
-                    <LucideIcons.User size={12} className="text-zinc-400" />
-                    <span className="text-zinc-500">Assignee</span>
-                  </>
-                )}
-                <LucideIcons.ChevronDown size={11} className="text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors" />
-              </button>
-
-              <AnimatePresence>
-                {showAssigneeMenu && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 6, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 6, scale: 0.95 }}
-                    transition={{ duration: 0.15 }}
-                    className="absolute right-0 mt-1.5 w-60 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl z-50 overflow-hidden flex flex-col max-h-80"
-                  >
-                    <div className="p-1.5 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 space-y-0.5">
-                      <button
-                        onClick={() => {
-                          const me = members.find(m => m.id === platformUser?.memberId || m.id === platformUser?.cuid);
-                          if (me) handleUpdateAssignee(me.id);
-                          setShowAssigneeMenu(false);
-                        }}
-                        className="w-full text-left px-2.5 py-1.5 rounded-md text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 transition-colors flex items-center gap-2"
-                      >
-                        <LucideIcons.UserCheck size={12} />
-                        <span>Assign to me</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          handleUpdateAssignee(null);
-                          setShowAssigneeMenu(false);
-                        }}
-                        className="w-full text-left px-2.5 py-1.5 rounded-md text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors flex items-center gap-2"
-                      >
-                        <LucideIcons.UserMinus size={12} />
-                        <span>Clear Assignee</span>
-                      </button>
-                    </div>
-
-                    <div className="p-1.5 border-b border-zinc-100 dark:border-zinc-800 relative">
-                      <LucideIcons.Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" size={11} />
-                      <input
-                        type="text"
-                        placeholder="Search members..."
-                        value={assigneeSearch}
-                        onChange={(e) => setAssigneeSearch(e.target.value)}
-                        className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-md pl-7 pr-2.5 py-1 text-xs text-zinc-900 dark:text-zinc-300 focus:outline-none focus:border-indigo-500"
-                      />
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto p-1 space-y-0.5 max-h-44 scrollbar-thin">
-                      {(members || [])
-                        .filter(m => !m.isSynthetic && m.name.toLowerCase().includes(assigneeSearch.toLowerCase()))
-                        .map(member => {
-                          const isSelected = (editData.assigneeId !== undefined ? editData.assigneeId : record?.assigneeId) === member.id;
-                          return (
-                            <button
-                              key={member.id}
-                              onClick={() => {
-                                handleUpdateAssignee(member.id);
-                                setShowAssigneeMenu(false);
-                              }}
-                              className={cn(
-                                "w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-all flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800/50",
-                                isSelected ? "bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 font-semibold" : "text-zinc-700 dark:text-zinc-300"
-                              )}
-                            >
-                              <div className="flex items-center gap-2 min-w-0">
-                                <UserAvatarWithPresence
-                                  avatarUrl={member.avatarUrl}
-                                  name={member.name}
-                                  status={(member as any).status || (member as any).presenceStatus || 'AVAILABLE'}
-                                  size="xs"
-                                />
-                                <div className="min-w-0">
-                                  <p className="truncate leading-none">{member.name}</p>
-                                  <p className="text-[9px] text-zinc-400 dark:text-zinc-500 truncate mt-0.5">{member.email}</p>
-                                </div>
-                              </div>
-                              {isSelected && <LucideIcons.Check size={12} className="text-indigo-500 shrink-0 ml-2" />}
-                            </button>
-                          );
-                        })}
-                      {(members || []).filter(m => !m.isSynthetic && m.name.toLowerCase().includes(assigneeSearch.toLowerCase())).length === 0 && (
-                        <p className="text-[10px] text-zinc-400 text-center py-3 italic font-medium">No members found</p>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* Participants Picker */}
-            <div className="relative" ref={participantMenuRef}>
-              <button
-                onClick={() => setShowParticipantMenu(!showParticipantMenu)}
-                className="h-8 px-2.5 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 rounded-lg transition-all flex items-center gap-1.5 group text-xs font-semibold text-zinc-700 dark:text-zinc-200 shadow-xs"
-                title={currentParticipants.length > 0 ? `${currentParticipants.length} Participants` : 'Manage Participants'}
-              >
-                <LucideIcons.Users size={12} className={currentParticipants.length > 0 ? "text-indigo-500" : "text-zinc-400"} />
-                <span>{currentParticipants.length > 0 ? currentParticipants.length : 'Participants'}</span>
-                <LucideIcons.ChevronDown size={11} className="text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-300 transition-colors" />
-              </button>
-
-              <AnimatePresence>
-                {showParticipantMenu && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 6, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 6, scale: 0.95 }}
-                    transition={{ duration: 0.15 }}
-                    className="absolute right-0 mt-1.5 w-60 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl z-50 overflow-hidden flex flex-col max-h-80"
-                  >
-                    <div className="p-1.5 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 space-y-0.5">
-                      <button
-                        onClick={() => {
-                          const me = members.find(m => m.id === platformUser?.memberId || m.id === platformUser?.cuid);
-                          if (me) handleToggleParticipant(me.id);
-                        }}
-                        className="w-full text-left px-2.5 py-1.5 rounded-md text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 transition-colors flex items-center gap-2"
-                      >
-                        <LucideIcons.UserPlus size={12} />
-                        <span>Toggle myself</span>
-                      </button>
-                      {currentParticipants.length > 0 && (
-                        <button
-                          onClick={() => {
-                            handleClearParticipants();
-                            setShowParticipantMenu(false);
-                          }}
-                          className="w-full text-left px-2.5 py-1.5 rounded-md text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 transition-colors flex items-center gap-2"
-                        >
-                          <LucideIcons.UserMinus size={12} />
-                          <span>Clear Participants</span>
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="p-1.5 border-b border-zinc-100 dark:border-zinc-800 relative">
-                      <LucideIcons.Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" size={11} />
-                      <input
-                        type="text"
-                        placeholder="Search members..."
-                        value={participantSearch}
-                        onChange={(e) => setParticipantSearch(e.target.value)}
-                        className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-md pl-7 pr-2.5 py-1 text-xs text-zinc-900 dark:text-zinc-300 focus:outline-none focus:border-indigo-500"
-                      />
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto p-1 space-y-0.5 max-h-44 scrollbar-thin">
-                      {(members || [])
-                        .filter(m => !m.isSynthetic && m.name.toLowerCase().includes(participantSearch.toLowerCase()))
-                        .map(member => {
-                          const currentIds: string[] = editData.participantIds !== undefined ? (editData.participantIds || []) : (record?.participantIds || []);
-                          const isSelected = currentIds.includes(member.id);
-                          return (
-                            <button
-                              key={member.id}
-                              onClick={() => {
-                                handleToggleParticipant(member.id);
-                              }}
-                              className={cn(
-                                "w-full text-left px-2.5 py-1.5 rounded-md text-xs font-medium transition-all flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800/50",
-                                isSelected ? "bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 font-semibold" : "text-zinc-700 dark:text-zinc-300"
-                              )}
-                            >
-                              <div className="flex items-center gap-2 min-w-0">
-                                <UserAvatarWithPresence
-                                  avatarUrl={member.avatarUrl}
-                                  name={member.name}
-                                  status={(member as any).status || (member as any).presenceStatus || 'AVAILABLE'}
-                                  size="xs"
-                                />
-                                <div className="min-w-0">
-                                  <p className="truncate leading-none">{member.name}</p>
-                                  <p className="text-[9px] text-zinc-400 dark:text-zinc-500 truncate mt-0.5">{member.email}</p>
-                                </div>
-                              </div>
-                              {isSelected && <LucideIcons.Check size={12} className="text-indigo-500 shrink-0 ml-2" />}
-                            </button>
-                          );
-                        })}
-                      {(members || []).filter(m => !m.isSynthetic && m.name.toLowerCase().includes(participantSearch.toLowerCase())).length === 0 && (
-                        <p className="text-[10px] text-zinc-400 text-center py-3 italic font-medium">No members found</p>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
-
-          {/* Quick Star Button */}
-          <button
-            type="button"
-            onClick={handleToggleStar}
-            title={isStarred ? "Unstar Record" : "Star Record"}
-            className={cn(
-              "w-8 h-8 rounded-lg border transition-all flex items-center justify-center shadow-xs cursor-pointer",
-              isStarred
-                ? "bg-amber-500/10 border-amber-500/30 text-amber-500 dark:text-amber-400 hover:bg-amber-500/20"
-                : "bg-zinc-100/80 hover:bg-amber-50 dark:bg-zinc-800/80 dark:hover:bg-amber-950/20 border-zinc-200/60 dark:border-zinc-700/60 text-zinc-400 hover:text-amber-500 dark:hover:text-amber-400"
-            )}
-          >
-            <LucideIcons.Star 
-              size={14} 
-              className={cn(isStarred ? "fill-amber-400 text-amber-500" : "text-zinc-400 hover:text-amber-500 transition-colors")} 
-            />
-          </button>
-
-          {/* More Options Menu (•••) */}
-          <div className="relative" ref={moreMenuRef}>
-            <button
-              onClick={() => setShowMoreMenu(!showMoreMenu)}
-              title="More Actions"
-              className={cn(
-                "w-8 h-8 rounded-lg border transition-all flex items-center justify-center shadow-xs",
-                showMoreMenu
-                  ? "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-500/40 text-indigo-600 dark:text-indigo-400"
-                  : "bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white"
-              )}
-            >
-              <MoreHorizontal size={15} />
-            </button>
-
-            <AnimatePresence>
-              {showMoreMenu && (
-                <motion.div
-                  initial={{ opacity: 0, y: 6, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 6, scale: 0.95 }}
-                  transition={{ duration: 0.15 }}
-                  className="absolute right-0 mt-1.5 w-52 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl z-50 overflow-hidden p-1.5 space-y-0.5 text-xs text-zinc-700 dark:text-zinc-200 backdrop-blur-xl"
-                >
-                  {/* Header info */}
-                  <div className="px-2.5 py-1.5 mb-1 border-b border-zinc-100 dark:border-zinc-800 text-[10px] uppercase font-bold tracking-wider text-zinc-400">
-                    {record?._record_key || 'Record Actions'}
-                  </div>
-
-                  {/* Activity & Audit Trail Option */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowActivityDrawer(true);
-                      setShowMoreMenu(false);
-                    }}
-                    className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80 flex items-center gap-2 transition-all cursor-pointer"
-                  >
-                    <History size={13} className="text-indigo-500 shrink-0" />
-                    <span>View Activity Feed</span>
-                  </button>
-
-                  {/* Star / Unstar Record */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowMoreMenu(false);
-                      handleToggleStar();
-                    }}
-                    className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80 flex items-center gap-2 transition-all cursor-pointer"
-                  >
-                    <LucideIcons.Star size={13} className={cn("shrink-0", isStarred ? "fill-amber-400 text-amber-400" : "text-zinc-400")} />
-                    <span>{isStarred ? "Unstar Record" : "Star Record"}</span>
-                  </button>
-
-                  {/* Duplicate Record */}
-                  <button
-                    type="button"
-                    disabled={isCloning}
-                    onClick={() => {
-                      setShowMoreMenu(false);
-                      handleDuplicateRecord();
-                    }}
-                    className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80 flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    {isCloning ? (
-                      <Loader2 size={13} className="animate-spin text-zinc-400 shrink-0" />
-                    ) : (
-                      <LucideIcons.CopyPlus size={13} className="text-zinc-400 shrink-0" />
-                    )}
-                    <span>Duplicate Record</span>
-                  </button>
-
-                  {/* Move to Another Module */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowMoreMenu(false);
-                      setShowMoveModal(true);
-                    }}
-                    className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80 flex items-center gap-2 transition-all cursor-pointer"
-                  >
-                    <LucideIcons.FolderInput size={13} className="text-zinc-400 shrink-0" />
-                    <span>Move to Another Module</span>
-                  </button>
-
-                  {/* Copy Record Link */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowMoreMenu(false);
-                      handleCopyRecordLink();
-                    }}
-                    className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80 flex items-center gap-2 transition-all cursor-pointer"
-                  >
-                    <LucideIcons.Link2 size={13} className="text-zinc-400 shrink-0" />
-                    <span>Copy Record Link</span>
-                  </button>
-
-                  {/* Assign to Me */}
-                  {currentMemberId && !isAssignedToCurrent && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowMoreMenu(false);
-                        handleUpdateAssignee(currentMemberId);
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80 flex items-center gap-2 transition-all cursor-pointer"
-                    >
-                      <LucideIcons.UserCheck size={13} className="text-indigo-400 shrink-0" />
-                      <span>Assign to Me</span>
-                    </button>
-                  )}
-
-                  {/* Quick Change Status Submenu */}
-                  {statusOptions && statusOptions.length > 0 && (
-                    <div className="my-1 pt-1 border-t border-zinc-100 dark:border-zinc-800">
-                      <div className="px-2.5 py-1 text-[9px] uppercase font-semibold tracking-wider text-zinc-400">
-                        Change Status
-                      </div>
-                      <div className="flex flex-wrap gap-1 px-1.5 py-1">
-                        {statusOptions.slice(0, 5).map((opt: any, idx: number) => {
-                          const optVal = typeof opt === 'string' ? opt : opt.name || opt.value || opt.label;
-                          const optId = typeof opt === 'string' ? opt : opt.id || optVal;
-                          const currentStatus = record?.status || editData.status || '';
-                          const isCurrent = currentStatus.toLowerCase() === optVal.toLowerCase();
-                          return (
-                            <button
-                              key={idx}
-                              type="button"
-                              onClick={() => {
-                                setShowMoreMenu(false);
-                                handleStatusTransition(optVal, optId);
-                              }}
-                              className={cn(
-                                "px-2 py-0.5 rounded-md text-[10.5px] font-medium transition-colors cursor-pointer",
-                                isCurrent 
-                                  ? "bg-indigo-600 text-white font-semibold"
-                                  : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                              )}
-                            >
-                              {optVal}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="border-t border-zinc-100 dark:border-zinc-800 my-1" />
-
-                  {/* Documents & Vault Option */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowDocumentsDrawer(true);
-                      setShowMoreMenu(false);
-                    }}
-                    className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80 flex items-center gap-2 transition-all cursor-pointer"
-                  >
-                    <LucideIcons.FolderLock size={13} className="text-zinc-400 shrink-0" />
-                    <span>Documents & Vault</span>
-                  </button>
-
-                  {/* Share Record Option */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowShareModal(true);
-                      setShowMoreMenu(false);
-                    }}
-                    className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80 flex items-center gap-2 transition-all cursor-pointer"
-                  >
-                    <Share2 size={13} className="text-zinc-400 shrink-0" />
-                    <span>Share Record</span>
-                  </button>
-
-                  {/* Export PDF & Custom Module Actions */}
-                  {interfaceSettings.actions && interfaceSettings.actions.length > 0 ? (
-                    interfaceSettings.actions.map((act: any) => {
-                      const ActionIcon = (LucideIcons as any)[act.icon] || LucideIcons.FileText;
-                      return (
-                        <button
-                          key={act.id}
-                          type="button"
-                          onClick={() => {
-                            setShowMoreMenu(false);
-                            const form = (moduleData as any)?.forms?.find((f: any) => f.usage === 'action_trigger');
-                            if (form) {
-                              setActiveQuickAction(act);
-                              setActionForm(form);
-                              const defaults: any = {};
-                              const allFormFields = form.isMultistep 
-                                ? (form.steps || []).flatMap((s: any) => s.fields || [])
-                                : (form.fields || []);
-                              allFormFields.forEach((fObj: any) => {
-                                const field = allFields.find(f => f.id === fObj.id);
-                                const defVal = calculateDefaultValue(field, defaults);
-                                if (defVal !== undefined && defVal !== null && defVal !== '') {
-                                  defaults[fObj.id] = defVal;
-                                }
-                              });
-                              if (form.isMultistep && form.steps?.length > 0) {
-                                const visibleSteps = form.steps.filter((s: any) => isFieldVisible(s, defaults, visibilityContext));
-                                setActionStepId(visibleSteps[0]?.id || form.steps[0].id);
-                              }
-                              setActionFormData(defaults);
-                              setActionFormErrors({});
-                              setShowQuickActionModal(true);
-                            } else {
-                              window.print();
-                            }
-                          }}
-                          className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80 flex items-center gap-2 transition-all cursor-pointer"
-                        >
-                          <ActionIcon size={13} className="text-zinc-500 dark:text-zinc-400 shrink-0" />
-                          <span>{act.label}</span>
-                        </button>
-                      );
-                    })
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowMoreMenu(false);
-                        window.print();
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80 flex items-center gap-2 transition-all cursor-pointer"
-                    >
-                      <LucideIcons.FileText size={13} className="text-zinc-400 shrink-0" />
-                      <span>Export PDF</span>
-                    </button>
-                  )}
-
-                  {activeWorkflow && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowVisualizer(true);
-                          setShowMoreMenu(false);
-                        }}
-                        className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80 flex items-center gap-2 transition-all cursor-pointer"
-                      >
-                        <GitFork size={13} className="text-indigo-500 shrink-0" />
-                        <span>Workflow Diagram</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowHistoryMenu(true);
-                          setShowMoreMenu(false);
-                        }}
-                        className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/80 flex items-center gap-2 transition-all cursor-pointer"
-                      >
-                        <History size={13} className="text-indigo-500 shrink-0" />
-                        <span>Workflow History</span>
-                      </button>
-                    </>
-                  )}
-
-                  <div className="border-t border-zinc-100 dark:border-zinc-800 my-1" />
-
-                  {/* Move to Recycling Bin */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowDeleteModal(true);
-                      setShowMoreMenu(false);
-                    }}
-                    className="w-full text-left px-2.5 py-1.5 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 flex items-center gap-2 transition-all cursor-pointer"
-                  >
-                    <Trash2 size={13} className="shrink-0" />
-                    <span>Move to Recycling Bin</span>
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* Open Full Page View Button (when in split view / embedded) */}
-          {isEmbedded && (
-            <Link
-              to={`/workspace/modules/${routeModuleId || moduleId}/records/${recordId}`}
-              className="w-8 h-8 rounded-lg border bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white transition-all flex items-center justify-center shadow-xs shrink-0"
-              title="Open full page view"
-            >
-              <LucideIcons.ExternalLink size={14} />
-            </Link>
-          )}
-
           {/* Close Button (for Modal) */}
           {isModal && (
             <button 
@@ -4159,28 +3584,6 @@ export const RecordDetailView = ({
           )}
         </div>
       </div>
-
-      {/* Workflow Process Status Bar (Odoo-Style Next Step & Stage Ribbon) */}
-      {activeWorkflow && (
-        <WorkflowStatusBar
-          workflow={activeWorkflow}
-          record={record}
-          allFields={allFields}
-          isTransitioning={isTransitioning}
-          onTransition={handleStatusTransition}
-          onStartWorkflow={handleStartWorkflow}
-          onScheduleActivity={handleScheduleActivity}
-          onCompleteActivity={handleCompleteActivity}
-          onUpdateSubstep={handleUpdateSubstep}
-          currentUserName={effectiveCurrentUserName}
-          currentUserId={session?.user?.id}
-          members={members}
-          onOpenVisualizer={() => setShowVisualizer(true)}
-          className={cn(
-            "w-full px-5 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 shrink-0 box-border h-[46px]"
-          )}
-        />
-      )}
 
       {/* 2-Column Main Workspace: Form Layout (Left) + Unified Context Rail (Right) */}
       <div className="flex-1 flex flex-row w-full min-h-0 relative overflow-hidden">
@@ -4487,6 +3890,29 @@ export const RecordDetailView = ({
           onOpenShare={() => setShowShareModal(true)}
           statusOptions={statusOptions}
           workflowTransitions={activeWorkflow?.edges || []}
+          activeTab={activeRailTab}
+          onTabChange={setActiveRailTab}
+          isTransitioning={isTransitioning}
+          onTransition={handleStatusTransition}
+          onStartWorkflow={handleStartWorkflow}
+          onScheduleActivity={handleScheduleActivity}
+          onCompleteActivity={handleCompleteActivity}
+          onUpdateSubstep={handleUpdateSubstep}
+          currentUserName={effectiveCurrentUserName}
+          currentUserId={session?.user?.id}
+          onOpenVisualizer={() => setShowVisualizer(true)}
+          isStarred={isStarred}
+          onToggleStar={handleToggleStar}
+          onDuplicate={handleDuplicateRecord}
+          isCloning={isCloning}
+          onOpenMove={() => setShowMoveModal(true)}
+          onCopyLink={handleCopyRecordLink}
+          onExportPdf={() => window.print()}
+          onDeleteRecord={() => setShowDeleteModal(true)}
+          fullViewUrl={isEmbedded ? `/workspace/modules/${routeModuleId || moduleId}/records/${recordId}` : undefined}
+          onToggleParticipant={handleToggleParticipant}
+          onClearParticipants={handleClearParticipants}
+          onOpenHistory={() => setShowHistoryMenu(true)}
         />
       </div>
     </div>

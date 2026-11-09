@@ -170,32 +170,61 @@
   display: none;
 }
 
-.custom-scrollbar {
+.custom-scrollbar,
+.scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: #52525b rgba(24, 24, 27, 0.6);
+  scrollbar-color: rgba(161, 161, 170, 0.5) transparent;
 }
 
-.dark .custom-scrollbar {
-  scrollbar-color: #52525b rgba(24, 24, 27, 0.6);
+.custom-scrollbar::-webkit-scrollbar,
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
-.custom-scrollbar::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+.custom-scrollbar::-webkit-scrollbar-track,
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 9999px;
 }
 
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: rgba(24, 24, 27, 0.6);
-  border-radius: 4px;
+.custom-scrollbar::-webkit-scrollbar-thumb,
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(161, 161, 170, 0.4);
+  border-radius: 9999px;
 }
 
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #3f3f46;
-  border-radius: 4px;
+.custom-scrollbar::-webkit-scrollbar-thumb:hover,
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(113, 113, 122, 0.7);
 }
 
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #71717a;
+.dark .custom-scrollbar,
+.dark.custom-scrollbar,
+.dark .scrollbar-thin,
+.dark.scrollbar-thin {
+  scrollbar-color: rgba(113, 113, 122, 0.5) transparent;
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-track,
+.dark.custom-scrollbar::-webkit-scrollbar-track,
+.dark .scrollbar-thin::-webkit-scrollbar-track,
+.dark.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb,
+.dark.custom-scrollbar::-webkit-scrollbar-thumb,
+.dark .scrollbar-thin::-webkit-scrollbar-thumb,
+.dark.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(113, 113, 122, 0.45);
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover,
+.dark.custom-scrollbar::-webkit-scrollbar-thumb:hover,
+.dark .scrollbar-thin::-webkit-scrollbar-thumb:hover,
+.dark.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(161, 161, 170, 0.7);
 }
 
 /* Premium UI Elements */
