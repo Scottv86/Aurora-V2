@@ -1531,7 +1531,7 @@ export const FieldInput: React.FC<FieldInputProps> = (props) => {
     props.onBlur?.();
   } : undefined;
 
-  const needsPointerEventsNone = ['user', 'lookup', 'connector', 'number', 'currency', 'longText', 'email', 'phone', 'url', 'text'].includes(type) || !type;
+  const needsPointerEventsNone = ['lookup', 'connector', 'number', 'currency', 'longText', 'email', 'phone', 'url', 'text'].includes(type) || !type;
 
   return (
     <div 

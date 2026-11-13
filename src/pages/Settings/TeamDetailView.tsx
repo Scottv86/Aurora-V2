@@ -214,7 +214,7 @@ export const TeamDetailView = () => {
                      sortKey: 'name',
                      accessor: (m) => (
                        <div className="flex items-center gap-3 font-semibold text-zinc-900 dark:text-zinc-100">
-                         <UserAvatarWithPresence avatarUrl={m.avatarUrl} name={m.name} status={m.status || m.presenceStatus || 'AVAILABLE'} size="xs" />
+                         <UserAvatarWithPresence memberId={m.id} avatarUrl={m.avatarUrl} name={m.name} status={m.status || m.presenceStatus || 'AVAILABLE'} size="xs" />
                          {m.name}
                        </div>
                      )

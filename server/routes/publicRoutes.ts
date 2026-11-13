@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { globalPrisma } from '../lib/prisma';
 import { SecurityScreeningService } from '../services/securityScreening';
 import { logRecordActivity } from '../lib/audit';
+import { handleGetOrInitPublicSiteChatSession, handlePublicSiteChatMessage, handleServiceDeskCardAction } from './serviceDeskRoutes';
 
 const router = Router();
 
@@ -19,6 +20,9 @@ router.get('/sites/:id', async (req, res) => {
           { id },
           { domain: id }
         ]
+      },
+      include: {
+        brand: true
       }
     });
 
@@ -30,7 +34,17 @@ router.get('/sites/:id', async (req, res) => {
       return res.status(403).json({ error: 'Site is currently offline for maintenance' });
     }
 
-    res.json(site);
+    const brandingObj = (site.branding && typeof site.branding === 'object') ? (site.branding as any) : {};
+    res.json({
+      ...site,
+      chatConfig: brandingObj.chatConfig || undefined,
+      seoConfig: brandingObj.seoConfig || undefined,
+      typographyConfig: brandingObj.typographyConfig || undefined,
+      customCode: brandingObj.customCode || undefined,
+      localizationConfig: brandingObj.localizationConfig || undefined,
+      authConfig: brandingObj.authConfig || undefined,
+      appExportConfig: brandingObj.appExportConfig || undefined
+    });
   } catch (err: any) {
     console.error('[PublicAPI] GET /sites/:id Error:', err);
     res.status(500).json({ error: err.message || 'Failed to fetch public site' });
@@ -679,46 +693,22 @@ router.post('/sites/:id/track', async (req, res) => {
 });
 
 /**
- * POST /api/public/sites/:id/chat
- * Live Online Chat support message submission
+ * GET /api/public/sites/:id/chat/session
+ * Initializes or retrieves the visitor's active Service Desk Site Chat session
  */
-router.post('/sites/:id/chat', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { message, senderName } = req.body;
+router.get('/sites/:id/chat/session', handleGetOrInitPublicSiteChatSession);
 
-    if (!message) {
-      return res.status(400).json({ error: 'Message content required' });
-    }
+/**
+ * POST /api/public/sites/:id/chat
+ * Live Online Chat support message submission (Connected to Service Desk Engine)
+ */
+router.post('/sites/:id/chat', handlePublicSiteChatMessage);
 
-    const site = await globalPrisma.site.findFirst({
-      where: { OR: [{ id }, { domain: id }] }
-    });
-
-    if (!site) {
-      return res.status(404).json({ error: 'Site not found' });
-    }
-
-    // Auto-generate AI/Staff response for portal live chat
-    const replies = [
-      `Hello ${senderName || 'Valued Visitor'}! Thanks for reaching out. A staff member or AI agent is reviewing your inquiry.`,
-      `We have received your message regarding: "${message.substring(0, 40)}...". Our average response time is under 2 minutes!`,
-      `Your session is connected to ${site.name} Support Hub. How else can we assist you with your property or application today?`
-    ];
-    const replyText = replies[Math.floor(Math.random() * replies.length)];
-
-    res.json({
-      success: true,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      sender: 'Aurora Staff / AI Agent',
-      reply: replyText
-    });
-
-  } catch (err: any) {
-    console.error('[PublicAPI] POST /sites/:id/chat error:', err);
-    res.status(500).json({ error: 'Failed to process chat message' });
-  }
-});
+/**
+ * POST /api/public/sites/:id/chat/card-action
+ * Interactive card actions (inline forms, booking confirmation, invoice payment) in Site Chat
+ */
+router.post('/sites/:id/chat/card-action', handleServiceDeskCardAction);
 
 /**
  * POST /api/public/sites/:id/bonds

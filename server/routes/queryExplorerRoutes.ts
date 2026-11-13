@@ -29,7 +29,10 @@ const PHYSICAL_TABLES_WHITELIST = [
   'tenant_connectors',
   'automations',
   'automation_runs',
-  'catalog_items'
+  'catalog_items',
+  'service_desk_sessions',
+  'service_desk_messages',
+  'service_desk_wrap_ups'
 ];
 
 const TABLE_SCHEMAS: Record<string, Array<{ name: string; type: string; nullable: boolean; isPrimary?: boolean }>> = {
@@ -210,6 +213,59 @@ const TABLE_SCHEMAS: Record<string, Array<{ name: string; type: string; nullable
     { name: 'name', type: 'TEXT', nullable: false },
     { name: 'code', type: 'TEXT', nullable: false },
     { name: 'price', type: 'DECIMAL', nullable: false }
+  ],
+  service_desk_sessions: [
+    { name: 'id', type: 'TEXT', nullable: false, isPrimary: true },
+    { name: 'site_name', type: 'TEXT', nullable: true },
+    { name: 'channel_type', type: 'TEXT', nullable: false },
+    { name: 'status', type: 'TEXT', nullable: false },
+    { name: 'priority', type: 'TEXT', nullable: false },
+    { name: 'visitor_name', type: 'TEXT', nullable: false },
+    { name: 'visitor_email', type: 'TEXT', nullable: true },
+    { name: 'allocated_assignee_type', type: 'TEXT', nullable: false },
+    { name: 'allocated_member_name', type: 'TEXT', nullable: true },
+    { name: 'allocated_agent_name', type: 'TEXT', nullable: true },
+    { name: 'wrap_up_outcome', type: 'TEXT', nullable: true },
+    { name: 'wrap_up_topic', type: 'TEXT', nullable: true },
+    { name: 'wrap_up_subtopic', type: 'TEXT', nullable: true },
+    { name: 'wrap_up_sentiment', type: 'TEXT', nullable: true },
+    { name: 'first_contact_resolution', type: 'BOOLEAN', nullable: false },
+    { name: 'wrap_up_notes', type: 'TEXT', nullable: true },
+    { name: 'wrapped_up_by_name', type: 'TEXT', nullable: true },
+    { name: 'wrapped_up_at', type: 'TIMESTAMP', nullable: true },
+    { name: 'handle_duration_seconds', type: 'INTEGER', nullable: true },
+    { name: 'acw_duration_seconds', type: 'INTEGER', nullable: true },
+    { name: 'csat_score', type: 'INTEGER', nullable: true },
+    { name: 'sla_status', type: 'TEXT', nullable: true },
+    { name: 'created_at', type: 'TIMESTAMP', nullable: false },
+    { name: 'resolved_at', type: 'TIMESTAMP', nullable: true }
+  ],
+  service_desk_wrap_ups: [
+    { name: 'id', type: 'TEXT', nullable: false, isPrimary: true },
+    { name: 'session_id', type: 'TEXT', nullable: false },
+    { name: 'channel_type', type: 'TEXT', nullable: false },
+    { name: 'site_name', type: 'TEXT', nullable: true },
+    { name: 'outcome', type: 'TEXT', nullable: false },
+    { name: 'topic', type: 'TEXT', nullable: false },
+    { name: 'subtopic', type: 'TEXT', nullable: true },
+    { name: 'sentiment', type: 'TEXT', nullable: false },
+    { name: 'first_contact_resolution', type: 'BOOLEAN', nullable: false },
+    { name: 'notes', type: 'TEXT', nullable: true },
+    { name: 'wrapped_up_by_type', type: 'TEXT', nullable: false },
+    { name: 'wrapped_up_by_name', type: 'TEXT', nullable: false },
+    { name: 'handle_duration_seconds', type: 'INTEGER', nullable: true },
+    { name: 'acw_duration_seconds', type: 'INTEGER', nullable: true },
+    { name: 'csat_score', type: 'INTEGER', nullable: true },
+    { name: 'created_at', type: 'TIMESTAMP', nullable: false }
+  ],
+  service_desk_messages: [
+    { name: 'id', type: 'TEXT', nullable: false, isPrimary: true },
+    { name: 'session_id', type: 'TEXT', nullable: false },
+    { name: 'sender_type', type: 'TEXT', nullable: false },
+    { name: 'sender_name', type: 'TEXT', nullable: false },
+    { name: 'content', type: 'TEXT', nullable: false },
+    { name: 'message_type', type: 'TEXT', nullable: false },
+    { name: 'created_at', type: 'TIMESTAMP', nullable: false }
   ]
 };
 

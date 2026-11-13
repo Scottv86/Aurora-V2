@@ -7,6 +7,9 @@ import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
 import { PlatformProvider } from './context/PlatformContext';
 import { DigitalTwinProvider } from './context/DigitalTwinContext';
+import { UserProfileCardProvider } from './context/UserProfileCardContext';
+import { UserProfileHoverCard } from './components/Common/UserProfileHoverCard';
+import { ServiceDeskProvider } from './context/ServiceDeskContext';
 import { AIContextProvider } from './context/AIContextProvider';
 import { ModalStackProvider } from './context/ModalStackContext';
 import { NewModuleModalProvider } from './context/NewModuleModalContext';
@@ -58,6 +61,7 @@ const FinancialManagementPage = lazy(() => import('./pages/Platform/FinancialMan
 const TransactionsPage = lazy(() => import('./pages/Settings/PlatformModules/TransactionsPage').then(m => ({ default: m.TransactionsPage })));
 const PaymentGatewaysPage = lazy(() => import('./pages/Settings/PlatformModules/PaymentGatewaysPage').then(m => ({ default: m.PaymentGatewaysPage })));
 const SchedulingSettings = lazy(() => import('./pages/Settings/PlatformModules/SchedulingSettings').then(m => ({ default: m.SchedulingSettings })));
+const ServiceDeskSettings = lazy(() => import('./pages/Settings/PlatformModules/ServiceDeskSettings').then(m => ({ default: m.ServiceDeskSettings })));
 const SchedulingPage = lazy(() => import('./pages/Platform/SchedulingPage').then(m => ({ default: m.SchedulingPage })));
 const HealthMonitor = lazy(() => import('./components/HealthMonitor').then(m => ({ default: m.HealthMonitor })));
 const FleetManager = lazy(() => import('./components/FleetManager').then(m => ({ default: m.FleetManager })));
@@ -139,6 +143,7 @@ const FeedApp = lazy(() => import('./pages/Apps/FeedApp').then(m => ({ default: 
 const NotesApp = lazy(() => import('./pages/Apps/NotesApp').then(m => ({ default: m.NotesApp })));
 const RemindersApp = lazy(() => import('./pages/Apps/RemindersApp').then(m => ({ default: m.RemindersApp })));
 const CalculatorApp = lazy(() => import('./pages/Apps/CalculatorApp').then(m => ({ default: m.CalculatorApp })));
+const ServiceDeskApp = lazy(() => import('./pages/Apps/ServiceDeskApp').then(m => ({ default: m.ServiceDeskApp })));
 const SearchesDirectoryPage = lazy(() => import('./pages/Search/SearchesDirectoryPage').then(m => ({ default: m.SearchesDirectoryPage })));
 const SearchRunnerPage = lazy(() => import('./pages/Search/SearchRunnerPage').then(m => ({ default: m.SearchRunnerPage })));
 const ApprovalsHubPage = lazy(() => import('./pages/Approvals/ApprovalsHubPage'));
@@ -258,12 +263,15 @@ const App = () => {
             <PlatformProvider>
               <BrandTokenApplier />
               <DigitalTwinProvider>
+                <ServiceDeskProvider>
                 <ModalStackProvider>
                   <NewModuleModalProvider>
                     <Router>
+                      <UserProfileCardProvider>
                       <PlatformToaster />
                       <StackedModalManager />
                       <NewModuleModal />
+                      <UserProfileHoverCard />
                       <Suspense fallback={<PageLoader label="Loading view..." />}>
                         <Routes>
                           {/* Login & Root Redirect */}
@@ -316,19 +324,19 @@ const App = () => {
                 <Route path="workflows" element={<Navigate to="/workspace/settings/automations" replace />} />
                 <Route path="automations" element={<Navigate to="/workspace/settings/automations" replace />} />
                 <Route path="reports" element={<Navigate to="/workspace/settings/reports" replace />} />
-                <Route path="platform/entities" element={<Navigate to="/workspace/platform/people-organisations" replace />} />
-                <Route path="platform/entities/:id" element={<NavigateWithParams to="/workspace/platform/people-organisations/:id" replace />} />
-                <Route path="platform" element={<NavigateWithSearch to="/workspace/platform/people-organisations" replace />} />
+                <Route path="platform/entities" element={<Navigate to="/workspace/apps/directory" replace />} />
+                <Route path="platform/entities/:id" element={<NavigateWithParams to="/workspace/apps/directory/:id" replace />} />
+                <Route path="platform" element={<NavigateWithSearch to="/workspace/apps/directory" replace />} />
                 <Route path="modules" element={<NavigateWithSearch to="/workspace/settings/modules" replace />} />
                 <Route path="pages" element={<NavigateWithSearch to="/workspace/settings/pages" replace />} />
                 <Route path="queues" element={<NavigateWithSearch to="/workspace/settings/queues" replace />} />
                 <Route path="testing" element={<Navigate to="/workspace/settings/testing" replace />} />
                 
                 {/* Platform Core Modules */}
-                <Route path="platform/people-organisations" element={<PeopleOrgDirectory />} />
-                <Route path="platform/people-organisations/:id" element={<PeopleOrgDetail />} />
-                <Route path="platform/work-distribution" element={<TriageInboxPage />} />
-                <Route path="platform/intake" element={<Navigate to="/workspace/platform/work-distribution" replace />} />
+                <Route path="platform/people-organisations" element={<Navigate to="/workspace/apps/directory" replace />} />
+                <Route path="platform/people-organisations/:id" element={<NavigateWithParams to="/workspace/apps/directory/:id" replace />} />
+                <Route path="platform/work-distribution" element={<Navigate to="/workspace/apps/triage" replace />} />
+                <Route path="platform/intake" element={<Navigate to="/workspace/apps/triage" replace />} />
                 <Route path="platform/knowledge-base" element={<KnowledgeBaseSettings />} />
                 <Route path="platform/pricing-catalog" element={<PricingCatalogSettings />} />
                 <Route path="platform/inventory-manager" element={<InventoryManagerSettings />} />
@@ -370,6 +378,11 @@ const App = () => {
                 <Route path="queue" element={<Navigate to="/workspace/my-work" replace />} />
                 
                 {/* Aurora Utility Apps */}
+                <Route path="apps/directory" element={<PeopleOrgDirectory />} />
+                <Route path="apps/directory/:id" element={<PeopleOrgDetail />} />
+                <Route path="directory" element={<Navigate to="/workspace/apps/directory" replace />} />
+                <Route path="apps/triage" element={<TriageInboxPage />} />
+                <Route path="triage" element={<Navigate to="/workspace/apps/triage" replace />} />
                 <Route path="apps/feed" element={<FeedApp />} />
                 <Route path="feed" element={<Navigate to="/workspace/apps/feed" replace />} />
                 <Route path="apps/inbox" element={<InboxApp />} />
@@ -388,6 +401,8 @@ const App = () => {
                 <Route path="pos" element={<Navigate to="/workspace/apps/pos" replace />} />
                 <Route path="apps/calculator" element={<CalculatorApp />} />
                 <Route path="calculator" element={<Navigate to="/workspace/apps/calculator" replace />} />
+                <Route path="apps/service-desk" element={<ServiceDeskApp />} />
+                <Route path="service-desk" element={<Navigate to="/workspace/apps/service-desk" replace />} />
 
                 {/* Federated Searches (Consumer Runtime) */}
                 <Route path="searches" element={<SearchesDirectoryPage />} />
@@ -476,6 +491,7 @@ const App = () => {
                    <Route path="kpi-library" element={<KpiLibraryPage />} />
                    <Route path="records-management" element={<RecordsManagementSettings />} />
                    <Route path="scheduling" element={<SchedulingSettings />} />
+                   <Route path="service-desk" element={<ServiceDeskSettings />} />
                    <Route path="bookings" element={<Navigate to="scheduling" replace />} />
                    <Route path="agents" element={<AgentsLibraryPage />} />
                    <Route path="agents-library" element={<AgentsLibraryPage />} />
@@ -533,9 +549,11 @@ const App = () => {
               <Route path="*" element={<Navigate to="/workspace" replace />} />
               </Routes>
               </Suspense>
+                      </UserProfileCardProvider>
               </Router>
               </NewModuleModalProvider>
             </ModalStackProvider>
+                </ServiceDeskProvider>
           </DigitalTwinProvider>
             </PlatformProvider>
           </AIContextProvider>

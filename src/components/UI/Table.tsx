@@ -92,6 +92,7 @@ export interface TableProps<T> {
   enableSelection?: boolean; // Default is true for enterprise utility
   selectedRowIds?: (string | number)[];
   onSelectionChange?: (selectedIds: (string | number)[], selectedItems: T[]) => void;
+  hideInternalBulkBar?: boolean;
   bulkActions?: React.ReactNode | ((selectedIds: (string | number)[], selectedItems: T[], clearSelection: () => void) => React.ReactNode);
   onBulkDelete?: (selectedIds: (string | number)[], selectedItems: T[], clearSelection: () => void) => void;
   onBulkMove?: (selectedIds: (string | number)[], selectedItems: T[], clearSelection: () => void) => void;
@@ -213,6 +214,7 @@ export function Table<T extends { id: string | number }>({
   enableSelection = true,
   selectedRowIds: controlledSelectedIds,
   onSelectionChange,
+  hideInternalBulkBar = false,
   bulkActions,
   onBulkDelete,
   onBulkMove,
@@ -1250,7 +1252,7 @@ export function Table<T extends { id: string | number }>({
 
       {/* Floating Glass Bulk Action Bar */}
       <AnimatePresence>
-        {enableSelection && selectedCount > 0 && (
+        {!hideInternalBulkBar && enableSelection && selectedCount > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 30, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -1505,7 +1507,7 @@ export function Table<T extends { id: string | number }>({
       />
 
       {/* Bulk Delete Modal */}
-      {typeof document !== 'undefined' && createPortal(
+      {!hideInternalBulkBar && typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
           {showBulkDeleteModal && (
             <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">

@@ -162,7 +162,7 @@ export const PeopleOrgSettings = () => {
 
   return (
     <SettingsSubNavLayout
-      title="People & Organisations"
+      title="Directory"
       description="Manage core entity taxonomies, relationship rules, and field extensibility."
       icon={Users}
       items={subNavItems}

@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 
 import { CustomerRmaModal } from '../../components/Platform/RMA/CustomerRmaModal';
+import { CustomerSiteChatWidget } from '../../components/ServiceDesk/CustomerSiteChatWidget';
 
 import { Site, SiteService, SitePage, ENTERPRISE_FONTS } from '../../services/siteService';
 import { toast } from 'sonner';
@@ -1015,50 +1016,20 @@ export const PortalViewPage = () => {
                 </div>
               )}
 
-              {/* REAL-TIME LIVE CHAT SUPPORT WIDGET */}
-              {w.type === 'live_chat' && (
-                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
-                  <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-                    <div className="flex items-center gap-2">
-                      <MessageSquare size={18} className="text-indigo-400" />
-                      <h4 className="text-sm font-bold text-white">{w.title || 'Online Customer Support Chat'}</h4>
-                    </div>
-                    <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
-                      <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" /> Staff Online
-                    </span>
-                  </div>
-
-                  <div className="h-48 overflow-y-auto space-y-2 p-3 bg-zinc-950 border border-zinc-800 rounded-xl">
-                    {chatMessages.map((msg, idx) => (
-                      <div key={idx} className={`flex flex-col ${msg.isUser ? 'items-end' : 'items-start'}`}>
-                        <div className={`p-2.5 rounded-xl text-xs max-w-sm ${
-                          msg.isUser ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-zinc-800 text-zinc-200 rounded-bl-none'
-                        }`}>
-                          <span className="text-[9px] opacity-75 block font-bold mb-0.5">{msg.sender}</span>
-                          <p>{msg.text}</p>
-                        </div>
-                        <span className="text-[9px] text-zinc-500 mt-0.5">{msg.time}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <form onSubmit={handleSendChat} className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Type your message..."
-                      value={chatInput}
-                      onChange={e => setChatInput(e.target.value)}
-                      className="flex-1 px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white"
-                    />
-                    <button
-                      type="submit"
-                      disabled={chatSending}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1"
-                    >
-                      <Send size={12} /> {chatSending ? 'Sending...' : 'Send'}
-                    </button>
-                  </form>
-                </div>
+              {/* REAL-TIME LIVE CHAT SUPPORT WIDGET (Connected to Aurora Service Desk & Agent Builder) */}
+              {(w.type === 'live_chat' || w.type === 'chat_thread') && (
+                <CustomerSiteChatWidget
+                  site={site}
+                  currentPageSlug={activePage?.slug || '/'}
+                  mode="inline"
+                  widgetTitle={w.title}
+                  widgetSubtitle={w.subtitle}
+                  authenticatedCustomer={authLoggedInUser ? {
+                    partyId: authLoggedInUser.partyId,
+                    name: authLoggedInUser.name,
+                    email: authLoggedInUser.email
+                  } : undefined}
+                />
               )}
 
               {/* AUTH & LOGIN WIDGET */}
@@ -2165,6 +2136,20 @@ export const PortalViewPage = () => {
         {footerText}
       </footer>
       </div>
+
+      {/* Site-Wide Floating Customer Chat Launcher (Service Desk) */}
+      {(site.chatConfig?.enabled !== false && site.chatConfig?.displayStyle !== 'inline_only') && (
+        <CustomerSiteChatWidget
+          site={site}
+          currentPageSlug={activePage?.slug || '/'}
+          mode="floating"
+          authenticatedCustomer={authLoggedInUser ? {
+            partyId: authLoggedInUser.partyId,
+            name: authLoggedInUser.name,
+            email: authLoggedInUser.email
+          } : undefined}
+        />
+      )}
 
     </div>
   );

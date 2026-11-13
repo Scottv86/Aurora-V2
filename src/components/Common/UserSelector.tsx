@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { useUsers, TenantMember } from '../../hooks/useUsers';
 import { useTeams } from '../../hooks/useTeams';
-import { UserAvatarWithPresence } from './UserPresenceBadge';
+import { UserAvatarWithPresence, UserProfileTrigger } from './UserPresenceBadge';
 
 interface UserSelectorProps {
   value?: string;
@@ -143,13 +143,16 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
     }
   };
 
-  const UserAvatar = ({ user, size = 'sm' }: { user: TenantMember, size?: 'sm' | 'md' }) => {
+  const UserAvatar = ({ user, size = 'sm', enableProfileCard = true }: { user: TenantMember, size?: 'sm' | 'md', enableProfileCard?: boolean }) => {
     return (
       <UserAvatarWithPresence
+        memberId={user.id}
+        userId={(user as any).userId}
         avatarUrl={user.avatarUrl}
         name={user.name}
         status={(user as any).status || (user as any).presenceStatus || 'AVAILABLE'}
         size={size === 'sm' ? 'xs' : 'sm'}
+        enableProfileCard={enableProfileCard}
       />
     );
   };
@@ -165,7 +168,7 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
             ? "border-indigo-500 bg-white dark:bg-zinc-950 ring-4 ring-indigo-500/10 shadow-lg shadow-indigo-500/5" 
             : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/50 hover:bg-white dark:hover:bg-zinc-950",
           error && "border-rose-500 bg-rose-500/5 ring-rose-500/5",
-          readonly && "cursor-default opacity-70 pointer-events-none"
+          readonly && "cursor-default opacity-70"
         )}
       >
         <div className="flex-1 flex items-center gap-3 overflow-hidden">
@@ -173,9 +176,18 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
             <>
               <UserAvatar user={selectedUser} size="sm" />
               <div className="flex items-center gap-2 min-w-0">
-                <span className="text-xs font-bold text-zinc-900 dark:text-white truncate">
-                  {selectedUser.name}
-                </span>
+                <UserProfileTrigger
+                  memberId={selectedUser.id}
+                  userId={(selectedUser as any).userId}
+                  name={selectedUser.name}
+                  avatarUrl={selectedUser.avatarUrl}
+                  status={(selectedUser as any).status || (selectedUser as any).presenceStatus || 'AVAILABLE'}
+                  className="min-w-0"
+                >
+                  <span className="text-xs font-bold text-zinc-900 dark:text-white truncate hover:underline">
+                    {selectedUser.name}
+                  </span>
+                </UserProfileTrigger>
                 <span className="text-[10px] text-zinc-500 truncate opacity-60">
                   • {selectedUser.team || 'Unassigned'}
                 </span>

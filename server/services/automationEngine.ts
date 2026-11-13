@@ -24,7 +24,9 @@ export interface AutomationAction {
     | 'COMPLETE_REMINDER'
     | 'CREATE_NOTE'
     | 'PIN_RECORD_NOTE'
-    | 'ROUTE_TO_MODULE';
+    | 'ROUTE_TO_MODULE'
+    | 'ALLOCATE_SERVICE_DESK_SESSION'
+    | 'SEND_SERVICE_DESK_MESSAGE';
   config: any;
 }
 
@@ -79,6 +81,17 @@ export class AutomationEngine {
           if (t.type === 'USER_MENTIONED' && event.type === 'USER_MENTIONED') return true;
           if (t.type === 'FORM_SUBMITTED' && event.type === 'FORM_SUBMITTED') {
             return !t.formId || t.formId === 'public_form' || t.formId === event.metadata?.formId;
+          }
+          if (
+            [
+              'SERVICE_DESK_SESSION_STARTED',
+              'SERVICE_DESK_ALLOCATED',
+              'SERVICE_DESK_ESCALATED',
+              'SERVICE_DESK_RESOLVED'
+            ].includes(t.type) &&
+            t.type === event.type
+          ) {
+            return true;
           }
           return false;
         });
@@ -518,6 +531,57 @@ export class AutomationEngine {
             await new Promise(resolve => setTimeout(resolve, delaySeconds * 1000));
           }
           output = { sleptSeconds: delaySeconds };
+          break;
+        }
+
+        case 'ALLOCATE_SERVICE_DESK_SESSION': {
+          const sessionId = this.interpolateString(
+            action.config.sessionId || context.trigger.record?.id || '',
+            context
+          );
+          const ownerType = action.config.ownerType || 'AI_AGENT';
+          const ownerId = this.interpolateString(action.config.ownerId || '', context);
+          const ownerName = this.interpolateString(action.config.ownerName || 'Assigned Specialist', context);
+          if (sessionId && db.serviceDeskSession) {
+            const updatedSession = await db.serviceDeskSession.update({
+              where: { id: sessionId },
+              data: {
+                assignedOwnerType: ownerType,
+                assignedOwnerId: ownerId || null,
+                assignedOwnerName: ownerName,
+                status: ownerType === 'AI_AGENT' ? 'ACTIVE_AI' : 'ACTIVE_HUMAN'
+              }
+            });
+            output = { sessionId: updatedSession.id, assignedOwnerType: ownerType, assignedOwnerId: ownerId };
+          } else {
+            output = { sessionId, assignedOwnerType: ownerType, assignedOwnerId: ownerId, simulated: true };
+          }
+          break;
+        }
+
+        case 'SEND_SERVICE_DESK_MESSAGE': {
+          const sessionId = this.interpolateString(
+            action.config.sessionId || context.trigger.record?.id || '',
+            context
+          );
+          const content = this.interpolateString(action.config.message || '', context);
+          const senderType = action.config.senderType || 'SYSTEM';
+          const senderName = this.interpolateString(action.config.senderName || 'Aurora Automation', context);
+          if (sessionId && content && db.serviceDeskMessage) {
+            const createdMsg = await db.serviceDeskMessage.create({
+              data: {
+                sessionId,
+                tenantId,
+                senderType,
+                senderName,
+                content,
+                messageType: 'TEXT'
+              }
+            });
+            output = { messageId: createdMsg.id, sessionId, content };
+          } else {
+            output = { sessionId, content, simulated: true };
+          }
           break;
         }
 

@@ -182,6 +182,45 @@ export const REPORT_TEMPLATES = [
     }
   },
   {
+    id: 'service_desk_outcomes',
+    name: 'Service Desk Outcomes & Contact Drivers',
+    description: 'Wrap-up disposition codes, primary customer interaction topics, FCR rate, and handle times.',
+    config: {
+      dataSource: { type: 'local', tables: ['service_desk_sessions'] },
+      slicers: ['channel_type', 'wrap_up_outcome', 'wrap_up_topic'],
+      widgets: [
+        {
+          id: 'widget-sd-1',
+          type: 'kpi',
+          title: 'Total Interactions',
+          w: 4,
+          properties: { xAxisKey: 'status', yAxisKey: 'id', aggregate: 'count', color: '#6366f1' }
+        },
+        {
+          id: 'widget-sd-2',
+          type: 'bar',
+          title: 'Interactions by Wrap-Up Outcome',
+          w: 8,
+          properties: { xAxisKey: 'wrap_up_outcome', yAxisKey: 'id', aggregate: 'count', color: '#6366f1' }
+        },
+        {
+          id: 'widget-sd-3',
+          type: 'pie',
+          title: 'Primary Contact Topics',
+          w: 6,
+          properties: { xAxisKey: 'wrap_up_topic', yAxisKey: 'id', aggregate: 'count', color: '#10b981' }
+        },
+        {
+          id: 'widget-sd-4',
+          type: 'bar',
+          title: 'Avg Handle Time (s) by Topic',
+          w: 6,
+          properties: { xAxisKey: 'wrap_up_topic', yAxisKey: 'handle_duration_seconds', aggregate: 'avg', color: '#3b82f6' }
+        }
+      ]
+    }
+  },
+  {
     id: 'external_pipeline',
     name: 'Salesforce Connector pipeline',
     description: 'Simulated dashboard connected to Salesforce external records leads pipeline.',
@@ -598,7 +637,14 @@ export const ReportManagementSettings: React.FC = () => {
     };
   }, [session?.access_token, tenant?.id]);
 
-  const activeReportTemplates = dbReportTemplates.length > 0 ? dbReportTemplates : REPORT_TEMPLATES;
+  const activeReportTemplates = useMemo(() => {
+    const base = dbReportTemplates.length > 0 ? dbReportTemplates : REPORT_TEMPLATES;
+    const sdTemplate = REPORT_TEMPLATES.find(t => t.id === 'service_desk_outcomes');
+    if (sdTemplate && !base.some((t: any) => t.id === 'service_desk_outcomes')) {
+      return [sdTemplate, ...base];
+    }
+    return base;
+  }, [dbReportTemplates]);
 
   // Builder States
   const [currentReport, setCurrentReport] = useState<Report | null>(null);
@@ -647,6 +693,8 @@ export const ReportManagementSettings: React.FC = () => {
   const [teams, setTeams] = useState<any[]>([]);
   const [automations, setAutomations] = useState<any[]>([]);
   const [catalogItems, setCatalogItems] = useState<any[]>([]);
+  const [serviceDeskSessions, setServiceDeskSessions] = useState<any[]>([]);
+  const [serviceDeskWrapUps, setServiceDeskWrapUps] = useState<any[]>([]);
   const [sourcesLoading, setSourcesLoading] = useState(false);
 
 
@@ -695,12 +743,14 @@ export const ReportManagementSettings: React.FC = () => {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       const headers = { 'Authorization': `Bearer ${token}`, 'x-tenant-id': tenant.id };
 
-      const [recsRes, memsRes, teamsRes, autosRes, catalogRes] = await Promise.all([
+      const [recsRes, memsRes, teamsRes, autosRes, catalogRes, sdSessionsRes, sdWrapUpsRes] = await Promise.all([
         fetch(`${API_BASE_URL}/api/data/records`, { headers }).then(res => res.json()).catch(() => ({ records: [] as any[] })),
         fetch(`${API_BASE_URL}/api/members`, { headers }).then(res => res.json()).catch(() => [] as any[]),
         fetch(`${API_BASE_URL}/api/teams`, { headers }).then(res => res.json()).catch(() => [] as any[]),
         fetch(`${API_BASE_URL}/api/automations`, { headers }).then(res => res.json()).catch(() => [] as any[]),
-        fetch(`${API_BASE_URL}/api/pricing-catalog`, { headers }).then(res => res.json()).catch(() => [] as any[])
+        fetch(`${API_BASE_URL}/api/pricing-catalog`, { headers }).then(res => res.json()).catch(() => [] as any[]),
+        fetch(`${API_BASE_URL}/api/service-desk/sessions`, { headers }).then(res => res.json()).catch(() => ({ sessions: [] as any[] })),
+        fetch(`${API_BASE_URL}/api/service-desk/wrap-ups`, { headers }).then(res => res.json()).catch(() => ({ wrapUps: [] as any[] }))
       ]);
 
       setRecords(recsRes.records || []);
@@ -708,6 +758,47 @@ export const ReportManagementSettings: React.FC = () => {
       setTeams(teamsRes || []);
       setAutomations(autosRes || []);
       setCatalogItems(catalogRes || []);
+
+      const normalizedSessions = (sdSessionsRes?.sessions || []).map((s: any) => ({
+        ...s,
+        site_name: s.siteName || s.site_name || 'Portal',
+        channel_type: s.channelType || s.channel_type || 'SITE_CHAT',
+        visitor_name: s.visitorName || s.visitor_name || 'Visitor',
+        visitor_email: s.visitorEmail || s.visitor_email || '',
+        allocated_assignee_type: s.allocatedAssigneeType || s.allocated_assignee_type || 'AI_AGENT',
+        allocated_member_name: s.allocatedMemberName || s.allocated_member_name || '',
+        allocated_agent_name: s.allocatedAgentName || s.allocated_agent_name || '',
+        wrap_up_outcome: s.wrapUpOutcome || s.wrap_up_outcome || 'In Progress',
+        wrap_up_topic: s.wrapUpTopic || s.wrap_up_topic || 'Unclassified',
+        wrap_up_subtopic: s.wrapUpSubtopic || s.wrap_up_subtopic || '',
+        wrap_up_sentiment: s.wrapUpSentiment || s.wrap_up_sentiment || s.sentiment || 'NEUTRAL',
+        first_contact_resolution: Boolean(s.firstContactResolution ?? s.first_contact_resolution),
+        wrap_up_notes: s.wrapUpNotes || s.wrap_up_notes || s.aiSummary || '',
+        wrapped_up_by_name: s.wrappedUpByName || s.wrapped_up_by_name || s.allocatedMemberName || s.allocatedAgentName || '',
+        wrapped_up_at: s.wrappedUpAt || s.wrapped_up_at || s.resolvedAt || null,
+        handle_duration_seconds: Number(s.handleDurationSeconds ?? s.handle_duration_seconds ?? 0),
+        acw_duration_seconds: Number(s.acwDurationSeconds ?? s.acw_duration_seconds ?? 0),
+        csat_score: s.csatScore ?? s.csat_score ?? null,
+        sla_status: s.slaStatus || s.sla_status || 'ON_TRACK',
+        created_at: s.createdAt || s.created_at,
+        resolved_at: s.resolvedAt || s.resolved_at
+      }));
+      setServiceDeskSessions(normalizedSessions);
+
+      const normalizedWrapUps = (sdWrapUpsRes?.wrapUps || []).map((w: any) => ({
+        ...w,
+        session_id: w.sessionId || w.session_id,
+        channel_type: w.channelType || w.channel_type || 'SITE_CHAT',
+        site_name: w.siteName || w.site_name || 'Portal',
+        first_contact_resolution: Boolean(w.firstContactResolution ?? w.first_contact_resolution),
+        wrapped_up_by_type: w.wrappedUpByType || w.wrapped_up_by_type || 'HUMAN_AGENT',
+        wrapped_up_by_name: w.wrappedUpByName || w.wrapped_up_by_name || 'Operator',
+        handle_duration_seconds: Number(w.handleDurationSeconds ?? w.handle_duration_seconds ?? 0),
+        acw_duration_seconds: Number(w.acwDurationSeconds ?? w.acw_duration_seconds ?? 0),
+        csat_score: w.csatScore ?? w.csat_score ?? null,
+        created_at: w.createdAt || w.created_at
+      }));
+      setServiceDeskWrapUps(normalizedWrapUps);
     } catch (err) {
     } finally {
       setSourcesLoading(false);
@@ -1008,6 +1099,8 @@ export const ReportManagementSettings: React.FC = () => {
       if (t === 'teams') return teams;
       if (t === 'automations') return automations;
       if (t === 'catalog_items') return catalogItems;
+      if (t === 'service_desk_sessions') return serviceDeskSessions;
+      if (t === 'service_desk_wrap_ups') return serviceDeskWrapUps;
       
       // Fallback: Mock external source pipeline if external
       if (currentReport?.config.dataSource.type === 'external') {
@@ -1045,6 +1138,8 @@ export const ReportManagementSettings: React.FC = () => {
       if (joinTable === 'teams') return teams;
       if (joinTable === 'automations') return automations;
       if (joinTable === 'catalog_items') return catalogItems;
+      if (joinTable === 'service_desk_sessions') return serviceDeskSessions;
+      if (joinTable === 'service_desk_wrap_ups') return serviceDeskWrapUps;
       return [];
     };
 
@@ -1167,6 +1262,50 @@ export const ReportManagementSettings: React.FC = () => {
           { name: 'name', type: 'text' },
           { name: 'type', type: 'text' },
           { name: 'base_price', type: 'number' }
+        ];
+      }
+      if (t === 'service_desk_sessions') {
+        return [
+          { name: 'id', type: 'text' },
+          { name: 'channel_type', type: 'text' },
+          { name: 'site_name', type: 'text' },
+          { name: 'status', type: 'text' },
+          { name: 'priority', type: 'text' },
+          { name: 'visitor_name', type: 'text' },
+          { name: 'allocated_assignee_type', type: 'text' },
+          { name: 'allocated_member_name', type: 'text' },
+          { name: 'allocated_agent_name', type: 'text' },
+          { name: 'wrap_up_outcome', type: 'text' },
+          { name: 'wrap_up_topic', type: 'text' },
+          { name: 'wrap_up_subtopic', type: 'text' },
+          { name: 'wrap_up_sentiment', type: 'text' },
+          { name: 'first_contact_resolution', type: 'boolean' },
+          { name: 'wrapped_up_by_name', type: 'text' },
+          { name: 'handle_duration_seconds', type: 'number' },
+          { name: 'acw_duration_seconds', type: 'number' },
+          { name: 'csat_score', type: 'number' },
+          { name: 'sla_status', type: 'text' },
+          { name: 'created_at', type: 'date' },
+          { name: 'resolved_at', type: 'date' }
+        ];
+      }
+      if (t === 'service_desk_wrap_ups') {
+        return [
+          { name: 'id', type: 'text' },
+          { name: 'session_id', type: 'text' },
+          { name: 'channel_type', type: 'text' },
+          { name: 'site_name', type: 'text' },
+          { name: 'outcome', type: 'text' },
+          { name: 'topic', type: 'text' },
+          { name: 'subtopic', type: 'text' },
+          { name: 'sentiment', type: 'text' },
+          { name: 'first_contact_resolution', type: 'boolean' },
+          { name: 'wrapped_up_by_type', type: 'text' },
+          { name: 'wrapped_up_by_name', type: 'text' },
+          { name: 'handle_duration_seconds', type: 'number' },
+          { name: 'acw_duration_seconds', type: 'number' },
+          { name: 'csat_score', type: 'number' },
+          { name: 'created_at', type: 'date' }
         ];
       }
       // External source mock fields
@@ -1946,6 +2085,8 @@ export const ReportManagementSettings: React.FC = () => {
 
                 const ALL_LOCAL_TABLES = [
                   { value: 'records', label: 'records (Module items)' },
+                  { value: 'service_desk_sessions', label: 'service_desk_sessions (Service Desk Interactions)' },
+                  { value: 'service_desk_wrap_ups', label: 'service_desk_wrap_ups (Service Desk Wrap-Ups)' },
                   { value: 'tenant_members', label: 'tenant_members (Workforce)' },
                   { value: 'teams', label: 'teams (Tenant Teams)' },
                   { value: 'automations', label: 'automations (Workflows)' },
@@ -2019,6 +2160,8 @@ export const ReportManagementSettings: React.FC = () => {
                         >
                           <optgroup label="Standard System Tables">
                             <option value="records">records (Module items)</option>
+                            <option value="service_desk_sessions">service_desk_sessions (Service Desk Interactions)</option>
+                            <option value="service_desk_wrap_ups">service_desk_wrap_ups (Service Desk Wrap-Ups & Dispositions)</option>
                             <option value="tenant_members">tenant_members (Workforce)</option>
                             <option value="teams">teams (Tenant Teams)</option>
                             <option value="automations">automations (Workflows)</option>

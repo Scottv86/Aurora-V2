@@ -5,8 +5,8 @@ import {
   TemplateQueryParams, 
   TemplateCatalogResponse 
 } from '../types/templates';
-import { FORM_TEMPLATES } from '../components/Modals/NewFormModal';
-import { TEMPLATE_AGENTS } from '../components/Modals/NewAgentModal';
+import { FORM_TEMPLATES } from '../constants/formTemplates';
+import { TEMPLATE_AGENTS } from '../constants/agentTemplates';
 import { MODULES } from '../constants/modules';
 import { getDocumentTemplates } from './documentService';
 import { API_BASE_URL } from '../config';

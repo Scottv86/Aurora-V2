@@ -26,6 +26,21 @@ const getDbContext = async (req: TenantRequest) => {
 };
 
 
+const unpackSiteConfigs = (site: any) => {
+  if (!site) return site;
+  const brandingObj = (site.branding && typeof site.branding === 'object') ? site.branding : {};
+  return {
+    ...site,
+    chatConfig: site.chatConfig || brandingObj.chatConfig || undefined,
+    seoConfig: site.seoConfig || brandingObj.seoConfig || undefined,
+    typographyConfig: site.typographyConfig || brandingObj.typographyConfig || undefined,
+    customCode: site.customCode || brandingObj.customCode || undefined,
+    localizationConfig: site.localizationConfig || brandingObj.localizationConfig || undefined,
+    authConfig: site.authConfig || brandingObj.authConfig || undefined,
+    appExportConfig: site.appExportConfig || brandingObj.appExportConfig || undefined
+  };
+};
+
 // GET all sites for the current tenant
 router.get('/', async (req: TenantRequest, res: Response) => {
   try {
@@ -48,7 +63,7 @@ router.get('/', async (req: TenantRequest, res: Response) => {
       orderBy: { updatedAt: 'desc' }
     });
 
-    res.json(sites);
+    res.json(sites.map(unpackSiteConfigs));
   } catch (err: any) {
     console.error('[SitesAPI] GET / Error:', err);
     res.status(500).json({ error: err.message || 'Failed to fetch sites' });
@@ -73,7 +88,7 @@ router.get('/:id', async (req: TenantRequest, res: Response) => {
       return res.status(404).json({ error: 'Site not found' });
     }
 
-    res.json(site);
+    res.json(unpackSiteConfigs(site));
   } catch (err: any) {
     console.error('[SitesAPI] GET /:id Error:', err);
     res.status(500).json({ error: err.message || 'Failed to fetch site details' });
@@ -229,7 +244,14 @@ router.put('/:id', async (req: TenantRequest, res: Response) => {
       branding, 
       navConfig, 
       pagesConfig, 
-      metrics 
+      metrics,
+      chatConfig,
+      seoConfig,
+      typographyConfig,
+      customCode,
+      localizationConfig,
+      authConfig,
+      appExportConfig
     } = req.body;
 
     const existing = await (db as any).site.findFirst({
@@ -239,6 +261,19 @@ router.put('/:id', async (req: TenantRequest, res: Response) => {
     if (!existing) {
       return res.status(404).json({ error: 'Site not found' });
     }
+
+    const existingBranding = (existing.branding && typeof existing.branding === 'object') ? existing.branding : {};
+    const mergedBranding = {
+      ...existingBranding,
+      ...(branding || {}),
+      ...(chatConfig !== undefined ? { chatConfig } : {}),
+      ...(seoConfig !== undefined ? { seoConfig } : {}),
+      ...(typographyConfig !== undefined ? { typographyConfig } : {}),
+      ...(customCode !== undefined ? { customCode } : {}),
+      ...(localizationConfig !== undefined ? { localizationConfig } : {}),
+      ...(authConfig !== undefined ? { authConfig } : {}),
+      ...(appExportConfig !== undefined ? { appExportConfig } : {})
+    };
 
     const updated = await (db as any).site.update({
       where: { id },
@@ -251,7 +286,7 @@ router.put('/:id', async (req: TenantRequest, res: Response) => {
         status: status !== undefined ? status : existing.status,
         access: access !== undefined ? access : existing.access,
         brandId: brandId !== undefined ? brandId : existing.brandId,
-        branding: branding !== undefined ? branding : existing.branding,
+        branding: mergedBranding,
         navConfig: navConfig !== undefined ? navConfig : existing.navConfig,
         pagesConfig: pagesConfig !== undefined ? pagesConfig : existing.pagesConfig,
         metrics: metrics !== undefined ? metrics : existing.metrics
@@ -261,7 +296,7 @@ router.put('/:id', async (req: TenantRequest, res: Response) => {
       }
     });
 
-    res.json(updated);
+    res.json(unpackSiteConfigs(updated));
   } catch (err: any) {
     console.error('[SitesAPI] PUT /:id Error:', err);
     res.status(500).json({ error: err.message || 'Failed to update site' });

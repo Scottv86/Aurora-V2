@@ -1,4 +1,4 @@
-export type KpiSourceType = 'module_record' | 'saved_query' | 'formula' | 'system';
+export type KpiSourceType = 'module_record' | 'service_desk' | 'saved_query' | 'formula' | 'system';
 
 export type KpiAggregationType = 
   | 'count' 

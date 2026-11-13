@@ -34,6 +34,9 @@ import { PageLoader } from '../UI/PageLoader';
 import { TransitionBar } from '../UI/TransitionBar';
 import { ConnectionErrorPage } from '../Error/ConnectionErrorPage';
 import { DockedCalculatorPanel } from '../Calculator/DockedCalculatorPanel';
+import { SideDockedServiceDeskPanel } from '../ServiceDesk/SideDockedServiceDeskPanel';
+import { FacebookDockedServiceDesk } from '../ServiceDesk/FacebookDockedServiceDesk';
+import { ServiceDeskWrapUpModal } from '../ServiceDesk/ServiceDeskWrapUpModal';
 
 
 const SidebarItemRenderer = ({ 
@@ -212,7 +215,10 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     setIsCalculatorDocked,
     dockedCalculatorWidth,
     setDockedCalculatorWidth,
-    setIsQuickCalculatorOpen
+    setIsQuickCalculatorOpen,
+    isServiceDeskFacebookDocked,
+    isServiceDeskSideDocked,
+    dockedServiceDeskWidth
   } = usePlatform();
 
   const isTenantAdmin = isDeveloper || 
@@ -232,19 +238,22 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
   const isSolutionBuilder = (location.pathname.includes('/solutions') || location.pathname.includes('/solution')) &&
                            (searchParams.get('mode') === 'studio' || searchParams.get('mode') === 'builder' || searchParams.has('id') || searchParams.has('solutionId'));
 
+  const isStandaloneApp = searchParams.get('standalone') === 'true';
+  const isServiceDeskPage = location.pathname.includes('/apps/service-desk');
   const isModuleBuilder = location.pathname.includes('/builder') || 
                           location.pathname.includes('/ai-builder') ||
                           location.pathname.includes('/agent-builder') ||
                           location.pathname.includes('/workspace/apps/doc-editor') ||
                           isReportBuilder ||
                           isSolutionBuilder ||
-                          isBuilderFullscreen;
+                          isBuilderFullscreen ||
+                          isStandaloneApp;
   const pathnames = location.pathname.split('/').filter(x => x);
   const isModuleMainView = (pathnames[0] === 'workspace' && pathnames[1] === 'modules' && pathnames[2] && pathnames[3] !== 'records') ||
     (pathnames[0] === 'workspace' && pathnames[1] === 'pages' && pathnames[3] === 'modules' && pathnames[4] && pathnames[5] !== 'records');
   const isQueueMainView = (pathnames[0] === 'workspace' && pathnames[1] === 'queues' && pathnames[2] && pathnames[3] !== 'records');
   const isPageMainView = (pathnames[0] === 'workspace' && pathnames[1] === 'pages' && pathnames[2] && pathnames[3] !== 'modules');
-  const isPosPage = location.pathname.includes('/pos');
+  const isPosPage = location.pathname.includes('/pos') || isServiceDeskPage;
   const shouldHideShellBreadcrumbs = isModuleMainView || isQueueMainView || isPageMainView || isPosPage;
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     if (location.pathname === '/workspace/settings/builder/new') return false;
@@ -487,7 +496,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       const feature = pathnames[2];
       
       if (feature === 'work-distribution' || feature === 'intake') {
-        return renderConfigureButton('Configure Work Distribution', () => navigateWithReturn('/workspace/settings/platform-modules/work-distribution'), 'Inbox');
+        return renderConfigureButton('Configure Triage', () => navigateWithReturn('/workspace/settings/platform-modules/work-distribution'), 'ListFilter');
       }
       if (feature === 'people-organisations' || feature === 'entities') {
         return renderConfigureButton('Configure Directory', () => navigateWithReturn('/workspace/settings/platform-modules/people-organisations'), 'Users');
@@ -553,6 +562,12 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       }
       if (appName === 'calendar' || appName === 'scheduling') {
         return renderConfigureButton('Configure Bookings & Scheduling', () => navigateWithReturn('/workspace/settings/platform-modules/scheduling'), 'CalendarClock');
+      }
+      if (appName === 'directory') {
+        return renderConfigureButton('Configure Directory', () => navigateWithReturn('/workspace/settings/platform-modules/people-organisations'), 'Users');
+      }
+      if (appName === 'triage') {
+        return renderConfigureButton('Configure Triage', () => navigateWithReturn('/workspace/settings/platform-modules/work-distribution'), 'ListFilter');
       }
     }
 
@@ -624,14 +639,15 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
       icon: LucideIcons.Sliders,
       items: [
         { label: 'Bookings & Scheduling', icon: LucideIcons.CalendarClock, to: '/workspace/settings/platform-modules/scheduling' },
-        { label: 'Work Distribution', icon: LucideIcons.Inbox, to: '/workspace/settings/platform-modules/work-distribution' },
+        { label: 'Service Desk', icon: LucideIcons.Headset, to: '/workspace/settings/platform-modules/service-desk' },
+        { label: 'Triage', icon: LucideIcons.ListFilter, to: '/workspace/settings/platform-modules/work-distribution' },
         { label: 'Transactions', icon: LucideIcons.ArrowLeftRight, to: '/workspace/settings/platform-modules/transactions' },
         { label: 'Payment Gateways & Hardware', icon: LucideIcons.CreditCard, to: '/workspace/settings/platform-modules/payment-gateways' },
         { label: 'Accounting', icon: LucideIcons.Banknote, to: '/workspace/settings/platform-modules/financial-management' },
         { label: 'Point of Sale & Terminals', icon: LucideIcons.Store, to: '/workspace/settings/platform-modules/payment-gateways?tab=pos' },
         { label: 'Pricing Catalog', icon: LucideIcons.Tag, to: '/workspace/settings/platform-modules/pricing-catalog' },
         { label: 'Inventory Manager', icon: LucideIcons.Boxes, to: '/workspace/settings/platform-modules/inventory-manager' },
-        { label: 'People & Organisations', icon: LucideIcons.Users, to: '/workspace/settings/platform-modules/people-organisations' },
+        { label: 'Directory', icon: LucideIcons.Users, to: '/workspace/settings/platform-modules/people-organisations' },
       ]
     },
     {
@@ -723,9 +739,12 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
           updatedItem.to = `/workspace/queues/${slugify(item.label)}`;
         }
 
-        // 4. Rewrite legacy platform/intake to work-distribution
-        if (item.to === '/workspace/platform/intake') {
-          updatedItem.to = '/workspace/platform/work-distribution';
+        // 4. Rewrite legacy platform routes to workspace apps
+        if (item.to === '/workspace/platform/intake' || item.to === '/workspace/platform/work-distribution') {
+          updatedItem.to = '/workspace/apps/triage';
+        }
+        if (item.to === '/workspace/platform/people-organisations' || item.to === '/workspace/platform/entities') {
+          updatedItem.to = '/workspace/apps/directory';
         }
 
         if (item.children) {
@@ -1156,7 +1175,9 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         <main 
           style={{ 
             marginLeft: `${currentMainMargin}px`,
-            marginRight: isCalculatorDocked ? `${dockedCalculatorWidth}px` : undefined 
+            marginRight: (isServiceDeskSideDocked && !isServiceDeskPage)
+              ? `${dockedServiceDeskWidth + (isCalculatorDocked ? dockedCalculatorWidth : 0)}px`
+              : (isCalculatorDocked ? `${dockedCalculatorWidth}px` : undefined)
           }}
           className={cn(
             "flex-1 flex flex-col min-h-0",
@@ -1194,6 +1215,16 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
             }}
           />
         )}
+
+        {isServiceDeskSideDocked && !isServiceDeskPage && (
+          <SideDockedServiceDeskPanel />
+        )}
+
+        {isServiceDeskFacebookDocked && !isServiceDeskPage && (
+          <FacebookDockedServiceDesk />
+        )}
+
+        <ServiceDeskWrapUpModal />
 
         <GlobalDrawers />
       </div>

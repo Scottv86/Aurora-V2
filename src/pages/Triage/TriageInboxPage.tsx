@@ -1519,7 +1519,7 @@ export const TriageInboxPage = () => {
             <Inbox size={24} />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-zinc-950 dark:text-white">Work Distribution</h1>
+            <h1 className="text-lg font-bold text-zinc-950 dark:text-white">Triage</h1>
             <p className="text-xs text-zinc-500 dark:text-zinc-450 mt-0.5">
               Review external client request submissions, run pre-assessment staging, and dispatch work pathways.
             </p>
@@ -1626,7 +1626,7 @@ export const TriageInboxPage = () => {
       {modulesLoading ? (
         <div className="flex-1 flex flex-col items-center justify-center p-12 text-zinc-550">
           <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mb-4" />
-          <p className="text-xs font-bold text-zinc-450 font-sans">Loading Work Distribution...</p>
+          <p className="text-xs font-bold text-zinc-450 font-sans">Loading Triage...</p>
         </div>
       ) : triageModule ? (
         <div className="flex flex-col gap-6 flex-1 min-h-0">
@@ -2445,7 +2445,7 @@ export const TriageInboxPage = () => {
                                           Intake Channel
                                         </span>
                                         <p className="text-xs font-bold text-white mt-1.5">{sourceChannel}</p>
-                                        <p className="text-[9.5px] text-zinc-500 leading-relaxed mt-0.5">Routed through Platform Work Distribution router.</p>
+                                        <p className="text-[9.5px] text-zinc-500 leading-relaxed mt-0.5">Routed through Platform Triage router.</p>
                                       </div>
                                     </div>
 
@@ -2724,8 +2724,8 @@ export const TriageInboxPage = () => {
         /* Intake Disabled */
         <div className="flex-1 border border-dashed border-white/20 dark:border-white/5 rounded-3xl flex flex-col items-center justify-center p-12 text-center text-zinc-550 bg-white/10 dark:bg-white/[0.01] backdrop-blur-md shadow-inner">
           <AlertCircle size={36} className="text-zinc-700 mb-4" />
-          <h3 className="text-sm font-black text-zinc-300">Work Distribution is not configured</h3>
-          <p className="text-[10px] text-zinc-500 mt-1 max-w-md">The Work Distribution system is currently being provisioned. Please wait or refresh the page to load the configuration.</p>
+          <h3 className="text-sm font-black text-zinc-300">Triage is not configured</h3>
+          <p className="text-[10px] text-zinc-500 mt-1 max-w-md">The Triage system is currently being provisioned. Please wait or refresh the page to load the configuration.</p>
         </div>
       )}
       

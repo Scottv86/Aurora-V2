@@ -35,9 +35,20 @@ export const initSocket = (httpServer: HttpServer) => {
     }
   });
 
-  // Authentication Middleware
+  // Authentication Middleware (Supports both Workspace JWT and Public Site Visitor Tokens)
   io.use(async (socket, next) => {
     const token = socket.handshake.auth.token;
+    const visitorToken = socket.handshake.auth.visitorToken;
+    const publicSiteId = socket.handshake.auth.siteId;
+
+    if (!token && visitorToken) {
+      socket.data.visitor = {
+        visitorToken: String(visitorToken),
+        siteId: publicSiteId ? String(publicSiteId) : undefined
+      };
+      return next();
+    }
+
     if (!token) {
       return next(new Error('Authentication Error'));
     }
@@ -117,6 +128,44 @@ export const initSocket = (httpServer: HttpServer) => {
       }
     });
 
+    // Service Desk Session Rooms (Accessible to Tenant Operators & Matching Site Visitor)
+    socket.on('join_service_desk_session', async (sessionId: string) => {
+      try {
+        if (!sessionId || typeof sessionId !== 'string') return;
+        const session = await (globalPrisma as any).serviceDeskSession.findUnique({
+          where: { id: sessionId },
+          select: { tenantId: true, visitorToken: true }
+        });
+        if (!session) return;
+
+        const isAuthorizedStaff =
+          socket.data.user?.tenantIds.includes(session.tenantId) || socket.data.user?.isSuperAdmin;
+        const isAuthorizedVisitor =
+          socket.data.visitor?.visitorToken && socket.data.visitor.visitorToken === session.visitorToken;
+
+        if (isAuthorizedStaff || isAuthorizedVisitor) {
+          socket.join(`service_desk_session_${sessionId}`);
+        }
+      } catch (err) {
+        console.error('[Socket] Service Desk session join error:', err);
+      }
+    });
+
+    socket.on('leave_service_desk_session', (sessionId: string) => {
+      if (sessionId && typeof sessionId === 'string') {
+        socket.leave(`service_desk_session_${sessionId}`);
+      }
+    });
+
+    socket.on('service_desk:typing', (data: { sessionId: string; tenantId?: string; senderName: string; senderType: string; isTyping: boolean }) => {
+      if (data?.sessionId) {
+        socket.to(`service_desk_session_${data.sessionId}`).emit('service_desk:typing', data);
+        if (data.tenantId) {
+          socket.to(`tenant_${data.tenantId}`).emit('service_desk:typing', data);
+        }
+      }
+    });
+
     socket.on('disconnect', () => {
       console.log(`[Socket] Client disconnected: ${socket.id}`);
     });
@@ -130,5 +179,17 @@ export const initSocket = (httpServer: HttpServer) => {
 export const emitTenantUpdate = (tenantId: string, event: string, payload: any) => {
   if (io && tenantId) {
     io.to(`tenant_${tenantId}`).emit(event, payload);
+  }
+};
+
+// Helper for emitting events to both a Service Desk session room (visitor + staff) and the tenant operator room
+export const emitServiceDeskSessionUpdate = (tenantId: string, sessionId: string, event: string, payload: any) => {
+  if (io) {
+    if (sessionId) {
+      io.to(`service_desk_session_${sessionId}`).emit(event, payload);
+    }
+    if (tenantId) {
+      io.to(`tenant_${tenantId}`).emit(event, payload);
+    }
   }
 };

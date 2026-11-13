@@ -14,6 +14,8 @@ import { UserAvatarWithPresence } from '../../Common/UserPresenceBadge';
 import { QueueEntity } from '../../../types/platform';
 import { PLATFORM_MODULES } from '../../../config/platformModules';
 import { Table, Column } from '../../UI/Table';
+import { FloatingBulkActionBar } from '../../UI/FloatingBulkActionBar';
+import { useRecordSelection } from '../../../hooks/useRecordSelection';
 import { ShareRecordModal } from '../../Platform/ShareRecordModal';
 import { MoveRecordModal } from '../../Platform/MoveRecordModal';
 import { BulkPasteRecordModal } from '../../Platform/BulkPasteRecordModal';
@@ -126,6 +128,7 @@ const InlineAssigneeCell = ({
         {resolvedUser ? (
           <>
             <UserAvatarWithPresence
+              memberId={resolvedUser.id}
               avatarUrl={resolvedUser.avatarUrl}
               name={resolvedUser.name}
               status={(resolvedUser as any).status || (resolvedUser as any).presenceStatus}
@@ -225,6 +228,7 @@ const InlineAssigneeCell = ({
                     )}
                   >
                     <UserAvatarWithPresence
+                      memberId={m.id}
                       avatarUrl={m.avatarUrl}
                       name={m.name}
                       status={(m as any).status || (m as any).presenceStatus}
@@ -551,6 +555,9 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
 
     return result;
   }, [rawRecords, activeQueue, searchQuery, visibilityContext, members, modules]);
+
+  // Multi-record selection across all queue layouts
+  const selection = useRecordSelection(filteredRecords);
 
   // Inline Assignee Claim/Update mutation
   const updateMutation = useMutation({
@@ -1423,6 +1430,24 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-200/60 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-mono shrink-0">
                 {splitRecords.length}
               </span>
+              {splitRecords.length > 0 && !readOnly && (
+                <button
+                  type="button"
+                  onClick={selection.isAllSelected ? selection.clearSelection : selection.selectAll}
+                  className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-pointer shrink-0"
+                  title={selection.isAllSelected ? "Deselect all" : "Select all"}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selection.isAllSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = selection.isSomeSelected;
+                    }}
+                    onChange={() => {}}
+                    className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 pointer-events-none"
+                  />
+                </button>
+              )}
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
               <LayoutSwitcherDropdown
@@ -1515,6 +1540,7 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
           ) : (
             splitRecords.map((rec) => {
               const isSelected = rec.id === effectiveSplitRecordId;
+              const isMultiSelected = selection.isSelected(rec.id);
               const recKey = rec._record_key || rec.id.slice(0, 8);
               const recTitle = rec.title || rec.data?.title || rec.name || rec._record_key || rec.id;
               const rawStatus = rec.status || rec.data?.status || 'Open';
@@ -1527,19 +1553,52 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
               return (
                 <div
                   key={rec.id}
-                  onClick={() => setSelectedSplitRecordId(rec.id)}
+                  onClick={(e) => {
+                    if (e.metaKey || e.ctrlKey) {
+                      e.stopPropagation();
+                      selection.toggleRecord(rec.id);
+                      return;
+                    }
+                    setSelectedSplitRecordId(rec.id);
+                  }}
                   className={cn(
                     "p-3 rounded-none border transition-all cursor-pointer space-y-1.5 select-none relative",
                     isSelected
                       ? "bg-indigo-50/80 dark:bg-indigo-500/10 border-indigo-300 dark:border-indigo-500/40 shadow-xs border-l-4 border-l-indigo-600 dark:border-l-indigo-500"
-                      : rowFmt.hasMatch
-                        ? cn("border-l-4", rowFmt.rowClassName)
-                        : "bg-white dark:bg-zinc-900 border-zinc-200/80 dark:border-zinc-800/80 hover:bg-zinc-50 dark:hover:bg-zinc-800/70 hover:border-zinc-300 dark:hover:border-zinc-700 border-l-4 border-l-transparent"
+                      : isMultiSelected
+                        ? "bg-indigo-50/40 dark:bg-indigo-500/10 border-indigo-300 dark:border-indigo-600 border-l-4 border-l-indigo-400"
+                        : rowFmt.hasMatch
+                          ? cn("border-l-4", rowFmt.rowClassName)
+                          : "bg-white dark:bg-zinc-900 border-zinc-200/80 dark:border-zinc-800/80 hover:bg-zinc-50 dark:hover:bg-zinc-800/70 hover:border-zinc-300 dark:hover:border-zinc-700 border-l-4 border-l-transparent"
                   )}
                   style={!isSelected && rowFmt.hasMatch && Object.keys(rowFmt.customStyle).length > 0 ? rowFmt.customStyle : undefined}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 min-w-0">
+                      {!readOnly && (
+                        <div
+                          className={cn(
+                            "transition-opacity cursor-pointer p-0.5 shrink-0 -ml-1",
+                            isMultiSelected
+                              ? "opacity-100"
+                              : selection.selectedCount > 0
+                                ? "opacity-60 hover:opacity-100"
+                                : "opacity-0 group-hover:opacity-100"
+                          )}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            selection.toggleRecord(rec.id);
+                          }}
+                          title={isMultiSelected ? "Deselect" : "Select"}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isMultiSelected}
+                            onChange={() => {}}
+                            className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 pointer-events-none"
+                          />
+                        </div>
+                      )}
                       {RowIcon && <RowIcon size={13} className={cn("shrink-0", rowFmt.iconColor || "text-rose-500")} />}
                       <span className={cn(
                         "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md",
@@ -1571,6 +1630,7 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
                     {assignedMember ? (
                       <div className="flex items-center gap-1.5 min-w-0 pr-1 truncate">
                         <UserAvatarWithPresence
+                          memberId={assignedMember.id}
                           avatarUrl={assignedMember.avatarUrl}
                           name={assignedMember.name}
                           status={(assignedMember as any).status || (assignedMember as any).presenceStatus}
@@ -1653,6 +1713,24 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {filteredRecords.length > 0 && !readOnly && (
+            <button
+              type="button"
+              onClick={selection.isAllSelected ? selection.clearSelection : selection.selectAll}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl border border-zinc-200 dark:border-zinc-800 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                checked={selection.isAllSelected}
+                ref={(el) => {
+                  if (el) el.indeterminate = selection.isSomeSelected;
+                }}
+                onChange={() => {}}
+                className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 pointer-events-none"
+              />
+              <span>{selection.isAllSelected ? 'Deselect All' : `Select All (${filteredRecords.length})`}</span>
+            </button>
+          )}
           <LayoutSwitcherDropdown
             currentLayout={currentListLayout}
             onSelectLayout={(layout) => setActiveLayoutOverride(layout)}
@@ -1690,6 +1768,7 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
                 col.records.map(rec => {
                   const recKey = rec._record_key || rec.id.slice(0, 8);
                   const recTitle = rec.title || rec.data?.title || rec.name || rec._record_key || rec.id;
+                  const isSelected = selection.isSelected(rec.id);
                   const assignedMember = members.find(m => m.id === rec.assigneeId);
                   const rawPriority = rec.priority || rec.data?.priority || 'Medium';
 
@@ -1701,15 +1780,49 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
                       key={rec.id}
                       draggable
                       onDragStart={(e) => e.dataTransfer.setData('text/plain', rec.id)}
-                      onClick={() => handleOpenRecord(rec)}
+                      onClick={(e) => {
+                        if (e.metaKey || e.ctrlKey) {
+                          e.stopPropagation();
+                          selection.toggleRecord(rec.id);
+                          return;
+                        }
+                        handleOpenRecord(rec);
+                      }}
                       className={cn(
-                        "p-3.5 bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800/80 rounded-xl shadow-xs hover:shadow-md hover:border-indigo-500/40 transition-all cursor-pointer space-y-2 select-none group active:cursor-grabbing",
+                        "p-3.5 bg-white dark:bg-zinc-900 border rounded-xl shadow-xs hover:shadow-md transition-all cursor-pointer space-y-2 select-none group active:cursor-grabbing",
+                        isSelected
+                          ? "border-indigo-500 dark:border-indigo-500 ring-2 ring-indigo-500/25 bg-indigo-50/20 dark:bg-indigo-950/20"
+                          : "border-zinc-200/80 dark:border-zinc-800/80 hover:border-indigo-500/40",
                         rowFmt.hasMatch && cn("border-l-4", rowFmt.rowClassName)
                       )}
                       style={rowFmt.hasMatch && Object.keys(rowFmt.customStyle).length > 0 ? rowFmt.customStyle : undefined}
                     >
                       <div className="flex items-center justify-between gap-1.5">
                         <div className="flex items-center gap-1.5 min-w-0">
+                          {!readOnly && (
+                            <div
+                              className={cn(
+                                "transition-opacity cursor-pointer p-0.5 shrink-0 -ml-1",
+                                isSelected
+                                  ? "opacity-100"
+                                  : selection.selectedCount > 0
+                                    ? "opacity-60 hover:opacity-100"
+                                    : "opacity-0 group-hover:opacity-100"
+                              )}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                selection.toggleRecord(rec.id);
+                              }}
+                              title={isSelected ? "Deselect" : "Select"}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {}}
+                                className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 pointer-events-none"
+                              />
+                            </div>
+                          )}
                           {RowIcon && <RowIcon size={12} className={cn("shrink-0", rowFmt.iconColor || "text-rose-500")} />}
                           <span className="text-[10px] font-mono font-bold text-zinc-500 dark:text-zinc-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                             {recKey}
@@ -1733,6 +1846,7 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
                         {assignedMember ? (
                           <div className="flex items-center gap-1.5">
                             <UserAvatarWithPresence
+                              memberId={assignedMember.id}
                               avatarUrl={assignedMember.avatarUrl}
                               name={assignedMember.name}
                               status={(assignedMember as any).status || (assignedMember as any).presenceStatus}
@@ -1774,6 +1888,24 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {filteredRecords.length > 0 && !readOnly && (
+            <button
+              type="button"
+              onClick={selection.isAllSelected ? selection.clearSelection : selection.selectAll}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                checked={selection.isAllSelected}
+                ref={(el) => {
+                  if (el) el.indeterminate = selection.isSomeSelected;
+                }}
+                onChange={() => {}}
+                className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 pointer-events-none"
+              />
+              <span>{selection.isAllSelected ? 'Deselect All' : `Select All (${filteredRecords.length})`}</span>
+            </button>
+          )}
           <LayoutSwitcherDropdown
             currentLayout={currentListLayout}
             onSelectLayout={(layout) => setActiveLayoutOverride(layout)}
@@ -1793,6 +1925,7 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
           {filteredRecords.map(rec => {
             const recKey = rec._record_key || rec.id.slice(0, 8);
             const recTitle = rec.title || rec.data?.title || rec.name || rec._record_key || rec.id;
+            const isSelected = selection.isSelected(rec.id);
             const rawStatus = rec.status || rec.data?.status || 'Open';
             const rawPriority = rec.priority || rec.data?.priority || 'Medium';
             const assignedMember = members.find(m => m.id === rec.assigneeId);
@@ -1803,9 +1936,19 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
             return (
               <div
                 key={rec.id}
-                onClick={() => handleOpenRecord(rec)}
+                onClick={(e) => {
+                  if (e.metaKey || e.ctrlKey) {
+                    e.stopPropagation();
+                    selection.toggleRecord(rec.id);
+                    return;
+                  }
+                  handleOpenRecord(rec);
+                }}
                 className={cn(
-                  "p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/40 rounded-2xl shadow-xs hover:shadow-lg transition-all cursor-pointer space-y-3.5 select-none group flex flex-col justify-between",
+                  "p-5 bg-white dark:bg-zinc-900 border rounded-2xl shadow-xs hover:shadow-lg transition-all cursor-pointer space-y-3.5 select-none group flex flex-col justify-between",
+                  isSelected
+                    ? "border-indigo-500 dark:border-indigo-500 ring-2 ring-indigo-500/25 bg-indigo-50/20 dark:bg-indigo-950/20 shadow-md"
+                    : "border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/40",
                   rowFmt.hasMatch && cn("border-l-4", rowFmt.rowClassName)
                 )}
                 style={rowFmt.hasMatch && Object.keys(rowFmt.customStyle).length > 0 ? rowFmt.customStyle : undefined}
@@ -1813,6 +1956,30 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 min-w-0">
+                      {!readOnly && (
+                        <div
+                          className={cn(
+                            "transition-opacity cursor-pointer p-0.5 shrink-0 -ml-1",
+                            isSelected
+                              ? "opacity-100"
+                              : selection.selectedCount > 0
+                                ? "opacity-60 hover:opacity-100"
+                                : "opacity-0 group-hover:opacity-100"
+                          )}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            selection.toggleRecord(rec.id);
+                          }}
+                          title={isSelected ? "Deselect" : "Select"}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {}}
+                            className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 pointer-events-none"
+                          />
+                        </div>
+                      )}
                       {RowIcon && <RowIcon size={14} className={cn("shrink-0", rowFmt.iconColor || "text-rose-500")} />}
                       <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                         {recKey}
@@ -1849,6 +2016,7 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
                   {assignedMember ? (
                     <div className="flex items-center gap-2">
                       <UserAvatarWithPresence
+                        memberId={assignedMember.id}
                         avatarUrl={assignedMember.avatarUrl}
                         name={assignedMember.name}
                         status={(assignedMember as any).status || (assignedMember as any).presenceStatus}
@@ -1911,6 +2079,9 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
       pageSizeOptions={[10, 25, 50, 100]}
       density={density}
       enableSelection={!readOnly}
+      selectedRowIds={selection.selectedIds}
+      onSelectionChange={(ids) => selection.setSelectedIds(ids)}
+      hideInternalBulkBar={true}
       enableFilters={true}
       filterFields={queueFilterFields}
       enableGrouping={true}
@@ -2053,6 +2224,75 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
         renderTableView()
       )}
 
+      {/* Floating Bulk Action Bar across all views */}
+      {!readOnly && (
+        <FloatingBulkActionBar
+          selectedIds={selection.selectedIds}
+          selectedItems={selection.selectedItems}
+          totalCount={filteredRecords.length}
+          onClearSelection={selection.clearSelection}
+          onSelectAll={selection.selectAll}
+          onBulkAssign={(_selectedIds, selectedItems, assigneeId, clearSelection) => {
+            bulkUpdateMutation.mutate({ records: selectedItems, patchData: { assigneeId } });
+            clearSelection();
+          }}
+          assigneeOptions={members}
+          onBulkStatusChange={(_selectedIds, selectedItems, status, clearSelection) => {
+            bulkUpdateMutation.mutate({ records: selectedItems, patchData: { status } });
+            clearSelection();
+          }}
+          statusOptions={['Open', 'In Progress', 'Under Review', 'Completed', 'Closed']}
+          onBulkMove={(_selectedIds, selectedItems, clearSelection) => {
+            setRecordsToMove(selectedItems);
+            clearSelection();
+          }}
+          onBulkStar={async (selectedIds, _selectedItems, star, clearSelection) => {
+            const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+            updateCachedRecordsStarred(selectedIds, star);
+            clearSelection();
+            try {
+              await fetch(`${DATA_API_URL}/records/star-batch`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`,
+                  'x-tenant-id': tenant?.id || ''
+                },
+                body: JSON.stringify({ recordIds: selectedIds, star })
+              });
+              toast.success(`${star ? 'Starred' : 'Unstarred'} ${selectedIds.length} record(s)`);
+              queryClient.invalidateQueries({ queryKey: ['records'] });
+              queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
+            } catch (err: any) {
+              updateCachedRecordsStarred(selectedIds, !star);
+              toast.error(err.message || 'Failed to update star for records');
+              queryClient.invalidateQueries({ queryKey: ['records'] });
+              queryClient.invalidateQueries({ queryKey: ['queue-renderer-records'] });
+            }
+          }}
+          onBulkDelete={(_selectedIds, selectedItems, clearSelection) => {
+            bulkDeleteMutation.mutate({ records: selectedItems });
+            clearSelection();
+          }}
+          bulkActions={(_selectedIds, selectedItems, clearSelection) => {
+            const me = platformUser?.memberId || platformUser?.cuid || platformUser?.id;
+            if (!me) return null;
+            return (
+              <button
+                type="button"
+                onClick={() => {
+                  bulkUpdateMutation.mutate({ records: selectedItems, patchData: { assigneeId: me } });
+                  clearSelection();
+                }}
+                className="h-8 px-2.5 rounded-full flex items-center gap-1.5 text-xs font-medium text-zinc-300 hover:text-white hover:bg-white/10 transition-all cursor-pointer shrink-0"
+              >
+                Assign to me
+              </button>
+            );
+          }}
+        />
+      )}
+
       {/* Slide-over / Modal Detail View */}
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
@@ -2069,7 +2309,7 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
                 initial={{ opacity: 0, scale: 0.96, y: 10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.96, y: 10 }}
-                className="relative w-full max-w-5xl h-[92vh] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col z-10"
+                className="relative w-full max-w-[96vw] 2xl:max-w-[1720px] h-[92vh] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col z-10"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="absolute right-4 top-4 z-50">

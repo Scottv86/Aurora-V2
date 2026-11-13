@@ -159,12 +159,14 @@ router.post('/ai-builder', async (req: TenantRequest, res: Response) => {
       
       Available local tables in Aurora tenancy:
       1. 'records': contains general items, fields: 'id', 'status', 'created_at', 'module_id'
-      2. 'tenant_members': contains workforce staff members, fields: 'id', 'first_name', 'family_name', 'status', 'role_id'
-      3. 'teams': contains tenant teams, fields: 'id', 'name', 'description'
-      4. 'automations': contains workflow automation rules, fields: 'id', 'name', 'trigger_type', 'enabled'
-      5. 'automation_runs': contains logs of runs, fields: 'id', 'status', 'started_at'
-      6. 'catalog_items': contains pricing catalog products/services, fields: 'id', 'name', 'type', 'base_price'
-      7. 'audit_logs': contains compliance logs, fields: 'id', 'action', 'timestamp'
+      2. 'service_desk_sessions': contains customer chats and voice calls with wrap-up dispositions, fields: 'id', 'channel_type', 'site_name', 'status', 'priority', 'visitor_name', 'allocated_assignee_type', 'allocated_member_name', 'allocated_agent_name', 'wrap_up_outcome', 'wrap_up_topic', 'wrap_up_subtopic', 'wrap_up_sentiment', 'first_contact_resolution', 'wrapped_up_by_name', 'handle_duration_seconds', 'acw_duration_seconds', 'csat_score', 'sla_status', 'created_at', 'resolved_at'
+      3. 'service_desk_wrap_ups': contains interaction wrap-up and disposition logs, fields: 'id', 'session_id', 'channel_type', 'site_name', 'outcome', 'topic', 'subtopic', 'sentiment', 'first_contact_resolution', 'wrapped_up_by_type', 'wrapped_up_by_name', 'handle_duration_seconds', 'acw_duration_seconds', 'csat_score', 'created_at'
+      4. 'tenant_members': contains workforce staff members, fields: 'id', 'first_name', 'family_name', 'status', 'role_id'
+      5. 'teams': contains tenant teams, fields: 'id', 'name', 'description'
+      6. 'automations': contains workflow automation rules, fields: 'id', 'name', 'trigger_type', 'enabled'
+      7. 'automation_runs': contains logs of runs, fields: 'id', 'status', 'started_at'
+      8. 'catalog_items': contains pricing catalog products/services, fields: 'id', 'name', 'type', 'base_price'
+      9. 'audit_logs': contains compliance logs, fields: 'id', 'action', 'timestamp'
       
       Design a report that contains 2 to 4 charts/widgets matching the user's request.
       Select one or more matching tables as data sources.

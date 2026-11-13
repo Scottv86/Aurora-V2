@@ -52,6 +52,8 @@ import { useModalStack } from '../../context/ModalStackContext';
 import { ShareRecordModal } from '../../components/Platform/ShareRecordModal';
 import { MoveRecordModal } from '../../components/Platform/MoveRecordModal';
 import { BulkPasteRecordModal } from '../../components/Platform/BulkPasteRecordModal';
+import { FloatingBulkActionBar } from '../../components/UI/FloatingBulkActionBar';
+import { useRecordSelection } from '../../hooks/useRecordSelection';
 import { RecordActivityDrawer } from '../../components/Platform/RecordActivityDrawer';
 import { TransitionRequirementsModal } from '../../components/Platform/TransitionRequirementsModal';
 import { resolveRecordNextStep, checkMissingRequiredFields, resolveRecordSlaStatus, buildPipelineSteps } from '../../lib/workflowProcessUtils';
@@ -2199,6 +2201,67 @@ export const ModuleView = () => {
     }
   };
 
+  const handleBulkAssign = (selectedIds: (string | number)[], _selectedItems: any[], assigneeId: string, clearSelection: () => void) => {
+    const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+    Promise.all(selectedIds.map(id => 
+      fetch(`${DATA_API_URL}/records/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant?.id || ''
+        },
+        body: JSON.stringify({ moduleId, assigneeId })
+      })
+    )).then(() => {
+      queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+      toast.success(`Updated assignee for ${selectedIds.length} record(s)`);
+      clearSelection();
+    }).catch(err => {
+      toast.error(err.message || 'Failed to update assignee');
+    });
+  };
+
+  const handleBulkStatusChange = (selectedIds: (string | number)[], _selectedItems: any[], status: string, clearSelection: () => void) => {
+    const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+    Promise.all(selectedIds.map(id => 
+      fetch(`${DATA_API_URL}/records/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant?.id || ''
+        },
+        body: JSON.stringify({ moduleId, status, data: { status } })
+      })
+    )).then(() => {
+      queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+      toast.success(`Updated status for ${selectedIds.length} record(s)`);
+      clearSelection();
+    }).catch(err => {
+      toast.error(err.message || 'Failed to update status');
+    });
+  };
+
+  const handleBulkDelete = (selectedIds: (string | number)[], _selectedItems: any[], clearSelection: () => void) => {
+    const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
+    Promise.all(selectedIds.map(id => 
+      fetch(`${DATA_API_URL}/records/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-id': tenant?.id || ''
+        }
+      })
+    )).then(() => {
+      queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+      toast.success(`Moved ${selectedIds.length} record(s) to Recycling Bin`);
+      clearSelection();
+    }).catch(err => {
+      toast.error(err.message || 'Failed to delete records');
+    });
+  };
+
   const filteredRecords = useMemo(() => {
     let result = records;
 
@@ -2219,6 +2282,9 @@ export const ModuleView = () => {
       });
     });
   }, [records, searchQuery, activeQueue, visibilityContext]);
+
+  // Record Multi-selection for bulk operations across all views
+  const selection = useRecordSelection(filteredRecords);
 
   // Keep pagination totals in sync dynamically when queue matches change
   useEffect(() => {
@@ -2834,6 +2900,24 @@ export const ModuleView = () => {
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-200/60 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-mono">
                     {splitRecords.length}
                   </span>
+                  {splitRecords.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={selection.isAllSelected ? selection.clearSelection : selection.selectAll}
+                      className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-pointer"
+                      title={selection.isAllSelected ? "Deselect all" : "Select all"}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selection.isAllSelected}
+                        ref={(el) => {
+                          if (el) el.indeterminate = selection.isSomeSelected;
+                        }}
+                        onChange={() => {}}
+                        className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 pointer-events-none"
+                      />
+                    </button>
+                  )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button
@@ -2980,6 +3064,7 @@ export const ModuleView = () => {
             ) : (
               splitRecords.map((rec: any) => {
                 const isSelected = rec.id === effectiveSelectedSplitRecordId;
+                const isMultiSelected = selection.isSelected(rec.id);
                 const recTitle = getRecordTitle(rec);
                 const recKey = rec._record_key || rec.id.slice(0, 8);
                 const activeWf = moduleData?.workflow || (moduleData?.workflows && moduleData.workflows[0]) || null;
@@ -3000,20 +3085,51 @@ export const ModuleView = () => {
                 return (
                   <div
                     key={rec.id}
-                    onClick={() => handleRecordClick(rec.id)}
+                    onClick={(e) => {
+                      if (e.metaKey || e.ctrlKey) {
+                        e.stopPropagation();
+                        selection.toggleRecord(rec.id);
+                        return;
+                      }
+                      handleRecordClick(rec.id);
+                    }}
                     className={cn(
                       "group p-3 rounded-none border transition-all cursor-pointer space-y-1.5 select-none relative",
                       isSelected
                         ? "bg-indigo-50/80 dark:bg-indigo-500/10 border-indigo-300 dark:border-indigo-500/40 shadow-xs border-l-4 border-l-indigo-600 dark:border-l-indigo-500"
-                        : rowFmt.hasMatch
-                          ? cn("border-l-4", rowFmt.rowClassName)
-                          : "bg-white dark:bg-zinc-900 border-zinc-200/80 dark:border-zinc-800/80 hover:bg-zinc-50 dark:hover:bg-zinc-800/70 hover:border-zinc-300 dark:hover:border-zinc-700 border-l-4 border-l-transparent"
+                        : isMultiSelected
+                          ? "bg-indigo-50/40 dark:bg-indigo-500/10 border-indigo-300 dark:border-indigo-600 border-l-4 border-l-indigo-400"
+                          : rowFmt.hasMatch
+                            ? cn("border-l-4", rowFmt.rowClassName)
+                            : "bg-white dark:bg-zinc-900 border-zinc-200/80 dark:border-zinc-800/80 hover:bg-zinc-50 dark:hover:bg-zinc-800/70 hover:border-zinc-300 dark:hover:border-zinc-700 border-l-4 border-l-transparent"
                     )}
                     style={!isSelected && rowFmt.hasMatch && Object.keys(rowFmt.customStyle).length > 0 ? rowFmt.customStyle : undefined}
                   >
                     {/* Top Row: Key + Status + Time */}
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 min-w-0">
+                        <div
+                          className={cn(
+                            "transition-opacity cursor-pointer p-0.5 shrink-0 -ml-1",
+                            isMultiSelected
+                              ? "opacity-100"
+                              : selection.selectedCount > 0
+                                ? "opacity-60 hover:opacity-100"
+                                : "opacity-0 group-hover:opacity-100"
+                          )}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            selection.toggleRecord(rec.id);
+                          }}
+                          title={isMultiSelected ? "Deselect" : "Select"}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isMultiSelected}
+                            onChange={() => {}}
+                            className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 pointer-events-none"
+                          />
+                        </div>
                         {RowIcon && <RowIcon size={13} className={cn("shrink-0", rowFmt.iconColor || "text-rose-500")} />}
                         <span className={cn(
                           "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md transition-colors",
@@ -3192,8 +3308,28 @@ export const ModuleView = () => {
               />
             </div>
           </div>
-          <div className="text-[11px] font-medium text-zinc-400">
-            {records.length} {records.length === 1 ? 'record' : 'records'} across {stages.length} stages
+          <div className="flex items-center gap-3">
+            {records.length > 0 && (
+              <button
+                type="button"
+                onClick={selection.isAllSelected ? selection.clearSelection : selection.selectAll}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-zinc-200 dark:border-zinc-800 text-[11px] font-semibold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={selection.isAllSelected}
+                  ref={(el) => {
+                    if (el) el.indeterminate = selection.isSomeSelected;
+                  }}
+                  onChange={() => {}}
+                  className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 pointer-events-none"
+                />
+                <span>{selection.isAllSelected ? 'Deselect All' : `Select All (${records.length})`}</span>
+              </button>
+            )}
+            <div className="text-[11px] font-medium text-zinc-400 hidden sm:block">
+              {records.length} {records.length === 1 ? 'record' : 'records'} across {stages.length} stages
+            </div>
           </div>
         </div>
 
@@ -3221,18 +3357,56 @@ export const ModuleView = () => {
                 </div>
 
                 <div className="flex-1 space-y-2.5 overflow-y-auto max-h-[620px] pr-1 custom-scrollbar">
-                  {cards.map(record => (
+                  {cards.map(record => {
+                    const isSelected = selection.isSelected(record.id);
+                    return (
                     <div 
                       key={record.id}
                       draggable
                       onDragStart={(e) => e.dataTransfer.setData('text/plain', record.id)}
-                      onClick={() => handleRecordClick(record.id)}
-                      className="p-3.5 bg-white dark:bg-zinc-900 border border-zinc-200/90 dark:border-zinc-800 rounded-xl cursor-grab active:cursor-grabbing hover:border-indigo-500/40 dark:hover:border-indigo-500/40 hover:shadow-sm transition-all group relative space-y-2.5"
+                      onClick={(e) => {
+                        if (e.metaKey || e.ctrlKey) {
+                          e.stopPropagation();
+                          selection.toggleRecord(record.id);
+                          return;
+                        }
+                        handleRecordClick(record.id);
+                      }}
+                      className={cn(
+                        "p-3.5 bg-white dark:bg-zinc-900 border rounded-xl cursor-grab active:cursor-grabbing hover:shadow-sm transition-all group relative space-y-2.5",
+                        isSelected
+                          ? "border-indigo-500 dark:border-indigo-500 ring-2 ring-indigo-500/20 bg-indigo-50/20 dark:bg-indigo-950/20"
+                          : "border-zinc-200/90 dark:border-zinc-800 hover:border-indigo-500/40 dark:hover:border-indigo-500/40"
+                      )}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-mono font-semibold text-zinc-400 dark:text-zinc-500">
-                          {record._record_key || `#${String(record.id || '').slice(-6)}`}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <div
+                            className={cn(
+                              "transition-opacity cursor-pointer p-0.5 shrink-0 -ml-0.5",
+                              isSelected
+                                ? "opacity-100"
+                                : selection.selectedCount > 0
+                                  ? "opacity-60 hover:opacity-100"
+                                  : "opacity-0 group-hover:opacity-100"
+                            )}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              selection.toggleRecord(record.id);
+                            }}
+                            title={isSelected ? "Deselect" : "Select"}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {}}
+                              className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 pointer-events-none"
+                            />
+                          </div>
+                          <span className="text-[10px] font-mono font-semibold text-zinc-400 dark:text-zinc-500">
+                            {record._record_key || `#${String(record.id || '').slice(-6)}`}
+                          </span>
+                        </div>
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
                             onClick={(e) => {
@@ -3377,7 +3551,8 @@ export const ModuleView = () => {
                         )}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                   {cards.length === 0 && (
                     <div className="h-28 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl flex items-center justify-center text-zinc-400 text-[10px] font-bold uppercase">
                       Empty column
@@ -3420,8 +3595,28 @@ export const ModuleView = () => {
               />
             </div>
           </div>
-          <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest hidden md:block">
-            Value Source: <span className="text-indigo-500 font-black">{allFields.find(f => f.id === valueFieldId)?.label || 'None (Count Only)'}</span>
+          <div className="flex items-center gap-3">
+            {filteredRecords.length > 0 && (
+              <button
+                type="button"
+                onClick={selection.isAllSelected ? selection.clearSelection : selection.selectAll}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={selection.isAllSelected}
+                  ref={(el) => {
+                    if (el) el.indeterminate = selection.isSomeSelected;
+                  }}
+                  onChange={() => {}}
+                  className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 pointer-events-none"
+                />
+                <span>{selection.isAllSelected ? 'Deselect All' : `Select All (${filteredRecords.length})`}</span>
+              </button>
+            )}
+            <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest hidden md:block">
+              Value Source: <span className="text-indigo-500 font-black">{allFields.find(f => f.id === valueFieldId)?.label || 'None (Count Only)'}</span>
+            </div>
           </div>
         </div>
 
@@ -3463,16 +3658,51 @@ export const ModuleView = () => {
                     const value = record[valueFieldId];
                     const dateVal = record[dateFieldId];
                     const assignee = members?.find((m: any) => m.id === record.assigneeId);
+                    const isSelected = selection.isSelected(record.id);
 
                     return (
                       <div 
                         key={record.id}
                         draggable
                         onDragStart={(e) => e.dataTransfer.setData('text/plain', record.id)}
-                        onClick={() => handleRecordClick(record.id)}
-                        className="p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-grab active:cursor-grabbing hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-lg transition-all group relative space-y-3.5"
+                        onClick={(e) => {
+                          if (e.metaKey || e.ctrlKey) {
+                            e.stopPropagation();
+                            selection.toggleRecord(record.id);
+                            return;
+                          }
+                          handleRecordClick(record.id);
+                        }}
+                        className={cn(
+                          "p-5 bg-white dark:bg-zinc-900 border rounded-2xl cursor-grab active:cursor-grabbing hover:shadow-lg transition-all group relative space-y-3.5",
+                          isSelected
+                            ? "border-indigo-500 dark:border-indigo-500 ring-2 ring-indigo-500/20 bg-indigo-50/20 dark:bg-indigo-950/20"
+                            : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
+                        )}
                       >
-                        <div className="flex items-center justify-end">
+                        <div className="flex items-center justify-between">
+                          <div
+                            className={cn(
+                              "transition-opacity cursor-pointer p-0.5 shrink-0 -ml-1",
+                              isSelected
+                                ? "opacity-100"
+                                : selection.selectedCount > 0
+                                  ? "opacity-60 hover:opacity-100"
+                                  : "opacity-0 group-hover:opacity-100"
+                            )}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              selection.toggleRecord(record.id);
+                            }}
+                            title={isSelected ? "Deselect" : "Select"}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {}}
+                              className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 pointer-events-none"
+                            />
+                          </div>
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                               onClick={(e) => {
@@ -4460,23 +4690,75 @@ export const ModuleView = () => {
               />
             </div>
           </div>
+          {filteredRecords.length > 0 && (
+            <button
+              type="button"
+              onClick={selection.isAllSelected ? selection.clearSelection : selection.selectAll}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                checked={selection.isAllSelected}
+                ref={(el) => {
+                  if (el) el.indeterminate = selection.isSomeSelected;
+                }}
+                onChange={() => {}}
+                className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 pointer-events-none"
+              />
+              <span>{selection.isAllSelected ? 'Deselect All' : `Select All (${filteredRecords.length})`}</span>
+            </button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredRecords.map((record: any) => {
             const statusField = allFields.find(f => f.id === 'status' || f.name === 'status');
             const status = record.status || record[statusField?.id || ''] || '-';
-            
+            const isSelected = selection.isSelected(record.id);
             const assignee = members?.find((m: any) => m.id === record.assigneeId);
 
             return (
               <div 
                 key={record.id}
-                onClick={() => handleRecordClick(record.id)}
-                className="group relative bg-white/50 dark:bg-white/[0.03] backdrop-blur-xl border border-zinc-200/80 dark:border-white/[0.07] hover:border-zinc-350 dark:hover:border-zinc-700 rounded-[2rem] p-6 hover:shadow-xl hover:-translate-y-0.5 cursor-pointer transition-all duration-300 flex flex-col justify-between min-h-[220px]"
+                onClick={(e) => {
+                  if (e.metaKey || e.ctrlKey) {
+                    e.stopPropagation();
+                    selection.toggleRecord(record.id);
+                    return;
+                  }
+                  handleRecordClick(record.id);
+                }}
+                className={cn(
+                  "group relative bg-white/50 dark:bg-white/[0.03] backdrop-blur-xl border rounded-[2rem] p-6 hover:shadow-xl hover:-translate-y-0.5 cursor-pointer transition-all duration-300 flex flex-col justify-between min-h-[220px]",
+                  isSelected
+                    ? "border-indigo-500 dark:border-indigo-500 ring-2 ring-indigo-500/25 bg-indigo-50/40 dark:bg-indigo-950/25 shadow-md"
+                    : "border-zinc-200/80 dark:border-white/[0.07] hover:border-zinc-350 dark:hover:border-zinc-700"
+                )}
               >
                 <div>
-                  <div className="flex items-center justify-end">
+                  <div className="flex items-center justify-between gap-2">
+                    <div
+                      className={cn(
+                        "transition-opacity cursor-pointer p-0.5 -ml-1",
+                        isSelected
+                          ? "opacity-100"
+                          : selection.selectedCount > 0
+                            ? "opacity-60 hover:opacity-100"
+                            : "opacity-0 group-hover:opacity-100"
+                      )}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        selection.toggleRecord(record.id);
+                      }}
+                      title={isSelected ? "Deselect record" : "Select record"}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {}}
+                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 pointer-events-none"
+                      />
+                    </div>
                     <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold uppercase tracking-wider">
                       {status}
                     </span>
@@ -4490,7 +4772,12 @@ export const ModuleView = () => {
                     {activeCardFields.map((f: any) => {
                       let val = record[f.id] || record[f.name];
                       if (f.id === 'createdBy' && record.createdBy) {
-                        const creator = members?.find((m: any) => m.id === record.createdBy);
+                        const creator = members?.find((m: any) => 
+                          m.id === record.createdBy || 
+                          m.cuid === record.createdBy ||
+                          (typeof record.createdBy === 'string' && m.name && m.name.toLowerCase() === record.createdBy.toLowerCase()) ||
+                          (typeof record.createdBy === 'string' && m.email && m.email.toLowerCase() === record.createdBy.toLowerCase())
+                        );
                         if (creator) val = creator.name;
                       }
                       if (f.id === 'assigneeId' && record.assigneeId) {
@@ -4574,6 +4861,24 @@ export const ModuleView = () => {
               />
             </div>
           </div>
+          {filteredRecords.length > 0 && (
+            <button
+              type="button"
+              onClick={selection.isAllSelected ? selection.clearSelection : selection.selectAll}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                checked={selection.isAllSelected}
+                ref={(el) => {
+                  if (el) el.indeterminate = selection.isSomeSelected;
+                }}
+                onChange={() => {}}
+                className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 pointer-events-none"
+              />
+              <span>{selection.isAllSelected ? 'Deselect All' : `Select All (${filteredRecords.length})`}</span>
+            </button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -4581,6 +4886,7 @@ export const ModuleView = () => {
             const statusField = allFields.find(f => f.id === 'status' || f.name === 'status');
             const status = record.status || record[statusField?.id || ''] || '-';
             const assignee = members?.find((m: any) => m.id === record.assigneeId);
+            const isSelected = selection.isSelected(record.id);
             
             // Extract images from gallery image field or auto-detect
             const isValidImageUrl = (url: any): boolean => {
@@ -4661,8 +4967,20 @@ export const ModuleView = () => {
             return (
               <div 
                 key={record.id}
-                onClick={() => handleRecordClick(record.id)}
-                className="group relative bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-350 dark:hover:border-zinc-700 rounded-[2.5rem] overflow-hidden hover:shadow-xl hover:-translate-y-0.5 cursor-pointer transition-all duration-300 flex flex-col justify-between min-h-[340px]"
+                onClick={(e) => {
+                  if (e.metaKey || e.ctrlKey) {
+                    e.stopPropagation();
+                    selection.toggleRecord(record.id);
+                    return;
+                  }
+                  handleRecordClick(record.id);
+                }}
+                className={cn(
+                  "group relative bg-white dark:bg-zinc-900/50 border rounded-[2.5rem] overflow-hidden hover:shadow-xl hover:-translate-y-0.5 cursor-pointer transition-all duration-300 flex flex-col justify-between min-h-[340px]",
+                  isSelected
+                    ? "border-indigo-500 dark:border-indigo-500 ring-2 ring-indigo-500/25 bg-indigo-50/20 dark:bg-indigo-950/20 shadow-md"
+                    : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-350 dark:hover:border-zinc-700"
+                )}
               >
                 {/* Picture Gallery Slider inside card header */}
                 <div className="h-44 w-full relative bg-zinc-150 dark:bg-zinc-800 border-b border-zinc-100 dark:border-zinc-800/80 overflow-hidden group/gallery">
@@ -4698,8 +5016,32 @@ export const ModuleView = () => {
                       </div>
                     </>
                   )}
-                  <div className="absolute top-4 left-4 px-2 py-0.5 bg-black/40 backdrop-blur-md rounded-lg text-white text-[8px] font-black uppercase tracking-widest border border-white/10">
-                    {activeImgIdx + 1} / {images.length}
+                  <div className="absolute top-4 left-4 flex items-center gap-1.5 z-10">
+                    <div
+                      className={cn(
+                        "transition-opacity cursor-pointer p-1 rounded-lg bg-black/40 backdrop-blur-md border border-white/10 flex items-center justify-center",
+                        isSelected
+                          ? "opacity-100 bg-indigo-600/90 border-indigo-400"
+                          : selection.selectedCount > 0
+                            ? "opacity-75 hover:opacity-100"
+                            : "opacity-0 group-hover:opacity-100"
+                      )}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        selection.toggleRecord(record.id);
+                      }}
+                      title={isSelected ? "Deselect" : "Select"}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {}}
+                        className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 pointer-events-none"
+                      />
+                    </div>
+                    <div className="px-2 py-0.5 bg-black/40 backdrop-blur-md rounded-lg text-white text-[8px] font-black uppercase tracking-widest border border-white/10">
+                      {activeImgIdx + 1} / {images.length}
+                    </div>
                   </div>
                 </div>
 
@@ -4719,7 +5061,12 @@ export const ModuleView = () => {
                       {activeKeyFields.map((f: any) => {
                         let val = record[f.id] || record[f.name];
                         if (f.id === 'createdBy' && record.createdBy) {
-                          const creator = members?.find((m: any) => m.id === record.createdBy);
+                          const creator = members?.find((m: any) => 
+                            m.id === record.createdBy || 
+                            m.cuid === record.createdBy ||
+                            (typeof record.createdBy === 'string' && m.name && m.name.toLowerCase() === record.createdBy.toLowerCase()) ||
+                            (typeof record.createdBy === 'string' && m.email && m.email.toLowerCase() === record.createdBy.toLowerCase())
+                          );
                           if (creator) val = creator.name;
                         }
                         if (f.id === 'assigneeId' && record.assigneeId) {
@@ -5302,7 +5649,19 @@ export const ModuleView = () => {
         accessor: (record: any) => {
           const val = record.createdBy;
           if (!val) return '-';
-          const resolvedUser = members?.find((m: any) => m.id === val);
+          const resolvedUser = members?.find((m: any) => {
+            if (!m) return false;
+            if (m.id === val || m.cuid === val || m.userId === val) return true;
+            if (record.createdByMemberId && (m.id === record.createdByMemberId || m.cuid === record.createdByMemberId)) return true;
+            if (typeof val === 'string') {
+              const vTrim = val.trim().toLowerCase();
+              if (m.name && m.name.trim().toLowerCase() === vTrim) return true;
+              if (m.email && m.email.toLowerCase() === vTrim) return true;
+              const fullName = `${m.firstName || ''} ${m.familyName || m.lastName || ''}`.trim().toLowerCase();
+              if (fullName && fullName === vTrim) return true;
+            }
+            return false;
+          });
           if (resolvedUser) {
             return (
               <div className="flex items-center gap-2">
@@ -5318,7 +5677,17 @@ export const ModuleView = () => {
               </div>
             );
           }
-          return '-';
+          return (
+            <div className="flex items-center gap-2">
+              <UserAvatarWithPresence
+                name={String(val)}
+                size="xs"
+              />
+              <span className="text-xs font-bold text-zinc-900 dark:text-white truncate">
+                {String(val)}
+              </span>
+            </div>
+          );
         }
       },
       updatedAt: {
@@ -5708,70 +6077,18 @@ export const ModuleView = () => {
           totalCount={totalRecords}
           pageSizeOptions={[10, 25, 50, 100]}
           enableSelection={true}
+          selectedRowIds={selection.selectedIds}
+          onSelectionChange={(ids) => selection.setSelectedIds(ids)}
+          hideInternalBulkBar={true}
           assigneeOptions={members}
           statusOptions={moduleStatusOptions}
           onBulkStar={handleBulkStar}
-          onBulkAssign={(selectedIds, _selectedItems, assigneeId, clearSelection) => {
-            const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
-            Promise.all(selectedIds.map(id => 
-              fetch(`${DATA_API_URL}/records/${id}`, {
-                method: 'PATCH',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`,
-                  'x-tenant-id': tenant?.id || ''
-                },
-                body: JSON.stringify({ moduleId, assigneeId })
-              })
-            )).then(() => {
-              queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
-              toast.success(`Updated assignee for ${selectedIds.length} record(s)`);
-              clearSelection();
-            }).catch(err => {
-              toast.error(err.message || 'Failed to update assignee');
-            });
-          }}
-          onBulkStatusChange={(selectedIds, _selectedItems, status, clearSelection) => {
-            const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
-            Promise.all(selectedIds.map(id => 
-              fetch(`${DATA_API_URL}/records/${id}`, {
-                method: 'PATCH',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`,
-                  'x-tenant-id': tenant?.id || ''
-                },
-                body: JSON.stringify({ moduleId, status, data: { status } })
-              })
-            )).then(() => {
-              queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
-              toast.success(`Updated status for ${selectedIds.length} record(s)`);
-              clearSelection();
-            }).catch(err => {
-              toast.error(err.message || 'Failed to update status');
-            });
-          }}
-          onBulkMove={(_selectedIds, selectedItems, _clearSelection) => {
+          onBulkAssign={handleBulkAssign}
+          onBulkStatusChange={handleBulkStatusChange}
+          onBulkMove={(_selectedIds, selectedItems) => {
             setRecordsToMove(selectedItems);
           }}
-          onBulkDelete={(selectedIds, _selectedItems, clearSelection) => {
-            const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
-            Promise.all(selectedIds.map(id => 
-              fetch(`${DATA_API_URL}/records/${id}`, {
-                method: 'DELETE',
-                headers: {
-                  'Authorization': `Bearer ${token}`,
-                  'x-tenant-id': tenant?.id || ''
-                }
-              })
-            )).then(() => {
-              queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
-              toast.success(`Moved ${selectedIds.length} record(s) to Recycling Bin`);
-              clearSelection();
-            }).catch(err => {
-              toast.error(err.message || 'Failed to delete records');
-            });
-          }}
+          onBulkDelete={handleBulkDelete}
         />
       </div>
     );
@@ -6976,7 +7293,7 @@ export const ModuleView = () => {
       {createPortal(
         <AnimatePresence>
           {activeDetailRecordId && (
-            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6 animate-in fade-in duration-200">
+            <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-6 lg:p-7 animate-in fade-in duration-200">
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -6991,9 +7308,9 @@ export const ModuleView = () => {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-[92vw] xl:max-w-7xl h-[85vh] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden z-10"
+              className="relative w-full max-w-[96vw] 2xl:max-w-[1720px] h-[92vh] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden z-10"
             >
-              <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <div className="flex-1 w-full h-full min-h-0 overflow-hidden flex flex-col">
                 <RecordDetailView 
                   moduleIdProp={moduleId} 
                   recordIdProp={activeDetailRecordId} 
@@ -7080,6 +7397,21 @@ export const ModuleView = () => {
           }}
         />
       )}
+      {/* Universal Floating Bulk Action Bar across all views */}
+      <FloatingBulkActionBar
+        selectedIds={selection.selectedIds}
+        selectedItems={selection.selectedItems}
+        totalCount={totalRecords}
+        onClearSelection={selection.clearSelection}
+        onSelectAll={selection.selectAll}
+        onBulkAssign={handleBulkAssign}
+        assigneeOptions={members}
+        onBulkStatusChange={handleBulkStatusChange}
+        statusOptions={moduleStatusOptions}
+        onBulkMove={(_selectedIds, selectedItems) => setRecordsToMove(selectedItems)}
+        onBulkStar={handleBulkStar}
+        onBulkDelete={handleBulkDelete}
+      />
     </div>
   );
 };

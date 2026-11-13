@@ -6,6 +6,7 @@ import { AppLauncher } from './AppLauncher';
 import { NotificationsDrawer } from './NotificationsDrawer';
 import { RecyclingBinDrawer } from './RecyclingBinDrawer';
 import { CalculatorLaunchModal } from '../Calculator/CalculatorLaunchModal';
+import { ServiceDeskLaunchModal } from '../ServiceDesk/ServiceDeskLaunchModal';
 
 export const GlobalDrawers = () => {
   const { 
@@ -26,6 +27,7 @@ export const GlobalDrawers = () => {
         {isRecyclingBinOpen && <RecyclingBinDrawer key="recycling-bin-drawer" />}
       </AnimatePresence>
       <CalculatorLaunchModal />
+      <ServiceDeskLaunchModal />
     </>
   );
 };

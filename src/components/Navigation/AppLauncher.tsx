@@ -14,6 +14,9 @@ export const AppLauncher = () => {
     setIsAppLauncherOpen, 
     inboxUnreadCount, 
     setIsCalculatorLaunchModalOpen,
+    setIsServiceDeskLaunchModalOpen,
+    setIsServiceDeskFacebookDocked,
+    setIsServiceDeskSideDocked,
     setIsRecyclingBinOpen 
   } = usePlatform();
   const [searchQuery, setSearchQuery] = useState('');
@@ -31,6 +34,26 @@ export const AppLauncher = () => {
     setIsAppLauncherOpen(false);
     if (app.id === 'calculator') {
       setIsCalculatorLaunchModalOpen(true);
+      return;
+    }
+    if (app.id === 'service-desk') {
+      const remember = localStorage.getItem('aurora_service_desk_remember_mode') === 'true';
+      const preferred = localStorage.getItem('aurora_service_desk_preferred_mode');
+      if (remember && preferred) {
+        if (preferred === 'facebook_dock') {
+          setIsServiceDeskSideDocked(false);
+          setIsServiceDeskFacebookDocked(true);
+        } else if (preferred === 'side_dock') {
+          setIsServiceDeskFacebookDocked(false);
+          setIsServiceDeskSideDocked(true);
+        } else if (preferred === 'new_tab') {
+          window.open('/workspace/apps/service-desk?standalone=true', '_blank', 'noopener,noreferrer');
+        } else {
+          navigate('/workspace/apps/service-desk');
+        }
+      } else {
+        setIsServiceDeskLaunchModalOpen(true);
+      }
       return;
     }
     if (app.id === 'recycling-bin' || app.id === 'recycling_bin') {

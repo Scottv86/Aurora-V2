@@ -85,6 +85,12 @@ model Tenant {
   universalNotes         UniversalNote[]
   universalReminders     UniversalReminder[]
   universalCalculations  UniversalCalculation[]
+  serviceDeskSessions    ServiceDeskSession[]
+  serviceDeskMessages    ServiceDeskMessage[]
+  serviceDeskPresences   ServiceDeskOperatorPresence[]
+  serviceDeskWrapUps     ServiceDeskWrapUp[]
+  serviceDeskCannedResponses ServiceDeskCannedResponse[]
+  serviceDeskFeedbackCases   ServiceDeskFeedbackCase[]
 
   @@map("tenants")
 }
@@ -598,6 +604,7 @@ model GlobalList {
   name        String
   description String?
   columns     Json?
+  isSystem    Boolean          @default(false) @map("is_system")
   createdAt   DateTime         @default(now()) @map("created_at")
   items       GlobalListItem[]
   tenant      Tenant           @relation(fields: [tenantId], references: [id])
@@ -1075,6 +1082,7 @@ model Site {
 
   tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   brand       BrandKit? @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  serviceDeskSessions ServiceDeskSession[]
 
   @@index([tenantId])
   @@index([tenantId, category])
@@ -2550,5 +2558,233 @@ model UniversalCalculation {
   @@index([tenantId, isPinned, updatedAt])
   @@map("universal_calculations")
 }
+
+// ----------------------------------------------------------------------
+// Enterprise Omnichannel Service Desk (Site Chat & CXone Voice Queues)
+// ----------------------------------------------------------------------
+
+model ServiceDeskSession {
+  id                    String               @id @default(cuid())
+  tenantId              String               @map("tenant_id")
+  siteId                String?              @map("site_id")
+  siteName              String?              @map("site_name")
+  channelType           String               @default("SITE_CHAT") @map("channel_type") // "SITE_CHAT" | "VOICE_CALL"
+  status                String               @default("ACTIVE_AI") // "ACTIVE_AI" | "QUEUED_FOR_HUMAN" | "ASSIGNED_HUMAN" | "AWAITING_HITL_APPROVAL" | "WRAP_UP" | "RESOLVED" | "ARCHIVED"
+  priority              String               @default("MEDIUM") // "LOW" | "MEDIUM" | "HIGH" | "URGENT"
+
+  // Customer / Visitor Identity
+  visitorToken          String?              @map("visitor_token")
+  partyId               String?              @map("party_id")
+  visitorName           String               @default("Site Visitor") @map("visitor_name")
+  visitorEmail          String?              @map("visitor_email")
+  visitorPhone          String?              @map("visitor_phone")
+  currentPageSlug       String?              @map("current_page_slug")
+  currentPageTitle      String?              @map("current_page_title")
+  isAuthenticated       Boolean              @default(false) @map("is_authenticated")
+
+  // Allocation & Routing (Unified Human + Synthetic AI Workforce)
+  allocationMode        String               @default("AI_FIRST") @map("allocation_mode") // "AI_FIRST" | "HUMAN_FIRST" | "TRIAGE_AGENT" | "DIRECT_OWNER"
+  allocatedAssigneeType String               @default("AI_AGENT") @map("allocated_assignee_type") // "AI_AGENT" | "HUMAN_USER" | "UNASSIGNED"
+  allocatedMemberId     String?              @map("allocated_member_id")
+  allocatedMemberName   String?              @map("allocated_member_name")
+  allocatedAgentId      String?              @map("allocated_agent_id")
+  allocatedAgentName    String?              @map("allocated_agent_name")
+  allocatedTeamId       String?              @map("allocated_team_id")
+  allocatedTeamName     String?              @map("allocated_team_name")
+  allocatedQueueId      String?              @map("allocated_queue_id")
+  allocatedQueueName    String?              @map("allocated_queue_name")
+
+  // AI Co-Pilot, Sentiment & Quality
+  aiWhisperEnabled      Boolean              @default(true) @map("ai_whisper_enabled")
+  sentiment             String               @default("NEUTRAL") // "POSITIVE" | "NEUTRAL" | "NEGATIVE"
+  confidenceScore       Float?               @default(0.92) @map("confidence_score")
+  aiSummary             String?              @db.Text @map("ai_summary")
+  aiSuggestedReply      String?              @db.Text @map("ai_suggested_reply")
+  pendingHitlTool       Json?                @map("pending_hitl_tool")
+
+  // Linked Ecosystem Entities & SLA
+  linkedRecords         Json                 @default("[]") @map("linked_records")
+  tags                  Json                 @default("[]")
+  metadata              Json?                @default("{}")
+  slaDeadline           DateTime?            @map("sla_deadline")
+  slaStatus             String?              @default("ON_TRACK") @map("sla_status") // "ON_TRACK" | "AT_RISK" | "BREACHED"
+  firstResponseAt       DateTime?            @map("first_response_at")
+  escalatedAt           DateTime?            @map("escalated_at")
+  resolvedAt            DateTime?            @map("resolved_at")
+  csatScore             Int?                 @map("csat_score")
+  csatFeedback          String?              @db.Text @map("csat_feedback")
+  unreadByOperator      Int                  @default(0) @map("unread_by_operator")
+  unreadByVisitor       Int                  @default(0) @map("unread_by_visitor")
+  lastMessageAt         DateTime             @default(now()) @map("last_message_at")
+  lastMessagePreview    String?              @db.Text @map("last_message_preview")
+
+  // Structured Interaction Wrap-Up & Disposition (BI & Reporting Ready)
+  wrapUpOutcome          String?              @map("wrap_up_outcome")
+  wrapUpTopic            String?              @map("wrap_up_topic")
+  wrapUpSubtopic         String?              @map("wrap_up_subtopic")
+  wrapUpTags             Json?                @default("[]") @map("wrap_up_tags")
+  wrapUpSentiment        String?              @map("wrap_up_sentiment") // "POSITIVE" | "NEUTRAL" | "NEGATIVE"
+  firstContactResolution Boolean              @default(false) @map("first_contact_resolution")
+  wrapUpNotes            String?              @db.Text @map("wrap_up_notes")
+  wrappedUpByType        String?              @map("wrapped_up_by_type") // "HUMAN_AGENT" | "AI_AGENT"
+  wrappedUpById          String?              @map("wrapped_up_by_id")
+  wrappedUpByName        String?              @map("wrapped_up_by_name")
+  wrappedUpAt            DateTime?            @map("wrapped_up_at")
+  handleDurationSeconds  Int?                 @map("handle_duration_seconds")
+  acwDurationSeconds     Int?                 @map("acw_duration_seconds")
+
+  createdAt             DateTime             @default(now()) @map("created_at")
+  updatedAt             DateTime             @updatedAt @map("updated_at")
+
+  tenant                Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site                  Site?                @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  messages              ServiceDeskMessage[]
+  wrapUps               ServiceDeskWrapUp[]
+  feedbackCases         ServiceDeskFeedbackCase[]
+  csatRating            Int?                 @map("csat_rating")
+  csatComment           String?              @map("csat_comment")
+  csatSubmittedAt       DateTime?            @map("csat_submitted_at")
+
+  @@index([tenantId, status, lastMessageAt])
+  @@index([tenantId, siteId, status])
+  @@index([tenantId, allocatedMemberId, status])
+  @@index([tenantId, allocatedAgentId, status])
+  @@index([tenantId, visitorToken])
+  @@index([tenantId, wrapUpOutcome])
+  @@index([tenantId, wrapUpTopic])
+  @@map("service_desk_sessions")
+}
+
+model ServiceDeskMessage {
+  id          String             @id @default(cuid())
+  sessionId   String             @map("session_id")
+  tenantId    String             @map("tenant_id")
+  senderType  String             @map("sender_type") // "VISITOR" | "AI_AGENT" | "HUMAN_AGENT" | "SYSTEM" | "INTERNAL_WHISPER"
+  senderId    String?            @map("sender_id")
+  senderName  String             @map("sender_name")
+  senderRole  String?            @map("sender_role")
+  senderAvatar String?           @map("sender_avatar")
+  content     String             @db.Text
+  messageType String             @default("TEXT") @map("message_type") // "TEXT" | "FORM_CARD" | "BOOKING_CARD" | "RECORD_CARD" | "PAYMENT_CARD" | "KB_CITATION" | "HITL_APPROVAL_REQUEST" | "CALL_EVENT" | "DOCUMENT_CARD" | "ATTACHMENT"
+  payload     Json?              @default("{}")
+  aiTrace     Json?              @map("ai_trace")
+  isRead      Boolean            @default(false) @map("is_read")
+  createdAt   DateTime           @default(now()) @map("created_at")
+
+  session     ServiceDeskSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@index([tenantId, sessionId])
+  @@map("service_desk_messages")
+}
+
+model ServiceDeskOperatorPresence {
+  id                 String   @id @default(cuid())
+  tenantId           String   @map("tenant_id")
+  memberId           String   @unique @map("member_id")
+  memberName         String   @map("member_name")
+  status             String   @default("AVAILABLE") // "AVAILABLE" | "ON_CALL" | "BUSY_CHAT" | "WRAP_UP" | "AWAY_TWIN" | "OFFLINE"
+  maxConcurrentChats Int      @default(3) @map("max_concurrent_chats")
+  activeChatCount    Int      @default(0) @map("active_chat_count")
+  activeCallId       String?  @map("active_call_id")
+  assignedQueues     Json     @default("[]") @map("assigned_queues")
+  lastAssignedAt     DateTime @default(now()) @map("last_assigned_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@map("service_desk_operator_presences")
+}
+
+model ServiceDeskWrapUp {
+  id                     String             @id @default(cuid())
+  tenantId               String             @map("tenant_id")
+  sessionId              String             @map("session_id")
+  channelType            String             @default("SITE_CHAT") @map("channel_type")
+  siteId                 String?            @map("site_id")
+  siteName               String?            @map("site_name")
+  outcome                String
+  topic                  String
+  subtopic               String?
+  sentiment              String             @default("NEUTRAL")
+  firstContactResolution Boolean            @default(false) @map("first_contact_resolution")
+  notes                  String?            @db.Text
+  tags                   Json?              @default("[]")
+  linkedRecordIds        Json?              @default("[]") @map("linked_record_ids")
+  wrappedUpByType        String             @default("HUMAN_AGENT") @map("wrapped_up_by_type")
+  wrappedUpById          String?            @map("wrapped_up_by_id")
+  wrappedUpByName        String             @map("wrapped_up_by_name")
+  handleDurationSeconds  Int?               @map("handle_duration_seconds")
+  acwDurationSeconds     Int?               @map("acw_duration_seconds")
+  csatScore              Int?               @map("csat_score")
+  createdAt              DateTime           @default(now()) @map("created_at")
+
+  session                ServiceDeskSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  tenant                 Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, outcome, createdAt])
+  @@index([tenantId, topic, createdAt])
+  @@index([tenantId, wrappedUpById, createdAt])
+  @@map("service_desk_wrap_ups")
+}
+
+model ServiceDeskFeedbackCase {
+  id                     String             @id @default(cuid())
+  tenantId               String             @map("tenant_id")
+  sessionId              String             @map("session_id")
+  visitorName            String             @map("visitor_name")
+  visitorEmail           String?            @map("visitor_email")
+  visitorPhone           String?            @map("visitor_phone")
+  channelType            String             @default("SITE_CHAT") @map("channel_type")
+  score                  Int
+  maxScore               Int                @default(5) @map("max_score")
+  ratingType             String             @default("CSAT_5_STAR") @map("rating_type")
+  comment                String?            @db.Text
+  sentiment              String             @default("NEGATIVE")
+  status                 String             @default("NEW_UNASSIGNED") // "NEW_UNASSIGNED" | "IN_REVIEW" | "OUTREACH_SCHEDULED" | "REMEDIATION_OFFERED" | "RESOLVED_CLOSED_LOOP" | "DISMISSED"
+  priority               String             @default("HIGH") // "URGENT" | "HIGH" | "MEDIUM" | "LOW"
+  rootCauseCategory      String?            @map("root_cause_category") // "SERVICE_DELAY" | "AGENT_CONDUCT" | "TECHNICAL_DEFECT" | "BILLING_DISPUTE" | "PRODUCT_GAP" | "MISCOMMUNICATION"
+  assignedSupervisorId   String?            @map("assigned_supervisor_id")
+  assignedSupervisorName String?            @map("assigned_supervisor_name")
+  remediationAction      String?            @map("remediation_action") // "PHONE_OUTREACH" | "APOLOGY_EMAIL" | "CREDIT_VOUCHER" | "REFUND" | "GOODWILL_UPGRADE" | "PROCESS_FIX"
+  remediationNotes       String?            @map("remediation_notes") @db.Text
+  slaDeadline            DateTime?          @map("sla_deadline")
+  closedAt               DateTime?          @map("closed_at")
+  closedByName           String?            @map("closed_by_name")
+  createdAt              DateTime           @default(now()) @map("created_at")
+  updatedAt              DateTime           @updatedAt @map("updated_at")
+
+  session                ServiceDeskSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  tenant                 Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, priority, createdAt])
+  @@map("service_desk_feedback_cases")
+}
+
+model ServiceDeskCannedResponse {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  shortcut    String
+  title       String
+  content     String   @db.Text
+  category    String   @default("General") // "General" | "Billing" | "Technical" | "Support" | "Sales"
+  isShared    Boolean  @default(true) @map("is_shared")
+  usageCount  Int      @default(0) @map("usage_count")
+  createdBy   String?  @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, shortcut])
+  @@index([tenantId, category])
+  @@map("service_desk_canned_responses")
+}
+
+
+
 
 

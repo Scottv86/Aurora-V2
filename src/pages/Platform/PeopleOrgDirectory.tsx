@@ -114,7 +114,7 @@ export const PeopleOrgDirectory = () => {
             <Users size={24} />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-zinc-950 dark:text-white">People & Organisations</h1>
+            <h1 className="text-lg font-bold text-zinc-950 dark:text-white">Directory</h1>
             <p className="text-xs text-zinc-500 dark:text-zinc-450 mt-0.5">
               Centralized management of all internal and external parties, personnel, and organizational structures.
             </p>
@@ -280,7 +280,7 @@ export const PeopleOrgDirectory = () => {
                     }))}
                     loading={loading}
                     density="compact"
-                    onRowClick={(entity) => navigate(`/workspace/platform/people-organisations/${entity.id}`)}
+                    onRowClick={(entity) => navigate(`/workspace/apps/directory/${entity.id}`)}
                     className="bg-transparent dark:bg-transparent border-none shadow-none"
                     noContainer={true}
                     columns={[
@@ -370,7 +370,7 @@ export const PeopleOrgDirectory = () => {
                           <button 
                             onClick={(e) => {
                               e.stopPropagation();
-                              navigate(`/workspace/platform/people-organisations/${entity.id}`);
+                              navigate(`/workspace/apps/directory/${entity.id}`);
                             }}
                             className="p-1.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
                           >

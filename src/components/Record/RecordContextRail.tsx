@@ -501,15 +501,84 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
   }, [currentParticipantIds, members]);
 
   const creator = useMemo(() => {
-    const creatorId = record?.createdBy || record?.created_by || record?.creatorId;
-    const member = members.find(m => m.id === creatorId || m.cuid === creatorId || m.email === creatorId);
-    if (member) return member;
-    if (record?.createdByMember) return record.createdByMember;
+    const creatorId = record?.createdBy || record?.created_by || record?.creatorId || record?.createdByMemberId || record?.createdByUserId;
+    const createdByMemberObj = record?.createdByMember;
+
+    // Search members list with comprehensive matching (id, cuid, userId, email, and name)
+    const member = members?.find((m: any) => {
+      if (!m) return false;
+      if (creatorId) {
+        if (m.id === creatorId || m.cuid === creatorId || m.userId === creatorId) return true;
+        if (typeof creatorId === 'string') {
+          const cIdTrim = creatorId.trim().toLowerCase();
+          if (m.email && m.email.toLowerCase() === cIdTrim) return true;
+          if (m.name && m.name.trim().toLowerCase() === cIdTrim) return true;
+          const memberFullName = `${m.firstName || ''} ${m.familyName || m.lastName || ''}`.trim().toLowerCase();
+          if (memberFullName && memberFullName === cIdTrim) return true;
+        }
+      }
+      if (record?.createdByMemberId && (m.id === record.createdByMemberId || m.cuid === record.createdByMemberId)) return true;
+      if (record?.createdByUserId && (m.id === record.createdByUserId || m.userId === record.createdByUserId)) return true;
+      if (createdByMemberObj) {
+        if (createdByMemberObj.id && (m.id === createdByMemberObj.id || m.cuid === createdByMemberObj.id)) return true;
+        if (createdByMemberObj.email && m.email && m.email.toLowerCase() === createdByMemberObj.email.toLowerCase()) return true;
+        if (createdByMemberObj.name && m.name && m.name.trim().toLowerCase() === createdByMemberObj.name.trim().toLowerCase()) return true;
+        const memberFullName = `${m.firstName || ''} ${m.familyName || m.lastName || ''}`.trim().toLowerCase();
+        const objFullName = `${createdByMemberObj.firstName || ''} ${createdByMemberObj.familyName || createdByMemberObj.lastName || ''}`.trim().toLowerCase();
+        if (memberFullName && objFullName && memberFullName === objFullName) return true;
+      }
+      return false;
+    });
+
+    if (member) {
+      return {
+        ...member,
+        avatarUrl: member.avatarUrl || (member as any).avatar || (member as any).photoUrl || (member as any).picture,
+        name: member.name || `${member.firstName || ''} ${member.familyName || member.lastName || ''}`.trim() || 'User'
+      };
+    }
+
+    // Check against current user if not in members array or if platformUser has avatar
+    const currentUserName = platformUser?.name || `${platformUser?.firstName || ''} ${platformUser?.familyName || ''}`.trim();
+    const currentUserEmail = session?.user?.email || platformUser?.email;
+    const currentUserId = platformUser?.id || session?.user?.id;
+    const isCurrentUserCreator = (
+      (creatorId && currentUserId && creatorId === currentUserId) ||
+      (creatorId && typeof creatorId === 'string' && currentUserEmail && creatorId.toLowerCase() === currentUserEmail.toLowerCase()) ||
+      (creatorId && typeof creatorId === 'string' && currentUserName && creatorId.trim().toLowerCase() === currentUserName.toLowerCase())
+    );
+    if (isCurrentUserCreator && (platformUser || session?.user)) {
+      return {
+        ...(platformUser || {}),
+        name: currentUserName || 'You',
+        avatarUrl: platformUser?.avatarUrl || (platformUser as any)?.avatar || (platformUser as any)?.photoUrl || session?.user?.user_metadata?.avatar_url || (session?.user as any)?.picture
+      };
+    }
+
+    if (createdByMemberObj && typeof createdByMemberObj === 'object') {
+      const name = createdByMemberObj.name || `${createdByMemberObj.firstName || ''} ${createdByMemberObj.familyName || createdByMemberObj.lastName || ''}`.trim() || 'User';
+      return {
+        ...createdByMemberObj,
+        name,
+        avatarUrl: createdByMemberObj.avatarUrl || createdByMemberObj.avatar || createdByMemberObj.photoUrl || createdByMemberObj.picture
+      };
+    }
+
     if (typeof creatorId === 'string' && creatorId.trim()) {
       return { name: creatorId };
     }
     return null;
-  }, [record?.createdBy, record?.created_by, record?.creatorId, record?.createdByMember, members]);
+  }, [
+    record?.createdBy, 
+    record?.created_by, 
+    record?.creatorId, 
+    record?.createdByMemberId, 
+    record?.createdByUserId, 
+    record?.createdByMember, 
+    members,
+    platformUser,
+    session?.user
+  ]);
 
   const createdDate = record?.createdAt || record?.created_at;
   const updatedDate = record?.updatedAt || record?.updated_at;
@@ -1522,7 +1591,7 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
                         <UserAvatarWithPresence
                           avatarUrl={creator.avatarUrl}
                           name={creator.name || 'User'}
-                          status="AVAILABLE"
+                          status={(creator as any).status || (creator as any).presenceStatus || 'AVAILABLE'}
                           size="xs"
                         />
                         <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 truncate">
@@ -1952,7 +2021,7 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
                   ) : resolution.availableTransitions.length > 0 ? (
                     <div className="p-3.5 bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl shadow-2xs space-y-2.5">
                       <div className="flex items-center justify-between text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
-                        <span>Advance Record</span>
+                        <span>Transition workflow</span>
                         <span className="font-normal lowercase font-mono">
                           {resolution.availableTransitions.length} option{resolution.availableTransitions.length === 1 ? '' : 's'}
                         </span>
@@ -2179,7 +2248,7 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
                   {/* 5. Vertical Pipeline Timeline (Process Stages Tree) */}
                   <div className="p-3.5 bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl shadow-2xs space-y-3">
                     <div className="flex items-center justify-between text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
-                      <span>Pipeline Stages</span>
+                      <span>Workflow</span>
                       {resolution.stages.length > 0 && (
                         <span className="font-normal font-mono lowercase">
                           {resolution.stages.filter(s => s.isCompleted).length}/{resolution.stages.length} done

@@ -74,7 +74,9 @@ import openApiRoutes from './routes/openApiRoutes';
 import ssoRoutes from './routes/ssoRoutes';
 import notesRoutes from './routes/notesRoutes';
 import remindersRoutes from './routes/remindersRoutes';
+import schedulingRoutes from './routes/schedulingRoutes';
 import calculationRoutes from './routes/calculationRoutes';
+import serviceDeskRoutes from './routes/serviceDeskRoutes';
 
 
 
@@ -264,7 +266,9 @@ app.use('/api/templates', authenticate, requireTenantAccess, templateRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/notes', authenticate, requireTenantAccess, notesRoutes);
 app.use('/api/reminders', authenticate, requireTenantAccess, remindersRoutes);
+app.use('/api/scheduling', authenticate, requireTenantAccess, schedulingRoutes);
 app.use('/api/calculations', authenticate, requireTenantAccess, calculationRoutes);
+app.use('/api/service-desk', authenticate, requireTenantAccess, serviceDeskRoutes);
 
 // Commerce & Financial Suite Routes
 app.use('/api/finance', authenticate, requireTenantAccess, financeRoutes);

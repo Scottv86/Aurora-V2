@@ -244,6 +244,81 @@ async function executeKpiEvaluation(tenantId: string, kpi: any): Promise<any> {
         });
       }
     }
+  } else if (sourceType === 'service_desk') {
+    const { aggregateType = 'count', aggregateField = 'csatScore', filters = [] } = sourceConfig || {};
+    const sessions = await (globalPrisma as any).serviceDeskSession?.findMany({
+      where: { tenantId }
+    }) || [];
+
+    const applySessionFilters = (sessionList: any[]) => {
+      return sessionList.filter(s => {
+        for (const f of filters) {
+          const rawVal = s[f.fieldId];
+          const strVal = rawVal === null || rawVal === undefined ? '' : String(rawVal);
+          const targetVal = f.value === null || f.value === undefined ? '' : String(f.value);
+          if (f.operator === 'equals' && strVal.toLowerCase() !== targetVal.toLowerCase()) return false;
+          if (f.operator === 'not_equals' && strVal.toLowerCase() === targetVal.toLowerCase()) return false;
+          if (f.operator === 'contains' && !strVal.toLowerCase().includes(targetVal.toLowerCase())) return false;
+          if (f.operator === 'greater_than' && Number(rawVal) <= Number(f.value)) return false;
+          if (f.operator === 'less_than' && Number(rawVal) >= Number(f.value)) return false;
+          if (f.operator === 'is_empty' && rawVal !== null && rawVal !== undefined && strVal !== '') return false;
+          if (f.operator === 'is_not_empty' && (rawVal === null || rawVal === undefined || strVal === '')) return false;
+        }
+        return true;
+      });
+    };
+
+    const computeSessionAggregate = (items: any[]) => {
+      if (items.length === 0) return 0;
+      if (aggregateType === 'count') return items.length;
+      const values = items
+        .map(i => {
+          if (aggregateField === 'firstContactResolution') return i.firstContactResolution ? 100 : 0;
+          const n = Number(i[aggregateField]);
+          return isNaN(n) ? null : n;
+        })
+        .filter((v): v is number => v !== null);
+      if (values.length === 0) return 0;
+      if (aggregateType === 'sum') return values.reduce((a, b) => a + b, 0);
+      if (aggregateType === 'avg') return Number((values.reduce((a, b) => a + b, 0) / values.length).toFixed(2));
+      if (aggregateType === 'min') return Math.min(...values);
+      if (aggregateType === 'max') return Math.max(...values);
+      if (aggregateType === 'median') {
+        values.sort((a, b) => a - b);
+        const mid = Math.floor(values.length / 2);
+        return values.length % 2 !== 0 ? values[mid] : (values[mid - 1] + values[mid]) / 2;
+      }
+      return items.length;
+    };
+
+    const matchedSessions = applySessionFilters(sessions);
+    matchedCount = matchedSessions.length;
+
+    if (timeHorizon === 'all_time') {
+      currentVal = computeSessionAggregate(matchedSessions);
+      previousVal = Number((currentVal * 0.92).toFixed(2));
+    } else {
+      const currentPeriodItems = matchedSessions.filter(r => new Date(r.wrappedUpAt || r.createdAt || now) >= currentRangeStart);
+      const previousPeriodItems = matchedSessions.filter(r => {
+        const dt = new Date(r.wrappedUpAt || r.createdAt || now);
+        return dt >= previousRangeStart && dt < previousRangeEnd;
+      });
+      currentVal = computeSessionAggregate(currentPeriodItems);
+      previousVal = computeSessionAggregate(previousPeriodItems);
+    }
+
+    for (let i = 6; i >= 0; i--) {
+      const dayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+      const nextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i + 1);
+      const daySessions = matchedSessions.filter(r => {
+        const dt = new Date(r.wrappedUpAt || r.createdAt || now);
+        return dt >= dayDate && dt < nextDay;
+      });
+      sparklineData.push({
+        date: dayDate.toISOString().slice(5, 10),
+        value: computeSessionAggregate(daySessions)
+      });
+    }
   } else if (sourceType === 'saved_query' && sourceConfig?.savedQueryId) {
     const savedQ = await globalPrisma.savedQuery.findFirst({
       where: { id: sourceConfig.savedQueryId, tenantId }

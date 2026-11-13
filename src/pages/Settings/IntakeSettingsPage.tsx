@@ -798,7 +798,7 @@ export const IntakeSettingsPage = () => {
 
   return (
     <SettingsSubNavLayout
-      title="Work Distribution"
+      title="Triage"
       description="Configure tenancy-wide rules to automatically route, validate, and distribute incoming requests."
       icon={GitFork}
       items={subNavItems}
@@ -809,7 +809,7 @@ export const IntakeSettingsPage = () => {
         modulesLoading ? (
           <div className="flex-1 flex flex-col items-center justify-center p-12 text-zinc-550">
             <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mb-4" />
-            <p className="text-xs font-bold text-zinc-450 font-sans">Loading Work Distribution settings...</p>
+            <p className="text-xs font-bold text-zinc-450 font-sans">Loading Triage settings...</p>
           </div>
         ) : triageModule ? (
           <div className="grid grid-cols-12 gap-8 items-start flex-1 min-h-0">
@@ -1341,8 +1341,8 @@ export const IntakeSettingsPage = () => {
         ) : (
           <div className="flex-1 border border-dashed border-zinc-900 rounded-3xl flex flex-col items-center justify-center p-12 text-center text-zinc-550">
             <Info size={36} className="text-zinc-700 mb-4" />
-            <h3 className="text-sm font-black text-zinc-300">Work Distribution is not configured</h3>
-            <p className="text-[10px] text-zinc-500 mt-1 max-w-md">The Work Distribution system is currently being provisioned. Please wait or refresh the page to load the configuration.</p>
+            <h3 className="text-sm font-black text-zinc-300">Triage is not configured</h3>
+            <p className="text-[10px] text-zinc-500 mt-1 max-w-md">The Triage system is currently being provisioned. Please wait or refresh the page to load the configuration.</p>
           </div>
         )
       ) : (

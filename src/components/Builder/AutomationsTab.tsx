@@ -1255,6 +1255,10 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                   { id: 'RELATION_LINKED', label: 'Relation Linked', desc: 'When records are linked' },
                   { id: 'USER_MENTIONED', label: 'User Mentioned', desc: 'Mentions in comments' },
                   { id: 'FORM_SUBMITTED', label: 'Form Submitted', desc: 'Public form ingestion' },
+                  { id: 'SERVICE_DESK_SESSION_STARTED', label: 'Service Desk Started', desc: 'New Site Chat or Call session' },
+                  { id: 'SERVICE_DESK_ALLOCATED', label: 'Service Desk Allocated', desc: 'Allocated to AI or Human' },
+                  { id: 'SERVICE_DESK_ESCALATED', label: 'Service Desk Escalated', desc: 'Handed off to human queue' },
+                  { id: 'SERVICE_DESK_RESOLVED', label: 'Service Desk Resolved', desc: 'Chat or call session closed' },
                   { id: 'QUICK_ACTION', label: 'Quick Action', desc: 'Detail page button click' },
                   { id: 'CALL_ONLY', label: 'No Trigger', desc: 'Triggered by Workflow/API' }
                 ].map((trig) => (
@@ -1305,7 +1309,9 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                   { id: 'COMPLETE_REMINDER', label: 'Complete Reminder', desc: 'Mark record tasks done', icon: CheckSquare },
                   { id: 'CREATE_NOTE', label: 'Create Note', desc: 'Log note on record', icon: StickyNote },
                   { id: 'PIN_RECORD_NOTE', label: 'Pin Alert Note', desc: 'Pin banner note to top', icon: Pin },
-                  { id: 'INVOKE_AGENT', label: 'Invoke AI Agent', desc: 'Run digital coworker tool', icon: Bot }
+                  { id: 'INVOKE_AGENT', label: 'Invoke AI Agent', desc: 'Run digital coworker tool', icon: Bot },
+                  { id: 'ALLOCATE_SERVICE_DESK_SESSION', label: 'Allocate Service Desk', desc: 'Route chat/call to AI or Human', icon: UserCheck },
+                  { id: 'SEND_SERVICE_DESK_MESSAGE', label: 'Service Desk Reply', desc: 'Send automated chat message', icon: MessageSquare }
                 ].map((actionType) => {
                   const Icon = actionType.icon;
                   return (
@@ -2413,6 +2419,62 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                               }}
                               className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500/50"
                               placeholder="agent_result"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Allocate Service Desk Session Form */}
+                      {action.type === 'ALLOCATE_SERVICE_DESK_SESSION' && (
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-zinc-400">Owner Type</label>
+                              <select
+                                value={action.config.ownerType || 'AI_AGENT'}
+                                onChange={(e) => {
+                                  const updated = [...actions];
+                                  updated[idx].config.ownerType = e.target.value;
+                                  setActions(updated);
+                                }}
+                                className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white"
+                              >
+                                <option value="AI_AGENT">AI Agent (Agent Builder)</option>
+                                <option value="HUMAN">Human Operator</option>
+                              </select>
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-zinc-400">Target Owner / Agent ID</label>
+                              <input
+                                type="text"
+                                value={action.config.ownerId || ''}
+                                onChange={(e) => {
+                                  const updated = [...actions];
+                                  updated[idx].config.ownerId = e.target.value;
+                                  setActions(updated);
+                                }}
+                                placeholder="Agent or Member ID"
+                                className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Send Service Desk Message Form */}
+                      {action.type === 'SEND_SERVICE_DESK_MESSAGE' && (
+                        <div className="space-y-3">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-zinc-400">Message Content</label>
+                            <textarea
+                              value={action.config.message || ''}
+                              onChange={(e) => {
+                                const updated = [...actions];
+                                updated[idx].config.message = e.target.value;
+                                setActions(updated);
+                              }}
+                              placeholder="Hello {{ trigger.record.visitorName }}, your specialist has been notified..."
+                              className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs text-zinc-900 dark:text-white h-20"
                             />
                           </div>
                         </div>

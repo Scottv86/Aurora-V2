@@ -9,6 +9,7 @@ import {
   Plus,
   LayoutDashboard,
   Inbox,
+  Users,
   ClipboardList,
   Sparkles,
   Sun,
@@ -303,14 +304,27 @@ export const WorkspaceCommandPalette: React.FC<WorkspaceCommandPaletteProps> = (
       },
       {
         id: 'act:triage',
-        title: 'Open Triage & Shared Inbox',
-        subtitle: 'AI email triage and intake submissions',
-        badge: 'Navigation',
+        title: 'Open Triage',
+        subtitle: 'Assess incoming work, routing rules, and distribution queues',
+        badge: 'App',
         category: 'actions',
-        icon: <Inbox size={15} className="text-indigo-500" />,
-        keywords: 'triage email inbox intake submissions',
+        icon: <Inbox size={15} className="text-amber-500" />,
+        keywords: 'triage work distribution intake routing submissions',
         onSelect: () => {
-          navigate('/workspace/apps/inbox');
+          navigate('/workspace/apps/triage');
+          onClose();
+        }
+      },
+      {
+        id: 'act:directory',
+        title: 'Open Directory',
+        subtitle: 'Browse people, organisations, and relationship networks',
+        badge: 'App',
+        category: 'actions',
+        icon: <Users size={15} className="text-sky-500" />,
+        keywords: 'directory people organisations contacts companies crm',
+        onSelect: () => {
+          navigate('/workspace/apps/directory');
           onClose();
         }
       },

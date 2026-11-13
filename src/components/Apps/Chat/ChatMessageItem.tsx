@@ -16,6 +16,7 @@ import { useChat } from '../../../context/ChatContext';
 import { useAuth } from '../../../hooks/useAuth';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { cn } from '../../../lib/utils';
+import { UserProfileTrigger } from '../../Common/UserPresenceBadge';
 import { toast } from 'sonner';
 
 interface ChatMessageItemProps {
@@ -151,7 +152,12 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({ message, isThr
       message.isPinned && "bg-amber-500/5 dark:bg-amber-500/10 border-l-2 border-amber-500"
     )}>
       {/* Sender Avatar */}
-      <div className="shrink-0 pt-1">
+      <UserProfileTrigger
+        userId={message.senderId}
+        name={message.senderName}
+        avatarUrl={message.senderAvatar}
+        className="shrink-0 pt-1"
+      >
         {message.senderAvatar ? (
           <img
             src={message.senderAvatar}
@@ -168,7 +174,7 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({ message, isThr
             {message.senderName ? message.senderName.charAt(0).toUpperCase() : 'U'}
           </div>
         )}
-      </div>
+      </UserProfileTrigger>
 
       {/* Main Bubble & Content Area */}
       <div className={cn(

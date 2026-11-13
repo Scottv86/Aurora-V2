@@ -67,12 +67,16 @@ import {
   Heading,
   Minus,
   Box,
-  MoveVertical
+  MoveVertical,
+  Headset,
+  Bot
 } from 'lucide-react';
 export { PageBuilderEngine } from '../../components/PageEngine';
 
 
 import { Site, SiteService, SiteNavItem, SiteWidget, SitePage, FormFieldConfig, PRESET_THEMES, PresetTheme, SiteThemeConfig, ENTERPRISE_FONTS } from '../../services/siteService';
+import { SiteChatConfig, DEFAULT_SITE_CHAT_CONFIG } from '../../types/serviceDesk';
+import { ServiceDeskService } from '../../services/serviceDeskService';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useTheme } from '../../hooks/useTheme';
 import { Modal } from '../../components/UI/TabsAndModal';
@@ -112,7 +116,13 @@ export const SiteBuilderPage: React.FC = () => {
   const [site, setSite] = useState<Site | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'pages' | 'branding' | 'widgets' | 'nav' | 'seo' | 'inbox' | 'code' | 'typography' | 'localization' | 'access' | 'analytics' | 'history'>('pages');
+  const [activeTab, setActiveTab] = useState<'pages' | 'branding' | 'widgets' | 'service_desk' | 'nav' | 'seo' | 'inbox' | 'code' | 'typography' | 'localization' | 'access' | 'analytics' | 'history'>('pages');
+  const [chatConfig, setChatConfig] = useState<SiteChatConfig>(DEFAULT_SITE_CHAT_CONFIG);
+  const [availableRoster, setAvailableRoster] = useState<{ aiAgents: any[]; humanMembers: any[]; teams: any[] }>({
+    aiAgents: [],
+    humanMembers: [],
+    teams: []
+  });
   const [viewport, setViewport] = useState<'desktop' | 'tablet' | 'mobile' | 'mobile_android'>('desktop');
   const [canvasZoom, setCanvasZoom] = useState<number>(100);
   const [selectedElement, setSelectedElement] = useState<InspectableElement>({ type: 'header' });
@@ -199,7 +209,7 @@ export const SiteBuilderPage: React.FC = () => {
     accentColor, logoUrl, headerTitle, footerText, headerLayout,
     pages, navItems, metaTitle, metaDescription, ogImageUrl, noIndex, canonicalUrl,
     fontFamily, borderRadius, fontScale, headScripts, bodyScripts, customCss,
-    navLinkStyle, themeBgMode, themeCardStyle, themeRadius, themeFont
+    navLinkStyle, themeBgMode, themeCardStyle, themeRadius, themeFont, chatConfig
   ]);
 
   const handleApplyPresetTheme = (preset: PresetTheme) => {
@@ -535,6 +545,24 @@ export const SiteBuilderPage: React.FC = () => {
           setDefaultLanguage(data.localizationConfig.defaultLanguage || 'en');
           setSupportedLanguages(data.localizationConfig.supportedLanguages || ['en', 'es', 'fr']);
           setAutoTranslate(!!data.localizationConfig.autoTranslate);
+        }
+
+        // Service Desk & Site Chat Config Resolution
+        if (data.chatConfig || (data.branding as any)?.chatConfig) {
+          setChatConfig({
+            ...DEFAULT_SITE_CHAT_CONFIG,
+            ...(data.chatConfig || (data.branding as any)?.chatConfig)
+          });
+        } else {
+          setChatConfig(DEFAULT_SITE_CHAT_CONFIG);
+        }
+
+        // Fetch Allocation Roster (AI Agents + Human Staff + Teams) for Service Desk routing
+        try {
+          const roster = await ServiceDeskService.getAllocationRoster();
+          if (roster) setAvailableRoster(roster);
+        } catch {
+          // ignore
         }
 
         // Fetch Workspace Modules for Form Embedding
@@ -1231,7 +1259,8 @@ export const SiteBuilderPage: React.FC = () => {
           defaultLanguage,
           supportedLanguages,
           autoTranslate
-        }
+        },
+        chatConfig
       };
 
 
@@ -1417,6 +1446,7 @@ export const SiteBuilderPage: React.FC = () => {
               { id: 'pages', label: 'Pages', icon: Layers },
               { id: 'branding', label: 'Branding', icon: Palette },
               { id: 'widgets', label: 'Layout Catalog', icon: LayoutGrid },
+              { id: 'service_desk', label: 'Service Desk & Chat', icon: Headset },
               { id: 'seo', label: 'SEO & Social', icon: Search },
               { id: 'inbox', label: 'Form Inbox', icon: Inbox },
               { id: 'code', label: 'Custom Code', icon: Code },
@@ -1482,6 +1512,7 @@ export const SiteBuilderPage: React.FC = () => {
                 {activeTab === 'pages' && <><Layers size={14} className="text-indigo-500" /> Site Pages</>}
                 {activeTab === 'branding' && <><Palette size={14} className="text-indigo-500" /> Branding & Theme</>}
                 {activeTab === 'widgets' && <><LayoutGrid size={14} className="text-indigo-500" /> Layout & Widgets</>}
+                {activeTab === 'service_desk' && <><Headset size={14} className="text-indigo-500" /> Service Desk & Chat</>}
                 {activeTab === 'nav' && <><Menu size={14} className="text-indigo-500" /> Header Navbar</>}
                 {activeTab === 'seo' && <><Search size={14} className="text-indigo-500" /> SEO & Social Sharing</>}
                 {activeTab === 'inbox' && <><Inbox size={14} className="text-indigo-500" /> Form Submissions & Inbox</>}
@@ -2110,6 +2141,256 @@ export const SiteBuilderPage: React.FC = () => {
                     onChange={e => setNoIndex(e.target.checked)}
                     className="h-4 w-4 rounded border-zinc-300 bg-white text-indigo-600 focus:ring-0 cursor-pointer"
                   />
+                </div>
+              </div>
+            )}
+
+            {/* TAB: SERVICE DESK & SITE CHAT CONFIGURATION */}
+            {activeTab === 'service_desk' && (
+              <div className="space-y-5">
+                <div className={`p-3.5 rounded-2xl border flex items-center justify-between ${isLight ? 'bg-indigo-50/60 border-indigo-200' : 'bg-indigo-950/20 border-indigo-500/30'}`}>
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                      <Headset size={16} />
+                    </div>
+                    <div>
+                      <h4 className={`text-xs font-bold ${isLight ? 'text-zinc-900' : 'text-white'}`}>Enable Site Service Desk Chat</h4>
+                      <p className={`text-[10px] ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>AI Bot + Live Human Operator omnichannel chat</p>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={chatConfig.enabled}
+                    onChange={e => setChatConfig(prev => ({ ...prev, enabled: e.target.checked }))}
+                    className="h-4 w-4 rounded border-zinc-300 text-indigo-600 focus:ring-0 cursor-pointer"
+                  />
+                </div>
+
+                {/* Display Mode & Launcher */}
+                <div className="space-y-3">
+                  <label className={`block text-[10px] font-bold uppercase tracking-wider ${isLight ? 'text-zinc-700' : 'text-zinc-400'}`}>
+                    Customer Widget Display Mode
+                  </label>
+                  <select
+                    value={chatConfig.displayStyle}
+                    onChange={e => setChatConfig(prev => ({ ...prev, displayStyle: e.target.value as any }))}
+                    className={`w-full px-3 py-2 border rounded-xl text-xs ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'}`}
+                  >
+                    <option value="both">Floating Site Bubble + Inline Page Widgets</option>
+                    <option value="floating_bubble">Floating Bottom Bubble Only</option>
+                    <option value="inline_only">Inline Embedded Page Widgets Only</option>
+                  </select>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1 ${isLight ? 'text-zinc-700' : 'text-zinc-400'}`}>
+                        Launcher Label
+                      </label>
+                      <input
+                        type="text"
+                        value={chatConfig.launcherLabel}
+                        onChange={e => setChatConfig(prev => ({ ...prev, launcherLabel: e.target.value }))}
+                        className={`w-full px-2.5 py-1.5 border rounded-xl text-xs ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'}`}
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1 ${isLight ? 'text-zinc-700' : 'text-zinc-400'}`}>
+                        Bubble Position
+                      </label>
+                      <select
+                        value={chatConfig.launcherPosition}
+                        onChange={e => setChatConfig(prev => ({ ...prev, launcherPosition: e.target.value as any }))}
+                        className={`w-full px-2.5 py-1.5 border rounded-xl text-xs ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'}`}
+                      >
+                        <option value="bottom_right">Bottom Right</option>
+                        <option value="bottom_left">Bottom Left</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Allocation & Routing Engine */}
+                <div className={`p-3.5 rounded-2xl border space-y-3 ${isLight ? 'bg-zinc-50 border-zinc-200' : 'bg-zinc-950 border-zinc-800'}`}>
+                  <div className="flex items-center justify-between">
+                    <span className={`text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${isLight ? 'text-zinc-900' : 'text-white'}`}>
+                      <Bot size={13} className="text-indigo-500" /> AI & Human Allocation Routing
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/workspace/settings/agent-builder')}
+                      className="text-[10px] font-bold text-indigo-500 hover:underline cursor-pointer"
+                    >
+                      Open Agent Builder →
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1 ${isLight ? 'text-zinc-700' : 'text-zinc-400'}`}>
+                      Allocation Strategy
+                    </label>
+                    <select
+                      value={chatConfig.allocationMode}
+                      onChange={e => setChatConfig(prev => ({ ...prev, allocationMode: e.target.value as any }))}
+                      className={`w-full px-3 py-2 border rounded-xl text-xs ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-900 border-zinc-800 text-white'}`}
+                    >
+                      <option value="AI_FIRST">AI Agent First (Escalate to Human on Request / Low Confidence)</option>
+                      <option value="HUMAN_FIRST">Human Queue First (Failover to AI Agent if Offline/Busy)</option>
+                      <option value="TRIAGE_AGENT">AI Triage Router (Classify Intent & Route to Specialist Team)</option>
+                      <option value="DIRECT_OWNER">Direct Account Owner (Customer 360 Party Owner + Digital Twin)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1 ${isLight ? 'text-zinc-700' : 'text-zinc-400'}`}>
+                      Primary AI Agent (Agent Builder)
+                    </label>
+                    <select
+                      value={chatConfig.primaryAgentId || ''}
+                      onChange={e => {
+                        const agent = availableRoster.aiAgents.find(a => a.id === e.target.value);
+                        setChatConfig(prev => ({
+                          ...prev,
+                          primaryAgentId: e.target.value || undefined,
+                          primaryAgentName: agent?.name || prev.primaryAgentName
+                        }));
+                      }}
+                      className={`w-full px-3 py-2 border rounded-xl text-xs ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-900 border-zinc-800 text-white'}`}
+                    >
+                      <option value="">Auto-Select Default Deployed Site Concierge Agent</option>
+                      {availableRoster.aiAgents.map(a => (
+                        <option key={a.id} value={a.id}>
+                          🤖 {a.name} ({a.role || 'AI Specialist'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1 ${isLight ? 'text-zinc-700' : 'text-zinc-400'}`}>
+                      Fallback Human Team / Queue
+                    </label>
+                    <select
+                      value={chatConfig.fallbackTeamId || ''}
+                      onChange={e => {
+                        const team = availableRoster.teams.find(t => t.id === e.target.value);
+                        setChatConfig(prev => ({
+                          ...prev,
+                          fallbackTeamId: e.target.value || undefined,
+                          fallbackTeamName: team?.name || prev.fallbackTeamName
+                        }));
+                      }}
+                      className={`w-full px-3 py-2 border rounded-xl text-xs ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-900 border-zinc-800 text-white'}`}
+                    >
+                      <option value="">Customer Service & Support Queue (Round-Robin)</option>
+                      {availableRoster.teams.map(t => (
+                        <option key={t.id} value={t.id}>
+                          👥 {t.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1 ${isLight ? 'text-zinc-700' : 'text-zinc-400'}`}>
+                        AI Confidence Gate ({Math.round(chatConfig.confidenceThreshold * 100)}%)
+                      </label>
+                      <input
+                        type="range"
+                        min="0.4"
+                        max="0.95"
+                        step="0.05"
+                        value={chatConfig.confidenceThreshold}
+                        onChange={e => setChatConfig(prev => ({ ...prev, confidenceThreshold: parseFloat(e.target.value) }))}
+                        className="w-full accent-indigo-600 cursor-pointer"
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1 ${isLight ? 'text-zinc-700' : 'text-zinc-400'}`}>
+                        SLA Target (Seconds)
+                      </label>
+                      <input
+                        type="number"
+                        min={30}
+                        max={3600}
+                        value={chatConfig.slaTargetSeconds}
+                        onChange={e => setChatConfig(prev => ({ ...prev, slaTargetSeconds: Number(e.target.value) || 120 }))}
+                        className={`w-full px-2.5 py-1 border rounded-xl text-xs ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-900 border-zinc-800 text-white'}`}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Grounded Task Capabilities */}
+                <div className={`p-3.5 rounded-2xl border space-y-2.5 ${isLight ? 'bg-zinc-50 border-zinc-200' : 'bg-zinc-950 border-zinc-800'}`}>
+                  <span className={`text-[11px] font-bold uppercase tracking-wider block ${isLight ? 'text-zinc-900' : 'text-white'}`}>
+                    Grounded AI & Task Execution Capabilities
+                  </span>
+                  {[
+                    { key: 'allowKnowledgeBase', label: 'Knowledge Base RAG & Citations' },
+                    { key: 'allowRecordLookup', label: 'Live Record & Order Status Lookup' },
+                    { key: 'allowRecordCreation', label: 'Create Support Tickets & Leads' },
+                    { key: 'allowAppointmentBooking', label: 'Interactive Appointment Slot Booking' },
+                    { key: 'allowFormPush', label: 'Push Inline Intake Forms in Chat' },
+                    { key: 'allowInvoicePayment', label: 'Inline Invoice Balance & Checkout Cards' },
+                    { key: 'allowHumanEscalation', label: '1-Click "Talk to a Human" Handoff' }
+                  ].map(cap => (
+                    <label key={cap.key} className="flex items-center justify-between text-xs cursor-pointer py-0.5">
+                      <span className={isLight ? 'text-zinc-700' : 'text-zinc-300'}>{cap.label}</span>
+                      <input
+                        type="checkbox"
+                        checked={(chatConfig.capabilities as any)[cap.key] !== false}
+                        onChange={e =>
+                          setChatConfig(prev => ({
+                            ...prev,
+                            capabilities: {
+                              ...prev.capabilities,
+                              [cap.key]: e.target.checked
+                            }
+                          }))
+                        }
+                        className="h-3.5 w-3.5 rounded border-zinc-300 text-indigo-600 focus:ring-0 cursor-pointer"
+                      />
+                    </label>
+                  ))}
+                </div>
+
+                {/* Pre-Chat Capture & Welcome Message */}
+                <div className="space-y-3">
+                  <div>
+                    <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1 ${isLight ? 'text-zinc-700' : 'text-zinc-400'}`}>
+                      Pre-Chat Visitor Identity Capture
+                    </label>
+                    <select
+                      value={chatConfig.preChatCapture}
+                      onChange={e => setChatConfig(prev => ({ ...prev, preChatCapture: e.target.value as any }))}
+                      className={`w-full px-3 py-2 border rounded-xl text-xs ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'}`}
+                    >
+                      <option value="optional">Optional (Instant Chat + Optional Details Banner)</option>
+                      <option value="required">Required (Collect Name & Email Before Chatting)</option>
+                      <option value="none">Anonymous (No Identity Prompt)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1 ${isLight ? 'text-zinc-700' : 'text-zinc-400'}`}>
+                      Welcome Greeting Message
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={chatConfig.welcomeMessage}
+                      onChange={e => setChatConfig(prev => ({ ...prev, welcomeMessage: e.target.value }))}
+                      className={`w-full px-3 py-2 border rounded-xl text-xs resize-none ${isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-950 border-zinc-800 text-white'}`}
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => navigate('/workspace/apps/service-desk')}
+                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                  >
+                    <Headset size={14} /> Open Service Desk Operator Console
+                  </button>
                 </div>
               </div>
             )}

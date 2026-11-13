@@ -11,21 +11,21 @@ export interface PlatformModule {
 export const PLATFORM_MODULES: PlatformModule[] = [
   {
     id: 'people-organisations',
-    name: 'People & Organisations',
+    name: 'Directory',
     slug: 'people-organisations',
     iconName: 'Users',
     isCore: true,
-    description: 'Manage core entity taxonomies and global relationship rules.',
-    path: '/workspace/platform/people-organisations'
+    description: 'Manage core entity taxonomies, people, organisations, and global relationship rules.',
+    path: '/workspace/apps/directory'
   },
   {
     id: 'work-distribution',
-    name: 'Work Distribution',
+    name: 'Triage',
     slug: 'work-distribution',
-    iconName: 'Inbox',
+    iconName: 'ListFilter',
     isCore: true,
-    description: 'Configure routing rules to automatically intake and distribute work across modules.',
-    path: '/workspace/platform/work-distribution'
+    description: 'Configure routing rules to automatically intake, prioritize, and distribute work across modules.',
+    path: '/workspace/apps/triage'
   },
   {
     id: 'knowledge-base',

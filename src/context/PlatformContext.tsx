@@ -8,7 +8,7 @@ import { systemDefaultMenuConfig } from '../config/menuDefaults';
 import { toast } from 'sonner';
 import { slugify } from '../lib/utils';
 import { EmailNotificationToast } from '../components/Apps/Inbox/EmailNotificationToast';
-import { playEmailNotificationSound } from '../lib/audioNotification';
+import { playChimeSound, playEmailNotificationSound } from '../lib/audioNotification';
 
 export interface NotificationItem {
   id: string;
@@ -73,6 +73,14 @@ interface PlatformContextType {
   setIsQuickCalculatorOpen: (open: boolean) => void;
   isCalculatorLaunchModalOpen: boolean;
   setIsCalculatorLaunchModalOpen: (open: boolean) => void;
+  isServiceDeskLaunchModalOpen: boolean;
+  setIsServiceDeskLaunchModalOpen: (open: boolean) => void;
+  isServiceDeskFacebookDocked: boolean;
+  setIsServiceDeskFacebookDocked: (docked: boolean) => void;
+  isServiceDeskSideDocked: boolean;
+  setIsServiceDeskSideDocked: (docked: boolean) => void;
+  dockedServiceDeskWidth: number;
+  setDockedServiceDeskWidth: (width: number) => void;
   breadcrumbOverrides: Record<string, string>;
   setBreadcrumbOverride: (id: string, label: string) => void;
   members: TenantMember[];
@@ -99,7 +107,10 @@ interface PlatformContextType {
   isOffline: boolean;
 }
 
-export const PlatformContext = createContext<PlatformContextType | undefined>(undefined);
+const PLATFORM_CONTEXT_KEY = '__aurora_platform_context__';
+export const PlatformContext: React.Context<PlatformContextType | undefined> =
+  (globalThis as any)[PLATFORM_CONTEXT_KEY] ??
+  ((globalThis as any)[PLATFORM_CONTEXT_KEY] = createContext<PlatformContextType | undefined>(undefined));
 
 const fallbackContext: PlatformContextType = {
   user: null,
@@ -227,6 +238,33 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
     setDockedCalculatorWidthState(width);
     localStorage.setItem('aurora_calculator_docked_width', String(width));
   }, []);
+
+  const [isServiceDeskLaunchModalOpen, setIsServiceDeskLaunchModalOpen] = useState(false);
+  const [isServiceDeskFacebookDocked, setIsServiceDeskFacebookDockedState] = useState<boolean>(() => {
+    return localStorage.getItem('aurora_service_desk_facebook_docked') === 'true';
+  });
+  const [isServiceDeskSideDocked, setIsServiceDeskSideDockedState] = useState<boolean>(() => {
+    return localStorage.getItem('aurora_service_desk_side_docked') === 'true';
+  });
+  const [dockedServiceDeskWidth, setDockedServiceDeskWidthState] = useState<number>(() => {
+    const saved = localStorage.getItem('aurora_service_desk_docked_width');
+    return saved ? parseInt(saved, 10) : 420;
+  });
+
+  const setIsServiceDeskFacebookDocked = useCallback((docked: boolean) => {
+    setIsServiceDeskFacebookDockedState(docked);
+    localStorage.setItem('aurora_service_desk_facebook_docked', String(docked));
+  }, []);
+
+  const setIsServiceDeskSideDocked = useCallback((docked: boolean) => {
+    setIsServiceDeskSideDockedState(docked);
+    localStorage.setItem('aurora_service_desk_side_docked', String(docked));
+  }, []);
+
+  const setDockedServiceDeskWidth = useCallback((width: number) => {
+    setDockedServiceDeskWidthState(width);
+    localStorage.setItem('aurora_service_desk_docked_width', String(width));
+  }, []);
   const [breadcrumbOverrides, setBreadcrumbOverrides] = useState<Record<string, string>>({});
   const [isBuilderFullscreen, setIsBuilderFullscreen] = useState(false);
 
@@ -265,6 +303,15 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
   // Global Notifications State (User & Tenant Scoped)
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [runningTasks, setRunningTasks] = useState<RunningTask[]>([]);
+
+  const notificationsRef = useRef<NotificationItem[]>(notifications);
+  notificationsRef.current = notifications;
+  const runningTasksRef = useRef<RunningTask[]>(runningTasks);
+  runningTasksRef.current = runningTasks;
+  const userRef = useRef<User | null>(user);
+  userRef.current = user;
+  const tenantRef = useRef<Tenant | null>(tenant);
+  tenantRef.current = tenant;
 
   // Sync notifications when user or tenant changes
   useEffect(() => {
@@ -385,13 +432,17 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
     const onTaskCompleted = (data: any) => {
       const taskId = data.taskId || data.id;
       const taskName = data.taskName || 'Scheduled Task';
-      const sessionId = data.sessionId;
       const isFailed = data.status === 'failed';
       const resultText = data.result || (isFailed ? 'Task execution failed' : 'Execution completed successfully');
 
+      // Resolve sessionId from event payload, running tasks, or existing notifications
+      const notifId = `sched_task_${taskId}`;
+      const existingNotif = notificationsRef.current.find(n => n.id === notifId);
+      const existingRunning = runningTasksRef.current.find(t => t.taskId === taskId);
+      const resolvedSessionId = data.sessionId || existingRunning?.sessionId || existingNotif?.sessionId;
+
       setRunningTasks(prev => prev.filter(t => t.taskId !== taskId));
 
-      const notifId = `sched_task_${taskId}`;
       setNotifications(prev => {
         const existing = prev.find(n => n.id === notifId);
         const updated: NotificationItem = {
@@ -405,12 +456,46 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
           status: isFailed ? 'failed' : 'completed',
           taskId,
           taskName,
-          sessionId: sessionId || existing?.sessionId,
+          sessionId: resolvedSessionId || existing?.sessionId,
           result: resultText,
           priority: isFailed ? 'high' : 'medium'
         };
         return [updated, ...prev.filter(n => n.id !== notifId)];
       });
+
+      // Optional sound chime if enabled in tenant settings
+      const soundConfig = tenantRef.current?.workspaceSettings?.notifications?.sounds;
+      if (soundConfig?.enabled) {
+        playChimeSound(soundConfig.defaultChime || 'aurora', soundConfig.volume ?? 0.22);
+      }
+
+      // Display a persistent toast that requires manual dismissal
+      const toastTitle = isFailed ? `Scheduled Task Failed: ${taskName}` : `Scheduled Task Completed: ${taskName}`;
+      const toastDescription = `Task "${taskName}" finished: ${resultText}`;
+
+      const toastOptions = {
+        description: toastDescription,
+        duration: Infinity,
+        closeButton: true,
+        cancel: {
+          label: 'Dismiss',
+          onClick: () => {}
+        },
+        ...(resolvedSessionId ? {
+          action: {
+            label: 'View in Chat',
+            onClick: () => {
+              window.location.href = `/workspace/aurora-vibe/${resolvedSessionId}`;
+            }
+          }
+        } : {})
+      };
+
+      if (isFailed) {
+        toast.error(toastTitle, toastOptions);
+      } else {
+        toast.success(toastTitle, toastOptions);
+      }
     };
 
     const handleRecordAssignment = (data: any) => {
@@ -539,14 +624,6 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       socket.off('record_shared', onRecordShared);
     };
   }, [tenant?.id, session?.access_token]);
-
-  const userRef = useRef<User | null>(null);
-  const tenantRef = useRef<Tenant | null>(null);
-
-  useEffect(() => {
-    userRef.current = user;
-    tenantRef.current = tenant;
-  }, [user, tenant]);
 
   const setBreadcrumbOverride = useCallback((id: string, label: string) => {
     setBreadcrumbOverrides(prev => ({ ...prev, [id]: label }));
@@ -1138,6 +1215,14 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
     setIsQuickCalculatorOpen,
     isCalculatorLaunchModalOpen,
     setIsCalculatorLaunchModalOpen,
+    isServiceDeskLaunchModalOpen,
+    setIsServiceDeskLaunchModalOpen,
+    isServiceDeskFacebookDocked,
+    setIsServiceDeskFacebookDocked,
+    isServiceDeskSideDocked,
+    setIsServiceDeskSideDocked,
+    dockedServiceDeskWidth,
+    setDockedServiceDeskWidth,
     breadcrumbOverrides,
     setBreadcrumbOverride,
     members,
@@ -1167,7 +1252,10 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
     modules, modulesLoading, refreshModules, menuConfig, billingUsage, billingLoading,
     refreshBilling, isAIAssistantOpen, isChatOpen, isAppLauncherOpen, isNotificationsOpen,
     isRecyclingBinOpen, isCalculatorDocked, setIsCalculatorDocked, dockedCalculatorWidth, setDockedCalculatorWidth,
-    isQuickCalculatorOpen, setIsQuickCalculatorOpen, isCalculatorLaunchModalOpen, setIsCalculatorLaunchModalOpen, breadcrumbOverrides, setBreadcrumbOverride, members, membersLoading,
+    isQuickCalculatorOpen, setIsQuickCalculatorOpen, isCalculatorLaunchModalOpen, setIsCalculatorLaunchModalOpen,
+    isServiceDeskLaunchModalOpen, setIsServiceDeskLaunchModalOpen, isServiceDeskFacebookDocked, setIsServiceDeskFacebookDocked,
+    isServiceDeskSideDocked, setIsServiceDeskSideDocked, dockedServiceDeskWidth, setDockedServiceDeskWidth,
+    breadcrumbOverrides, setBreadcrumbOverride, members, membersLoading,
     refreshMembers, teams, teamsLoading, refreshTeams, notifications, runningTasks,
     addNotification, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification,
     clearNotifications, unreadCount, inboxUnreadCount, refreshInboxUnreadCount,

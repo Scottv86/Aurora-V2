@@ -407,6 +407,7 @@ export const ActivityEventCard: React.FC<ActivityEventCardProps> = ({
           <div className="flex items-center gap-1.5 min-w-0">
             {event.actor?.avatarUrl ? (
               <UserAvatarWithPresence
+                userId={(event.actor as any)?.id || (event.actor as any)?.userId}
                 avatarUrl={event.actor.avatarUrl}
                 name={event.actor.name}
                 status="AVAILABLE"

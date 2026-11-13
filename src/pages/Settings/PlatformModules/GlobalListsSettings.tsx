@@ -236,7 +236,7 @@ export const evaluateListFormula = (
 export const GlobalListsSettings = () => {
   const { tenant, members = [], setIsBuilderFullscreen } = usePlatform();
 
-  const { lists, loading: listsLoading, createListWithItems, saveFullList, deleteList } = useGlobalLists();
+  const { lists, loading: listsLoading, createListWithItems, saveFullList, deleteList, refetch: refetchLists } = useGlobalLists();
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showHistory, setShowHistory] = useState(false);
@@ -492,6 +492,11 @@ export const GlobalListsSettings = () => {
 
   const handleDeleteColumn = () => {
     if (!confirmDeleteColumnId) return;
+    if (activeList?.is_system) {
+      toast.error('Columns cannot be deleted from system lookup lists because they are required by core platform features.');
+      setConfirmDeleteColumnId(null);
+      return;
+    }
     if (localColumns.length <= 1) {
       toast.error('Lists require at least one column');
       setConfirmDeleteColumnId(null);
@@ -878,6 +883,11 @@ export const GlobalListsSettings = () => {
                 <span className="px-2 py-0.5 text-[9px] font-bold uppercase rounded-md bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 shrink-0">
                   {draftList?.isNewDraft ? 'Draft List' : 'List Studio'}
                 </span>
+                {activeList?.is_system && (
+                  <span className="px-2 py-0.5 text-[9px] font-bold uppercase rounded-md bg-amber-500/10 text-amber-500 border border-amber-500/20 shrink-0">
+                    System Protected
+                  </span>
+                )}
                 <span className="px-2 py-0.5 text-[9px] font-bold rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700 shrink-0">
                   {localItems.length} Records
                 </span>
@@ -991,8 +1001,8 @@ export const GlobalListsSettings = () => {
               <span>{isSaving ? 'Saving...' : draftList?.isNewDraft ? 'Save List' : isDirty ? 'Save Changes' : 'Saved'}</span>
             </button>
 
-            {/* Delete List (only if not a brand new unsaved draft) */}
-            {!draftList?.isNewDraft && selectedListId !== 'draft' && (
+            {/* Delete List (only for custom lists, not system lookups or unsaved drafts) */}
+            {!draftList?.isNewDraft && selectedListId !== 'draft' && !activeList?.is_system && (
               <button
                 onClick={() => setConfirmDeleteListId(selectedListId)}
                 className="p-2 text-zinc-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all cursor-pointer"
@@ -1061,6 +1071,7 @@ export const GlobalListsSettings = () => {
                                 setConfirmRenumberCol({ colId: col.id, prefix, padding, start, colName: col.name });
                               }}
                               disabled={showHistory} 
+                              isSystemList={Boolean(activeList?.is_system)}
                             />
                           </th>
                         ))}
@@ -1173,13 +1184,20 @@ export const GlobalListsSettings = () => {
             <ContextMenuPortal 
               {...contextMenu} 
               onClose={() => setContextMenu(null)}
+              isSystemList={Boolean(activeList?.is_system)}
               actions={{
                 insertRowAbove: () => handleAddRow(contextMenu.rowIndex),
                 insertRowBelow: () => handleAddRow(contextMenu.rowIndex !== undefined ? contextMenu.rowIndex + 1 : undefined),
                 insertColLeft: () => handleAddColumn(contextMenu.colIndex),
                 insertColRight: () => handleAddColumn(contextMenu.colIndex !== undefined ? contextMenu.colIndex + 1 : undefined),
                 removeRow: () => { if (contextMenu.itemId) setConfirmRetireItemId(contextMenu.itemId); },
-                removeCol: () => { if (contextMenu.colId) setConfirmDeleteColumnId(contextMenu.colId); }
+                removeCol: () => {
+                  if (activeList?.is_system) {
+                    toast.error('Columns cannot be deleted from system lookup lists because they are required by core platform features.');
+                    return;
+                  }
+                  if (contextMenu.colId) setConfirmDeleteColumnId(contextMenu.colId);
+                }
               }}
             />
           )}
@@ -1279,6 +1297,15 @@ export const GlobalListsSettings = () => {
         actions={
           <div className="flex items-center gap-2">
             <Button
+              onClick={() => refetchLists()}
+              variant="secondary"
+              className="flex items-center gap-2 font-semibold text-xs px-3 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 transition-all cursor-pointer bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+              title="Refresh lists"
+            >
+              <RefreshCw size={14} className={listsLoading ? "animate-spin text-indigo-500" : "text-zinc-400"} />
+              <span className="hidden sm:inline">Refresh</span>
+            </Button>
+            <Button
               onClick={() => {
                 setImportModalTargetList(null);
                 setIsImportModalOpen(true);
@@ -1368,17 +1395,29 @@ export const GlobalListsSettings = () => {
                       </div>
 
                       <div className="flex items-center gap-2">
+                        {list.is_system ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border bg-amber-500/10 text-amber-500 border-amber-500/20">
+                            System
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border bg-zinc-800 text-zinc-400 border-zinc-700">
+                            Custom
+                          </span>
+                        )}
+
                         <span className="text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border bg-indigo-500/10 text-indigo-500 border-indigo-500/20">
                           {list.columns?.length || 1} Columns
                         </span>
 
-                        <button
-                          onClick={(e) => handleDeleteClick(e, list)}
-                          className="p-2 rounded-xl bg-zinc-100 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800 dark:hover:bg-red-500/20 transition-colors duration-150 opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
-                          title="Delete List"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        {!list.is_system && (
+                          <button
+                            onClick={(e) => handleDeleteClick(e, list)}
+                            className="p-2 rounded-xl bg-zinc-100 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800 dark:hover:bg-red-500/20 transition-colors duration-150 opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
+                            title="Delete List"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -1442,7 +1481,7 @@ export const GlobalListsSettings = () => {
   );
 };
 
-const ContextMenuPortal = ({ x, y, type, onClose, actions }: any) => {
+const ContextMenuPortal = ({ x, y, type, onClose, actions, isSystemList }: any) => {
   return createPortal(
     <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="fixed z-[9999] bg-zinc-900 border border-zinc-800 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden p-1.5 w-56 backdrop-blur-xl" style={{ left: x, top: y }}>
       <div className="flex flex-col">
@@ -1456,7 +1495,9 @@ const ContextMenuPortal = ({ x, y, type, onClose, actions }: any) => {
             <div className="px-3 py-1.5 text-[9px] font-black uppercase text-zinc-500 tracking-widest border-b border-zinc-800 my-1">Column Actions</div>
             <button onClick={() => { actions.insertColLeft(); onClose(); }} className="flex items-center gap-3 px-3 py-2 hover:bg-indigo-600 text-zinc-300 hover:text-white rounded-xl text-xs font-bold transition-all"><PlusCircle size={14} className="text-emerald-400" /> Insert Column Left</button>
             <button onClick={() => { actions.insertColRight(); onClose(); }} className="flex items-center gap-3 px-3 py-2 hover:bg-indigo-600 text-zinc-300 hover:text-white rounded-xl text-xs font-bold transition-all"><PlusCircle size={14} className="text-emerald-400" /> Insert Column Right</button>
-            <button onClick={() => { actions.removeCol(); onClose(); }} className="flex items-center gap-3 px-3 py-2 hover:bg-rose-600 text-rose-500 hover:text-white rounded-xl text-xs font-bold transition-all"><Trash2 size={14} /> Remove Column</button>
+            {!isSystemList && (
+              <button onClick={() => { actions.removeCol(); onClose(); }} className="flex items-center gap-3 px-3 py-2 hover:bg-rose-600 text-rose-500 hover:text-white rounded-xl text-xs font-bold transition-all"><Trash2 size={14} /> Remove Column</button>
+            )}
           </>
         ) : null}
       </div>
@@ -1479,7 +1520,8 @@ const ColumnHeader = ({
   onRegenerateAllUUID,
   onBackfillAutoNumber,
   onRenumberAutoNumber, 
-  disabled 
+  disabled,
+  isSystemList
 }: any) => {
   const [isEditingName, setIsEditingName] = useState(false);
   const [localName, setLocalName] = useState(column.name);
@@ -1599,10 +1641,19 @@ const ColumnHeader = ({
         {isMenuOpen && (
           <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} className="absolute left-0 top-full mt-2 w-80 max-h-[85vh] overflow-y-auto custom-scrollbar bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-800 z-[100] p-4 backdrop-blur-xl space-y-4">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-              <span className="text-xs font-semibold text-zinc-400">Field Settings</span>
-              <button onClick={() => { onToggleMenu(false); onDelete(); }} className="text-zinc-400 hover:text-rose-400 transition-colors p-1 cursor-pointer">
-                <Trash2 size={14} />
-              </button>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-zinc-400">Field Settings</span>
+                {isSystemList && (
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                    System Required
+                  </span>
+                )}
+              </div>
+              {!isSystemList && (
+                <button onClick={() => { onToggleMenu(false); onDelete(); }} className="text-zinc-400 hover:text-rose-400 transition-colors p-1 cursor-pointer" title="Delete Column">
+                  <Trash2 size={14} />
+                </button>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-2">
               <button onClick={() => { onInsertLeft(); onToggleMenu(false); }} className="flex items-center gap-2 px-3 py-2 bg-zinc-800 hover:bg-indigo-600 text-zinc-300 hover:text-white rounded-lg text-xs font-medium transition-all cursor-pointer">

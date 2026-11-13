@@ -22,7 +22,23 @@ export interface KpiBuilderProps {
 const AVAILABLE_ICONS = [
   'Target', 'TrendingUp', 'TrendingDown', 'DollarSign', 'Percent', 'Users', 
   'Activity', 'CheckCircle2', 'Flame', 'Zap', 'BarChart2', 'PieChart', 
-  'Clock', 'Shield', 'Layers', 'Boxes', 'ShoppingBag', 'FileText'
+  'Clock', 'Shield', 'Layers', 'Boxes', 'ShoppingBag', 'FileText', 'Headset'
+];
+
+const SERVICE_DESK_KPI_FIELDS = [
+  { id: 'status', label: 'Session Status (BOT_ACTIVE / QUEUED_FOR_HUMAN / HUMAN_ACTIVE / RESOLVED)', type: 'text' },
+  { id: 'channelType', label: 'Channel Type (SITE_CHAT / VOICE_CALL)', type: 'text' },
+  { id: 'wrapUpOutcome', label: 'Wrap-Up Outcome (Disposition Code)', type: 'text' },
+  { id: 'wrapUpTopic', label: 'Primary Interaction Topic', type: 'text' },
+  { id: 'wrapUpSubtopic', label: 'Sub-Topic', type: 'text' },
+  { id: 'wrapUpSentiment', label: 'Customer Sentiment (POSITIVE / NEUTRAL / NEGATIVE)', type: 'text' },
+  { id: 'firstContactResolution', label: 'First Contact Resolution (true / false)', type: 'boolean' },
+  { id: 'allocatedAssigneeType', label: 'Assignee Type (AI_AGENT / HUMAN_USER)', type: 'text' },
+  { id: 'wrappedUpByName', label: 'Wrapped Up By (Operator / Agent)', type: 'text' },
+  { id: 'slaStatus', label: 'SLA Status (ON_TRACK / BREACHED)', type: 'text' },
+  { id: 'handleDurationSeconds', label: 'Handle Duration (Seconds)', type: 'number' },
+  { id: 'acwDurationSeconds', label: 'Wrap-Up / ACW Duration (Seconds)', type: 'number' },
+  { id: 'csatScore', label: 'CSAT Score (1-5)', type: 'number' }
 ];
 
 export const KpiBuilder: React.FC<KpiBuilderProps> = ({
@@ -153,7 +169,12 @@ export const KpiBuilder: React.FC<KpiBuilderProps> = ({
       runDraftEvaluation();
     }, 300);
     return () => clearTimeout(timer);
-  }, [name, format, currencyCode, decimalPrecision, targetValue, aggregateType, aggregateField, timeHorizon, thresholds, filters]);
+  }, [name, sourceType, moduleId, format, currencyCode, decimalPrecision, targetValue, aggregateType, aggregateField, timeHorizon, thresholds, filters]);
+
+  const activeFilterFields = useMemo(() => {
+    if (sourceType === 'service_desk') return SERVICE_DESK_KPI_FIELDS;
+    return selectedModule?.fields || [];
+  }, [sourceType, selectedModule]);
 
   // Mark dirty
   useEffect(() => {
@@ -166,7 +187,7 @@ export const KpiBuilder: React.FC<KpiBuilderProps> = ({
       ...filters,
       {
         id: `f_${Date.now()}`,
-        fieldId: selectedModule?.fields?.[0]?.id || 'status',
+        fieldId: activeFilterFields?.[0]?.id || 'status',
         operator: 'equals',
         value: ''
       }
@@ -329,9 +350,10 @@ export const KpiBuilder: React.FC<KpiBuilderProps> = ({
                     <label className="block text-xs font-bold text-zinc-300 uppercase tracking-wider mb-2">
                       Metric Source Type
                     </label>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                       {[
                         { id: 'module_record', label: 'Module Records', desc: 'Aggregate data from standard or custom objects', icon: Layers },
+                        { id: 'service_desk', label: 'Service Desk & Wrap-Ups', desc: 'Outcomes, topics, FCR, handle time & CSAT', icon: (LucideIcons as any).Headset || Layers },
                         { id: 'saved_query', label: 'Saved Query', desc: 'Virtual dataset from Query Builder', icon: Database },
                         { id: 'formula', label: 'Custom Formula', desc: 'Math across multiple metrics', icon: Code }
                       ].map(st => {
@@ -359,22 +381,31 @@ export const KpiBuilder: React.FC<KpiBuilderProps> = ({
                     </div>
                   </div>
 
-                  {/* Module & Field Selection */}
-                  {sourceType === 'module_record' && (
+                  {/* Module / Service Desk & Field Selection */}
+                  {(sourceType === 'module_record' || sourceType === 'service_desk') && (
                     <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/40 space-y-4">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Target Module</label>
-                          <select
-                            value={moduleId}
-                            onChange={e => setModuleId(e.target.value)}
-                            className="w-full px-3 py-2 text-xs rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-100 focus:outline-none focus:border-indigo-500"
-                          >
-                            {availableModules.map((m: any) => (
-                              <option key={m.id} value={m.id}>{m.name}</option>
-                            ))}
-                          </select>
-                        </div>
+                        {sourceType === 'module_record' ? (
+                          <div>
+                            <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Target Module</label>
+                            <select
+                              value={moduleId}
+                              onChange={e => setModuleId(e.target.value)}
+                              className="w-full px-3 py-2 text-xs rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-100 focus:outline-none focus:border-indigo-500"
+                            >
+                              {availableModules.map((m: any) => (
+                                <option key={m.id} value={m.id}>{m.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : (
+                          <div>
+                            <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Target Table</label>
+                            <div className="w-full px-3 py-2 text-xs rounded-lg bg-zinc-900/80 border border-zinc-800 text-indigo-300 font-medium">
+                              Service Desk Sessions & Wrap-Up Dispositions
+                            </div>
+                          </div>
+                        )}
 
                         <div>
                           <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Aggregation Operation</label>
@@ -383,9 +414,9 @@ export const KpiBuilder: React.FC<KpiBuilderProps> = ({
                             onChange={e => setAggregateType(e.target.value as any)}
                             className="w-full px-3 py-2 text-xs rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-100 focus:outline-none focus:border-indigo-500"
                           >
-                            <option value="count">COUNT (Total Records)</option>
-                            <option value="sum">SUM (Total Amount / Value)</option>
-                            <option value="avg">AVERAGE (Mean)</option>
+                            <option value="count">COUNT (Total Interactions / Records)</option>
+                            <option value="sum">SUM (Total Amount / Duration)</option>
+                            <option value="avg">AVERAGE (Mean CSAT / Handle Time)</option>
                             <option value="min">MIN (Lowest Value)</option>
                             <option value="max">MAX (Highest Value)</option>
                             <option value="median">MEDIAN</option>
@@ -402,7 +433,7 @@ export const KpiBuilder: React.FC<KpiBuilderProps> = ({
                             className="w-full px-3 py-2 text-xs rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-100 focus:outline-none focus:border-indigo-500"
                           >
                             <option value="">Select numeric field...</option>
-                            {selectedModule?.fields?.map((f: any) => (
+                            {activeFilterFields.map((f: any) => (
                               <option key={f.id} value={f.id}>{f.label || f.name} ({f.type})</option>
                             ))}
                           </select>
@@ -445,7 +476,7 @@ export const KpiBuilder: React.FC<KpiBuilderProps> = ({
 
                     {filters.length === 0 ? (
                       <div className="p-4 rounded-xl border border-dashed border-zinc-800 text-center text-xs text-zinc-500">
-                        No filters applied. Metric will calculate across all records in this module.
+                        No filters applied. Metric will calculate across all matching interactions or records.
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -454,9 +485,9 @@ export const KpiBuilder: React.FC<KpiBuilderProps> = ({
                             <select
                               value={filter.fieldId}
                               onChange={e => handleUpdateFilter(filter.id, { fieldId: e.target.value })}
-                              className="px-2.5 py-1.5 text-xs rounded bg-zinc-800 border border-zinc-700 text-zinc-200"
+                              className="px-2.5 py-1.5 text-xs rounded bg-zinc-800 border border-zinc-700 text-zinc-200 max-w-[220px]"
                             >
-                              {selectedModule?.fields?.map((f: any) => (
+                              {activeFilterFields.map((f: any) => (
                                 <option key={f.id} value={f.id}>{f.label || f.name}</option>
                               ))}
                             </select>

@@ -98,7 +98,7 @@ export const PeopleOrgDetail = () => {
       const data = await res.json();
       if (!res.ok) {
         toast.error('Failed to fetch record');
-        navigate('/workspace/platform/people-organisations');
+        navigate('/workspace/apps/directory');
             } else {
         setParty(data);
         setFormData({
@@ -188,7 +188,7 @@ export const PeopleOrgDetail = () => {
         toast.error(data.error || 'Delete failed');
       } else {
         toast.success('Record deleted');
-        navigate('/workspace/platform/people-organisations');
+        navigate('/workspace/apps/directory');
       }
     } catch (err) {
       toast.error('Connection error');
@@ -513,7 +513,7 @@ export const PeopleOrgDetail = () => {
                                      {rel.ownershipPercentage}% Ownership
                                    </Badge>
                                  )}
-                                 <Button variant="ghost" size="sm" className="ml-2" onClick={() => navigate(`/workspace/platform/people-organisations/${other.id}`)}>
+                                 <Button variant="ghost" size="sm" className="ml-2" onClick={() => navigate(`/workspace/apps/directory/${other.id}`)}>
                                    View Details
                                  </Button>
                               </div>

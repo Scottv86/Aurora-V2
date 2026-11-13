@@ -16,7 +16,11 @@ import {
   Trash2,
   ShieldCheck,
   StickyNote,
-  Calculator
+  Calculator,
+  Plane,
+  Clock,
+  FileText,
+  Briefcase
 } from 'lucide-react';
 import { QuickCalculatorModal } from '../Calculator/QuickCalculatorModal';
 import { usePlatform } from '../../hooks/usePlatform';
@@ -26,6 +30,7 @@ import { cn } from '../../lib/utils';
 import { Environment } from '../../types/platform';
 import { LicenseGate } from '../Auth/LicenseGate';
 import { useDigitalTwin } from '../../context/DigitalTwinContext';
+import { useServiceDesk } from '../../context/ServiceDeskContext';
 import { DigitalTwinSettingsModal } from '../Twin/DigitalTwinSettingsModal';
 import { MorningHandoverModal } from '../Twin/MorningHandoverModal';
 import { AccountModal } from '../Settings/AccountModal';
@@ -52,6 +57,7 @@ export const Navbar = () => {
     isQuickCalculatorOpen,
     setIsQuickCalculatorOpen,
     setIsCalculatorLaunchModalOpen,
+    setIsServiceDeskLaunchModalOpen,
     unreadCount = 0,
     runningTasks = []
   } = usePlatform();
@@ -68,6 +74,13 @@ export const Navbar = () => {
     setIsHandoverOpen, 
     drafts 
   } = useDigitalTwin();
+  const {
+    isQueueActive,
+    isQueuePaused,
+    toggleQueuePaused,
+    activeVoiceCall,
+    activeWrapUpSessionId
+  } = useServiceDesk();
   const pendingDraftsCount = drafts.filter(d => d.status === 'PENDING').length;
   const location = useLocation();
   const navigate = useNavigate();
@@ -79,9 +92,16 @@ export const Navbar = () => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showEnvMenu, setShowEnvMenu] = useState(false);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [accountModalInitialTab, setAccountModalInitialTab] = useState<string>('hr-overview');
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const envMenuRef = useRef<HTMLDivElement>(null);
+
+  const openAccountWithTab = (tab: string) => {
+    setAccountModalInitialTab(tab);
+    setShowUserMenu(false);
+    setIsAccountModalOpen(true);
+  };
   
   // Close menu when clicking outside
   useEffect(() => {
@@ -108,6 +128,10 @@ export const Navbar = () => {
           setIsCalculatorLaunchModalOpen(true);
         }
       }
+      if (event.altKey && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        setIsServiceDeskLaunchModalOpen(true);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('keydown', handleKeyDown);
@@ -115,7 +139,7 @@ export const Navbar = () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isCalculatorDocked, isQuickCalculatorOpen, setIsCalculatorDocked, setIsQuickCalculatorOpen, setIsCalculatorLaunchModalOpen]);
+  }, [isCalculatorDocked, isQuickCalculatorOpen, setIsCalculatorDocked, setIsQuickCalculatorOpen, setIsCalculatorLaunchModalOpen, setIsServiceDeskLaunchModalOpen]);
 
   useEffect(() => {
     // Branding handled via style bindings below
@@ -431,6 +455,52 @@ export const Navbar = () => {
                   </div>
                   {presenceStatus === 'OFFLINE' && <span className="text-[9px] font-bold">Off</span>}
                 </button>
+
+                {/* Unified Service Desk Queue Readiness Toggle */}
+                <div className="pt-1 mt-1 border-t border-zinc-100 dark:border-zinc-800/80 px-2 pb-1">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleQueuePaused();
+                    }}
+                    className={cn(
+                      "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[11px] font-medium border transition-colors",
+                      activeVoiceCall
+                        ? "bg-indigo-50 dark:bg-indigo-950/60 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300"
+                        : activeWrapUpSessionId
+                        ? "bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300"
+                        : isQueueActive
+                        ? "bg-indigo-50/70 dark:bg-indigo-950/40 border-indigo-200/80 dark:border-indigo-800/70 text-indigo-700 dark:text-indigo-300"
+                        : "bg-zinc-100/80 dark:bg-zinc-800/70 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400"
+                    )}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <span
+                        className={cn(
+                          "w-1.5 h-1.5 rounded-full",
+                          activeVoiceCall
+                            ? "bg-indigo-600 animate-ping"
+                            : activeWrapUpSessionId
+                            ? "bg-amber-500"
+                            : isQueueActive
+                            ? "bg-emerald-500"
+                            : "bg-zinc-400"
+                        )}
+                      />
+                      {activeVoiceCall
+                        ? "Service Desk: On Call"
+                        : activeWrapUpSessionId
+                        ? "Service Desk: Wrapping Up"
+                        : isQueueActive
+                        ? "Service Desk Queue: Active"
+                        : "Service Desk Queue: Paused"}
+                    </span>
+                    <span className="text-[9px] font-bold uppercase tracking-wider opacity-75">
+                      {isQueuePaused || presenceStatus !== 'AVAILABLE' ? 'Resume' : 'Pause'}
+                    </span>
+                  </button>
+                </div>
               </div>
 
               {/* Digital Twin Studio & Handover Links */}
@@ -470,6 +540,47 @@ export const Navbar = () => {
                 </button>
               </div>
 
+              {/* Workforce & HR Hub */}
+              <div className="p-1 border-b border-zinc-100 dark:border-zinc-800">
+                <button
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-lg transition-colors group"
+                  onClick={() => openAccountWithTab('hr-overview')}
+                >
+                  <div className="flex items-center gap-2">
+                    <Briefcase size={14} className="text-indigo-500 group-hover:scale-110 transition-transform" />
+                    My Workplace & HR Hub
+                  </div>
+                  <span className="text-[9px] bg-indigo-500/10 text-indigo-500 px-1.5 py-0.5 rounded font-extrabold uppercase">
+                    Hub
+                  </span>
+                </button>
+
+                {/* Quick Action Chips */}
+                <div className="grid grid-cols-3 gap-1 px-1 pt-1 pb-1">
+                  <button
+                    onClick={() => openAccountWithTab('hr-leave')}
+                    className="flex flex-col items-center justify-center p-1.5 rounded-lg bg-zinc-50 dark:bg-zinc-800/60 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 text-zinc-600 dark:text-zinc-300 hover:text-indigo-600 dark:hover:text-indigo-400 text-[10px] font-medium transition-colors border border-zinc-200/60 dark:border-zinc-700/60"
+                  >
+                    <Plane size={12} className="mb-0.5 text-indigo-500" />
+                    Leave
+                  </button>
+                  <button
+                    onClick={() => openAccountWithTab('hr-timesheet')}
+                    className="flex flex-col items-center justify-center p-1.5 rounded-lg bg-zinc-50 dark:bg-zinc-800/60 hover:bg-purple-50 dark:hover:bg-purple-950/30 text-zinc-600 dark:text-zinc-300 hover:text-purple-600 dark:hover:text-purple-400 text-[10px] font-medium transition-colors border border-zinc-200/60 dark:border-zinc-700/60"
+                  >
+                    <Clock size={12} className="mb-0.5 text-purple-500" />
+                    Hours
+                  </button>
+                  <button
+                    onClick={() => openAccountWithTab('hr-requests')}
+                    className="flex flex-col items-center justify-center p-1.5 rounded-lg bg-zinc-50 dark:bg-zinc-800/60 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-zinc-600 dark:text-zinc-300 hover:text-emerald-600 dark:hover:text-emerald-400 text-[10px] font-medium transition-colors border border-zinc-200/60 dark:border-zinc-700/60"
+                  >
+                    <FileText size={12} className="mb-0.5 text-emerald-500" />
+                    Claims
+                  </button>
+                </div>
+              </div>
+
               <div className="p-1">
                 <button 
                   className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-50 dark:hover:bg-white/5 rounded-lg transition-colors group"
@@ -493,13 +604,10 @@ export const Navbar = () => {
                 <LicenseGate>
                   <button 
                     className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-50 dark:hover:bg-white/5 rounded-lg transition-colors group"
-                    onClick={() => {
-                      setShowUserMenu(false);
-                      setIsAccountModalOpen(true);
-                    }}
+                    onClick={() => openAccountWithTab('profile')}
                   >
                     <SettingsIcon size={14} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
-                    Account
+                    Account Settings
                   </button>
                 </LicenseGate>
               </div>
@@ -530,6 +638,7 @@ export const Navbar = () => {
       <AccountModal 
         isOpen={isAccountModalOpen} 
         onClose={() => setIsAccountModalOpen(false)} 
+        initialTab={accountModalInitialTab as any}
       />
       <WorkspaceCommandPalette
         isOpen={isCommandPaletteOpen}

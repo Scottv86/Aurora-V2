@@ -292,8 +292,17 @@ const SETTINGS_ITEMS: SettingItem[] = [
     tags: ['scheduling', 'bookings', 'calendar', 'appointments', 'rentals', 'airbnb', 'field service', 'dispatch', 'capacity']
   },
   {
+    id: 'service-desk-settings',
+    label: 'Service Desk',
+    description: 'Manage interaction routing, wrap-up disposition codes, SLA thresholds, and AI concierge guardrails.',
+    icon: 'Headset',
+    to: '/workspace/settings/platform-modules/service-desk',
+    category: 'Configure',
+    tags: ['service desk', 'chat', 'voice', 'telephony', 'wrap up', 'disposition', 'sla', 'contact center', 'ai concierge']
+  },
+  {
     id: 'work-distribution',
-    label: 'Work Distribution',
+    label: 'Triage',
     description: 'Configure routing rules to automatically intake and distribute work across modules.',
     icon: 'Inbox',
     to: '/workspace/settings/platform-modules/work-distribution',
@@ -347,7 +356,7 @@ const SETTINGS_ITEMS: SettingItem[] = [
   },
   {
     id: 'people-organisations',
-    label: 'People & Organisations',
+    label: 'Directory',
     description: 'Manage core entity taxonomies and global relationship rules.',
     icon: 'Users',
     to: '/workspace/settings/platform-modules/people-organisations',

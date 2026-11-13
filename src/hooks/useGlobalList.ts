@@ -406,9 +406,6 @@ export const useGlobalLists = () => {
 
   const fetchLists = useCallback(async () => {
     if (!tenant?.id) return;
-    if (!builderCache.has(cacheKey)) {
-      setLoading(true);
-    }
     try {
       const { data, error } = await supabase
         .from('global_lists')
@@ -531,12 +528,18 @@ export const useGlobalLists = () => {
 
   const deleteList = async (id: string) => {
     try {
+      const target = lists.find(l => l.id === id);
+      if (target?.is_system) {
+        toast.error('System lookup lists are protected and cannot be deleted.');
+        return false;
+      }
       const { error } = await supabase.from('global_lists').delete().eq('id', id);
       if (error) throw error;
       toast.success('List deleted');
       globalListDetailCache.delete(id);
       globalListItemsCache.delete(id);
       await fetchLists();
+      return true;
     } catch (err: any) {
       toast.error(err.message);
       throw err;

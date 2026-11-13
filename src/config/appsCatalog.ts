@@ -68,6 +68,28 @@ export const AURORA_APPS: AppItem[] = [
     status: 'active'
   },
   {
+    id: 'triage',
+    label: 'Triage',
+    iconName: 'ListFilter',
+    description: 'Assess incoming work, apply routing rules, and distribute items across teams',
+    color: 'text-amber-500',
+    to: '/workspace/apps/triage',
+    category: 'Commerce & Operations',
+    isCore: true,
+    status: 'active'
+  },
+  {
+    id: 'directory',
+    label: 'Directory',
+    iconName: 'Users',
+    description: 'Master directory of people, organisations, and relationship networks',
+    color: 'text-sky-500',
+    to: '/workspace/apps/directory',
+    category: 'Data & Search',
+    isCore: true,
+    status: 'active'
+  },
+  {
     id: 'docs',
     label: 'Documents',
     iconName: 'FileText',
@@ -140,6 +162,17 @@ export const AURORA_APPS: AppItem[] = [
     description: 'Real-time team messaging channels and direct conversations',
     color: 'text-emerald-500',
     to: '/workspace/apps/chat',
+    category: 'Communication',
+    isCore: true,
+    status: 'active'
+  },
+  {
+    id: 'service-desk',
+    label: 'Service Desk',
+    iconName: 'Headset',
+    description: 'Omnichannel customer site chat, AI/human allocation and CXone voice queues',
+    color: 'text-indigo-500',
+    to: '/workspace/apps/service-desk',
     category: 'Communication',
     isCore: true,
     status: 'active'
@@ -339,7 +372,7 @@ export const AURORA_APPS: AppItem[] = [
 ];
 
 export const INITIAL_APP_IDS = [
-  'ai-assistant', 'recycling-bin', 'approvals', 'inbox', 'docs', 'drive', 'chat', 'meet', 'calendar', 'notes', 'reminders',
+  'ai-assistant', 'recycling-bin', 'approvals', 'inbox', 'docs', 'drive', 'chat', 'service-desk', 'meet', 'calendar', 'notes', 'reminders',
   'reports', 'converter', 'feed', 'draw', 'whiteboard', 'calculator', 'snipper', 'flowchart'
 ];
 

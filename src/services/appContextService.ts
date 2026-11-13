@@ -145,9 +145,9 @@ export const AppContextService = {
       },
       {
         id: 'app_queue_1',
-        title: 'Customer Intake & Work Distribution Queue',
+        title: 'Customer Intake & Triage Queue',
         category: 'APP',
-        typeLabel: 'Work Distribution / Inbox App',
+        typeLabel: 'Triage / Inbox App',
         content: 'Inbox & Triage Rules: Automatic round-robin assignment based on workload capacity, priority score thresholding, and automated email trigger notifications.',
         updatedAt: 'Active'
       }

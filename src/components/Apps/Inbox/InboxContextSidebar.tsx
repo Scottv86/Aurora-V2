@@ -254,14 +254,14 @@ export const InboxContextSidebar: React.FC<InboxContextSidebarProps> = ({
               <div className="flex items-center justify-between">
                 <h3 className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
                   <Users size={13} className="text-blue-500" />
-                  People & Organisations
+                  Directory
                 </h3>
                 {contactParty && (
                   <button
-                    onClick={() => navigate(`/workspace/platform/people-organisations/${contactParty.id}`)}
+                    onClick={() => navigate(`/workspace/apps/directory/${contactParty.id}`)}
                     className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5 cursor-pointer"
                   >
-                    <span>View CRM</span>
+                    <span>View Profile</span>
                     <ExternalLink size={10} />
                   </button>
                 )}
@@ -306,10 +306,10 @@ export const InboxContextSidebar: React.FC<InboxContextSidebarProps> = ({
               ) : (
                 <div className="p-3.5 bg-white dark:bg-zinc-950 rounded-2xl border border-dashed border-zinc-300 dark:border-zinc-800 space-y-2 text-center">
                   <p className="text-[11px] text-zinc-500">
-                    Sender not registered in People & Organisations.
+                    Sender not registered in Directory.
                   </p>
                   <button
-                    onClick={() => navigate('/workspace/platform/people-organisations')}
+                    onClick={() => navigate('/workspace/apps/directory')}
                     className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 font-bold transition-all cursor-pointer text-[11px]"
                   >
                     <Plus size={12} />

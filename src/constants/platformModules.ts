@@ -20,7 +20,7 @@ export interface PlatformModule {
 export const PLATFORM_MODULES: PlatformModule[] = [
   {
     id: 'people-organisations',
-    name: 'People & Organisations',
+    name: 'Directory',
     slug: 'people-organisations',
     icon: Users,
     description: 'Manage core entity taxonomies and global relationship rules.',

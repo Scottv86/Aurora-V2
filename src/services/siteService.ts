@@ -1,3 +1,5 @@
+import { SiteChatConfig } from '../types/serviceDesk';
+
 export interface EnterpriseFont {
   id: string;
   name: string;
@@ -311,6 +313,7 @@ export interface Site {
   localizationConfig?: SiteLocalizationConfig;
   authConfig?: SiteAuthConfig;
   appExportConfig?: SiteAppExportConfig;
+  chatConfig?: SiteChatConfig;
   submissions?: SiteSubmission[];
   metrics?: {
     metricLabel: string;

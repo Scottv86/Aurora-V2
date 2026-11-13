@@ -5,6 +5,7 @@ import { TwinPresenceStatus } from '../../types/twin';
 import { useAuth } from '../../hooks/useAuth';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useDigitalTwin } from '../../context/DigitalTwinContext';
+import { useUserProfileCard } from '../../context/UserProfileCardContext';
 
 interface UserPresenceBadgeProps {
   status?: TwinPresenceStatus | string;
@@ -72,6 +73,9 @@ interface UserAvatarWithPresenceProps {
   size?: 'xs' | 'sm' | 'md' | 'lg';
   className?: string;
   showPresence?: boolean;
+  memberId?: string;
+  userId?: string;
+  enableProfileCard?: boolean;
 }
 
 export const UserAvatarWithPresence: React.FC<UserAvatarWithPresenceProps> = ({
@@ -80,11 +84,15 @@ export const UserAvatarWithPresence: React.FC<UserAvatarWithPresenceProps> = ({
   status,
   size = 'sm',
   className,
-  showPresence = true
+  showPresence = true,
+  memberId,
+  userId,
+  enableProfileCard = true
 }) => {
   const { user } = useAuth();
   const platformCtx = usePlatform();
   const platformUser = platformCtx?.user;
+  const profileCard = useUserProfileCard();
 
   const { presenceStatus: myPresenceStatus } = useDigitalTwin();
 
@@ -127,8 +135,39 @@ export const UserAvatarWithPresence: React.FC<UserAvatarWithPresenceProps> = ({
     lg: 'lg'
   };
 
+  const resolvedMember = React.useMemo(() => {
+    if (memberId || userId || !enableProfileCard) return null;
+    const membersList = platformCtx?.members || [];
+    if (!membersList.length) return null;
+    if (avatarUrl) {
+      const byAvatar = membersList.find((m) => m.avatarUrl && m.avatarUrl === avatarUrl);
+      if (byAvatar) return byAvatar;
+    }
+    if (name && name !== 'User') {
+      const lower = name.toLowerCase();
+      return membersList.find((m) => m.name?.toLowerCase() === lower) || null;
+    }
+    return null;
+  }, [memberId, userId, enableProfileCard, platformCtx?.members, avatarUrl, name]);
+
+  const targetProfileId = memberId || userId || resolvedMember?.id || (resolvedMember as any)?.userId;
+  const canShowCard = Boolean(enableProfileCard && targetProfileId && profileCard);
+
   return (
-    <div className={cn("relative inline-block shrink-0", className)}>
+    <div
+      className={cn("relative inline-block shrink-0", canShowCard && "cursor-pointer", className)}
+      onMouseEnter={
+        canShowCard
+          ? (e) =>
+              profileCard!.scheduleOpen(targetProfileId!, e.currentTarget, {
+                name,
+                avatarUrl,
+                status: finalStatus
+              })
+          : undefined
+      }
+      onMouseLeave={canShowCard ? () => profileCard!.scheduleClose() : undefined}
+    >
       <div className={cn(
         "rounded-full bg-indigo-500/10 dark:bg-indigo-500/20 border border-indigo-500/20 dark:border-indigo-500/30 flex items-center justify-center overflow-hidden font-bold text-indigo-600 dark:text-indigo-400",
         containerSizes[size]
@@ -149,6 +188,44 @@ export const UserAvatarWithPresence: React.FC<UserAvatarWithPresenceProps> = ({
           className="absolute -bottom-0.5 -right-0.5 z-10"
         />
       )}
+    </div>
+  );
+};
+
+interface UserProfileTriggerProps {
+  memberId?: string;
+  userId?: string;
+  name?: string;
+  avatarUrl?: string;
+  status?: string;
+  className?: string;
+  children: React.ReactNode;
+}
+
+export const UserProfileTrigger: React.FC<UserProfileTriggerProps> = ({
+  memberId,
+  userId,
+  name,
+  avatarUrl,
+  status,
+  className,
+  children
+}) => {
+  const profileCard = useUserProfileCard();
+  const targetId = memberId || userId;
+  const enabled = Boolean(targetId && profileCard);
+
+  return (
+    <div
+      className={cn(enabled && 'cursor-pointer', className)}
+      onMouseEnter={
+        enabled
+          ? (e) => profileCard!.scheduleOpen(targetId!, e.currentTarget, { name, avatarUrl, status })
+          : undefined
+      }
+      onMouseLeave={enabled ? () => profileCard!.scheduleClose() : undefined}
+    >
+      {children}
     </div>
   );
 };
