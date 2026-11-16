@@ -2,6 +2,7 @@ import { globalPrisma } from '../lib/prisma';
 import { AutomationEngine } from './automationEngine';
 import { emitTenantUpdate } from '../socket';
 import { SlaService } from './slaService';
+import { DedupeService } from './dedupeService';
 
 export class AutomationScheduler {
   private static intervalId: NodeJS.Timeout | null = null;
@@ -56,6 +57,9 @@ export class AutomationScheduler {
 
     // Check time-sensitive reminders & workflow follow-up alerts
     await this.checkDueReminders();
+
+    // Check automated Directory Deduplication procedures
+    await DedupeService.checkScheduledDedupe();
 
     // Fetch and execute active Antigravity scheduled tasks
     try {

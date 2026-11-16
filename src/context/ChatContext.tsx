@@ -26,6 +26,7 @@ interface ChatContextType {
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   sendMessage: (content: string, attachments?: any[], parentMessageId?: string) => Promise<void>;
+  sendMessageToChannel: (channelId: string, content: string, attachments?: any[]) => Promise<ChatMessage | null>;
   editMessage: (messageId: string, content: string) => Promise<void>;
   deleteMessage: (messageId: string) => Promise<void>;
   toggleReaction: (messageId: string, emoji: string) => Promise<void>;
@@ -45,6 +46,14 @@ interface ChatContextType {
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const existing = useContext(ChatContext);
+  if (existing) {
+    return <>{children}</>;
+  }
+  return <ChatProviderInner>{children}</ChatProviderInner>;
+};
+
+const ChatProviderInner: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, session } = useAuth();
   const token = session?.access_token || (import.meta as any).env.VITE_DEV_TOKEN;
   const { tenant, user: platformUser } = usePlatform();
@@ -71,8 +80,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   usersRef.current = users;
   const activeChannelRef = useRef<ChatChannel | null>(null);
   activeChannelRef.current = activeChannel;
+  const threadParentMessageRef = useRef<ChatMessage | null>(null);
+  threadParentMessageRef.current = threadParentMessage;
 
   const currentUserId = user?.id || platformUser?.id || platformUser?.memberId || 'current-user';
+  const currentUserIdRef = useRef(currentUserId);
+  currentUserIdRef.current = currentUserId;
 
   const platformName = platformUser?.firstName && ((platformUser as any)?.lastName || (platformUser as any)?.familyName)
     ? `${platformUser.firstName} ${(platformUser as any).lastName || (platformUser as any).familyName}`
@@ -84,6 +97,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 1. Initial load for channels and user directory
   const loadChannelsAndUsers = useCallback(async () => {
+    if (!tenant?.id && !user) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
       const [fetchedChannels, fetchedUsers] = await Promise.all([
@@ -100,7 +117,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUserPresence(pMap);
 
       // Default active channel to general if not selected
-      if (!activeChannel && fetchedChannels.length > 0) {
+      if (!activeChannelRef.current && fetchedChannels.length > 0) {
         const general = fetchedChannels.find(c => c.name === 'general') || fetchedChannels[0];
         setActiveChannel(general);
       }
@@ -109,7 +126,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setIsLoading(false);
     }
-  }, [token, tenant?.id, activeChannel]);
+  }, [token, tenant?.id]);
 
   useEffect(() => {
     loadChannelsAndUsers();
@@ -172,6 +189,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 4. WebSocket setup
   useEffect(() => {
+    if (!tenant?.id && !user) return;
     const socket = io(API_BASE_URL, {
       auth: { token },
       transports: ['websocket', 'polling']
@@ -182,14 +200,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (tenant?.id) {
         socket.emit('join_tenant', tenant.id);
       }
-      if (activeChannel?.id) {
-        socket.emit('join_channel', activeChannel.id);
+      if (activeChannelRef.current?.id) {
+        socket.emit('join_channel', activeChannelRef.current.id);
       }
     });
 
     // Real-time new message
     socket.on('chat:message', (newMsg: ChatMessage) => {
-      const isFromMe = newMsg.senderId === currentUserId;
+      const isFromMe = newMsg.senderId === currentUserIdRef.current;
       const isCurrentActive = activeChannelRef.current?.id === newMsg.channelId;
 
       // Play sound and show toast notification if message is from another user
@@ -263,7 +281,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     socket.on('chat:reaction_updated', (data: { messageId: string; channelId: string; reactions: ChatReaction[] }) => {
       setMessages(prev => prev.map(m => m.id === data.messageId ? { ...m, reactions: data.reactions } : m));
       setThreadReplies(prev => prev.map(m => m.id === data.messageId ? { ...m, reactions: data.reactions } : m));
-      if (threadParentMessage?.id === data.messageId) {
+      if (threadParentMessageRef.current?.id === data.messageId) {
         setThreadParentMessage(prev => prev ? { ...prev, reactions: data.reactions } : null);
       }
     });
@@ -272,7 +290,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     socket.on('chat:message_updated', (updatedMsg: ChatMessage) => {
       setMessages(prev => prev.map(m => m.id === updatedMsg.id ? updatedMsg : m));
       setThreadReplies(prev => prev.map(m => m.id === updatedMsg.id ? updatedMsg : m));
-      if (threadParentMessage?.id === updatedMsg.id) {
+      if (threadParentMessageRef.current?.id === updatedMsg.id) {
         setThreadParentMessage(updatedMsg);
       }
     });
@@ -281,7 +299,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     socket.on('chat:message_deleted', (data: { messageId: string; channelId: string }) => {
       setMessages(prev => prev.filter(m => m.id !== data.messageId));
       setThreadReplies(prev => prev.filter(m => m.id !== data.messageId));
-      if (threadParentMessage?.id === data.messageId) {
+      if (threadParentMessageRef.current?.id === data.messageId) {
         setThreadParentMessage(null);
       }
     });
@@ -296,7 +314,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // User typing
     socket.on('chat:user_typing', (data: { channelId: string; userId: string; userName: string; isTyping: boolean }) => {
-      if (data.userId === currentUserId) return;
+      if (data.userId === currentUserIdRef.current) return;
       setTypingMap(prev => {
         const channelTypers = { ...(prev[data.channelId] || {}) };
         if (data.isTyping) {
@@ -328,9 +346,18 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     return () => {
+      socket.removeAllListeners();
       socket.disconnect();
+      socketRef.current = null;
     };
-  }, [token, tenant?.id, activeChannel, currentUserId, threadParentMessage?.id]);
+  }, [token, tenant?.id, user?.id]);
+
+  // Join active channel room over existing WebSocket connection
+  useEffect(() => {
+    if (socketRef.current?.connected && activeChannel?.id) {
+      socketRef.current.emit('join_channel', activeChannel.id);
+    }
+  }, [activeChannel?.id]);
 
   // Set active channel by id
   const setActiveChannelById = useCallback((channelId: string) => {
@@ -403,6 +430,42 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       toast.error('Failed to send message');
     }
   }, [activeChannel, currentUserId, currentUserName, currentUserRole, currentUserAvatar, token, tenant?.id]);
+
+  // Send message to any specific channel (used by docked chat heads)
+  const sendMessageToChannel = useCallback(async (channelId: string, content: string, attachments: any[] = []): Promise<ChatMessage | null> => {
+    try {
+      const realMsg = await ChatService.sendMessage(
+        channelId,
+        {
+          content,
+          attachments,
+          senderId: currentUserId,
+          senderName: currentUserName,
+          senderRole: currentUserRole,
+          senderAvatar: currentUserAvatar
+        },
+        token || undefined,
+        tenant?.id
+      );
+      if (activeChannelRef.current?.id === channelId) {
+        setMessages(prev => [...prev.filter(m => m.id !== realMsg.id), realMsg]);
+      }
+      setChannels(prev => prev.map(c => c.id === channelId ? {
+        ...c,
+        lastMessage: {
+          id: realMsg.id,
+          senderName: realMsg.senderName,
+          content: realMsg.content,
+          createdAt: realMsg.createdAt
+        }
+      } : c));
+      return realMsg;
+    } catch (err) {
+      console.error('[ChatContext] Failed to send message to channel:', err);
+      toast.error('Failed to send message');
+      return null;
+    }
+  }, [currentUserId, currentUserName, currentUserRole, currentUserAvatar, token, tenant?.id]);
 
   // Edit message
   const editMessage = useCallback(async (messageId: string, content: string) => {
@@ -554,6 +617,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         searchQuery,
         setSearchQuery,
         sendMessage,
+        sendMessageToChannel,
         editMessage,
         deleteMessage,
         toggleReaction,

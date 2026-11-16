@@ -23,6 +23,7 @@ import { usePlatform } from '../../../hooks/usePlatform';
 import { useAuth } from '../../../hooks/useAuth';
 import { cn } from '../../../lib/utils';
 import { toast } from 'sonner';
+import { PartyProfileTrigger } from '../../../context/PartyProfileCardContext';
 
 interface InboxContextSidebarProps {
   thread: EmailThread;
@@ -258,10 +259,10 @@ export const InboxContextSidebar: React.FC<InboxContextSidebarProps> = ({
                 </h3>
                 {contactParty && (
                   <button
-                    onClick={() => navigate(`/workspace/apps/directory/${contactParty.id}`)}
+                    onClick={() => navigate(`/workspace/people-organisations/${contactParty.id}`)}
                     className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5 cursor-pointer"
                   >
-                    <span>View Profile</span>
+                    <span>View 360° Profile</span>
                     <ExternalLink size={10} />
                   </button>
                 )}
@@ -273,36 +274,39 @@ export const InboxContextSidebar: React.FC<InboxContextSidebarProps> = ({
                   <span>Resolving party identity...</span>
                 </div>
               ) : contactParty ? (
-                <div className="p-3.5 bg-white dark:bg-zinc-950 rounded-2xl border border-zinc-200/80 dark:border-zinc-800 shadow-sm space-y-2.5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold flex items-center justify-center text-xs shrink-0 border border-blue-500/20">
-                      {contactParty.partyType === 'ORGANIZATION' ? <Building2 size={18} /> : <User size={18} />}
-                    </div>
-                    <div className="min-w-0">
-                      <h4 className="text-xs font-bold text-zinc-900 dark:text-white truncate">
-                        {contactParty.partyType === 'PERSON'
-                          ? `${contactParty.person?.firstName || ''} ${contactParty.person?.lastName || ''}`
-                          : contactParty.organization?.legalName}
-                      </h4>
-                      <p className="text-[10px] text-zinc-500 truncate">
-                        {contactParty.person?.jobTitle || contactParty.organization?.industry || 'Registered Party'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="pt-2 border-t border-zinc-100 dark:border-zinc-900 space-y-1 text-[11px] text-zinc-500">
-                    <div className="flex items-center gap-2">
-                      <Mail size={12} className="text-zinc-400" />
-                      <span className="truncate">{thread.from.address}</span>
-                    </div>
-                    {contactParty.person?.contactDetails?.phone && (
-                      <div className="flex items-center gap-2">
-                        <Phone size={12} className="text-zinc-400" />
-                        <span>{contactParty.person.contactDetails.phone}</span>
+                <PartyProfileTrigger partyId={contactParty.id} fallbackData={contactParty} className="block w-full cursor-pointer">
+                  <div className="p-3.5 bg-white dark:bg-zinc-950 hover:border-indigo-500/40 rounded-2xl border border-zinc-200/80 dark:border-zinc-800 shadow-sm space-y-2.5 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold flex items-center justify-center text-xs shrink-0 border border-blue-500/20">
+                        {contactParty.partyType === 'ORGANIZATION' ? <Building2 size={18} /> : <User size={18} />}
                       </div>
-                    )}
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-bold text-zinc-900 dark:text-white truncate">
+                          {contactParty.displayName ||
+                            (contactParty.partyType === 'PERSON'
+                              ? `${contactParty.person?.firstName || ''} ${contactParty.person?.lastName || ''}`
+                              : contactParty.organization?.legalName)}
+                        </h4>
+                        <p className="text-[10px] text-zinc-500 truncate">
+                          {contactParty.person?.jobTitle || contactParty.organization?.industry || 'Registered Directory Entity'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-zinc-100 dark:border-zinc-900 space-y-1 text-[11px] text-zinc-500">
+                      <div className="flex items-center gap-2">
+                        <Mail size={12} className="text-zinc-400" />
+                        <span className="truncate">{contactParty.email || thread.from.address}</span>
+                      </div>
+                      {(contactParty.phone || contactParty.mobile || contactParty.person?.contactDetails?.phone) && (
+                        <div className="flex items-center gap-2">
+                          <Phone size={12} className="text-zinc-400" />
+                          <span>{contactParty.phone || contactParty.mobile || contactParty.person?.contactDetails?.phone}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                </PartyProfileTrigger>
               ) : (
                 <div className="p-3.5 bg-white dark:bg-zinc-950 rounded-2xl border border-dashed border-zinc-300 dark:border-zinc-800 space-y-2 text-center">
                   <p className="text-[11px] text-zinc-500">

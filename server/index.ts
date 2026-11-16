@@ -140,12 +140,21 @@ app.use(cors({
 }));
 
 // Multi-Tiered Rate Limiters
-// 1. General API: 600 req per 15 min per IP
+// In development or when running locally on loopback, rate limiting is skipped so HMR, testing, and dev navigation aren't blocked by 429 errors.
+const isDev = process.env.NODE_ENV !== 'production';
+const isLocalOrDev = (req: express.Request) => {
+  if (isDev) return true;
+  const ip = req.ip || req.socket?.remoteAddress || '';
+  return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+};
+
+// 1. General API: 3,000 req per 15 min per IP in production (protects DDoS while supporting active workspaces)
 const globalApiRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 600,
+  max: Number(process.env.RATE_LIMIT_MAX) || 3000,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: isLocalOrDev,
   message: { error: 'Too many API requests, please try again later.' }
 });
 
@@ -155,6 +164,7 @@ const publicRateLimiter = rateLimit({
   max: 100,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: isLocalOrDev,
   message: { error: 'Too many requests, please try again later.' }
 });
 
@@ -164,13 +174,14 @@ const authRateLimiter = rateLimit({
   max: 60,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: isLocalOrDev,
   message: { error: 'Too many authentication attempts, please try again later.' }
 });
 
-// 4. AI endpoints (Antigravity & AI settings): 30 req per 1 min per IP to protect Gemini API quota
+// 4. AI endpoints (Antigravity & AI settings): 30 req per 1 min per IP to protect Gemini API quota (60 in dev)
 const aiRateLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
-  max: 30,
+  max: isDev ? 120 : 30,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many AI requests. Please slow down and try again.' }
@@ -179,9 +190,10 @@ const aiRateLimiter = rateLimit({
 // 5. Document upload limiter: 40 uploads per 15 min per IP
 const uploadRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 40,
+  max: isDev ? 200 : 40,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: isLocalOrDev,
   message: { error: 'Document upload limit reached. Please wait before uploading more files.' }
 });
 

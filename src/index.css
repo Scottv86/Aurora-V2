@@ -2,6 +2,82 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Color Scheme & Native Form Controls */
+html.dark,
+.dark {
+  color-scheme: dark;
+}
+
+html:not(.dark) {
+  color-scheme: light;
+}
+
+/* Comprehensive Modern Checkbox Styling across Aurora */
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 0.95rem;
+  height: 0.95rem;
+  border-radius: 0.25rem;
+  border: 1px solid #d4d4d8; /* zinc-300 */
+  background-color: #ffffff;
+  display: inline-grid;
+  place-content: center;
+  cursor: pointer;
+  transition: all 120ms ease;
+  vertical-align: middle;
+  flex-shrink: 0;
+  margin: 0;
+  outline: none;
+}
+
+input[type="checkbox"]:hover {
+  border-color: #818cf8; /* indigo-400 */
+}
+
+input[type="checkbox"]:checked {
+  background-color: #6366f1; /* indigo-500 */
+  border-color: #6366f1;
+  background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3e%3cpolyline points='3.5 8.5 6.5 11.5 12.5 4.5'/%3e%3c/svg%3e");
+  background-size: 80% 80%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+input[type="checkbox"]:indeterminate {
+  background-color: #6366f1;
+  border-color: #6366f1;
+  background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3e%3cline x1='4' y1='8' x2='12' y2='8'/%3e%3c/svg%3e");
+  background-size: 80% 80%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* Dark Mode Checkbox Styles */
+.dark input[type="checkbox"] {
+  background-color: #27272a; /* zinc-800 */
+  border-color: #3f3f46; /* zinc-700 */
+}
+
+.dark input[type="checkbox"]:hover {
+  border-color: #818cf8;
+  background-color: #27272a;
+}
+
+.dark input[type="checkbox"]:checked {
+  background-color: #6366f1;
+  border-color: #6366f1;
+}
+
+.dark input[type="checkbox"]:indeterminate {
+  background-color: #6366f1;
+  border-color: #6366f1;
+}
+
+input[type="checkbox"]:focus-visible {
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.4);
+}
+
 /* react-grid-layout styles */
 .react-grid-layout {
   position: relative;
@@ -318,27 +394,40 @@ input[type=number] {
   top: auto !important;
 }
 
+/* Sonner Toast Custom Design & Formatting */
+[data-sonner-toaster] {
+  --width: 440px !important;
+  max-width: calc(100vw - 32px) !important;
+}
+
 [data-sonner-toast] {
-  background: rgba(9, 10, 15, 0.88) !important;
-  backdrop-filter: blur(20px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background: rgba(11, 13, 19, 0.94) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
   border-radius: 0px !important;
-  padding: 14px 18px !important;
+  padding: 16px 20px 16px 18px !important;
   color: #f4f4f5 !important;
-  box-shadow: 0 20px 35px -10px rgba(0, 0, 0, 0.65),
+  width: var(--width, 440px) !important;
+  max-width: min(460px, calc(100vw - 32px)) !important;
+  box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.75),
               0 0 0 1px rgba(255, 255, 255, 0.05),
               inset 0 1px 0 0 rgba(255, 255, 255, 0.12) !important;
   overflow: hidden !important;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
   font-family: inherit !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: flex-start !important;
+  gap: 12px 10px !important;
+  box-sizing: border-box !important;
 }
 
 [data-sonner-toast]:hover {
-  transform: translateY(-2px) scale(1.01) !important;
-  border-color: rgba(255, 255, 255, 0.2) !important;
-  box-shadow: 0 25px 45px -10px rgba(0, 0, 0, 0.75),
-              0 0 20px 0 rgba(99, 102, 241, 0.15) !important;
+  transform: translateY(-2px) scale(1.005) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  box-shadow: 0 28px 52px -10px rgba(0, 0, 0, 0.8),
+              0 0 24px 0 rgba(99, 102, 241, 0.18) !important;
 }
 
 /* Left accent bar on every toast */
@@ -396,38 +485,137 @@ input[type=number] {
   box-shadow: 0 0 12px rgba(129, 140, 248, 0.8);
 }
 
+/* Top-anchored icon styling */
+[data-sonner-toast] [data-icon] {
+  align-self: flex-start !important;
+  margin-top: 1px !important;
+  margin-right: 2px !important;
+  margin-left: 0 !important;
+  flex-shrink: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+[data-sonner-toast] [data-icon] svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+
 /* Close button styling - pinned to top right */
 [data-sonner-toast] [data-close-button] {
   position: absolute !important;
-  top: 10px !important;
-  right: 10px !important;
+  top: 12px !important;
+  right: 12px !important;
   left: auto !important;
   transform: none !important;
+  width: 22px !important;
+  height: 22px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   background: rgba(255, 255, 255, 0.08) !important;
   border: 1px solid rgba(255, 255, 255, 0.12) !important;
   color: #a1a1aa !important;
   transition: all 0.2s ease !important;
   border-radius: 0px !important;
+  cursor: pointer !important;
+  z-index: 10 !important;
 }
 
 [data-sonner-toast] [data-close-button]:hover {
   background: rgba(255, 255, 255, 0.18) !important;
   color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+/* Content Container */
+[data-sonner-toast] [data-content] {
+  flex: 1 1 calc(100% - 36px) !important;
+  min-width: 0 !important;
+  padding-right: 24px !important; /* Ensure content never touches or overlaps close button */
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 5px !important;
 }
 
 /* Toast Title and Description */
 [data-sonner-toast] [data-title] {
   font-weight: 600 !important;
   font-size: 0.875rem !important;
+  line-height: 1.45 !important;
   color: #f4f4f5 !important;
   letter-spacing: -0.01em !important;
+  word-break: break-word !important;
 }
 
 [data-sonner-toast] [data-description] {
-  font-size: 0.775rem !important;
+  font-size: 0.8125rem !important;
   color: #a1a1aa !important;
-  margin-top: 3px !important;
-  line-height: 1.45 !important;
+  line-height: 1.55 !important;
+  margin-top: 2px !important;
+  letter-spacing: normal !important;
+  word-break: break-word !important;
+  white-space: pre-line !important;
+}
+
+/* Dedicated Action & Cancel Buttons Row (wraps cleanly below content) */
+[data-sonner-toast] [data-button] {
+  margin-top: 8px !important;
+  margin-bottom: 2px !important;
+  height: 28px !important;
+  padding: 0 12px !important;
+  font-size: 0.775rem !important;
+  font-weight: 500 !important;
+  border-radius: 0px !important;
+  cursor: pointer !important;
+  outline: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 0.15s ease !important;
+  box-sizing: border-box !important;
+  text-decoration: none !important;
+}
+
+[data-sonner-toast] [data-button]:first-of-type {
+  margin-left: auto !important;
+}
+
+[data-sonner-toast] [data-button] + [data-button] {
+  margin-left: 8px !important;
+}
+
+/* Cancel / Dismiss Button */
+[data-sonner-toast] [data-cancel] {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #d4d4d8 !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+}
+
+[data-sonner-toast] [data-cancel]:hover {
+  background: rgba(255, 255, 255, 0.16) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+/* Primary Action Button (e.g. "View in Chat", "Open") */
+[data-sonner-toast] [data-action] {
+  background: #ffffff !important;
+  color: #090a0f !important;
+  font-weight: 600 !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4) !important;
+}
+
+[data-sonner-toast] [data-action]:hover {
+  background: #f4f4f5 !important;
+  box-shadow: 0 3px 12px rgba(255, 255, 255, 0.25) !important;
+  transform: translateY(-1px) !important;
+}
+
+[data-sonner-toast] [data-action]:active,
+[data-sonner-toast] [data-cancel]:active {
+  transform: translateY(0px) !important;
 }
 
 /* Aurora Document Editor Typography & Formatting */
@@ -489,4 +677,28 @@ input[type=number] {
 .prose em, .prose-invert em, [contenteditable] em {
   font-style: italic !important;
 }
+
+/* Adaptive container rules when workspace apps are rendered inside Side Mount or Bottom Mount panels */
+.aurora-docked-surface {
+  container-type: inline-size;
+}
+
+.aurora-docked-surface > div,
+.aurora-docked-surface > section,
+.aurora-docked-surface > main {
+  height: auto !important;
+  min-height: 100% !important;
+  max-width: 100% !important;
+}
+
+.aurora-docked-surface [class*="h-screen"],
+.aurora-docked-surface [class*="h-[calc(100vh"] {
+  height: 100% !important;
+  min-height: 0 !important;
+}
+
+.aurora-docked-surface [class*="min-h-screen"] {
+  min-height: 100% !important;
+}
+
 

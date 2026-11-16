@@ -1,22 +1,21 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import * as LucideIcons from 'lucide-react';
 import { LayoutGrid, Search, ExternalLink, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { usePlatform } from '../../hooks/usePlatform';
 import { getEnabledApps } from '../../config/appsCatalog';
+import { getWorkspaceAppById } from '../../config/workspaceAppViews';
 
 export const AppLauncher = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { 
     tenant, 
     setIsAppLauncherOpen, 
     inboxUnreadCount, 
-    setIsCalculatorLaunchModalOpen,
-    setIsServiceDeskLaunchModalOpen,
-    setIsServiceDeskFacebookDocked,
-    setIsServiceDeskSideDocked,
+    launchWorkspaceApp,
     setIsRecyclingBinOpen 
   } = usePlatform();
   const [searchQuery, setSearchQuery] = useState('');
@@ -32,32 +31,12 @@ export const AppLauncher = () => {
   const handleAppLaunch = (app: any) => {
     if (!app.to) return;
     setIsAppLauncherOpen(false);
-    if (app.id === 'calculator') {
-      setIsCalculatorLaunchModalOpen(true);
-      return;
-    }
-    if (app.id === 'service-desk') {
-      const remember = localStorage.getItem('aurora_service_desk_remember_mode') === 'true';
-      const preferred = localStorage.getItem('aurora_service_desk_preferred_mode');
-      if (remember && preferred) {
-        if (preferred === 'facebook_dock') {
-          setIsServiceDeskSideDocked(false);
-          setIsServiceDeskFacebookDocked(true);
-        } else if (preferred === 'side_dock') {
-          setIsServiceDeskFacebookDocked(false);
-          setIsServiceDeskSideDocked(true);
-        } else if (preferred === 'new_tab') {
-          window.open('/workspace/apps/service-desk?standalone=true', '_blank', 'noopener,noreferrer');
-        } else {
-          navigate('/workspace/apps/service-desk');
-        }
-      } else {
-        setIsServiceDeskLaunchModalOpen(true);
-      }
-      return;
-    }
     if (app.id === 'recycling-bin' || app.id === 'recycling_bin') {
       setIsRecyclingBinOpen(true);
+      return;
+    }
+    if (getWorkspaceAppById(app.id)) {
+      launchWorkspaceApp(app.id, undefined, navigate, location.pathname);
       return;
     }
     navigate(app.to);
@@ -151,7 +130,7 @@ export const AppLauncher = () => {
                   
                   {!isClickable ? (
                     <span className="mt-2 text-[8px] font-bold px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 uppercase">Coming Soon</span>
-                  ) : app.id === 'calculator' ? (
+                  ) : getWorkspaceAppById(app.id) ? (
                     <div className="mt-2 text-indigo-600 dark:text-indigo-400 flex items-center gap-1 text-[9px] font-bold bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800">
                       Launch Mode <ExternalLink size={10} />
                     </div>

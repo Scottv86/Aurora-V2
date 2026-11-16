@@ -42,11 +42,9 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
     [members, value]
   );
 
-  // Auto-open when becoming editable
+  // Close when becoming readonly
   useEffect(() => {
-    if (!readonly) {
-      setIsOpen(true);
-    } else {
+    if (readonly) {
       setIsOpen(false);
     }
   }, [readonly]);

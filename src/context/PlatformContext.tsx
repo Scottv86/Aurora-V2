@@ -9,6 +9,11 @@ import { toast } from 'sonner';
 import { slugify } from '../lib/utils';
 import { EmailNotificationToast } from '../components/Apps/Inbox/EmailNotificationToast';
 import { playChimeSound, playEmailNotificationSound } from '../lib/audioNotification';
+import {
+  WorkspaceAppDisplayMode,
+  getWorkspaceAppById,
+  getAppRememberedMode
+} from '../config/workspaceAppViews';
 
 export interface NotificationItem {
   id: string;
@@ -81,6 +86,23 @@ interface PlatformContextType {
   setIsServiceDeskSideDocked: (docked: boolean) => void;
   dockedServiceDeskWidth: number;
   setDockedServiceDeskWidth: (width: number) => void;
+  launchModalAppId: string | null;
+  openAppLaunchModal: (appId: string) => void;
+  closeAppLaunchModal: () => void;
+  bottomDockedAppIds: string[];
+  addBottomDockedApp: (appId: string) => void;
+  removeBottomDockedApp: (appId: string) => void;
+  sideDockedAppId: string | null;
+  setSideDockedAppId: (appId: string | null) => void;
+  sideDockedAppWidth: number;
+  setSideDockedAppWidth: (width: number) => void;
+  launchWorkspaceApp: (
+    appId: string,
+    mode?: WorkspaceAppDisplayMode,
+    navigateFn?: (to: string) => void,
+    currentPathname?: string,
+    options?: { openNewTab?: boolean }
+  ) => void;
   breadcrumbOverrides: Record<string, string>;
   setBreadcrumbOverride: (id: string, label: string) => void;
   members: TenantMember[];
@@ -149,6 +171,25 @@ const fallbackContext: PlatformContextType = {
   setIsQuickCalculatorOpen: () => {},
   isCalculatorLaunchModalOpen: false,
   setIsCalculatorLaunchModalOpen: () => {},
+  isServiceDeskLaunchModalOpen: false,
+  setIsServiceDeskLaunchModalOpen: () => {},
+  isServiceDeskFacebookDocked: false,
+  setIsServiceDeskFacebookDocked: () => {},
+  isServiceDeskSideDocked: false,
+  setIsServiceDeskSideDocked: () => {},
+  dockedServiceDeskWidth: 420,
+  setDockedServiceDeskWidth: () => {},
+  launchModalAppId: null,
+  openAppLaunchModal: () => {},
+  closeAppLaunchModal: () => {},
+  bottomDockedAppIds: [],
+  addBottomDockedApp: () => {},
+  removeBottomDockedApp: () => {},
+  sideDockedAppId: null,
+  setSideDockedAppId: () => {},
+  sideDockedAppWidth: 420,
+  setSideDockedAppWidth: () => {},
+  launchWorkspaceApp: () => {},
   breadcrumbOverrides: {},
   setBreadcrumbOverride: () => {},
   members: [],
@@ -265,6 +306,167 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
     setDockedServiceDeskWidthState(width);
     localStorage.setItem('aurora_service_desk_docked_width', String(width));
   }, []);
+
+  const [launchModalAppId, setLaunchModalAppId] = useState<string | null>(null);
+  const [bottomDockedAppIds, setBottomDockedAppIds] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('aurora_workspace_bottom_docked_apps');
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+  const [sideDockedAppId, setSideDockedAppIdState] = useState<string | null>(() => {
+    return localStorage.getItem('aurora_workspace_side_docked_app') || null;
+  });
+  const [sideDockedAppWidth, setSideDockedAppWidthState] = useState<number>(() => {
+    const saved = localStorage.getItem('aurora_workspace_side_docked_width');
+    return saved ? parseInt(saved, 10) : 420;
+  });
+
+  const openAppLaunchModal = useCallback((appId: string) => {
+    if (appId === 'service-desk') {
+      setIsServiceDeskLaunchModalOpen(true);
+      return;
+    }
+    setLaunchModalAppId(appId);
+  }, []);
+
+  const closeAppLaunchModal = useCallback(() => {
+    setLaunchModalAppId(null);
+  }, []);
+
+  const addBottomDockedApp = useCallback((appId: string) => {
+    if (appId === 'service-desk') {
+      setIsServiceDeskSideDocked(false);
+      setIsServiceDeskFacebookDocked(true);
+      return;
+    }
+    setBottomDockedAppIds((prev) => {
+      const next = prev.includes(appId) ? prev : [...prev, appId];
+      localStorage.setItem('aurora_workspace_bottom_docked_apps', JSON.stringify(next));
+      return next;
+    });
+  }, [setIsServiceDeskFacebookDocked, setIsServiceDeskSideDocked]);
+
+  const removeBottomDockedApp = useCallback((appId: string) => {
+    if (appId === 'service-desk') {
+      setIsServiceDeskFacebookDocked(false);
+      return;
+    }
+    setBottomDockedAppIds((prev) => {
+      const next = prev.filter((id) => id !== appId);
+      localStorage.setItem('aurora_workspace_bottom_docked_apps', JSON.stringify(next));
+      return next;
+    });
+  }, [setIsServiceDeskFacebookDocked]);
+
+  const setSideDockedAppId = useCallback((appId: string | null) => {
+    setSideDockedAppIdState(appId);
+    if (appId) {
+      localStorage.setItem('aurora_workspace_side_docked_app', appId);
+    } else {
+      localStorage.removeItem('aurora_workspace_side_docked_app');
+    }
+  }, []);
+
+  const setSideDockedAppWidth = useCallback((width: number) => {
+    setSideDockedAppWidthState(width);
+    localStorage.setItem('aurora_workspace_side_docked_width', String(width));
+  }, []);
+
+  const launchWorkspaceApp = useCallback((
+    appId: string,
+    mode?: WorkspaceAppDisplayMode,
+    navigateFn?: (to: string) => void,
+    currentPathname?: string,
+    options?: { openNewTab?: boolean }
+  ) => {
+    const app = getWorkspaceAppById(appId);
+    if (!app) return;
+
+    const targetMode = mode || getAppRememberedMode(appId);
+    if (!targetMode) {
+      openAppLaunchModal(appId);
+      return;
+    }
+
+    const isOnAppRoute = Boolean(
+      currentPathname && (currentPathname === app.route || currentPathname.startsWith(`${app.route}/`))
+    );
+
+    if (targetMode === 'bottom_dock') {
+      if (appId === 'service-desk') {
+        setIsServiceDeskSideDocked(false);
+        setIsServiceDeskFacebookDocked(true);
+      } else {
+        if (appId === 'calculator') {
+          setIsCalculatorDocked(false);
+          setIsQuickCalculatorOpen(false);
+        }
+        if (sideDockedAppId === appId) {
+          setSideDockedAppId(null);
+        }
+        addBottomDockedApp(appId);
+      }
+      if (isOnAppRoute && navigateFn) {
+        navigateFn('/workspace');
+      }
+    } else if (targetMode === 'side_dock') {
+      if (appId === 'service-desk') {
+        setIsServiceDeskFacebookDocked(false);
+        setSideDockedAppId(null);
+        setIsServiceDeskSideDocked(true);
+      } else if (appId === 'calculator') {
+        removeBottomDockedApp('calculator');
+        setIsQuickCalculatorOpen(false);
+        setSideDockedAppId(null);
+        setIsCalculatorDocked(true);
+      } else {
+        removeBottomDockedApp(appId);
+        setIsServiceDeskSideDocked(false);
+        setIsCalculatorDocked(false);
+        setSideDockedAppId(appId);
+      }
+      if (isOnAppRoute && navigateFn) {
+        navigateFn('/workspace');
+      }
+    } else if (targetMode === 'in_app') {
+      if (appId === 'service-desk') {
+        setIsServiceDeskSideDocked(false);
+        setIsServiceDeskFacebookDocked(false);
+      } else if (appId === 'calculator') {
+        setIsCalculatorDocked(false);
+        setIsQuickCalculatorOpen(false);
+        removeBottomDockedApp('calculator');
+      } else {
+        if (sideDockedAppId === appId) setSideDockedAppId(null);
+        removeBottomDockedApp(appId);
+      }
+      if (navigateFn) {
+        navigateFn(app.route);
+      } else {
+        window.location.assign(app.route);
+      }
+    } else if (targetMode === 'fullscreen') {
+      const standaloneUrl = `${app.route}${app.route.includes('?') ? '&' : '?'}standalone=true`;
+      if (options?.openNewTab === false && navigateFn) {
+        navigateFn(standaloneUrl);
+      } else {
+        window.open(standaloneUrl, '_blank', 'noopener,noreferrer');
+      }
+    }
+  }, [
+    openAppLaunchModal,
+    setIsServiceDeskSideDocked,
+    setIsServiceDeskFacebookDocked,
+    setIsCalculatorDocked,
+    sideDockedAppId,
+    setSideDockedAppId,
+    addBottomDockedApp,
+    removeBottomDockedApp
+  ]);
   const [breadcrumbOverrides, setBreadcrumbOverrides] = useState<Record<string, string>>({});
   const [isBuilderFullscreen, setIsBuilderFullscreen] = useState(false);
 
@@ -471,7 +673,12 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
 
       // Display a persistent toast that requires manual dismissal
       const toastTitle = isFailed ? `Scheduled Task Failed: ${taskName}` : `Scheduled Task Completed: ${taskName}`;
-      const toastDescription = `Task "${taskName}" finished: ${resultText}`;
+      const cleanResult = (resultText || (isFailed ? 'Execution failed' : 'Execution completed successfully')).trim();
+      const toastDescription = cleanResult.toLowerCase().includes(taskName.toLowerCase())
+        ? cleanResult
+        : cleanResult.toLowerCase().startsWith('task ') || cleanResult.toLowerCase().startsWith('execution ')
+          ? cleanResult
+          : `Execution: ${cleanResult}`;
 
       const toastOptions = {
         description: toastDescription,
@@ -1004,10 +1211,19 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
         setTenant(data.tenant);
       }
       
-      // Use backend menuConfig if available, otherwise fall back to system default (empty)
+      // Use backend menuConfig if available, otherwise fall back to tenant default if available, otherwise system default (empty)
       let resolvedConfig: MenuConfig;
       if (data.menuConfig && Array.isArray(data.menuConfig.sections)) {
         resolvedConfig = data.menuConfig;
+      } else if (data.tenant?.menuConfig) {
+        const tConfig = data.tenant.menuConfig as any;
+        if (Array.isArray(tConfig.sections)) {
+          resolvedConfig = tConfig;
+        } else if (tConfig.default && Array.isArray(tConfig.default.sections)) {
+          resolvedConfig = tConfig.default;
+        } else {
+          resolvedConfig = systemDefaultMenuConfig;
+        }
       } else {
         resolvedConfig = systemDefaultMenuConfig;
       }
@@ -1223,6 +1439,17 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
     setIsServiceDeskSideDocked,
     dockedServiceDeskWidth,
     setDockedServiceDeskWidth,
+    launchModalAppId,
+    openAppLaunchModal,
+    closeAppLaunchModal,
+    bottomDockedAppIds,
+    addBottomDockedApp,
+    removeBottomDockedApp,
+    sideDockedAppId,
+    setSideDockedAppId,
+    sideDockedAppWidth,
+    setSideDockedAppWidth,
+    launchWorkspaceApp,
     breadcrumbOverrides,
     setBreadcrumbOverride,
     members,
@@ -1255,6 +1482,8 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
     isQuickCalculatorOpen, setIsQuickCalculatorOpen, isCalculatorLaunchModalOpen, setIsCalculatorLaunchModalOpen,
     isServiceDeskLaunchModalOpen, setIsServiceDeskLaunchModalOpen, isServiceDeskFacebookDocked, setIsServiceDeskFacebookDocked,
     isServiceDeskSideDocked, setIsServiceDeskSideDocked, dockedServiceDeskWidth, setDockedServiceDeskWidth,
+    launchModalAppId, openAppLaunchModal, closeAppLaunchModal, bottomDockedAppIds, addBottomDockedApp, removeBottomDockedApp,
+    sideDockedAppId, setSideDockedAppId, sideDockedAppWidth, setSideDockedAppWidth, launchWorkspaceApp,
     breadcrumbOverrides, setBreadcrumbOverride, members, membersLoading,
     refreshMembers, teams, teamsLoading, refreshTeams, notifications, runningTasks,
     addNotification, markNotificationAsRead, markAllNotificationsAsRead, deleteNotification,

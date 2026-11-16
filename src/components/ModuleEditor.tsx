@@ -161,7 +161,8 @@ import {
   Edit2,
   Undo2,
   Redo2,
-  RefreshCw
+  RefreshCw,
+  Building2
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -187,6 +188,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { CommandPalette } from './CommandPalette';
+import { extractPaletteFields, getSystemMetaFields, getUnifiedFieldDefinition, GroupedModuleFields } from '../lib/formFieldUtils';
 import { cn, calculateHeight, flattenFields, isFieldVisible, isContainerField } from '../lib/utils';
 import { compactLayout } from '../lib/layoutEngine';
 import { usePlatform } from '../hooks/usePlatform';
@@ -908,6 +910,9 @@ export interface Field {
   lookupFilters?: LookupFilter[];
   lookupDisplayField?: string;
   lookupOutputMappings?: { id: string; sourceFieldId: string; targetFieldId: string }[];
+  partyTypeFilter?: 'ALL' | 'PERSON' | 'ORGANIZATION';
+  classificationFilter?: string;
+  allowInlineCreate?: boolean;
   connectorSearchParam?: string;
   connectorLabelField?: string;
   connectorValueField?: string;
@@ -1088,6 +1093,7 @@ export const FIELD_CATEGORIES = [
       { id: 'treeview', label: 'Tree View', icon: TreePalm, defaultSpan: 6 },
       { id: 'calculation', label: 'Calculation', icon: Calculator, defaultSpan: 6 },
       { id: 'lookup', label: 'Data Lookup', icon: Search, defaultSpan: 6 },
+      { id: 'party', label: 'Directory Entity', icon: Building2, defaultSpan: 6 },
       { id: 'user', label: 'User Selector', icon: Users, defaultSpan: 6 },
       { id: 'autonumber', label: 'Auto-increment', icon: Hash, defaultSpan: 6 },
       { id: 'automation', label: 'AI Prompt', icon: Sparkles, defaultSpan: 6 },
@@ -1418,6 +1424,17 @@ const BlockThumbnail = ({ type }: { type: string }) => {
             <div className="h-1 w-2/3 bg-zinc-100 dark:bg-zinc-900 rounded-full" />
           </div>
         </div>
+      ) : type === 'party' ? (
+        <div className="space-y-1.5">
+          <div className="h-1 w-1/3 bg-indigo-500/30 rounded-full" />
+          <div className="h-5 w-full bg-white dark:bg-zinc-950 border border-indigo-500/30 rounded-md flex items-center justify-between px-2 gap-1.5">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <Building2 size={10} className="text-indigo-500 shrink-0" />
+              <div className="h-1 w-2/3 bg-indigo-500/20 rounded-full" />
+            </div>
+            <span className="text-[7px] font-black text-indigo-500 uppercase">360°</span>
+          </div>
+        </div>
       ) : type === 'calculation' ? (
         <div className="space-y-1.5">
           <div className="h-1 w-1/4 bg-indigo-500/30 rounded-full" />
@@ -1657,7 +1674,7 @@ const FieldFormattingRulesEditor = ({
 
 // --- Components ---
 
-const FormCanvasItem = ({ fObj, isSelected, onSelect, onDelete, layout, isRestricted }: any) => {
+const FormCanvasItem = ({ fObj, isSelected, onSelect, onDelete, layout, isRestricted, workflow }: any) => {
   const {
     attributes,
     listeners,
@@ -1675,8 +1692,15 @@ const FormCanvasItem = ({ fObj, isSelected, onSelect, onDelete, layout, isRestri
   };
 
   const isVisual = fObj.id.startsWith('visual-');
-  const field = isVisual ? null : layout.find((f: any) => f.id === fObj.id);
+  const field = isVisual ? null : getUnifiedFieldDefinition(fObj.id, layout, workflow);
   if (!isVisual && !field) return null;
+
+  const colSpanClass = 
+    fObj.width === 'half' || fObj.width === '6' ? "col-span-12 sm:col-span-6" :
+    fObj.width === 'one-third' || fObj.width === '4' ? "col-span-12 sm:col-span-4" :
+    fObj.width === 'two-thirds' || fObj.width === '8' ? "col-span-12 sm:col-span-8" :
+    fObj.width === 'one-quarter' || fObj.width === '3' ? "col-span-12 sm:col-span-3" :
+    "col-span-12";
 
   return (
     <div 
@@ -1688,7 +1712,7 @@ const FormCanvasItem = ({ fObj, isSelected, onSelect, onDelete, layout, isRestri
       }}
       className={cn(
         "relative group p-4 rounded-2xl border-2 transition-all select-none",
-        fObj.width === 'half' ? "col-span-6" : "col-span-12",
+        colSpanClass,
         isSelected 
           ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10" 
           : "border-transparent hover:border-zinc-200 dark:hover:border-zinc-800",
@@ -1809,10 +1833,17 @@ const FormCanvasItem = ({ fObj, isSelected, onSelect, onDelete, layout, isRestri
         </div>
       ) : (
         <div className="space-y-2 opacity-80 group-hover:opacity-100 transition-opacity">
-           <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1">
-             {fObj.labelOverride || field?.label}
-             {(fObj.required || field?.required) && <span className="text-rose-500 ml-1">*</span>}
-           </label>
+           <div className="flex items-center justify-between">
+             <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1">
+               {fObj.labelOverride || field?.label}
+               {(fObj.required || field?.required) && <span className="text-rose-500 ml-1">*</span>}
+             </label>
+             {field?.isSystemMeta && (
+               <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                 Meta
+               </span>
+             )}
+           </div>
            <div className="h-11 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-4 flex items-center justify-between text-xs text-zinc-400 italic">
              <span>
                {fObj.placeholderOverride || (['select', 'lookup', 'user'].includes(field?.type || '') 
@@ -1981,9 +2012,7 @@ export const ModuleEditor = () => {
       wizardSaveMode: 'step' as 'step' | 'end'
     },
     filters: [] as { fieldId: string, type: string }[],
-    actions: [
-      { id: 'act-1', label: 'Export PDF', icon: 'FileText' }
-    ]
+    actions: [] as { id: string, label: string, icon: string }[]
   });
   const getRecordTitle = React.useCallback((r: any) => {
     const fieldId = moduleSettings.titleFieldId;
@@ -3343,7 +3372,10 @@ export const ModuleEditor = () => {
 
   const createField = (type: FieldType): Field => {
     const id = `field-${generateId()}`;
-    const label = `New ${type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')}`;
+    const label =
+      type === 'party'
+        ? 'Directory Entity'
+        : `New ${type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')}`;
     const name = generateSlug(label, layout, id);
     
     return {
@@ -3351,15 +3383,28 @@ export const ModuleEditor = () => {
       name,
       type,
       label,
-      placeholder: ['select', 'lookup', 'user'].includes(type) 
-        ? `Select ${type.replace('_', ' ')}...`
-        : `Enter ${type.replace('_', ' ')}...`,
+      placeholder:
+        type === 'party'
+          ? 'Search people or organisations in Directory...'
+          : ['select', 'lookup', 'user'].includes(type) 
+          ? `Select ${type.replace('_', ' ')}...`
+          : `Enter ${type.replace('_', ' ')}...`,
       helperText: '',
       required: false,
       currencySymbol: '$',
       options: ['Option 1', 'Option 2'],
       calculationLogic: '',
       targetModuleId: '',
+      ...(type === 'party'
+        ? {
+            lookupSource: 'platform' as const,
+            platformEntity: 'modules' as const,
+            targetPlatformModuleId: 'people-organisations',
+            partyTypeFilter: 'ALL' as const,
+            classificationFilter: 'ALL',
+            allowInlineCreate: true,
+          }
+        : {}),
       colSpan: 6,
       startCol: 1,
       rowIndex: layout.length,
@@ -5439,6 +5484,20 @@ export const ModuleEditor = () => {
                 renderRelationshipM2MMock(block)
               ) : block.type === 'rollup' ? (
                 renderRollupMock(block)
+              ) : block.type === 'party' ? (
+                <div className="pt-2">
+                  <div className="h-11 w-full bg-white dark:bg-zinc-950 border border-indigo-500/30 rounded-xl flex items-center justify-between px-4">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Building2 size={14} className="text-indigo-500 shrink-0" />
+                      <span className="text-xs text-zinc-400 font-medium italic select-none truncate">
+                        {block.placeholder || `Search ${block.label} in Directory...`}
+                      </span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold uppercase shrink-0">
+                      360° Directory
+                    </span>
+                  </div>
+                </div>
               ) : block.type === 'lookup' ? (
                 <div className="pt-2">
                   <div className="h-11 w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-between px-4">
@@ -7496,7 +7555,21 @@ export const ModuleEditor = () => {
                                         renderRelationshipM2MMock(block)
                                       ) : block.type === 'rollup' ? (
                                         renderRollupMock(block)
-                                      ) : block.type === 'lookup' ? (
+                                      ) : block.type === 'party' ? (
+                <div className="pt-2">
+                  <div className="h-11 w-full bg-white dark:bg-zinc-950 border border-indigo-500/30 rounded-xl flex items-center justify-between px-4">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Building2 size={14} className="text-indigo-500 shrink-0" />
+                      <span className="text-xs text-zinc-400 font-medium italic select-none truncate">
+                        {block.placeholder || `Search ${block.label} in Directory...`}
+                      </span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold uppercase shrink-0">
+                      360° Directory
+                    </span>
+                  </div>
+                </div>
+              ) : block.type === 'lookup' ? (
                                         <div className="pt-2">
                                           <div className="h-11 w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-between px-4">
                                             <div className="flex items-center gap-2">
@@ -8576,7 +8649,21 @@ export const ModuleEditor = () => {
                                       renderRelationshipM2MMock(block)
                                     ) : block.type === 'rollup' ? (
                                       renderRollupMock(block)
-                                    ) : block.type === 'lookup' ? (
+                                    ) : block.type === 'party' ? (
+                <div className="pt-2">
+                  <div className="h-11 w-full bg-white dark:bg-zinc-950 border border-indigo-500/30 rounded-xl flex items-center justify-between px-4">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Building2 size={14} className="text-indigo-500 shrink-0" />
+                      <span className="text-xs text-zinc-400 font-medium italic select-none truncate">
+                        {block.placeholder || `Search ${block.label} in Directory...`}
+                      </span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold uppercase shrink-0">
+                      360° Directory
+                    </span>
+                  </div>
+                </div>
+              ) : block.type === 'lookup' ? (
                                       <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center px-4 gap-2 shadow-sm dark:shadow-none">
                                         <Search size={14} className="text-zinc-400 dark:text-zinc-600" />
                                         <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">{block.placeholder || `Search ${block.label?.toLowerCase() || 'records'}...`}</span>
@@ -10819,71 +10906,283 @@ export const ModuleEditor = () => {
                {selectedFormId ? (() => {
                  const selectedForm = forms.find(f => f.id === selectedFormId);
                  if (!selectedForm) return null;
+
+                 const { ungroupedFields, groups } = extractPaletteFields(layout);
+                 const systemMetaFields = getSystemMetaFields(workflow);
+
+                 const isFieldInCurrentForm = (fieldId: string) => {
+                   return selectedForm.isMultistep 
+                     ? (selectedForm.steps || []).some((s: any) => (s.fields || []).some((f: any) => f.id === fieldId)) 
+                     : (selectedForm.fields || []).some((f: any) => f.id === fieldId);
+                 };
+
+                 const handleToggleSingleField = (fieldId: string, fieldLabel: string, fieldRequired: boolean = false) => {
+                   const isAdded = isFieldInCurrentForm(fieldId);
+                   if (isAdded) {
+                     setForms(prev => prev.map(f => {
+                       if (f.id !== selectedFormId) return f;
+                       if (f.isMultistep) {
+                         return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.filter((fo: any) => fo.id !== fieldId) })) };
+                       }
+                       return { ...f, fields: f.fields.filter((fo: any) => fo.id !== fieldId) };
+                     }));
+                     if (selectedFieldInFormId === fieldId) setSelectedFieldInFormId(null);
+                   } else {
+                     const newFieldObj = { id: fieldId, labelOverride: fieldLabel, width: 'full', required: fieldRequired };
+                     setForms(prev => prev.map(f => {
+                       if (f.id !== selectedFormId) return f;
+                       if (f.isMultistep) {
+                         return { ...f, steps: f.steps.map((s: any) => s.id === currentStepId ? { ...s, fields: [...s.fields, newFieldObj] } : s) };
+                       }
+                       return { ...f, fields: [...f.fields, newFieldObj] };
+                     }));
+                     setSelectedFieldInFormId(fieldId);
+                   }
+                 };
+
+                 const handleToggleGroup = (group: GroupedModuleFields) => {
+                   const childIds = group.fields.map(f => f.id);
+                   const allAdded = childIds.length > 0 && childIds.every(id => isFieldInCurrentForm(id));
+
+                   if (allAdded) {
+                     setForms(prev => prev.map(f => {
+                       if (f.id !== selectedFormId) return f;
+                       if (f.isMultistep) {
+                         return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.filter((fo: any) => !childIds.includes(fo.id)) })) };
+                       }
+                       return { ...f, fields: f.fields.filter((fo: any) => !childIds.includes(fo.id)) };
+                     }));
+                     if (selectedFieldInFormId && childIds.includes(selectedFieldInFormId)) {
+                       setSelectedFieldInFormId(null);
+                     }
+                   } else {
+                     setForms(prev => prev.map(f => {
+                       if (f.id !== selectedFormId) return f;
+                       const currentFormFields = f.isMultistep
+                         ? (f.steps.find((s: any) => s.id === currentStepId)?.fields || [])
+                         : f.fields;
+                       const existingIds = new Set(currentFormFields.map((fo: any) => fo.id));
+                       const toAdd = group.fields
+                         .filter(cf => !existingIds.has(cf.id))
+                         .map(cf => ({
+                           id: cf.id,
+                           labelOverride: cf.label,
+                           width: 'full',
+                           required: cf.required || false
+                         }));
+
+                       if (f.isMultistep) {
+                         return {
+                           ...f,
+                           steps: f.steps.map((s: any) => s.id === currentStepId ? { ...s, fields: [...s.fields, ...toAdd] } : s)
+                         };
+                       }
+                       return {
+                         ...f,
+                         fields: [...f.fields, ...toAdd]
+                       };
+                     }));
+                   }
+                 };
                  
                  return (
                    <>
-                      <aside className="w-72 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 flex flex-col gap-8 overflow-y-auto custom-scrollbar">
-                        <div className="space-y-4">
-                           <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-2">Module Fields</h3>
-                           <div className="space-y-2">
-                              {layout.map(field => {
-                                 const isAdded = selectedForm.isMultistep 
-                                    ? (selectedForm.steps || []).some((s: any) => (s.fields || []).some((f: any) => f.id === field.id)) 
-                                    : (selectedForm.fields || []).some((f: any) => f.id === field.id);
-                                 return (
-                                   <button 
-                                     key={field.id}
-                                     onClick={() => {
-                                       if (isAdded) {
-                                         setForms(prev => prev.map(f => {
-                                           if (f.id !== selectedFormId) return f;
-                                           if (f.isMultistep) {
-                                             return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.filter((fo: any) => fo.id !== field.id) })) };
-                                           }
-                                           return { ...f, fields: f.fields.filter((fo: any) => fo.id !== field.id) };
-                                         }));
-                                       } else {
-                                         const newFieldObj = { id: field.id, labelOverride: field.label, width: 'full', required: field.required || false };
-                                         setForms(prev => prev.map(f => {
-                                           if (f.id !== selectedFormId) return f;
-                                           if (f.isMultistep) {
-                                             return { ...f, steps: f.steps.map((s: any) => s.id === currentStepId ? { ...s, fields: [...s.fields, newFieldObj] } : s) };
-                                           }
-                                           return { ...f, fields: [...f.fields, newFieldObj] };
-                                         }));
-                                       }
-                                     }}
-                                     className={cn(
-                                       "w-full flex items-center justify-between p-3.5 rounded-2xl border-2 transition-all group",
-                                       isAdded 
-                                         ? "bg-indigo-50/50 dark:bg-indigo-500/5 border-indigo-500/20" 
-                                         : "bg-transparent border-transparent hover:bg-zinc-50 dark:hover:bg-zinc-900"
-                                     )}
-                                   >
-                                     <div className="flex items-center gap-3">
-                                        <div className={cn(
-                                          "w-8 h-8 rounded-lg flex items-center justify-center transition-all",
-                                          isAdded ? "bg-indigo-600 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 group-hover:text-zinc-600"
-                                        )}>
-                                           {(() => {
-                                             const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === field.type);
-                                             const Icon = fieldDef?.icon || Table;
-                                             return <Icon size={14} />;
-                                           })()}
-                                        </div>
-                                        <div className="text-left">
-                                           <p className={cn("text-xs font-bold", isAdded ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-500")}>{field.label}</p>
-                                           <p className="text-[9px] text-zinc-400 uppercase font-bold tracking-tighter">{field.type}</p>
-                                        </div>
+                      <aside className="w-72 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 flex flex-col gap-6 overflow-y-auto custom-scrollbar">
+                        {/* Module Fields Section */}
+                        <div className="space-y-3">
+                           <div className="flex items-center justify-between px-1">
+                             <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Module Fields</h3>
+                             <span className="text-[9px] font-mono font-bold text-zinc-400">
+                               {groups.reduce((acc, g) => acc + g.fields.length, 0) + ungroupedFields.length}
+                             </span>
+                           </div>
+
+                           {/* Grouped Fields with Add All */}
+                           <div className="space-y-3">
+                             {groups.map((group) => {
+                               const childIds = group.fields.map(f => f.id);
+                               const allAdded = childIds.length > 0 && childIds.every(id => isFieldInCurrentForm(id));
+                               const someAdded = childIds.some(id => isFieldInCurrentForm(id));
+
+                               return (
+                                 <div key={group.id} className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/40 overflow-hidden shadow-xs">
+                                   {/* Group Header with Add All */}
+                                   <div className="flex items-center justify-between p-2.5 bg-zinc-100/70 dark:bg-zinc-800/60 border-b border-zinc-200/70 dark:border-zinc-800">
+                                     <div className="flex items-center gap-2 min-w-0 pr-1">
+                                       <Folder size={13} className="text-indigo-500 shrink-0" />
+                                       <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">{group.label}</span>
+                                       <span className="text-[8px] font-mono px-1.5 py-0.5 rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-400 shrink-0">
+                                         {group.fields.length}
+                                       </span>
                                      </div>
-                                     {isAdded ? (
-                                       <Minus size={14} className="text-indigo-500" />
-                                     ) : (
-                                       <Plus size={14} className="text-zinc-300 group-hover:text-indigo-500 transition-colors" />
-                                     )}
-                                   </button>
-                                 );
-                              })}
+                                     <button
+                                       type="button"
+                                       onClick={() => handleToggleGroup(group)}
+                                       className={cn(
+                                         "text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-lg transition-all shrink-0 cursor-pointer",
+                                         allAdded
+                                           ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20"
+                                           : someAdded
+                                             ? "bg-indigo-600 text-white shadow-xs hover:bg-indigo-500"
+                                             : "bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 border border-zinc-200 dark:border-zinc-700 hover:border-indigo-400"
+                                       )}
+                                       title={allAdded ? "Remove all fields in this group from form" : "Add all fields in this group to active form step"}
+                                     >
+                                       {allAdded ? "Remove All" : "Add All"}
+                                     </button>
+                                   </div>
+
+                                   {/* Individual Child Fields */}
+                                   <div className="p-1.5 space-y-1">
+                                     {group.fields.map((field: any) => {
+                                       const isAdded = isFieldInCurrentForm(field.id);
+                                       const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === field.type);
+                                       const Icon = fieldDef?.icon || Table;
+
+                                       return (
+                                         <button
+                                           key={field.id}
+                                           type="button"
+                                           onClick={() => handleToggleSingleField(field.id, field.label, field.required)}
+                                           className={cn(
+                                             "w-full flex items-center justify-between p-2 rounded-xl border transition-all group text-left cursor-pointer",
+                                             isAdded 
+                                               ? "bg-indigo-50/70 dark:bg-indigo-500/10 border-indigo-500/25 shadow-xs" 
+                                               : "bg-white dark:bg-zinc-900 border-transparent hover:border-zinc-200 dark:hover:border-zinc-800"
+                                           )}
+                                         >
+                                           <div className="flex items-center gap-2 min-w-0">
+                                             <div className={cn(
+                                               "w-6 h-6 rounded-md flex items-center justify-center shrink-0 transition-all",
+                                               isAdded ? "bg-indigo-600 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 group-hover:text-indigo-600"
+                                             )}>
+                                               <Icon size={11} />
+                                             </div>
+                                             <div className="min-w-0">
+                                               <p className={cn("text-xs font-bold truncate leading-tight", isAdded ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-700 dark:text-zinc-300")}>
+                                                 {field.label}
+                                               </p>
+                                               <p className="text-[8px] text-zinc-400 uppercase font-bold tracking-tighter">{field.type}</p>
+                                             </div>
+                                           </div>
+                                           {isAdded ? (
+                                             <Minus size={12} className="text-indigo-500 shrink-0 ml-1" />
+                                           ) : (
+                                             <Plus size={12} className="text-zinc-300 group-hover:text-indigo-500 transition-colors shrink-0 ml-1" />
+                                           )}
+                                         </button>
+                                       );
+                                     })}
+                                   </div>
+                                 </div>
+                               );
+                             })}
+
+                             {/* Ungrouped Fields */}
+                             {ungroupedFields.length > 0 && (
+                               <div className="space-y-1">
+                                 {groups.length > 0 && (
+                                   <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest px-1 block pt-1">
+                                     Other Fields
+                                   </span>
+                                 )}
+                                 {ungroupedFields.map((field: any) => {
+                                   const isAdded = isFieldInCurrentForm(field.id);
+                                   const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === field.type);
+                                   const Icon = fieldDef?.icon || Table;
+
+                                   return (
+                                     <button
+                                       key={field.id}
+                                       type="button"
+                                       onClick={() => handleToggleSingleField(field.id, field.label, field.required)}
+                                       className={cn(
+                                         "w-full flex items-center justify-between p-2.5 rounded-xl border transition-all group text-left cursor-pointer",
+                                         isAdded 
+                                           ? "bg-indigo-50/70 dark:bg-indigo-500/10 border-indigo-500/25 shadow-xs" 
+                                           : "bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800/80 hover:border-zinc-200 dark:hover:border-zinc-700"
+                                       )}
+                                     >
+                                       <div className="flex items-center gap-2.5 min-w-0">
+                                         <div className={cn(
+                                           "w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all",
+                                           isAdded ? "bg-indigo-600 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 group-hover:text-zinc-600"
+                                         )}>
+                                           <Icon size={12} />
+                                         </div>
+                                         <div className="min-w-0">
+                                           <p className={cn("text-xs font-bold truncate", isAdded ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-700 dark:text-zinc-300")}>
+                                             {field.label}
+                                           </p>
+                                           <p className="text-[8px] text-zinc-400 uppercase font-bold tracking-tighter">{field.type}</p>
+                                         </div>
+                                       </div>
+                                       {isAdded ? (
+                                         <Minus size={13} className="text-indigo-500 shrink-0 ml-1" />
+                                       ) : (
+                                         <Plus size={13} className="text-zinc-300 group-hover:text-indigo-500 transition-colors shrink-0 ml-1" />
+                                       )}
+                                     </button>
+                                   );
+                                 })}
+                               </div>
+                             )}
+
+                             {groups.length === 0 && ungroupedFields.length === 0 && (
+                               <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-dashed border-zinc-200 dark:border-zinc-800 text-center">
+                                 <p className="text-xs text-zinc-400">No fields configured on module layout yet.</p>
+                               </div>
+                             )}
+                           </div>
+                        </div>
+
+                        {/* System & Record Meta Fields Section */}
+                        <div className="space-y-3 pt-2 border-t border-zinc-100 dark:border-zinc-800/80">
+                           <div className="flex items-center justify-between px-1">
+                             <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Record Meta Fields</h3>
+                             <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 font-mono">
+                               {systemMetaFields.length}
+                             </span>
+                           </div>
+                           <div className="space-y-1.5">
+                             {systemMetaFields.map((meta) => {
+                               const isAdded = isFieldInCurrentForm(meta.id);
+                               const Icon = meta.icon;
+
+                               return (
+                                 <button
+                                   key={meta.id}
+                                   type="button"
+                                   onClick={() => handleToggleSingleField(meta.id, meta.label, false)}
+                                   className={cn(
+                                     "w-full flex items-center justify-between p-2.5 rounded-xl border transition-all group text-left cursor-pointer",
+                                     isAdded
+                                       ? "bg-purple-50/70 dark:bg-purple-950/20 border-purple-500/30 shadow-xs"
+                                       : "bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800/80 hover:border-zinc-200 dark:hover:border-zinc-700"
+                                   )}
+                                 >
+                                   <div className="flex items-center gap-2.5 min-w-0">
+                                     <div className={cn(
+                                       "w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all",
+                                       isAdded ? "bg-purple-600 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 group-hover:text-purple-600"
+                                     )}>
+                                       <Icon size={13} />
+                                     </div>
+                                     <div className="min-w-0">
+                                       <p className={cn("text-xs font-bold truncate", isAdded ? "text-purple-600 dark:text-purple-400" : "text-zinc-700 dark:text-zinc-300")}>
+                                         {meta.label}
+                                       </p>
+                                       <p className="text-[8px] text-zinc-400 truncate">{meta.description || meta.type}</p>
+                                     </div>
+                                   </div>
+                                   {isAdded ? (
+                                     <Minus size={13} className="text-purple-500 shrink-0 ml-1" />
+                                   ) : (
+                                     <Plus size={13} className="text-zinc-300 group-hover:text-purple-500 transition-colors shrink-0 ml-1" />
+                                   )}
+                                 </button>
+                               );
+                             })}
                            </div>
                         </div>
 
@@ -11063,6 +11362,7 @@ export const ModuleEditor = () => {
                                                  fObj={fObj} 
                                                  isSelected={selectedFieldInFormId === fObj.id}
                                                  layout={layout}
+                                                 workflow={workflow}
                                                  onSelect={setSelectedFieldInFormId}
                                                  isRestricted={isRestricted}
                                                  onDelete={(id: string) => {
@@ -11191,7 +11491,7 @@ export const ModuleEditor = () => {
                            const fObjIdx = fields.findIndex((f: any) => f.id === selectedFieldInFormId);
                            const fObj = fields[fObjIdx];
                            const isVisual = selectedFieldInFormId.startsWith('visual-');
-                           const field = isVisual ? null : layout.find(f => f.id === selectedFieldInFormId);
+                           const field = isVisual ? null : getUnifiedFieldDefinition(selectedFieldInFormId, layout, workflow);
                            if (!fObj || (!isVisual && !field)) return null;
 
                            return (
@@ -11249,13 +11549,20 @@ export const ModuleEditor = () => {
                                    </div>
 
                                     <div className="space-y-2">
-                                       <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1">Field Width</label>
-                                       <div className="grid grid-cols-2 gap-2">
-                                          {['full', 'half'].map((w) => (
+                                       <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1">Field Width (12-Col Grid)</label>
+                                       <div className="grid grid-cols-5 gap-1.5">
+                                          {[
+                                            { id: 'full', label: 'Full', span: '12 cols' },
+                                            { id: 'half', label: '1/2', span: '6 cols' },
+                                            { id: 'two-thirds', label: '2/3', span: '8 cols' },
+                                            { id: 'one-third', label: '1/3', span: '4 cols' },
+                                            { id: 'one-quarter', label: '1/4', span: '3 cols' }
+                                          ].map((opt) => (
                                             <button 
-                                              key={w}
+                                              key={opt.id}
+                                              type="button"
                                               onClick={() => {
-                                                const updates = { width: w };
+                                                const updates = { width: opt.id };
                                                 setForms(prev => prev.map(f => {
                                                   if (f.id !== selectedFormId) return f;
                                                   if (f.isMultistep) {
@@ -11265,17 +11572,56 @@ export const ModuleEditor = () => {
                                                 }));
                                               }}
                                               className={cn(
-                                                "py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest border-2 transition-all",
-                                                fObj.width === w || (!fObj.width && w === 'full')
-                                                  ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-500/20"
-                                                  : "bg-transparent border-zinc-100 dark:border-zinc-800 text-zinc-400 hover:border-zinc-200"
+                                                "py-2 rounded-xl text-[10px] font-bold border transition-all text-center flex flex-col items-center justify-center cursor-pointer",
+                                                fObj.width === opt.id || (!fObj.width && opt.id === 'full')
+                                                  ? "bg-indigo-600 border-indigo-600 text-white shadow-xs"
+                                                  : "bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700/60 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300"
                                               )}
+                                              title={opt.span}
                                             >
-                                              {w}
+                                              <span>{opt.label}</span>
+                                              <span className="text-[7px] opacity-75">{opt.span}</span>
                                             </button>
                                           ))}
                                        </div>
                                     </div>
+
+                                    {selectedForm.isMultistep && (selectedForm.steps?.length || 0) > 1 && (
+                                      <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1">Move to Step</label>
+                                        <select
+                                          value={currentStepId || ''}
+                                          onChange={(e) => {
+                                            const targetStepId = e.target.value;
+                                            if (targetStepId === currentStepId) return;
+                                            setForms(prev => prev.map(f => {
+                                              if (f.id !== selectedFormId) return f;
+                                              const currentStepFields = (f.steps || []).find((s: any) => s.id === currentStepId)?.fields || [];
+                                              const fieldToMove = currentStepFields.find((fo: any) => fo.id === selectedFieldInFormId);
+                                              if (!fieldToMove) return f;
+                                              return {
+                                                ...f,
+                                                steps: f.steps.map((s: any) => {
+                                                  if (s.id === currentStepId) {
+                                                    return { ...s, fields: s.fields.filter((fo: any) => fo.id !== selectedFieldInFormId) };
+                                                  }
+                                                  if (s.id === targetStepId) {
+                                                    return { ...s, fields: [...(s.fields || []), fieldToMove] };
+                                                  }
+                                                  return s;
+                                                })
+                                              };
+                                            }));
+                                            setCurrentStepId(targetStepId);
+                                          }}
+                                          className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+                                        >
+                                          {(selectedForm.steps || []).map((step: any, idx: number) => (
+                                            <option key={step.id} value={step.id}>Step {idx + 1}: {step.title}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                    )}
 
                                     {!isVisual && (
                                       <div className="grid grid-cols-2 gap-4 py-6 border-y border-zinc-100 dark:border-zinc-800">
@@ -11330,13 +11676,26 @@ export const ModuleEditor = () => {
                                     )}
 
                                    {!isVisual && (
-                                     <div className="p-6 bg-indigo-50/50 dark:bg-indigo-500/5 rounded-3xl border border-indigo-500/10 space-y-3">
-                                        <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
+                                     <div className={cn(
+                                       "p-5 rounded-3xl border space-y-2.5",
+                                       field?.isSystemMeta
+                                         ? "bg-purple-50/60 dark:bg-purple-950/20 border-purple-500/20"
+                                         : "bg-indigo-50/50 dark:bg-indigo-500/5 border-indigo-500/10"
+                                     )}>
+                                        <div className={cn(
+                                          "flex items-center gap-2",
+                                          field?.isSystemMeta ? "text-purple-600 dark:text-purple-400" : "text-indigo-600 dark:text-indigo-400"
+                                        )}>
                                            <Info size={14} />
-                                           <span className="text-[10px] font-black uppercase tracking-widest">Base Data Point</span>
+                                           <span className="text-[10px] font-black uppercase tracking-widest">
+                                             {field?.isSystemMeta ? 'System Meta Field' : 'Base Data Point'}
+                                           </span>
                                         </div>
                                         <p className="text-[10px] text-zinc-500 leading-relaxed font-medium">
-                                          This field maps to <strong>{field?.id}</strong> in your module schema. Data type is <strong>{field?.type}</strong>.
+                                          {field?.isSystemMeta 
+                                            ? <span>This is a built-in record property: <strong>{field?.label}</strong>. {field?.description || ''}</span>
+                                            : <span>This field maps to <strong>{field?.id}</strong> in your module schema. Data type is <strong>{field?.type}</strong>.</span>
+                                          }
                                         </p>
                                      </div>
                                    )}
@@ -15468,6 +15827,322 @@ export const ModuleEditor = () => {
                               </div>
                             </div>
                           )}
+                        </div>
+                      )}
+
+                      {selectedField.type === 'party' && (
+                        <div className="space-y-6">
+                          {/* Banner */}
+                          <div className="p-3.5 rounded-2xl bg-gradient-to-br from-indigo-500/10 to-purple-500/5 border border-indigo-500/20 space-y-1">
+                            <div className="flex items-center gap-2">
+                              <Building2 size={14} className="text-indigo-500" />
+                              <span className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-wider">
+                                Master Directory Entity Selector
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-zinc-500 leading-relaxed">
+                              Links records to the centralized People &amp; Organisations Directory with MS365 hover profile cards and 360° ecosystem tracking.
+                            </p>
+                          </div>
+
+                          {/* 1. Allowed Entity Types */}
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">
+                              Allowed Entity Types
+                            </label>
+                            <div className="grid grid-cols-3 gap-1.5">
+                              {[
+                                { id: 'ALL', label: 'All Entities' },
+                                { id: 'PERSON', label: 'People Only' },
+                                { id: 'ORGANIZATION', label: 'Orgs Only' },
+                              ].map((opt) => {
+                                const active = (selectedField.partyTypeFilter || 'ALL') === opt.id;
+                                return (
+                                  <button
+                                    key={opt.id}
+                                    type="button"
+                                    onClick={() =>
+                                      updateField(selectedField.id, {
+                                        partyTypeFilter: opt.id as any,
+                                        lookupSource: 'platform',
+                                        platformEntity: 'modules',
+                                        targetPlatformModuleId: 'people-organisations',
+                                      })
+                                    }
+                                    className={cn(
+                                      'py-2 px-2 rounded-xl text-[9px] font-black uppercase tracking-wider border-2 transition-all cursor-pointer',
+                                      active
+                                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-500/20'
+                                        : 'bg-transparent border-zinc-100 dark:border-zinc-800 text-zinc-400 hover:border-zinc-200'
+                                    )}
+                                  >
+                                    {opt.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* 2. Classification Filter */}
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">
+                              Classification Filter (Optional)
+                            </label>
+                            <select
+                              value={selectedField.classificationFilter || 'ALL'}
+                              onChange={(e) =>
+                                updateField(selectedField.id, {
+                                  classificationFilter: e.target.value,
+                                })
+                              }
+                              className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+                            >
+                              <option value="ALL">All Classifications</option>
+                              <option value="CLIENT">Clients Only (CLIENT)</option>
+                              <option value="SUPPLIER">Suppliers Only (SUPPLIER)</option>
+                              <option value="PARTNER">Partners Only (PARTNER)</option>
+                              <option value="PROSPECT">Prospects Only (PROSPECT)</option>
+                              <option value="CONTRACTOR">Contractors Only (CONTRACTOR)</option>
+                              <option value="REGULATOR">Regulators Only (REGULATOR)</option>
+                              <option value="VIP">VIP Entities Only (VIP)</option>
+                              <option value="INVESTOR">Investors Only (INVESTOR)</option>
+                              <option value="SUBSIDIARY">Subsidiaries Only (SUBSIDIARY)</option>
+                              <option value="ADVISOR">Advisors Only (ADVISOR)</option>
+                            </select>
+                          </div>
+
+                          {/* 3. Allow Inline Entity Registration */}
+                          <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800">
+                            <div>
+                              <p className="text-[11px] font-bold text-zinc-900 dark:text-white">
+                                Inline &ldquo;+ Register Entity&rdquo;
+                              </p>
+                              <p className="text-[9px] text-zinc-500">
+                                Allow users to register a new Person/Org from the dropdown
+                              </p>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={selectedField.allowInlineCreate !== false}
+                              onChange={(e) =>
+                                updateField(selectedField.id, {
+                                  allowInlineCreate: e.target.checked,
+                                })
+                              }
+                              className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                            />
+                          </div>
+
+                          {/* 4. Display Field */}
+                          <div className="space-y-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                            <div className="flex items-center gap-2 px-1">
+                              <div className="p-1 bg-indigo-500/10 text-indigo-500 rounded-md">
+                                <Eye size={12} />
+                              </div>
+                              <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                                Display Label Field
+                              </label>
+                            </div>
+                            <select
+                              value={selectedField.lookupDisplayField || ''}
+                              onChange={(e) =>
+                                updateField(selectedField.id, { lookupDisplayField: e.target.value })
+                              }
+                              className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+                            >
+                              <option value="">Default (Full / Display Name)</option>
+                              {(
+                                PLATFORM_MODULES.find((m) => m.id === 'people-organisations')
+                                  ?.availableFields || []
+                              ).map((f) => (
+                                <option key={f.id} value={f.id}>
+                                  {f.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* 5. Auto-Populate Field Mapping + One-Click Auto-Provision */}
+                          <div className="space-y-3 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                            <div className="flex items-center justify-between px-1">
+                              <div className="flex items-center gap-2">
+                                <div className="p-1 bg-indigo-500/10 text-indigo-500 rounded-md">
+                                  <ArrowRightLeft size={12} />
+                                </div>
+                                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                                  Auto-Populate Fields
+                                </label>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const currentMappings = selectedField.lookupOutputMappings || [];
+                                  updateField(selectedField.id, {
+                                    lookupOutputMappings: [
+                                      ...currentMappings,
+                                      {
+                                        id: Math.random().toString(36).substr(2, 9),
+                                        sourceFieldId: '',
+                                        targetFieldId: '',
+                                      },
+                                    ],
+                                  });
+                                }}
+                                className="text-[9px] font-black text-indigo-500 uppercase tracking-widest hover:text-indigo-600 flex items-center gap-1 cursor-pointer"
+                              >
+                                <Plus size={10} /> Add Mapping
+                              </button>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const presetDefs =
+                                  selectedField.partyTypeFilter === 'ORGANIZATION'
+                                    ? [
+                                        { src: 'legalName', label: 'Legal Name', type: 'text' as FieldType },
+                                        { src: 'taxIdentifier', label: 'ABN / Tax ID', type: 'text' as FieldType },
+                                        { src: 'email', label: 'Primary Email', type: 'email' as FieldType },
+                                        { src: 'phone', label: 'Business Phone', type: 'phone' as FieldType },
+                                      ]
+                                    : selectedField.partyTypeFilter === 'PERSON'
+                                    ? [
+                                        { src: 'firstName', label: 'First Name', type: 'text' as FieldType },
+                                        { src: 'lastName', label: 'Last Name', type: 'text' as FieldType },
+                                        { src: 'email', label: 'Email Address', type: 'email' as FieldType },
+                                        { src: 'phone', label: 'Phone Number', type: 'phone' as FieldType },
+                                      ]
+                                    : [
+                                        { src: 'partyType', label: 'Entity Type', type: 'text' as FieldType },
+                                        { src: 'email', label: 'Primary Email', type: 'email' as FieldType },
+                                        { src: 'phone', label: 'Contact Phone', type: 'phone' as FieldType },
+                                        { src: 'primaryAddress', label: 'Primary Address', type: 'text' as FieldType },
+                                      ];
+
+                                const createdFields: Field[] = [];
+                                const newMappings = [...(selectedField.lookupOutputMappings || [])];
+                                const baseRow = (selectedField.rowIndex ?? layout.length) + 1;
+
+                                presetDefs.forEach((def, idx) => {
+                                  const fId = `field-${generateId()}`;
+                                  const fName = generateSlug(def.label, [...layout, ...createdFields], fId);
+                                  createdFields.push({
+                                    id: fId,
+                                    name: fName,
+                                    type: def.type,
+                                    label: def.label,
+                                    placeholder: `Auto-filled from ${selectedField.label}...`,
+                                    required: false,
+                                    colSpan: 6,
+                                    startCol: idx % 2 === 0 ? 1 : 7,
+                                    rowIndex: baseRow + Math.floor(idx / 2),
+                                    tabId: selectedField.tabId || currentTabId,
+                                    showInTable: false,
+                                  });
+                                  newMappings.push({
+                                    id: Math.random().toString(36).substr(2, 9),
+                                    sourceFieldId: def.src,
+                                    targetFieldId: fId,
+                                  });
+                                });
+
+                                setLayout((prev) =>
+                                  prev
+                                    .map((f) =>
+                                      f.id === selectedField.id
+                                        ? { ...f, lookupOutputMappings: newMappings }
+                                        : f
+                                    )
+                                    .concat(createdFields)
+                                );
+                                toast.success(
+                                  `Auto-provisioned & mapped ${createdFields.length} Directory fields`
+                                );
+                              }}
+                              className="w-full py-2 px-3 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-[10px] font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                            >
+                              <Sparkles size={12} />
+                              <span>Auto-Provision &amp; Map Contact Fields</span>
+                            </button>
+
+                            <div className="space-y-2">
+                              {(selectedField.lookupOutputMappings || []).map((mapping: any, idx: number) => (
+                                <div
+                                  key={mapping.id}
+                                  className="flex items-center gap-2 p-2 bg-zinc-50 dark:bg-zinc-950/40 border border-zinc-200 dark:border-zinc-800 rounded-xl group/mapping"
+                                >
+                                  <div className="flex-1 space-y-1">
+                                    <select
+                                      value={mapping.sourceFieldId}
+                                      onChange={(e) => {
+                                        const newMappings = [
+                                          ...(selectedField.lookupOutputMappings || []),
+                                        ];
+                                        newMappings[idx] = {
+                                          ...newMappings[idx],
+                                          sourceFieldId: e.target.value,
+                                        };
+                                        updateField(selectedField.id, {
+                                          lookupOutputMappings: newMappings,
+                                        });
+                                      }}
+                                      className="w-full bg-transparent text-[10px] font-bold text-zinc-600 dark:text-zinc-400 focus:outline-none"
+                                    >
+                                      <option value="">Source Directory Field...</option>
+                                      {(
+                                        PLATFORM_MODULES.find((m) => m.id === 'people-organisations')
+                                          ?.availableFields || []
+                                      ).map((f) => (
+                                        <option key={f.id} value={f.id}>
+                                          {f.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <div className="flex items-center gap-1 text-[8px] text-zinc-400 font-black uppercase tracking-widest px-1">
+                                      <ArrowRight size={8} /> Target Module Field
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveMappingIdx(idx);
+                                        setActiveMappingType('target');
+                                        setShowMappingModal(true);
+                                      }}
+                                      className="w-full bg-zinc-100/50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 text-left flex items-center justify-between hover:border-indigo-500 transition-all group/btn"
+                                    >
+                                      <span className="truncate">
+                                        {(() => {
+                                          const allFields = flattenFields(layout);
+                                          const target = allFields.find(
+                                            (f) => f.id === mapping.targetFieldId
+                                          );
+                                          return target ? target.label : 'Select Target Field...';
+                                        })()}
+                                      </span>
+                                      <Search
+                                        size={10}
+                                        className="text-zinc-400 group-hover/btn:text-indigo-500"
+                                      />
+                                    </button>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newMappings = (
+                                        selectedField.lookupOutputMappings || []
+                                      ).filter((m: any) => m.id !== mapping.id);
+                                      updateField(selectedField.id, {
+                                        lookupOutputMappings: newMappings,
+                                      });
+                                    }}
+                                    className="p-1 text-zinc-400 hover:text-rose-500 opacity-0 group-hover/mapping:opacity-100 transition-all"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         </div>
                       )}
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import * as LucideIcons from 'lucide-react';
 import {
@@ -29,6 +29,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useTheme } from '../../hooks/useTheme';
 import { getAllCachedRecordsAcrossWorkspace, primeRecordCache } from '../../services/dataService';
 import { DATA_API_URL } from '../../config';
+import { WORKSPACE_APP_VIEWS } from '../../config/workspaceAppViews';
 import { cn, slugify } from '../../lib/utils';
 
 interface CommandItem {
@@ -53,6 +54,7 @@ export const WorkspaceCommandPalette: React.FC<WorkspaceCommandPaletteProps> = (
   onClose
 }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const {
     tenant,
     modules,
@@ -63,7 +65,8 @@ export const WorkspaceCommandPalette: React.FC<WorkspaceCommandPaletteProps> = (
     setIsAppLauncherOpen,
     setIsNotificationsOpen,
     setIsRecyclingBinOpen,
-    setIsCalculatorLaunchModalOpen
+    launchWorkspaceApp,
+    openAppLaunchModal
   } = usePlatform();
   const { session } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -311,8 +314,8 @@ export const WorkspaceCommandPalette: React.FC<WorkspaceCommandPaletteProps> = (
         icon: <Inbox size={15} className="text-amber-500" />,
         keywords: 'triage work distribution intake routing submissions',
         onSelect: () => {
-          navigate('/workspace/apps/triage');
           onClose();
+          launchWorkspaceApp('triage', undefined, navigate, location.pathname);
         }
       },
       {
@@ -324,22 +327,22 @@ export const WorkspaceCommandPalette: React.FC<WorkspaceCommandPaletteProps> = (
         icon: <Users size={15} className="text-sky-500" />,
         keywords: 'directory people organisations contacts companies crm',
         onSelect: () => {
-          navigate('/workspace/apps/directory');
           onClose();
+          launchWorkspaceApp('directory', undefined, navigate, location.pathname);
         }
       },
       {
         id: 'act:aurora-ai',
         title: 'Ask Aurora AI Workspace Co-Pilot',
-        subtitle: 'Open full-page Aurora Vibe AI assistant',
+        subtitle: 'Open Aurora Vibe AI assistant in your preferred display mode',
         badge: 'AI',
         badgeColor: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20',
         category: 'actions',
         icon: <Sparkles size={15} className="text-indigo-500" />,
         keywords: 'ai assistant chat copilot aurora vibe prompt',
         onSelect: () => {
-          navigate('/workspace/aurora-vibe');
           onClose();
+          launchWorkspaceApp('ai-assistant', undefined, navigate, location.pathname);
         }
       },
       {
@@ -371,7 +374,7 @@ export const WorkspaceCommandPalette: React.FC<WorkspaceCommandPaletteProps> = (
       {
         id: 'act:calculator',
         title: 'Open Aurora Calculator',
-        subtitle: 'Choose display mode: docked side pane, full suite app, or floating calc',
+        subtitle: 'Choose display mode: Bottom Mount, Side Mount, In App, or Full Screen',
         badge: 'Calculator',
         badgeColor: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20',
         category: 'actions',
@@ -379,9 +382,27 @@ export const WorkspaceCommandPalette: React.FC<WorkspaceCommandPaletteProps> = (
         keywords: 'calculator math compute numbers calculate docked suite finance formula',
         onSelect: () => {
           onClose();
-          setIsCalculatorLaunchModalOpen(true);
+          openAppLaunchModal('calculator');
         }
       },
+      ...Object.values(WORKSPACE_APP_VIEWS)
+        .filter((app) => !['triage', 'directory', 'ai-assistant', 'calculator'].includes(app.id))
+        .map((app) => {
+          const IconComp = ((LucideIcons as unknown) as Record<string, React.ElementType>)[app.iconName] || LayoutGrid;
+          return {
+            id: `act:app:${app.id}`,
+            title: `Open ${app.label}`,
+            subtitle: `${app.subtitle} (Bottom, Side, In App, or Full Screen)`,
+            badge: 'App',
+            category: 'actions' as const,
+            icon: <IconComp size={15} className="text-indigo-500" />,
+            keywords: `${app.label} ${app.id} ${app.subtitle} app bottom side fullscreen`,
+            onSelect: () => {
+              onClose();
+              launchWorkspaceApp(app.id, undefined, navigate, location.pathname);
+            }
+          };
+        }),
       {
         id: 'act:theme',
         title: `Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`,
@@ -440,7 +461,7 @@ export const WorkspaceCommandPalette: React.FC<WorkspaceCommandPaletteProps> = (
     }
 
     return items;
-  }, [dataModules, workspacePages, queueItems, liveRecords, theme, isDeveloper, platformUser?.role]);
+  }, [dataModules, workspacePages, queueItems, liveRecords, theme, isDeveloper, platformUser?.role, launchWorkspaceApp, openAppLaunchModal, location.pathname]);
 
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();

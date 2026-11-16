@@ -10,7 +10,7 @@ import { FormRenderer } from './FormRenderer';
 import { FieldSelectorModal } from '../../Builder/FieldSelectorModal';
 import { CalculatorModal } from '../../Builder/CalculatorModal';
 import { ConditionModal } from '../../Builder/ConditionModal';
-import { cn } from '../../../lib/utils';
+import { cn, flattenFields, isContainerField } from '../../../lib/utils';
 import { toast } from 'sonner';
 import { API_BASE_URL } from '../../../config';
 import { usePlatform } from '../../../hooks/usePlatform';
@@ -117,9 +117,12 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
 
   const handleSyncModuleFields = () => {
     if (!currentAssociatedModule) return;
-    const moduleFields = currentAssociatedModule.layout || currentAssociatedModule.fields || [];
+    const rawFields = currentAssociatedModule.layout || currentAssociatedModule.fields || [];
+    const moduleFields = flattenFields(rawFields).filter((f: any) => 
+      !isContainerField(f.type) && !['divider', 'spacer', 'heading', 'alert'].includes(f.type)
+    );
     if (moduleFields.length === 0) {
-      toast.info('No fields configured on associated module layout.');
+      toast.info('No data fields found on associated module layout.');
       return;
     }
     const existingIds = new Set(fields.map(f => f.id));
@@ -323,7 +326,7 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm min-h-[400px]">
               <div className="grid grid-cols-12 gap-4">
                 {fields.map((field) => {
-                  const isInherited = Boolean(currentAssociatedModule && (currentAssociatedModule.layout || currentAssociatedModule.fields || []).some(f => f.id === field.id));
+                  const isInherited = Boolean(currentAssociatedModule && flattenFields(currentAssociatedModule.layout || currentAssociatedModule.fields || []).some((f: any) => f.id === field.id));
                   return (
                     <div
                       key={field.id}
@@ -380,7 +383,7 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
 
             {selectedField ? (
               <div className="space-y-4">
-                {Boolean(currentAssociatedModule && (currentAssociatedModule.layout || currentAssociatedModule.fields || []).some(f => f.id === selectedField.id)) && (
+                {Boolean(currentAssociatedModule && flattenFields(currentAssociatedModule.layout || currentAssociatedModule.fields || []).some((f: any) => f.id === selectedField.id)) && (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300">
                     <Lock size={13} className="text-indigo-500 shrink-0" />
                     <span>Inherited from {currentAssociatedModule?.name} Schema</span>

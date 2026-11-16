@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { motion } from 'motion/react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -15,13 +16,17 @@ import {
   Check,
   ExternalLink,
   Users,
-  Sparkles
+  Sparkles,
+  Send,
+  Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../../lib/supabase';
 import { API_BASE_URL } from '../../config';
+import { useAuth } from '../../hooks/useAuth';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useUserProfileCard } from '../../context/UserProfileCardContext';
+import { ChatService } from '../../services/chatService';
 import { UserAvatarWithPresence, UserPresenceBadge } from './UserPresenceBadge';
 import { cn } from '../../lib/utils';
 
@@ -54,15 +59,43 @@ const CARD_WIDTH = 340;
 const CARD_MAX_HEIGHT = 520;
 const VIEWPORT_PADDING = 12;
 
+function computeCardCoords(anchorRect: DOMRect, cardHeight: number): { top: number; left: number } {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  let top = anchorRect.bottom + 8;
+  if (top + cardHeight > vh - VIEWPORT_PADDING) {
+    const aboveTop = anchorRect.top - cardHeight - 8;
+    top =
+      aboveTop >= VIEWPORT_PADDING
+        ? aboveTop
+        : Math.max(VIEWPORT_PADDING, vh - cardHeight - VIEWPORT_PADDING);
+  }
+
+  let left = anchorRect.left;
+  if (left + CARD_WIDTH > vw - VIEWPORT_PADDING) {
+    left = Math.max(VIEWPORT_PADDING, vw - CARD_WIDTH - VIEWPORT_PADDING);
+  }
+  if (left < VIEWPORT_PADDING) {
+    left = VIEWPORT_PADDING;
+  }
+
+  return { top, left };
+}
+
 export const UserProfileHoverCard: React.FC = () => {
   const ctx = useUserProfileCard();
+  const { user: authUser, session } = useAuth();
   const platform = usePlatform();
   const navigate = useNavigate();
   const cardRef = useRef<HTMLDivElement>(null);
 
-  const [coords, setCoords] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
   const [membershipsExpanded, setMembershipsExpanded] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState(false);
+  const [quickMessage, setQuickMessage] = useState('');
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [sentChannelId, setSentChannelId] = useState<string | null>(null);
 
   const isOpen = ctx?.isOpen ?? false;
   const isPinned = ctx?.isPinned ?? false;
@@ -74,6 +107,9 @@ export const UserProfileHoverCard: React.FC = () => {
   useEffect(() => {
     setMembershipsExpanded(false);
     setCopiedEmail(false);
+    setQuickMessage('');
+    setIsSendingMessage(false);
+    setSentChannelId(null);
   }, [targetId]);
 
   const { data, isLoading, isError } = useQuery<ProfileCardData>({
@@ -104,29 +140,14 @@ export const UserProfileHoverCard: React.FC = () => {
 
   // Compute viewport-clamped position
   useLayoutEffect(() => {
-    if (!isOpen || !anchorRect) return;
+    if (!isOpen || !anchorRect) {
+      setCoords(null);
+      return;
+    }
 
     const cardHeight = cardRef.current?.offsetHeight || 380;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-
-    // Prefer below-right of anchor, flip up or left if needed
-    let top = anchorRect.bottom + 8;
-    if (top + cardHeight > vh - VIEWPORT_PADDING) {
-      const aboveTop = anchorRect.top - cardHeight - 8;
-      top = aboveTop >= VIEWPORT_PADDING ? aboveTop : Math.max(VIEWPORT_PADDING, vh - cardHeight - VIEWPORT_PADDING);
-    }
-
-    let left = anchorRect.left;
-    if (left + CARD_WIDTH > vw - VIEWPORT_PADDING) {
-      left = Math.max(VIEWPORT_PADDING, vw - CARD_WIDTH - VIEWPORT_PADDING);
-    }
-    if (left < VIEWPORT_PADDING) {
-      left = VIEWPORT_PADDING;
-    }
-
-    setCoords({ top, left });
-  }, [isOpen, anchorRect, data, membershipsExpanded, isLoading]);
+    setCoords(computeCardCoords(anchorRect, cardHeight));
+  }, [isOpen, anchorRect, data, membershipsExpanded, isLoading, sentChannelId]);
 
   // Close on Escape
   useEffect(() => {
@@ -168,9 +189,107 @@ export const UserProfileHoverCard: React.FC = () => {
     setTimeout(() => setCopiedEmail(false), 1800);
   };
 
-  const handleOpenChat = () => {
-    ctx?.closeCard();
-    navigate('/workspace/apps/chat');
+  const resolveChatContext = async () => {
+    const { data: sessData } = await supabase.auth.getSession();
+    const activeToken =
+      session?.access_token ||
+      sessData?.session?.access_token ||
+      localStorage.getItem('aurora_token') ||
+      (import.meta as any).env.VITE_DEV_TOKEN ||
+      'dev-token';
+    const tenantId =
+      platform?.tenant?.id ||
+      sessData?.session?.user?.user_metadata?.tenant_id ||
+      't1';
+
+    const platformUser = platform?.user;
+    const senderId = authUser?.id || platformUser?.id || platformUser?.memberId || 'current-user';
+    const platformName =
+      platformUser?.firstName && ((platformUser as any)?.lastName || (platformUser as any)?.familyName)
+        ? `${platformUser.firstName} ${(platformUser as any).lastName || (platformUser as any).familyName}`
+        : platformUser?.name || platformUser?.firstName;
+    const senderName =
+      platformName ||
+      (authUser?.user_metadata as any)?.full_name ||
+      (authUser?.user_metadata as any)?.name ||
+      authUser?.email?.split('@')[0] ||
+      'User';
+    const senderAvatar =
+      platformUser?.avatarUrl ||
+      (platformUser as any)?.avatar_url ||
+      (authUser?.user_metadata as any)?.avatar_url ||
+      undefined;
+    const senderRole =
+      (platformUser as any)?.position?.title ||
+      platformUser?.position ||
+      platformUser?.role ||
+      'Team Member';
+
+    const recipient = {
+      id: data?.userId || data?.id || targetId!,
+      name: displayName,
+      email: primaryEmail || undefined,
+      avatarUrl: displayAvatar || undefined,
+      role: data?.jobTitle || data?.role || undefined,
+      presence: 'online' as const
+    };
+
+    return { activeToken, tenantId, senderId, senderName, senderAvatar, senderRole, recipient };
+  };
+
+  const handleOpenChat = async () => {
+    try {
+      const { activeToken, tenantId, recipient } = await resolveChatContext();
+      const channel = await ChatService.getOrCreateDirectChannel(recipient, activeToken, tenantId);
+      ctx?.closeCard();
+      navigate(`/workspace/apps/chat/${channel.id}`);
+    } catch {
+      ctx?.closeCard();
+      navigate('/workspace/apps/chat');
+    }
+  };
+
+  const handleSendQuickMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const content = quickMessage.trim();
+    if (!content || isSendingMessage || !targetId) return;
+
+    setIsSendingMessage(true);
+    try {
+      const { activeToken, tenantId, senderId, senderName, senderAvatar, senderRole, recipient } =
+        await resolveChatContext();
+
+      const channel = await ChatService.getOrCreateDirectChannel(recipient, activeToken, tenantId);
+      await ChatService.sendMessage(
+        channel.id,
+        {
+          content,
+          senderId,
+          senderName,
+          senderRole,
+          senderAvatar
+        },
+        activeToken,
+        tenantId
+      );
+
+      setQuickMessage('');
+      setSentChannelId(channel.id);
+      toast.success(`Message sent to ${displayName}`, {
+        action: {
+          label: 'Open Chat',
+          onClick: () => {
+            ctx?.closeCard();
+            navigate(`/workspace/apps/chat/${channel.id}`);
+          }
+        }
+      });
+    } catch (err) {
+      console.error('[UserProfileHoverCard] Failed to send quick message:', err);
+      toast.error('Failed to send message');
+    } finally {
+      setIsSendingMessage(false);
+    }
   };
 
   const handleOpenDirectory = () => {
@@ -179,15 +298,21 @@ export const UserProfileHoverCard: React.FC = () => {
     navigate(`/workspace/apps/directory/${data.id}`);
   };
 
+  const activeCoords = coords ?? computeCardCoords(anchorRect, 380);
+
   return createPortal(
-    <div
+    <motion.div
+      key={targetId}
       ref={cardRef}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.12, ease: 'easeOut' }}
       onMouseEnter={() => ctx?.cancelClose()}
       onMouseLeave={() => ctx?.scheduleClose()}
       style={{
         position: 'fixed',
-        top: coords.top,
-        left: coords.left,
+        top: activeCoords.top,
+        left: activeCoords.left,
         width: CARD_WIDTH,
         maxHeight: CARD_MAX_HEIGHT,
         zIndex: 9999
@@ -195,7 +320,7 @@ export const UserProfileHoverCard: React.FC = () => {
       className={cn(
         'rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/90 dark:border-zinc-800',
         'shadow-2xl shadow-zinc-950/15 dark:shadow-black/50 overflow-y-auto',
-        'text-zinc-900 dark:text-zinc-100 animate-in fade-in zoom-in-95 duration-150'
+        'text-zinc-900 dark:text-zinc-100'
       )}
       role="dialog"
       aria-label={`Profile card for ${displayName}`}
@@ -287,6 +412,65 @@ export const UserProfileHoverCard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* MS365-style Inline Quick Message */}
+      <form
+        onSubmit={handleSendQuickMessage}
+        className="px-4 py-2.5 border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/60"
+      >
+        <div className="flex items-center gap-1.5 rounded-xl bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 px-2.5 py-1.5 focus-within:border-indigo-500 dark:focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-500/15 transition-all">
+          <input
+            type="text"
+            value={quickMessage}
+            onChange={(e) => {
+              setQuickMessage(e.target.value);
+              if (sentChannelId) setSentChannelId(null);
+            }}
+            onFocus={() => {
+              ctx?.cancelClose();
+              if (!isPinned) ctx?.togglePin();
+            }}
+            placeholder={`Message ${displayName.split(' ')[0]}...`}
+            disabled={isSendingMessage}
+            className="flex-1 min-w-0 bg-transparent text-xs text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none disabled:opacity-60"
+            aria-label={`Send a chat message to ${displayName}`}
+          />
+          <button
+            type="submit"
+            disabled={!quickMessage.trim() || isSendingMessage}
+            title="Send message"
+            className={cn(
+              'p-1 rounded-lg transition-colors shrink-0',
+              quickMessage.trim() && !isSendingMessage
+                ? 'bg-indigo-600 text-white hover:bg-indigo-500'
+                : 'text-zinc-300 dark:text-zinc-600 cursor-not-allowed'
+            )}
+          >
+            {isSendingMessage ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : (
+              <Send size={13} />
+            )}
+          </button>
+        </div>
+        {sentChannelId && !quickMessage && (
+          <div className="mt-1.5 flex items-center justify-between text-[11px] text-emerald-600 dark:text-emerald-400 px-0.5">
+            <span className="flex items-center gap-1 font-medium">
+              <Check size={12} /> Sent
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                ctx?.closeCard();
+                navigate(`/workspace/apps/chat/${sentChannelId}`);
+              }}
+              className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
+            >
+              Open in Chat &rarr;
+            </button>
+          </div>
+        )}
+      </form>
 
       {/* Loading / Error State */}
       {isLoading && !data && (
@@ -445,7 +629,7 @@ export const UserProfileHoverCard: React.FC = () => {
           )}
         </div>
       )}
-    </div>,
+    </motion.div>,
     document.body
   );
 };

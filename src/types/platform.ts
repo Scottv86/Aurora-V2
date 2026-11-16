@@ -106,10 +106,10 @@ export interface Suite {
 }
 
 export type FieldType = 
-  | 'text' | 'longText' | 'textarea' | 'number' | 'checkbox' | 'boolean' | 'currency' | 'email' | 'phone' | 'address' | 'lookup' | 'user' | 'calculation' | 'ai_summary' | 'date' | 'select' | 'file'
+  | 'text' | 'longText' | 'textarea' | 'number' | 'checkbox' | 'boolean' | 'currency' | 'email' | 'phone' | 'address' | 'lookup' | 'party' | 'user' | 'calculation' | 'ai_summary' | 'date' | 'select' | 'file'
   | 'radio' | 'checkboxGroup' | 'toggle' | 'slider' | 'time' | 'button' | 'buttonGroup' | 'icon' | 'card' | 'richtext' | 'accordion' | 'datatable' | 'stepper' 
   | 'timeline' | 'duallist' | 'treeview' | 'signature' | 'payment' | 'colorpicker' | 'map' | 'html' | 'qr_scanner' | 'canvas' | 'chat' | 'tabs_nested' 
-  | 'rating' | 'progress' | 'tag' | 'video' | 'audio' | 'heading' | 'divider' | 'spacer' | 'alert' | 'url' | 'fieldGroup' | 'group' | 'repeatableGroup' | 'autonumber' | 'connector' | 'automation' | 'sub_module' | 'rollup' | 'relationship_m2m' | 'placeholder';
+  | 'rating' | 'progress' | 'tag' | 'video' | 'audio' | 'heading' | 'divider' | 'spacer' | 'alert' | 'url' | 'fieldGroup' | 'group' | 'repeatableGroup' | 'autonumber' | 'connector' | 'automation' | 'sub_module' | 'rollup' | 'relationship_m2m' | 'booking' | 'booking_slot' | 'placeholder';
 
 export interface VisibilityRule {
   id: string;
@@ -176,6 +176,9 @@ export interface ModuleField {
   // Lookup enhancements
   lookupDisplayField?: string;
   lookupOutputMappings?: { id: string; sourceFieldId: string; targetFieldId: string }[];
+  partyTypeFilter?: 'ALL' | 'PERSON' | 'ORGANIZATION';
+  classificationFilter?: string;
+  allowInlineCreate?: boolean;
   
   // Layout metadata (Modern Grid)
   colSpan?: number; // 1-12

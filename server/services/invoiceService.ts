@@ -350,6 +350,18 @@ export class InvoiceService {
       }
     });
 
+    // Reconcile associated billable timesheet entries to PAID
+    if (isFullyPaid) {
+      try {
+        await db.timesheetEntry.updateMany({
+          where: { invoiceId },
+          data: { billingStatus: 'PAID' }
+        });
+      } catch (tsErr) {
+        console.warn('[InvoiceService] Could not update linked timesheet entries to PAID:', tsErr);
+      }
+    }
+
     // Record universal PaymentTransaction in omnichannel ledger
     try {
       await TransactionService.recordTransaction({
@@ -566,6 +578,80 @@ export class InvoiceService {
         total: Math.round(buckets.total * 100) / 100
       },
       invoices: details
+    };
+  }
+
+  /**
+   * Generates a draft invoice from billable timesheet entries (WIP)
+   */
+  static async generateInvoiceFromWIP(
+    tenantId: string,
+    customerPartyId: string,
+    timesheetEntryIds: string[],
+    dueDate?: string,
+    notes?: string,
+    userId?: string,
+    db: any = globalPrisma
+  ) {
+    const entries = await db.timesheetEntry.findMany({
+      where: {
+        id: { in: timesheetEntryIds },
+        partyId: customerPartyId,
+        billingStatus: 'UNBILLED'
+      },
+      include: {
+        catalogItem: true
+      },
+      orderBy: { date: 'asc' }
+    });
+
+    if (entries.length === 0) {
+      throw new Error('No unbilled timesheet entries found for this client');
+    }
+
+    const defaultRevenueAcc = await db.chartOfAccount.findFirst({
+      where: { tenantId, systemAccount: null, accountType: 'REVENUE' }
+    });
+
+    const lines = entries.map((entry: any) => {
+      const rate = Number(entry.hourlyRate || entry.catalogItem?.basePrice || 0);
+      const hours = Number(entry.hours || 0);
+      const dateStr = entry.date ? new Date(entry.date).toISOString().split('T')[0] : '';
+      const description = `${dateStr} | ${entry.description || 'Professional Services'} (${hours.toFixed(2)}h @ $${rate.toFixed(2)}/hr)`;
+      
+      return {
+        catalogItemId: entry.catalogItemId || null,
+        description,
+        quantity: hours,
+        unitPrice: rate,
+        discountAmount: 0,
+        taxAmount: 0,
+        accountId: defaultRevenueAcc?.id || ''
+      };
+    });
+
+    const invoice = await this.createInvoice(tenantId, {
+      customerPartyId,
+      issueDate: new Date().toISOString(),
+      dueDate: dueDate || new Date(Date.now() + 14 * 24 * 3600 * 1000).toISOString(),
+      currency: entries[0]?.currency || 'AUD',
+      notes: notes || 'Invoice generated from billable timesheet activity',
+      lines
+    }, userId, db);
+
+    // Atomically transition entries to INVOICED
+    await db.timesheetEntry.updateMany({
+      where: { id: { in: entries.map((e: any) => e.id) } },
+      data: {
+        billingStatus: 'INVOICED',
+        invoiceId: invoice.id
+      }
+    });
+
+    return {
+      invoice,
+      entriesBilled: entries.length,
+      totalHours: entries.reduce((acc: number, e: any) => acc + Number(e.hours || 0), 0)
     };
   }
 }

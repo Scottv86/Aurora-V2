@@ -579,9 +579,11 @@ export const InboxService = {
         const data = await res.json();
         const parties = Array.isArray(data) ? data : (data.parties || []);
         const match = parties.find((p: any) => {
+          const topEmail = p.email || p.secondaryEmail;
           const personEmail = p.person?.contactDetails?.email || p.person?.email;
-          const orgEmail = p.organization?.contactDetails?.email || p.organization?.email;
-          return (personEmail && personEmail.toLowerCase() === email.toLowerCase()) ||
+          const orgEmail = p.organization?.contactDetails?.email || p.organization?.billingEmail || p.organization?.email;
+          return (topEmail && topEmail.toLowerCase() === email.toLowerCase()) ||
+                 (personEmail && personEmail.toLowerCase() === email.toLowerCase()) ||
                  (orgEmail && orgEmail.toLowerCase() === email.toLowerCase());
         });
         return match || null;

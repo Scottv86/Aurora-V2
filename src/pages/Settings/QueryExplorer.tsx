@@ -55,17 +55,18 @@ interface SchemaData {
   columnToFkMap?: Record<string, { targetTable: string; targetColumn: string }>;
 }
 
-export const QueryExplorer = () => {
+export const QueryExplorer = ({ embedded = false }: { embedded?: boolean }) => {
   const navigate = useNavigate();
   const { tenant, isBuilderFullscreen, setIsBuilderFullscreen } = usePlatform();
   const { session } = useAuth();
 
   useEffect(() => {
+    if (embedded) return;
     setIsBuilderFullscreen(true);
     return () => {
       setIsBuilderFullscreen(false);
     };
-  }, [setIsBuilderFullscreen]);
+  }, [embedded, setIsBuilderFullscreen]);
   const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || localStorage.getItem('aurora_token') || 'dev-token';
 
   // UI State
@@ -402,7 +403,7 @@ export const QueryExplorer = () => {
   return (
     <div className={cn(
       "flex w-full overflow-hidden bg-zinc-900 text-zinc-300 font-sans transition-all duration-300",
-      isBuilderFullscreen ? "h-screen" : "h-[calc(100vh-64px)]"
+      embedded ? "h-full" : isBuilderFullscreen ? "h-screen" : "h-[calc(100vh-64px)]"
     )}>
       {/* 1. Object Explorer (Sidebar) */}
       <div className="w-80 flex flex-col border-r border-zinc-800 bg-zinc-950 select-none">

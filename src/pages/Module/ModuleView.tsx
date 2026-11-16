@@ -7,7 +7,8 @@ import { Breadcrumbs } from '../../components/Navigation/Breadcrumbs';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   motion, 
-  AnimatePresence 
+  AnimatePresence,
+  LayoutGroup
 } from 'motion/react';
 import { 
   Plus, 
@@ -42,12 +43,14 @@ import { generateAISummary, evaluateCalculations } from '../../services/aiServic
 import { fetchModule, fetchRecords } from '../../services/dataService';
 import { cn, isFieldVisible, flattenFields, getFieldValue, checkCondition, evaluateExpression, evaluateFormula, slugify, evaluateFormattingRules } from '../../lib/utils';
 import { validateRecordRules } from '../../lib/validationEngine';
+import { getSystemMetaFields } from '../../lib/formFieldUtils';
 import { Module, ModuleField } from '../../types/platform';
 import { calculateDefaultValue } from '../../services/fieldService';
 import { CollapsibleFieldGroup } from '../../components/UI/CollapsibleFieldGroup';
 import { RepeatableGroupBlock } from '../../components/Platform/RepeatableGroupBlock';
 import { DynamicIcon } from '../../components/UI/DynamicIcon';
 import { UserAvatarWithPresence } from '../../components/Common/UserPresenceBadge';
+import { PartyEntityBadge } from '../../components/Common/PartyProfileHoverCard';
 import { useModalStack } from '../../context/ModalStackContext';
 import { ShareRecordModal } from '../../components/Platform/ShareRecordModal';
 import { MoveRecordModal } from '../../components/Platform/MoveRecordModal';
@@ -1056,7 +1059,8 @@ export const ModuleView = () => {
 
   const allFields = useMemo(() => {
     const raw = flattenFields(moduleData?.layout || []) as ModuleField[];
-    return raw.filter((f: ModuleField) => !isFieldHiddenBySecurity(f.id, moduleData, platformUser || user));
+    const meta = getSystemMetaFields(moduleData?.workflow || (moduleData?.workflows && moduleData.workflows[0]));
+    return [...raw, ...meta].filter((f: any) => !isFieldHiddenBySecurity(f.id, moduleData, platformUser || user));
   }, [moduleData, platformUser, user]);
 
   const activeWorkflow = useMemo(() => {
@@ -1741,7 +1745,7 @@ export const ModuleView = () => {
       
       // Execute Lookup Output Mappings
       const field = allFields.find(f => f.id === fieldId);
-      if ((field?.type === 'lookup' || field?.lookupSource === 'connector') && field.lookupOutputMappings?.length) {
+      if ((field?.type === 'lookup' || field?.type === 'party' || field?.lookupSource === 'connector') && field.lookupOutputMappings?.length) {
         // ONLY clear and populate if the lookup value itself has changed.
         if (val !== prev[fieldId]) {
           // First, null out all target fields to clear any previously mapped values
@@ -1765,7 +1769,11 @@ export const ModuleView = () => {
           if (metadata && typeof metadata === 'object') {
             field.lookupOutputMappings.forEach(mapping => {
               if (mapping.sourceFieldId && mapping.targetFieldId) {
-                const sourceValue = metadata[mapping.sourceFieldId];
+                const sourceValue = 
+                  metadata[mapping.sourceFieldId] ?? 
+                  (mapping.sourceFieldId.includes('.') 
+                    ? mapping.sourceFieldId.split('.').reduce((obj: any, key: string) => obj?.[key], metadata)
+                    : undefined);
                 if (sourceValue !== undefined) {
                   const targetFieldId = mapping.targetFieldId;
                   const targetGroupId = fieldToGroupMap[targetFieldId];
@@ -3062,163 +3070,182 @@ export const ModuleView = () => {
                 )}
               </div>
             ) : (
-              splitRecords.map((rec: any) => {
-                const isSelected = rec.id === effectiveSelectedSplitRecordId;
-                const isMultiSelected = selection.isSelected(rec.id);
-                const recTitle = getRecordTitle(rec);
-                const recKey = rec._record_key || rec.id.slice(0, 8);
-                const activeWf = moduleData?.workflow || (moduleData?.workflows && moduleData.workflows[0]) || null;
-                const wfNode = activeWf?.nodes?.find((n: any) => n.id === rec.workflowState?.currentNodeId);
-                const rawStatus = rec.status || wfNode?.name || (rec.data && rec.data.status) || (rec.workflowState?.currentNodeId) || 'Todo';
-                const statusStyle = getSplitStatusStyle(rawStatus);
-                const assignedMember = (members || []).find((m: any) => m.id === rec.assigneeId);
-                const timeAgo = formatSplitTime(rec.updatedAt || rec.createdAt);
-                const isStarred = (rec._starredUserIds || []).includes(resolvedCurrentUserId) || rec.is_starred || rec._is_starred || false;
+              <LayoutGroup id="module-split-records">
+                {splitRecords.map((rec: any) => {
+                  const isSelected = rec.id === effectiveSelectedSplitRecordId;
+                  const isMultiSelected = selection.isSelected(rec.id);
+                  const recTitle = getRecordTitle(rec);
+                  const recKey = rec._record_key || rec.id.slice(0, 8);
+                  const activeWf = moduleData?.workflow || (moduleData?.workflows && moduleData.workflows[0]) || null;
+                  const wfNode = activeWf?.nodes?.find((n: any) => n.id === rec.workflowState?.currentNodeId);
+                  const rawStatus = rec.status || wfNode?.name || (rec.data && rec.data.status) || (rec.workflowState?.currentNodeId) || 'Todo';
+                  const statusStyle = getSplitStatusStyle(rawStatus);
+                  const assignedMember = (members || []).find((m: any) => m.id === rec.assigneeId);
+                  const timeAgo = formatSplitTime(rec.updatedAt || rec.createdAt);
+                  const isStarred = (rec._starredUserIds || []).includes(resolvedCurrentUserId) || rec.is_starred || rec._is_starred || false;
 
-                const rules = interfaceSettings?.master?.formattingRules || moduleData?.interfaceSettings?.master?.formattingRules || moduleData?.formattingRules || (moduleData?.config as any)?.formattingRules;
-                const rowFmt = evaluateFormattingRules(rules, rec, visibilityContext, { targetType: 'row' });
-                const RowIcon = rowFmt.hasMatch && rowFmt.iconName ? (LucideIcons as any)[rowFmt.iconName] : null;
+                  const rules = interfaceSettings?.master?.formattingRules || moduleData?.interfaceSettings?.master?.formattingRules || moduleData?.formattingRules || (moduleData?.config as any)?.formattingRules;
+                  const rowFmt = evaluateFormattingRules(rules, rec, visibilityContext, { targetType: 'row' });
+                  const RowIcon = rowFmt.hasMatch && rowFmt.iconName ? (LucideIcons as any)[rowFmt.iconName] : null;
 
-                const statusFmt = evaluateFormattingRules(rules, rec, visibilityContext, { targetType: 'column', targetId: 'status' });
-                const StatusIcon = statusFmt.hasMatch && statusFmt.iconName ? (LucideIcons as any)[statusFmt.iconName] : null;
+                  const statusFmt = evaluateFormattingRules(rules, rec, visibilityContext, { targetType: 'column', targetId: 'status' });
+                  const StatusIcon = statusFmt.hasMatch && statusFmt.iconName ? (LucideIcons as any)[statusFmt.iconName] : null;
 
-                return (
-                  <div
-                    key={rec.id}
-                    onClick={(e) => {
-                      if (e.metaKey || e.ctrlKey) {
-                        e.stopPropagation();
-                        selection.toggleRecord(rec.id);
-                        return;
-                      }
-                      handleRecordClick(rec.id);
-                    }}
-                    className={cn(
-                      "group p-3 rounded-none border transition-all cursor-pointer space-y-1.5 select-none relative",
-                      isSelected
-                        ? "bg-indigo-50/80 dark:bg-indigo-500/10 border-indigo-300 dark:border-indigo-500/40 shadow-xs border-l-4 border-l-indigo-600 dark:border-l-indigo-500"
-                        : isMultiSelected
+                  return (
+                    <div
+                      key={rec.id}
+                      onClick={(e) => {
+                        if (e.metaKey || e.ctrlKey) {
+                          e.stopPropagation();
+                          selection.toggleRecord(rec.id);
+                          return;
+                        }
+                        handleRecordClick(rec.id);
+                      }}
+                      className={cn(
+                        "group p-3 rounded-none border transition-colors cursor-pointer select-none relative active:scale-[0.995] transition-transform duration-75",
+                        isMultiSelected
                           ? "bg-indigo-50/40 dark:bg-indigo-500/10 border-indigo-300 dark:border-indigo-600 border-l-4 border-l-indigo-400"
                           : rowFmt.hasMatch
                             ? cn("border-l-4", rowFmt.rowClassName)
-                            : "bg-white dark:bg-zinc-900 border-zinc-200/80 dark:border-zinc-800/80 hover:bg-zinc-50 dark:hover:bg-zinc-800/70 hover:border-zinc-300 dark:hover:border-zinc-700 border-l-4 border-l-transparent"
-                    )}
-                    style={!isSelected && rowFmt.hasMatch && Object.keys(rowFmt.customStyle).length > 0 ? rowFmt.customStyle : undefined}
-                  >
-                    {/* Top Row: Key + Status + Time */}
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <div
-                          className={cn(
-                            "transition-opacity cursor-pointer p-0.5 shrink-0 -ml-1",
-                            isMultiSelected
-                              ? "opacity-100"
-                              : selection.selectedCount > 0
-                                ? "opacity-60 hover:opacity-100"
-                                : "opacity-0 group-hover:opacity-100"
-                          )}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            selection.toggleRecord(rec.id);
+                            : "bg-white dark:bg-zinc-900 border-zinc-200/80 dark:border-zinc-800/80 border-l-4 border-l-transparent",
+                        !isSelected && !isMultiSelected && "hover:bg-zinc-50 dark:hover:bg-zinc-800/70 hover:border-zinc-300 dark:hover:border-zinc-700"
+                      )}
+                      style={!isSelected && rowFmt.hasMatch && Object.keys(rowFmt.customStyle).length > 0 ? rowFmt.customStyle : undefined}
+                    >
+                      {/* Sliding active record highlight */}
+                      {isSelected && (
+                        <motion.div
+                          layoutId="splitRecordActiveHighlight"
+                          className="absolute -inset-px z-0 pointer-events-none rounded-none bg-indigo-50/85 dark:bg-indigo-500/[0.14] border border-indigo-300/90 dark:border-indigo-500/50 border-l-4 border-l-indigo-600 dark:border-l-indigo-500 shadow-xs dark:shadow-[0_0_20px_rgba(99,102,241,0.08)]"
+                          transition={{
+                            type: "spring",
+                            stiffness: 450,
+                            damping: 35,
+                            mass: 0.8,
                           }}
-                          title={isMultiSelected ? "Deselect" : "Select"}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isMultiSelected}
-                            onChange={() => {}}
-                            className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 pointer-events-none"
-                          />
-                        </div>
-                        {RowIcon && <RowIcon size={13} className={cn("shrink-0", rowFmt.iconColor || "text-rose-500")} />}
-                        <span className={cn(
-                          "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md transition-colors",
-                          isSelected
-                            ? "bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-extrabold"
-                            : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
-                        )}>
-                          {recKey}
-                        </span>
-                        {rowFmt.hasMatch && rowFmt.badgeLabel && (
-                          <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded bg-black/10 dark:bg-white/10 shrink-0">
-                            {rowFmt.badgeLabel}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className={cn(
-                          "flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-md border",
-                          statusFmt.hasMatch && statusFmt.cellBadgeClassName
-                            ? statusFmt.cellBadgeClassName
-                            : statusStyle.badge
-                        )}>
-                          {StatusIcon ? (
-                            <StatusIcon size={10} className={cn("shrink-0", statusFmt.iconColor)} />
-                          ) : (
-                            <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", statusStyle.dot)} />
-                          )}
-                          <span className="truncate max-w-[80px]">{rawStatus}</span>
-                        </span>
-                        {timeAgo && (
-                          <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium shrink-0">
-                            {timeAgo}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Middle Row: Title */}
-                    <h4 className={cn(
-                      "text-xs font-semibold leading-snug line-clamp-2 transition-colors",
-                      isSelected ? "text-indigo-950 dark:text-white font-bold" : "text-zinc-800 dark:text-zinc-200 group-hover:text-zinc-950 dark:group-hover:text-white"
-                    )}>
-                      {recTitle}
-                    </h4>
-
-                    {/* Bottom Row: Assignee & Actions */}
-                    <div className="flex items-center justify-between pt-0.5 text-[10px] text-zinc-500 dark:text-zinc-400 gap-1.5">
-                      {assignedMember ? (
-                        <div className="flex items-center gap-1.5 min-w-0 pr-1 truncate">
-                          <UserAvatarWithPresence
-                            avatarUrl={assignedMember.avatarUrl}
-                            name={assignedMember.name}
-                            status={(assignedMember as any).status || (assignedMember as any).presenceStatus}
-                            size="xs"
-                          />
-                          <span className="truncate text-zinc-700 dark:text-zinc-300 font-medium">
-                            {assignedMember.name}
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1 text-zinc-400 italic min-w-0 pr-1 truncate">
-                          <User size={11} />
-                          <span>Unassigned</span>
-                        </div>
+                          initial={false}
+                        />
                       )}
 
-                      <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
-                        <RecordActionsCell
-                          record={rec}
-                          onViewActivity={() => setActivityRecord(rec)}
-                          onShare={() => setRecordToShare(rec)}
-                          onDelete={() => setRecordToDelete(rec.id)}
-                          onDuplicate={() => handleDuplicateRecord(rec)}
-                          onMove={() => setRecordsToMove([rec])}
-                          onToggleStar={() => handleToggleStar(rec)}
-                          isStarred={isStarred}
-                          onCopyKey={() => handleCopyRecordKey(rec)}
-                          onCopyLink={() => handleCopyRecordLink(rec)}
-                          onQuickStatus={(status) => handleQuickUpdateStatus(rec, status)}
-                          onQuickAssign={(assigneeId) => handleQuickUpdateAssignee(rec, assigneeId)}
-                          statusOptions={moduleStatusOptions}
-                          members={members}
-                          currentUserId={resolvedCurrentUserId}
-                        />
+                      {/* Content with z-10 so it sits cleanly above the sliding highlight */}
+                      <div className="relative z-10 space-y-1.5">
+                        {/* Top Row: Key + Status + Time */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <div
+                              className={cn(
+                                "transition-opacity cursor-pointer p-0.5 shrink-0 -ml-1",
+                                isMultiSelected
+                                  ? "opacity-100"
+                                  : selection.selectedCount > 0
+                                    ? "opacity-60 hover:opacity-100"
+                                    : "opacity-0 group-hover:opacity-100"
+                              )}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                selection.toggleRecord(rec.id);
+                              }}
+                              title={isMultiSelected ? "Deselect" : "Select"}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isMultiSelected}
+                                onChange={() => {}}
+                                className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 pointer-events-none"
+                              />
+                            </div>
+                            {RowIcon && <RowIcon size={13} className={cn("shrink-0", rowFmt.iconColor || "text-rose-500")} />}
+                            <span className={cn(
+                              "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md transition-all duration-200",
+                              isSelected
+                                ? "bg-indigo-100 dark:bg-indigo-500/25 text-indigo-700 dark:text-indigo-300 font-extrabold shadow-2xs"
+                                : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
+                            )}>
+                              {recKey}
+                            </span>
+                            {rowFmt.hasMatch && rowFmt.badgeLabel && (
+                              <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded bg-black/10 dark:bg-white/10 shrink-0">
+                                {rowFmt.badgeLabel}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className={cn(
+                              "flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-md border",
+                              statusFmt.hasMatch && statusFmt.cellBadgeClassName
+                                ? statusFmt.cellBadgeClassName
+                                : statusStyle.badge
+                            )}>
+                              {StatusIcon ? (
+                                <StatusIcon size={10} className={cn("shrink-0", statusFmt.iconColor)} />
+                              ) : (
+                                <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", statusStyle.dot)} />
+                              )}
+                              <span className="truncate max-w-[80px]">{rawStatus}</span>
+                            </span>
+                            {timeAgo && (
+                              <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium shrink-0">
+                                {timeAgo}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Middle Row: Title */}
+                        <h4 className={cn(
+                          "text-xs font-semibold leading-snug line-clamp-2 transition-colors duration-200",
+                          isSelected ? "text-indigo-950 dark:text-white font-bold" : "text-zinc-800 dark:text-zinc-200 group-hover:text-zinc-950 dark:group-hover:text-white"
+                        )}>
+                          {recTitle}
+                        </h4>
+
+                        {/* Bottom Row: Assignee & Actions */}
+                        <div className="flex items-center justify-between pt-0.5 text-[10px] text-zinc-500 dark:text-zinc-400 gap-1.5">
+                          {assignedMember ? (
+                            <div className="flex items-center gap-1.5 min-w-0 pr-1 truncate">
+                              <UserAvatarWithPresence
+                                avatarUrl={assignedMember.avatarUrl}
+                                name={assignedMember.name}
+                                status={(assignedMember as any).status || (assignedMember as any).presenceStatus}
+                                size="xs"
+                              />
+                              <span className="truncate text-zinc-700 dark:text-zinc-300 font-medium">
+                                {assignedMember.name}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 text-zinc-400 italic min-w-0 pr-1 truncate">
+                              <User size={11} />
+                              <span>Unassigned</span>
+                            </div>
+                          )}
+
+                          <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <RecordActionsCell
+                              record={rec}
+                              onViewActivity={() => setActivityRecord(rec)}
+                              onShare={() => setRecordToShare(rec)}
+                              onDelete={() => setRecordToDelete(rec.id)}
+                              onDuplicate={() => handleDuplicateRecord(rec)}
+                              onMove={() => setRecordsToMove([rec])}
+                              onToggleStar={() => handleToggleStar(rec)}
+                              isStarred={isStarred}
+                              onCopyKey={() => handleCopyRecordKey(rec)}
+                              onCopyLink={() => handleCopyRecordLink(rec)}
+                              onQuickStatus={(status) => handleQuickUpdateStatus(rec, status)}
+                              onQuickAssign={(assigneeId) => handleQuickUpdateAssignee(rec, assigneeId)}
+                              statusOptions={moduleStatusOptions}
+                              members={members}
+                              currentUserId={resolvedCurrentUserId}
+                            />
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })
+                  );
+                })}
+              </LayoutGroup>
             )}
           </div>
         </div>
@@ -3439,6 +3466,20 @@ export const ModuleView = () => {
                           const val = record[f.id] || record[f.name];
                           if (val === undefined || val === null || val === '') return null;
                           
+                          if (
+                            f.type === 'party' ||
+                            f.targetPlatformModuleId === 'people-organisations' ||
+                            f.platformEntity === 'people-organisations' ||
+                            f.platformEntity === 'directory'
+                          ) {
+                            return (
+                              <div key={f.id} className="flex items-center gap-1.5 text-[10px] text-zinc-400 font-medium truncate">
+                                <span className="font-bold text-zinc-500">{f.label}:</span>
+                                <PartyEntityBadge partyId={String(val)} size="xs" />
+                              </div>
+                            );
+                          }
+
                           if (f.type === 'user') {
                             const resolvedUser = members?.find((m: any) => m.id === val);
                             return (
@@ -5518,6 +5559,16 @@ export const ModuleView = () => {
           : rawVal;
         if (field.type === 'checkbox') return val ? 'Yes' : 'No';
         
+        if (
+          field.type === 'party' ||
+          field.targetPlatformModuleId === 'people-organisations' ||
+          field.platformEntity === 'people-organisations' ||
+          field.platformEntity === 'directory'
+        ) {
+          if (!val) return '-';
+          return <PartyEntityBadge partyId={String(val)} size="sm" showSubtitle={false} />;
+        }
+
         if (field.type === 'user') {
           if (!val) return '-';
           const resolvedUser = members?.find((m: any) => m.id === val);
@@ -6264,12 +6315,18 @@ export const ModuleView = () => {
           )}
 
           {/* Custom Action Buttons */}
-          {interfaceSettings.actions?.map((act: any) => {
+          {interfaceSettings.actions?.filter((act: any) => act.id !== 'act-1' && act.label?.trim().toLowerCase() !== 'export pdf')?.map((act: any) => {
             const ActionIcon = (LucideIcons as any)[act.icon] || LucideIcons.Zap;
             return (
               <button
                 key={act.id}
                 onClick={() => {
+                  if (act.label?.trim().toLowerCase() === 'export pdf' && effectiveSelectedSplitRecordId) {
+                    window.dispatchEvent(new CustomEvent('aurora:export-record-pdf', {
+                      detail: { recordId: effectiveSelectedSplitRecordId }
+                    }));
+                    return;
+                  }
                   const form = (moduleData as any)?.forms?.find((f: any) => f.usage === 'action_trigger');
                   setActiveQuickAction(act);
                   setActionForm(form || null);
@@ -6640,7 +6697,11 @@ export const ModuleView = () => {
                           return (
                             <div key={fObj.id} className={cn(
                               "flex flex-col",
-                              fObj.width === 'half' ? "col-span-12 sm:col-span-6" : "col-span-12"
+                              fObj.width === 'half' || fObj.width === '6' ? "col-span-12 sm:col-span-6" :
+                              fObj.width === 'one-third' || fObj.width === '4' ? "col-span-12 sm:col-span-4" :
+                              fObj.width === 'two-thirds' || fObj.width === '8' ? "col-span-12 sm:col-span-8" :
+                              fObj.width === 'one-quarter' || fObj.width === '3' ? "col-span-12 sm:col-span-3" :
+                              "col-span-12"
                             )}>
                               {isVisual ? (
                                 <div className="py-1">
@@ -7073,7 +7134,11 @@ export const ModuleView = () => {
                           return (
                             <div key={fObj.id} className={cn(
                               "flex flex-col",
-                              fObj.width === 'half' ? "col-span-12 sm:col-span-6" : "col-span-12"
+                              fObj.width === 'half' || fObj.width === '6' ? "col-span-12 sm:col-span-6" :
+                              fObj.width === 'one-third' || fObj.width === '4' ? "col-span-12 sm:col-span-4" :
+                              fObj.width === 'two-thirds' || fObj.width === '8' ? "col-span-12 sm:col-span-8" :
+                              fObj.width === 'one-quarter' || fObj.width === '3' ? "col-span-12 sm:col-span-3" :
+                              "col-span-12"
                             )}>
                               {isVisual ? (
                                 <div className="py-1">

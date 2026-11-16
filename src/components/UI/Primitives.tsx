@@ -38,7 +38,7 @@ export const Button = ({
   ...props 
 }: ButtonProps) => {
   const variants = {
-    primary: 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm shadow-blue-500/20',
+    primary: 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm shadow-indigo-500/20',
     secondary: 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700',
     outline: 'border border-zinc-200 dark:border-zinc-800 bg-transparent text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800',
     ghost: 'bg-transparent text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800',
@@ -55,7 +55,7 @@ export const Button = ({
   return (
     <button
       className={cn(
-        'inline-flex items-center justify-center rounded-lg transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2',
+        'inline-flex items-center justify-center rounded-lg transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2',
         variants[variant],
         sizes[size],
         className
@@ -88,7 +88,7 @@ export const Input = ({ className, label, error, icon, ...props }: InputProps) =
         )}
         <input
           className={cn(
-            'flex h-11 w-full rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-900 outline-none transition-all placeholder:text-zinc-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md dark:text-zinc-100 dark:placeholder:text-zinc-600',
+            'flex h-11 w-full rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-900 outline-none transition-all placeholder:text-zinc-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md dark:text-zinc-100 dark:placeholder:text-zinc-600',
             icon && 'pl-11',
             error && 'border-red-500 focus:border-red-500 focus:ring-red-500/10',
             className
@@ -120,7 +120,7 @@ export const Select = ({ className, label, options, icon, ...props }: SelectProp
         )}
         <select
           className={cn(
-            'flex h-11 w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-900 outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md dark:text-zinc-100',
+            'flex h-11 w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm text-zinc-900 outline-none transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md dark:text-zinc-100',
             icon && 'pl-11',
             className
           )}

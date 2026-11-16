@@ -618,6 +618,9 @@ export async function assembleServiceDeskContext(
     const emailLower = visitorEmail.toLowerCase();
     matchedParty =
       parties.find((p: any) => {
+        if (p.email && String(p.email).toLowerCase() === emailLower) return true;
+        if (p.secondaryEmail && String(p.secondaryEmail).toLowerCase() === emailLower) return true;
+        if (p.organization?.billingEmail && String(p.organization.billingEmail).toLowerCase() === emailLower) return true;
         const logStr = String(p.creationContextLog || '').toLowerCase();
         return logStr.includes(emailLower);
       }) || null;

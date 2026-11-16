@@ -1083,7 +1083,16 @@ router.post('/:id/timesheets', async (req: TenantRequest, res) => {
               timesheetId: timesheet.id,
               date: new Date(entry.date),
               hours: parseFloat(entry.hours) || 0,
-              description: entry.description || ''
+              description: entry.description || '',
+              partyId: entry.partyId || null,
+              catalogItemId: entry.catalogItemId || null,
+              hourlyRate: entry.hourlyRate !== undefined && entry.hourlyRate !== null ? parseFloat(entry.hourlyRate) : null,
+              currency: entry.currency || 'AUD',
+              isBillable: entry.isBillable !== undefined ? Boolean(entry.isBillable) : true,
+              billingStatus: entry.billingStatus || (entry.isBillable === false ? 'NON_BILLABLE' : 'UNBILLED'),
+              matterRecordId: entry.matterRecordId || null,
+              invoiceId: entry.invoiceId || null,
+              invoiceLineId: entry.invoiceLineId || null
             }
           });
         }

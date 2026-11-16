@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, LayoutGroup } from 'motion/react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as LucideIcons from 'lucide-react';
@@ -327,8 +327,9 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
         if (foundItem) break;
       }
     }
-    if ((tenant?.menuConfig as any)?.sections && !foundItem) {
-      for (const sec of (tenant.menuConfig as any).sections) {
+    const tenantSections = (tenant?.menuConfig as any)?.sections || (tenant?.menuConfig as any)?.default?.sections;
+    if (tenantSections && !foundItem) {
+      for (const sec of tenantSections) {
         walk(sec.items);
         if (foundItem) break;
       }
@@ -1354,7 +1355,8 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
               ? "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400"
               : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
           )}
-          title="Switch queue layout view"
+          data-tooltip="Switch queue layout view"
+          data-tooltip-side="bottom"
         >
           <CurrentIcon size={14} className="text-indigo-500 shrink-0" />
           <span className={cn("truncate", compact ? "hidden sm:inline" : "")}>{currentObj.label}</span>
@@ -1459,7 +1461,8 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
                 type="button"
                 onClick={() => setIsSidebarCollapsed(true)}
                 className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors cursor-pointer border border-zinc-200/60 dark:border-zinc-800 bg-white dark:bg-zinc-900"
-                title="Collapse sidebar"
+                data-tooltip="Collapse sidebar"
+                data-tooltip-side="bottom"
               >
                 <LucideIcons.PanelLeftClose size={14} />
               </button>
@@ -1538,124 +1541,143 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
               </div>
             </div>
           ) : (
-            splitRecords.map((rec) => {
-              const isSelected = rec.id === effectiveSplitRecordId;
-              const isMultiSelected = selection.isSelected(rec.id);
-              const recKey = rec._record_key || rec.id.slice(0, 8);
-              const recTitle = rec.title || rec.data?.title || rec.name || rec._record_key || rec.id;
-              const rawStatus = rec.status || rec.data?.status || 'Open';
-              const rawPriority = rec.priority || rec.data?.priority || 'Medium';
-              const assignedMember = members.find(m => m.id === rec.assigneeId);
+            <LayoutGroup id="queue-split-records">
+              {splitRecords.map((rec) => {
+                const isSelected = rec.id === effectiveSplitRecordId;
+                const isMultiSelected = selection.isSelected(rec.id);
+                const recKey = rec._record_key || rec.id.slice(0, 8);
+                const recTitle = rec.title || rec.data?.title || rec.name || rec._record_key || rec.id;
+                const rawStatus = rec.status || rec.data?.status || 'Open';
+                const rawPriority = rec.priority || rec.data?.priority || 'Medium';
+                const assignedMember = members.find(m => m.id === rec.assigneeId);
 
-              const rowFmt = evaluateFormattingRules(activeQueue?.queueConfig?.formattingRules, rec, visibilityContext, { targetType: 'row' });
-              const RowIcon = rowFmt.hasMatch && rowFmt.iconName ? (LucideIcons as any)[rowFmt.iconName] : null;
+                const rowFmt = evaluateFormattingRules(activeQueue?.queueConfig?.formattingRules, rec, visibilityContext, { targetType: 'row' });
+                const RowIcon = rowFmt.hasMatch && rowFmt.iconName ? (LucideIcons as any)[rowFmt.iconName] : null;
 
-              return (
-                <div
-                  key={rec.id}
-                  onClick={(e) => {
-                    if (e.metaKey || e.ctrlKey) {
-                      e.stopPropagation();
-                      selection.toggleRecord(rec.id);
-                      return;
-                    }
-                    setSelectedSplitRecordId(rec.id);
-                  }}
-                  className={cn(
-                    "p-3 rounded-none border transition-all cursor-pointer space-y-1.5 select-none relative",
-                    isSelected
-                      ? "bg-indigo-50/80 dark:bg-indigo-500/10 border-indigo-300 dark:border-indigo-500/40 shadow-xs border-l-4 border-l-indigo-600 dark:border-l-indigo-500"
-                      : isMultiSelected
+                return (
+                  <div
+                    key={rec.id}
+                    onClick={(e) => {
+                      if (e.metaKey || e.ctrlKey) {
+                        e.stopPropagation();
+                        selection.toggleRecord(rec.id);
+                        return;
+                      }
+                      setSelectedSplitRecordId(rec.id);
+                    }}
+                    className={cn(
+                      "group p-3 rounded-none border transition-colors cursor-pointer select-none relative active:scale-[0.995] transition-transform duration-75",
+                      isMultiSelected
                         ? "bg-indigo-50/40 dark:bg-indigo-500/10 border-indigo-300 dark:border-indigo-600 border-l-4 border-l-indigo-400"
                         : rowFmt.hasMatch
                           ? cn("border-l-4", rowFmt.rowClassName)
-                          : "bg-white dark:bg-zinc-900 border-zinc-200/80 dark:border-zinc-800/80 hover:bg-zinc-50 dark:hover:bg-zinc-800/70 hover:border-zinc-300 dark:hover:border-zinc-700 border-l-4 border-l-transparent"
-                  )}
-                  style={!isSelected && rowFmt.hasMatch && Object.keys(rowFmt.customStyle).length > 0 ? rowFmt.customStyle : undefined}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      {!readOnly && (
-                        <div
-                          className={cn(
-                            "transition-opacity cursor-pointer p-0.5 shrink-0 -ml-1",
-                            isMultiSelected
-                              ? "opacity-100"
-                              : selection.selectedCount > 0
-                                ? "opacity-60 hover:opacity-100"
-                                : "opacity-0 group-hover:opacity-100"
-                          )}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            selection.toggleRecord(rec.id);
-                          }}
-                          title={isMultiSelected ? "Deselect" : "Select"}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isMultiSelected}
-                            onChange={() => {}}
-                            className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 pointer-events-none"
-                          />
-                        </div>
-                      )}
-                      {RowIcon && <RowIcon size={13} className={cn("shrink-0", rowFmt.iconColor || "text-rose-500")} />}
-                      <span className={cn(
-                        "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md",
-                        isSelected
-                          ? "bg-indigo-100 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-extrabold"
-                          : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
-                      )}>
-                        {recKey}
-                      </span>
-                      {rowFmt.hasMatch && rowFmt.badgeLabel && (
-                        <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded bg-black/10 dark:bg-white/10 shrink-0">
-                          {rowFmt.badgeLabel}
-                        </span>
-                      )}
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[9px] font-bold border border-indigo-500/20">
-                      {rawStatus}
-                    </span>
-                  </div>
-
-                  <h4 className={cn(
-                    "text-xs font-semibold leading-snug line-clamp-2 transition-colors",
-                    isSelected ? "text-indigo-950 dark:text-white font-bold" : "text-zinc-800 dark:text-zinc-200"
-                  )}>
-                    {recTitle}
-                  </h4>
-
-                  <div className="flex items-center justify-between pt-0.5 text-[10px] text-zinc-500 dark:text-zinc-400 gap-1.5">
-                    {assignedMember ? (
-                      <div className="flex items-center gap-1.5 min-w-0 pr-1 truncate">
-                        <UserAvatarWithPresence
-                          memberId={assignedMember.id}
-                          avatarUrl={assignedMember.avatarUrl}
-                          name={assignedMember.name}
-                          status={(assignedMember as any).status || (assignedMember as any).presenceStatus}
-                          size="xs"
-                        />
-                        <span className="truncate text-zinc-700 dark:text-zinc-300 font-medium">
-                          {assignedMember.name}
-                        </span>
-                      </div>
-                    ) : (
-                      <span className="text-zinc-400 italic">Unassigned</span>
+                          : "bg-white dark:bg-zinc-900 border-zinc-200/80 dark:border-zinc-800/80 border-l-4 border-l-transparent",
+                      !isSelected && !isMultiSelected && "hover:bg-zinc-50 dark:hover:bg-zinc-800/70 hover:border-zinc-300 dark:hover:border-zinc-700"
+                    )}
+                    style={!isSelected && rowFmt.hasMatch && Object.keys(rowFmt.customStyle).length > 0 ? rowFmt.customStyle : undefined}
+                  >
+                    {/* Sliding active record highlight */}
+                    {isSelected && (
+                      <motion.div
+                        layoutId="queueRecordActiveHighlight"
+                        className="absolute -inset-px z-0 pointer-events-none rounded-none bg-indigo-50/85 dark:bg-indigo-500/[0.14] border border-indigo-300/90 dark:border-indigo-500/50 border-l-4 border-l-indigo-600 dark:border-l-indigo-500 shadow-xs dark:shadow-[0_0_20px_rgba(99,102,241,0.08)]"
+                        transition={{
+                          type: "spring",
+                          stiffness: 450,
+                          damping: 35,
+                          mass: 0.8,
+                        }}
+                        initial={false}
+                      />
                     )}
 
-                    <span className={cn(
-                      "px-1.5 py-0.2 rounded text-[9px] font-bold border",
-                      String(rawPriority).toLowerCase().includes('high') || String(rawPriority).toLowerCase().includes('critical')
-                        ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
-                        : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 border-zinc-200 dark:border-zinc-700"
-                    )}>
-                      {rawPriority}
-                    </span>
+                    {/* Content with z-10 so it sits cleanly above the sliding highlight */}
+                    <div className="relative z-10 space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {!readOnly && (
+                            <div
+                              className={cn(
+                                "transition-opacity cursor-pointer p-0.5 shrink-0 -ml-1",
+                                isMultiSelected
+                                  ? "opacity-100"
+                                  : selection.selectedCount > 0
+                                    ? "opacity-60 hover:opacity-100"
+                                    : "opacity-0 group-hover:opacity-100"
+                              )}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                selection.toggleRecord(rec.id);
+                              }}
+                              title={isMultiSelected ? "Deselect" : "Select"}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isMultiSelected}
+                                onChange={() => {}}
+                                className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 pointer-events-none"
+                              />
+                            </div>
+                          )}
+                          {RowIcon && <RowIcon size={13} className={cn("shrink-0", rowFmt.iconColor || "text-rose-500")} />}
+                          <span className={cn(
+                            "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md transition-all duration-200",
+                            isSelected
+                              ? "bg-indigo-100 dark:bg-indigo-500/25 text-indigo-700 dark:text-indigo-300 font-extrabold shadow-2xs"
+                              : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
+                          )}>
+                            {recKey}
+                          </span>
+                          {rowFmt.hasMatch && rowFmt.badgeLabel && (
+                            <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded bg-black/10 dark:bg-white/10 shrink-0">
+                              {rowFmt.badgeLabel}
+                            </span>
+                          )}
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 text-[9px] font-bold border border-indigo-500/20">
+                          {rawStatus}
+                        </span>
+                      </div>
+
+                      <h4 className={cn(
+                        "text-xs font-semibold leading-snug line-clamp-2 transition-colors duration-200",
+                        isSelected ? "text-indigo-950 dark:text-white font-bold" : "text-zinc-800 dark:text-zinc-200 group-hover:text-zinc-950 dark:group-hover:text-white"
+                      )}>
+                        {recTitle}
+                      </h4>
+
+                      <div className="flex items-center justify-between pt-0.5 text-[10px] text-zinc-500 dark:text-zinc-400 gap-1.5">
+                        {assignedMember ? (
+                          <div className="flex items-center gap-1.5 min-w-0 pr-1 truncate">
+                            <UserAvatarWithPresence
+                              memberId={assignedMember.id}
+                              avatarUrl={assignedMember.avatarUrl}
+                              name={assignedMember.name}
+                              status={(assignedMember as any).status || (assignedMember as any).presenceStatus}
+                              size="xs"
+                            />
+                            <span className="truncate text-zinc-700 dark:text-zinc-300 font-medium">
+                              {assignedMember.name}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-zinc-400 italic">Unassigned</span>
+                        )}
+
+                        <span className={cn(
+                          "px-1.5 py-0.2 rounded text-[9px] font-bold border",
+                          String(rawPriority).toLowerCase().includes('high') || String(rawPriority).toLowerCase().includes('critical')
+                            ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                            : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 border-zinc-200 dark:border-zinc-700"
+                        )}>
+                          {rawPriority}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              );
-            })
+                );
+              })}
+            </LayoutGroup>
           )}
         </div>
       </div>
@@ -1667,7 +1689,8 @@ export const QueueRenderer: React.FC<QueueRendererProps> = ({
             type="button"
             onClick={() => setIsSidebarCollapsed(false)}
             className="absolute left-4 top-4 z-40 p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-600 dark:text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 shadow-md hover:scale-105 transition-all flex items-center gap-1.5 text-xs font-bold cursor-pointer"
-            title="Expand record navigator"
+            data-tooltip="Expand record navigator"
+            data-tooltip-side="right"
           >
             <LucideIcons.PanelLeftOpen size={16} />
             <span>Show Records</span>

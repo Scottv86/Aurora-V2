@@ -312,8 +312,9 @@ export const QueuesLibraryPage: React.FC = () => {
         checkMenuItems(sec.items || [], sec.title || 'Navigation');
       }
     }
-    if ((tenant?.menuConfig as any)?.sections) {
-      for (const sec of (tenant?.menuConfig as any).sections) {
+    const tenantSections = (tenant?.menuConfig as any)?.sections || (tenant?.menuConfig as any)?.default?.sections;
+    if (tenantSections) {
+      for (const sec of tenantSections) {
         checkMenuItems(sec.items || [], sec.title || 'Navigation');
       }
     }

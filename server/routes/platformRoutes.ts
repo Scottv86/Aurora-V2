@@ -62,19 +62,30 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
     const positionId = primaryMembership?.positionId;
     const roleId = primaryMembership?.roleId || 'USER';
 
-    let resolvedMenuConfig = primaryMembership?.menuConfig || null;
+    const isValidMenu = (cfg: any) => cfg && typeof cfg === 'object' && Array.isArray(cfg.sections);
+
+    const memberMenuRaw = primaryMembership?.menuConfig as any;
+    let resolvedMenuConfig = isValidMenu(memberMenuRaw) ? memberMenuRaw : null;
 
     if (!resolvedMenuConfig && tenant?.menuConfig) {
       const tConfig = tenant.menuConfig as any;
       if (tConfig && typeof tConfig === 'object' && !Array.isArray(tConfig) && (tConfig.default || tConfig.roles || tConfig.teams || tConfig.positions || tConfig.users)) {
-        resolvedMenuConfig = 
+        const candidate = 
           (memberId && tConfig.users?.[memberId]) ||
           (teamId && tConfig.teams?.[teamId]) ||
           (positionId && tConfig.positions?.[positionId]) ||
           (roleId && tConfig.roles?.[roleId]) ||
           tConfig.default ||
           null;
-      } else {
+
+        if (isValidMenu(candidate)) {
+          resolvedMenuConfig = candidate;
+        } else if (isValidMenu(tConfig.default)) {
+          resolvedMenuConfig = tConfig.default;
+        } else {
+          resolvedMenuConfig = candidate;
+        }
+      } else if (isValidMenu(tenant.menuConfig)) {
         resolvedMenuConfig = tenant.menuConfig;
       }
     }
@@ -169,9 +180,22 @@ router.put('/menu-config', authenticate, async (req: AuthRequest, res: Response)
       });
     } else {
       // Default scope: user (TenantMember profile)
+      const existing = await globalPrisma.tenantMember.findUnique({
+        where: { userId_tenantId: { userId: uid, tenantId } },
+        select: { menuConfig: true }
+      });
+      const currentMenu = (existing?.menuConfig && typeof existing.menuConfig === 'object' && !Array.isArray(existing.menuConfig))
+        ? (existing.menuConfig as Record<string, any>)
+        : {};
+
       await globalPrisma.tenantMember.update({
         where: { userId_tenantId: { userId: uid, tenantId } },
-        data: { menuConfig: config }
+        data: { 
+          menuConfig: {
+            ...currentMenu,
+            ...(typeof config === 'object' ? config : {})
+          }
+        }
       });
     }
 
@@ -179,6 +203,98 @@ router.put('/menu-config', authenticate, async (req: AuthRequest, res: Response)
   } catch (error) {
     console.error('[PlatformAPI] Menu config update error:', error);
     res.status(500).json({ error: 'Failed to save menu configuration' });
+  }
+});
+
+/**
+ * GET /api/platform/widget-preferences
+ * Fetches the user's header widget configuration from database.
+ */
+router.get('/widget-preferences', authenticate, async (req: AuthRequest, res: Response) => {
+  const { uid, tenantIds } = req.user!;
+  const tenantId = (req.headers['x-tenant-id'] as string) || tenantIds[0];
+
+  const defaultPreferences = {
+    enabledIds: ['weather'],
+    order: ['weather', 'calendar-next', 'time-tracker', 'scratchpad', 'focus-timer'],
+    maxVisibleDesktop: 3
+  };
+
+  if (!tenantId) {
+    return res.json(defaultPreferences);
+  }
+
+  try {
+    const membership = await globalPrisma.tenantMember.findUnique({
+      where: { userId_tenantId: { userId: uid, tenantId } },
+      select: { menuConfig: true }
+    });
+
+    const menuObj = (membership?.menuConfig && typeof membership.menuConfig === 'object' && !Array.isArray(membership.menuConfig))
+      ? (membership.menuConfig as Record<string, any>)
+      : null;
+
+    if (menuObj && menuObj.widgetPreferences) {
+      return res.json(menuObj.widgetPreferences);
+    }
+
+    return res.json(defaultPreferences);
+  } catch (error) {
+    console.error('[PlatformAPI] GET widget-preferences error:', error);
+    return res.json(defaultPreferences);
+  }
+});
+
+/**
+ * PUT /api/platform/widget-preferences
+ * Persists the user's header widget preferences in the database (TenantMember.menuConfig).
+ */
+router.put('/widget-preferences', authenticate, async (req: AuthRequest, res: Response) => {
+  const { preferences } = req.body;
+  const { uid, tenantIds } = req.user!;
+  const tenantId = (req.headers['x-tenant-id'] as string) || tenantIds[0];
+
+  if (!tenantId) {
+    return res.status(400).json({ error: 'Tenant context required' });
+  }
+
+  if (!preferences || !Array.isArray(preferences.enabledIds)) {
+    return res.status(400).json({ error: 'Invalid preferences payload' });
+  }
+
+  try {
+    const membership = await globalPrisma.tenantMember.findUnique({
+      where: { userId_tenantId: { userId: uid, tenantId } },
+      select: { id: true, menuConfig: true }
+    });
+
+    if (!membership) {
+      return res.status(404).json({ error: 'Tenant membership not found' });
+    }
+
+    const currentMenu = (membership.menuConfig && typeof membership.menuConfig === 'object' && !Array.isArray(membership.menuConfig))
+      ? (membership.menuConfig as Record<string, any>)
+      : {};
+
+    const updatedMenu = {
+      ...currentMenu,
+      widgetPreferences: {
+        enabledIds: preferences.enabledIds,
+        order: preferences.order || ['weather', 'calendar-next', 'time-tracker', 'scratchpad', 'focus-timer'],
+        maxVisibleDesktop: preferences.maxVisibleDesktop || 3,
+        unit: preferences.unit || 'C'
+      }
+    };
+
+    await globalPrisma.tenantMember.update({
+      where: { id: membership.id },
+      data: { menuConfig: updatedMenu }
+    });
+
+    res.json({ success: true, widgetPreferences: updatedMenu.widgetPreferences });
+  } catch (error) {
+    console.error('[PlatformAPI] PUT widget-preferences error:', error);
+    res.status(500).json({ error: 'Failed to persist widget preferences' });
   }
 });
 

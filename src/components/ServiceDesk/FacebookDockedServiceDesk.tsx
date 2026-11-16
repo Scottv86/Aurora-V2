@@ -29,7 +29,9 @@ import { useServiceDesk } from '../../context/ServiceDeskContext';
 import { ServiceDeskMessageBubble } from './ServiceDeskMessageBubble';
 import { ServiceDeskOperatorStatus, ServiceDeskSession } from '../../types/serviceDesk';
 
-export const FacebookDockedServiceDesk: React.FC = () => {
+export const FacebookDockedServiceDesk: React.FC<{ embedded?: boolean }> = ({
+  embedded = false,
+}) => {
   const navigate = useNavigate();
   const location = useLocation();
   const {
@@ -110,7 +112,13 @@ export const FacebookDockedServiceDesk: React.FC = () => {
   };
 
   return (
-    <div className="fixed bottom-0 right-4 z-40 flex items-end gap-3 pointer-events-none select-none font-sans">
+    <div
+      className={
+        embedded
+          ? 'flex items-end gap-3 pointer-events-none select-none font-sans'
+          : 'fixed bottom-0 right-4 z-40 flex items-end gap-3 pointer-events-none select-none font-sans'
+      }
+    >
       {/* 1. Active Voice Call Pod */}
       {activeVoiceCall && (
         <div className="pointer-events-auto w-72 rounded-t-xl bg-zinc-900 text-white border border-zinc-800 shadow-2xl overflow-hidden">

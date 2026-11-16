@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Hash, 
   Lock, 
@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useChat } from '../../../context/ChatContext';
 import { UserPresenceStatus } from '../../../types/chat';
+import { AppViewSwitcher } from '../../WorkspaceApps/AppViewSwitcher';
 import { cn } from '../../../lib/utils';
 
 interface ChatSidebarProps {
@@ -23,6 +24,8 @@ interface ChatSidebarProps {
 
 export const ChatSidebar: React.FC<ChatSidebarProps> = ({ onOpenNewModal }) => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isStandalone = searchParams.get('standalone') === 'true';
   const { channels, activeChannel, setActiveChannel, userPresence, unreadTotal, users = [], isLoading } = useChat();
   
   const [search, setSearch] = useState('');
@@ -76,7 +79,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({ onOpenNewModal }) => {
             <h2 className="text-sm font-bold text-zinc-900 dark:text-white tracking-tight leading-none">Aurora Chat</h2>
             <div className="flex items-center gap-1.5 text-[10px] text-zinc-500 font-medium mt-0.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
-              <span>Full Screen</span>
+              <span>{isStandalone ? 'Full Screen' : 'In App'}</span>
             </div>
           </div>
         </div>
@@ -292,6 +295,29 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({ onOpenNewModal }) => {
         </div>
       </div>
       )}
+
+      {/* Footer: Metrics & View Switcher (Modeled on Service Desk) */}
+      <div className="p-3 border-t border-zinc-200/80 dark:border-zinc-800/80 space-y-2.5 bg-zinc-50/40 dark:bg-zinc-900/40 shrink-0">
+        <div className="grid grid-cols-3 gap-1 text-center">
+          <div className="p-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800">
+            <div className="text-xs font-bold text-zinc-900 dark:text-white">{publicChannels.length}</div>
+            <div className="text-[9px] text-zinc-400">Channels</div>
+          </div>
+          <div className="p-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800">
+            <div className="text-xs font-bold text-zinc-900 dark:text-white">{directMessages.length}</div>
+            <div className="text-[9px] text-zinc-400">Direct</div>
+          </div>
+          <div className="p-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800">
+            <div className="text-xs font-bold text-zinc-900 dark:text-white">{unreadTotal}</div>
+            <div className="text-[9px] text-zinc-400">Unread</div>
+          </div>
+        </div>
+        <AppViewSwitcher
+          appId="chat"
+          currentMode={isStandalone ? 'fullscreen' : 'in_app'}
+          variant="footer"
+        />
+      </div>
     </aside>
   );
 };

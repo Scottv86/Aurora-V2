@@ -7,6 +7,7 @@ import { NotificationsDrawer } from './NotificationsDrawer';
 import { RecyclingBinDrawer } from './RecyclingBinDrawer';
 import { CalculatorLaunchModal } from '../Calculator/CalculatorLaunchModal';
 import { ServiceDeskLaunchModal } from '../ServiceDesk/ServiceDeskLaunchModal';
+import { WorkspaceAppLaunchModal } from '../WorkspaceApps/WorkspaceAppLaunchModal';
 
 export const GlobalDrawers = () => {
   const { 
@@ -28,6 +29,7 @@ export const GlobalDrawers = () => {
       </AnimatePresence>
       <CalculatorLaunchModal />
       <ServiceDeskLaunchModal />
+      <WorkspaceAppLaunchModal />
     </>
   );
 };

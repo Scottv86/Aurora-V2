@@ -88,6 +88,50 @@ export class ChatService {
   }
 
   /**
+   * Find an existing 1:1 direct message channel or create one
+   */
+  static async getOrCreateDirectChannel(
+    recipient: ChatUser,
+    token?: string,
+    tenantId?: string
+  ): Promise<ChatChannel> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/chat/direct`, {
+        method: 'POST',
+        headers: this.getHeaders(token, tenantId),
+        body: JSON.stringify({ recipient }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.channel) return data.channel;
+      }
+    } catch (err) {
+      console.warn('[ChatService] Error in getOrCreateDirectChannel on server:', err);
+    }
+
+    // Local fallback: check existing direct channels first
+    const channels = await this.getChannels(token, tenantId);
+    const existing = channels.find(
+      (c) =>
+        c.type === 'direct' &&
+        (c.dmRecipient?.id === recipient.id ||
+          (c.memberIds?.length <= 2 && c.memberIds?.includes(recipient.id)))
+    );
+    if (existing) return existing;
+
+    return this.createChannel(
+      {
+        name: recipient.name,
+        type: 'direct',
+        memberIds: [recipient.id],
+        dmRecipient: recipient,
+      },
+      token,
+      tenantId
+    );
+  }
+
+  /**
    * Fetch messages for a channel (or thread)
    */
   static async getMessages(channelId: string, parentMessageId?: string, token?: string, tenantId?: string): Promise<ChatMessage[]> {

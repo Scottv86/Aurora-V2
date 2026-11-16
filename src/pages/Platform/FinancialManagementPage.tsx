@@ -31,6 +31,7 @@ import { SettingsSubNavLayout, SettingsSubNavItem } from '../../components/Setti
 import { TransactionClientService } from '../../services/transactionService';
 import { CreditNoteDocumentModal, CreditNoteData } from '../../components/Platform/Invoices/CreditNoteDocument';
 import { AuroraModal } from '../../components/UI/AuroraModal';
+import { PartyEntityBadge } from '../../components/Common/PartyProfileHoverCard';
 
 export const FinancialManagementPage = () => {
   const { tenant } = usePlatform();
@@ -845,7 +846,15 @@ export const FinancialManagementPage = () => {
                       <tr key={inv.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
                         <td className="py-3 px-4 font-mono font-bold text-zinc-900 dark:text-white">{inv.invoiceNumber}</td>
                         <td className="py-3 px-4 text-zinc-700 dark:text-zinc-200">
-                          {inv.customer?.organization?.legalName || `${inv.customer?.person?.firstName || ''} ${inv.customer?.person?.lastName || ''}`.trim()}
+                          <PartyEntityBadge
+                            partyId={inv.customerPartyId || inv.customer?.id}
+                            fallbackName={
+                              inv.customer?.organization?.legalName ||
+                              `${inv.customer?.person?.firstName || ''} ${inv.customer?.person?.lastName || ''}`.trim()
+                            }
+                            partyType={inv.customer?.partyType}
+                            size="xs"
+                          />
                         </td>
                         <td className="py-3 px-4 text-zinc-500 dark:text-zinc-400">{new Date(inv.issueDate).toLocaleDateString()}</td>
                         <td className="py-3 px-4 text-zinc-500 dark:text-zinc-400">{new Date(inv.dueDate).toLocaleDateString()}</td>
@@ -979,7 +988,16 @@ export const FinancialManagementPage = () => {
                       <tr key={bill.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
                         <td className="py-3 px-4 font-mono font-bold text-zinc-900 dark:text-white">{bill.billNumber}</td>
                         <td className="py-3 px-4 text-zinc-700 dark:text-zinc-200">
-                          {bill.supplier?.organization?.legalName || `${bill.supplier?.person?.firstName || ''} ${bill.supplier?.person?.lastName || ''}`.trim() || 'Supplier'}
+                          <PartyEntityBadge
+                            partyId={bill.supplierPartyId || bill.supplier?.id}
+                            fallbackName={
+                              bill.supplier?.organization?.legalName ||
+                              `${bill.supplier?.person?.firstName || ''} ${bill.supplier?.person?.lastName || ''}`.trim() ||
+                              'Supplier'
+                            }
+                            partyType={bill.supplier?.partyType || 'ORGANIZATION'}
+                            size="xs"
+                          />
                         </td>
                         <td className="py-3 px-4 text-zinc-500 dark:text-zinc-400">{new Date(bill.billDate).toLocaleDateString()}</td>
                         <td className="py-3 px-4 text-zinc-500 dark:text-zinc-400">{new Date(bill.dueDate).toLocaleDateString()}</td>

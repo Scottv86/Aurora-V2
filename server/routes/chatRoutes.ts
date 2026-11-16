@@ -212,28 +212,77 @@ router.get('/channels', async (req: any, res) => {
     });
     const presenceMap = new Map(presences.map(p => [p.userId, p]));
 
+    // Collect any "other" participant IDs needed when the current user is the stored dmRecipient
+    const otherUserIdsNeedingLookup = new Set<string>();
+    for (const chan of channels) {
+      const meta = chan.metadata as any;
+      if (chan.type === 'direct' && meta?.dmRecipient?.id === userId) {
+        const other = chan.members.find((m) => m.userId !== userId);
+        if (other) otherUserIdsNeedingLookup.add(other.userId);
+      }
+    }
+
+    const memberLookupMap = new Map<string, any>();
+    if (otherUserIdsNeedingLookup.size > 0) {
+      const ids = Array.from(otherUserIdsNeedingLookup);
+      const members = await globalPrisma.tenantMember.findMany({
+        where: {
+          tenantId,
+          OR: [{ userId: { in: ids } }, { id: { in: ids } }]
+        },
+        include: { position: true }
+      });
+      for (const m of members) {
+        if (m.userId) memberLookupMap.set(m.userId, m);
+        memberLookupMap.set(m.id, m);
+      }
+    }
+
     const formatted = channels.map(chan => {
       const lastMsg = chan.messages[0];
       const meta = chan.metadata as any;
       let dmRecipient = meta?.dmRecipient;
+      let channelName = chan.name;
 
-      if (chan.type === 'direct' && dmRecipient) {
-        const pres = presenceMap.get(dmRecipient.id);
-        if (pres) {
-          dmRecipient = {
-            ...dmRecipient,
-            presence: pres.presence,
-            status: {
-              emoji: pres.statusEmoji,
-              text: pres.statusText
-            }
-          };
+      if (chan.type === 'direct') {
+        if (dmRecipient?.id === userId) {
+          const other = chan.members.find((m) => m.userId !== userId);
+          const otherMember = other ? memberLookupMap.get(other.userId) : null;
+          if (otherMember) {
+            const otherName =
+              [otherMember.firstName, otherMember.familyName].filter(Boolean).join(' ') ||
+              otherMember.workEmail?.split('@')[0] ||
+              'Team Member';
+            dmRecipient = {
+              id: other!.userId,
+              name: otherName,
+              email: otherMember.workEmail || otherMember.personalEmail || undefined,
+              avatarUrl: otherMember.avatarUrl || undefined,
+              role: otherMember.position?.title || 'Team Member',
+              presence: 'online'
+            };
+            channelName = otherName;
+          }
+        }
+
+        if (dmRecipient) {
+          const pres = presenceMap.get(dmRecipient.id);
+          if (pres) {
+            dmRecipient = {
+              ...dmRecipient,
+              presence: pres.presence,
+              status: {
+                emoji: pres.statusEmoji,
+                text: pres.statusText
+              }
+            };
+          }
         }
       }
 
       return {
         id: chan.id,
-        name: chan.name,
+        name: channelName,
         description: chan.description,
         topic: chan.topic,
         type: chan.type,
@@ -331,6 +380,147 @@ router.post('/channels', async (req: any, res) => {
   } catch (err: any) {
     console.error('[Chat API] Error creating channel in DB:', err);
     res.status(500).json({ error: 'Failed to create channel in database' });
+  }
+});
+
+// 2b. Find or create a 1:1 direct message channel in PostgreSQL
+router.post('/direct', async (req: any, res) => {
+  try {
+    const tenantId = req.headers['x-tenant-id'] as string;
+    const userId = req.user?.id || 'current-user';
+    const { recipient } = req.body as {
+      recipient?: {
+        id: string;
+        name: string;
+        email?: string;
+        avatarUrl?: string;
+        role?: string;
+        presence?: string;
+      };
+    };
+
+    if (!recipient?.id || !recipient?.name) {
+      return res.status(400).json({ error: 'recipient.id and recipient.name are required' });
+    }
+
+    const targetId = recipient.id;
+    const isSelfDm = targetId === userId;
+
+    // Look for an existing non-archived 1:1 direct channel between userId and targetId
+    const existingDms = await globalPrisma.chatChannel.findMany({
+      where: {
+        tenantId,
+        type: 'direct',
+        isArchived: false,
+        members: { some: { userId } }
+      },
+      include: {
+        members: true,
+        messages: {
+          where: { parentMessageId: null },
+          orderBy: { createdAt: 'desc' },
+          take: 1
+        }
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    const match = existingDms.find((chan) => {
+      const memberUserIds = chan.members.map((m) => m.userId);
+      const metaRecipientId = (chan.metadata as any)?.dmRecipient?.id;
+      if (isSelfDm) {
+        return memberUserIds.length === 1 && memberUserIds[0] === userId;
+      }
+      return (
+        (memberUserIds.length === 2 && memberUserIds.includes(targetId)) ||
+        (memberUserIds.length <= 2 && metaRecipientId === targetId)
+      );
+    });
+
+    if (match) {
+      const lastMsg = match.messages[0];
+      const meta = match.metadata as any;
+      return res.json({
+        success: true,
+        existing: true,
+        channel: {
+          id: match.id,
+          name: match.name,
+          description: match.description,
+          topic: match.topic,
+          type: match.type,
+          isFavorite: match.isFavorite,
+          isArchived: match.isArchived,
+          memberIds: match.members.map((m) => m.userId),
+          unreadCount: 0,
+          createdAt: match.createdAt.toISOString(),
+          createdBy: match.createdBy,
+          dmRecipient: meta?.dmRecipient || recipient,
+          lastMessage: lastMsg
+            ? {
+                id: lastMsg.id,
+                senderName: lastMsg.senderName,
+                content: lastMsg.content,
+                createdAt: lastMsg.createdAt.toISOString()
+              }
+            : undefined
+        }
+      });
+    }
+
+    const allMembers = Array.from(new Set([userId, targetId]));
+    const newChannel = await globalPrisma.chatChannel.create({
+      data: {
+        tenantId,
+        name: recipient.name.trim(),
+        type: 'direct',
+        createdBy: userId,
+        metadata: { dmRecipient: recipient },
+        members: {
+          create: allMembers.map((mId) => ({
+            userId: mId,
+            role: mId === userId ? 'admin' : 'member'
+          }))
+        },
+        messages: {
+          create: [
+            {
+              tenantId,
+              senderId: 'system',
+              senderName: 'System',
+              content: `Direct conversation started with ${recipient.name}`,
+              isSystem: true
+            }
+          ]
+        }
+      },
+      include: {
+        members: true
+      }
+    });
+
+    const responseChannel = {
+      id: newChannel.id,
+      name: newChannel.name,
+      description: newChannel.description,
+      topic: newChannel.topic,
+      type: newChannel.type,
+      isFavorite: newChannel.isFavorite,
+      memberIds: newChannel.members.map((m) => m.userId),
+      unreadCount: 0,
+      createdAt: newChannel.createdAt.toISOString(),
+      createdBy: newChannel.createdBy,
+      dmRecipient: recipient
+    };
+
+    if (io) {
+      io.to(`tenant_${tenantId}`).emit('chat:channel_created', responseChannel);
+    }
+
+    res.json({ success: true, existing: false, channel: responseChannel });
+  } catch (err: any) {
+    console.error('[Chat API] Error in find-or-create direct channel:', err);
+    res.status(500).json({ error: 'Failed to open direct conversation' });
   }
 });
 

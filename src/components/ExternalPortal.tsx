@@ -14,6 +14,7 @@ import {
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, isFieldVisible } from '../lib/utils';
+import { getUnifiedFieldDefinition } from '../lib/formFieldUtils';
 import { API_BASE_URL } from '../config';
 import { FieldInput } from './FieldInput';
 import { calculateDefaultValue } from '../services/fieldService';
@@ -165,7 +166,7 @@ export const ExternalPortal = () => {
       const isVisible = isFieldVisible(fObj, dynamicFormData);
       if (!isVisible) return;
 
-      const field = (moduleData.layout || []).find((f: any) => f.id === fObj.id);
+      const field = getUnifiedFieldDefinition(fObj.id, moduleData.layout || [], moduleData.workflow);
       const isRequired = fObj.required || field?.required;
       const value = dynamicFormData[fObj.id];
 
@@ -321,7 +322,7 @@ export const ExternalPortal = () => {
 
                           return fields.map((fObj: any) => {
                             const isVisual = fObj.id.startsWith('visual-');
-                            const field = isVisual ? null : (moduleData.layout || []).find((f: any) => f.id === fObj.id);
+                            const field = isVisual ? null : getUnifiedFieldDefinition(fObj.id, moduleData.layout || [], moduleData.workflow);
                             if (!isVisual && !field) return null;
 
                             // Evaluate Visibility
@@ -331,10 +332,17 @@ export const ExternalPortal = () => {
                             const isRequired = fObj.required || field?.required;
                             const isReadOnly = fObj.readOnly || field?.readOnly;
 
+                            const colSpanClass = 
+                              fObj.width === 'half' || fObj.width === '6' ? "col-span-12 sm:col-span-6" :
+                              fObj.width === 'one-third' || fObj.width === '4' ? "col-span-12 sm:col-span-4" :
+                              fObj.width === 'two-thirds' || fObj.width === '8' ? "col-span-12 sm:col-span-8" :
+                              fObj.width === 'one-quarter' || fObj.width === '3' ? "col-span-12 sm:col-span-3" :
+                              "col-span-12";
+
                             return (
                               <div key={fObj.id} className={cn(
                                 "space-y-2",
-                                fObj.width === 'half' ? "col-span-6" : "col-span-12"
+                                colSpanClass
                               )}>
                                 {isVisual ? (
                                   <div className="py-2">

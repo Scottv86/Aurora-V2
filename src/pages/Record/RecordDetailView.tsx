@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from 'react';
 import { useParams, useNavigate, Link, Navigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { 
@@ -22,6 +22,9 @@ import {
   CheckCircle2,
   Lock,
   HelpCircle,
+  MoreHorizontal,
+  Search,
+  Check,
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { toast } from 'sonner';
@@ -30,6 +33,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { ShareRecordModal } from '../../components/Platform/ShareRecordModal';
 import { MoveRecordModal } from '../../components/Platform/MoveRecordModal';
 import { RecordContextRail, ContextRailTab } from '../../components/Record/RecordContextRail';
+import { RecordPdfExportModal } from '../../components/Record/RecordPdfExportModal';
 import { RecordActivityDrawer } from '../../components/Platform/RecordActivityDrawer';
 import { RecordDocumentsDrawer } from '../../components/Platform/RecordDocumentsDrawer';
 import { RecordNotesRemindersDrawer } from '../../components/Platform/RecordNotesRemindersDrawer';
@@ -80,7 +84,7 @@ interface WorkflowState {
 }
 
 const isDirectInteractableField = (type?: string) => 
-  ['date', 'time', 'datetime', 'select', 'choice', 'status_pill', 'boolean', 'toggle', 'rating', 'colorpicker'].includes(type || '');
+  ['date', 'time', 'datetime', 'select', 'choice', 'status_pill', 'boolean', 'toggle', 'rating', 'colorpicker', 'party', 'lookup'].includes(type || '');
 
 export const RecordDetailView = ({
   moduleIdProp,
@@ -344,6 +348,7 @@ export const RecordDetailView = ({
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState(false);
+  const [showExportPdfModal, setShowExportPdfModal] = useState(false);
   const [isCloning, setIsCloning] = useState(false);
   const [showActivityDrawer, setShowActivityDrawer] = useState(false);
   const [showScheduleActivityModal, setShowScheduleActivityModal] = useState(false);
@@ -387,6 +392,17 @@ export const RecordDetailView = ({
   useEffect(() => {
     bypassedRuleIdsRef.current.clear();
     setBypassedRuleIds(new Set());
+  }, [recordId]);
+
+  // Listen for custom export PDF event (e.g. from top bar action)
+  useEffect(() => {
+    const handleCustomExport = (e: any) => {
+      if (!e.detail?.recordId || e.detail.recordId === recordId) {
+        setShowExportPdfModal(true);
+      }
+    };
+    window.addEventListener('aurora:export-record-pdf', handleCustomExport);
+    return () => window.removeEventListener('aurora:export-record-pdf', handleCustomExport);
   }, [recordId]);
 
   const isSavingRef = useRef(false);
@@ -754,34 +770,7 @@ export const RecordDetailView = ({
     return sorted;
   }, [visibleTabs]);
 
-  // Tab scrolling state
-  const tabContainerRef = useRef<HTMLDivElement>(null);
-  const [showLeftScroll, setShowLeftScroll] = useState(false);
-  const [showRightScroll, setShowRightScroll] = useState(false);
 
-  const checkScroll = useCallback(() => {
-    if (tabContainerRef.current) {
-      const { scrollLeft, scrollWidth, clientWidth } = tabContainerRef.current;
-      setShowLeftScroll(scrollLeft > 0);
-      setShowRightScroll(scrollLeft < scrollWidth - clientWidth - 5);
-    }
-  }, []);
-
-  const handleScroll = (direction: 'left' | 'right') => {
-    if (tabContainerRef.current) {
-      const scrollAmount = 200;
-      tabContainerRef.current.scrollBy({
-        left: direction === 'left' ? -scrollAmount : scrollAmount,
-        behavior: 'smooth'
-      });
-    }
-  };
-
-  useEffect(() => {
-    checkScroll();
-    window.addEventListener('resize', checkScroll);
-    return () => window.removeEventListener('resize', checkScroll);
-  }, [checkScroll, visibleTabs]);
 
   useEffect(() => {
     const isParent = (id: string) => visibleTabs.some((t: any) => t.parentId === id);
@@ -827,6 +816,187 @@ export const RecordDetailView = ({
     
     return tabSeverities;
   }, [activeValidations, allFields, moduleData, visibleTabs]);
+
+  // Tab overflow dropdown state and calculations
+  const tabBarContainerRef = useRef<HTMLDivElement>(null);
+  const measureContainerRef = useRef<HTMLDivElement>(null);
+  const overflowButtonRef = useRef<HTMLButtonElement>(null);
+  const [visibleCount, setVisibleCount] = useState<number | null>(null);
+  const [showOverflowDropdown, setShowOverflowDropdown] = useState(false);
+  const [overflowRect, setOverflowRect] = useState<{ top: number; right: number } | null>(null);
+  const [overflowSearchQuery, setOverflowSearchQuery] = useState('');
+
+
+
+  const topLevelTabs = useMemo(() => {
+    return sortedVisibleTabs.filter((t: any) => !t.parentId);
+  }, [sortedVisibleTabs]);
+
+  const updateTabMeasurements = useCallback(() => {
+    if (!tabBarContainerRef.current || !measureContainerRef.current) return;
+
+    const containerWidth = tabBarContainerRef.current.clientWidth;
+    if (containerWidth <= 0) return;
+
+    const widths: Record<string, number> = {};
+    const children = Array.from(measureContainerRef.current.children);
+    children.forEach((child: any) => {
+      const id = child.getAttribute('data-tab-id');
+      if (id) {
+        widths[id] = child.getBoundingClientRect().width;
+      }
+    });
+
+    const moreEl = measureContainerRef.current.querySelector('[data-more-button="true"]') as HTMLElement | null;
+    const moreButtonWidth = moreEl ? moreEl.getBoundingClientRect().width : 85;
+
+    const padding = 40; // px-5 is 20px on each side = 40px
+    const gap = 24; // gap-6 = 24px
+
+    // Check if all tabs fit without overflow button:
+    let totalAllWidth = 0;
+    for (let i = 0; i < topLevelTabs.length; i++) {
+      const w = widths[topLevelTabs[i].id] || 80;
+      totalAllWidth += w + (i > 0 ? gap : 0);
+    }
+
+    if (totalAllWidth <= containerWidth - padding) {
+      setVisibleCount(topLevelTabs.length);
+      return;
+    }
+
+    // Otherwise, reserve space for More button:
+    const maxAvailable = containerWidth - padding - moreButtonWidth - gap;
+    let accumulated = 0;
+    let count = 0;
+
+    for (let i = 0; i < topLevelTabs.length; i++) {
+      const w = widths[topLevelTabs[i].id] || 80;
+      const nextTotal = accumulated + (i > 0 ? gap : 0) + w;
+      if (nextTotal > maxAvailable) {
+        break;
+      }
+      accumulated = nextTotal;
+      count++;
+    }
+
+    setVisibleCount(Math.max(1, count));
+  }, [topLevelTabs]);
+
+  useLayoutEffect(() => {
+    updateTabMeasurements();
+  }, [updateTabMeasurements]);
+
+  useEffect(() => {
+    if (!tabBarContainerRef.current) return;
+    const observer = new ResizeObserver(() => {
+      updateTabMeasurements();
+    });
+    observer.observe(tabBarContainerRef.current);
+    return () => observer.disconnect();
+  }, [updateTabMeasurements]);
+
+  // Handle escape key to close overflow dropdown
+  useEffect(() => {
+    if (!showOverflowDropdown) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowOverflowDropdown(false);
+        setOverflowSearchQuery('');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showOverflowDropdown]);
+
+  // Handle repositioning when window is resized/scrolled with dropdown open
+  useEffect(() => {
+    if (!showOverflowDropdown) return;
+    const handleReposition = () => {
+      if (overflowButtonRef.current) {
+        const rect = overflowButtonRef.current.getBoundingClientRect();
+        setOverflowRect({
+          top: rect.bottom + 4,
+          right: Math.max(8, window.innerWidth - rect.right),
+        });
+      }
+    };
+    window.addEventListener('resize', handleReposition);
+    window.addEventListener('scroll', handleReposition, true);
+    return () => {
+      window.removeEventListener('resize', handleReposition);
+      window.removeEventListener('scroll', handleReposition, true);
+    };
+  }, [showOverflowDropdown]);
+
+  const visibleTabsList = useMemo(() => {
+    if (visibleCount === null || visibleCount >= topLevelTabs.length) {
+      return topLevelTabs;
+    }
+    return topLevelTabs.slice(0, visibleCount);
+  }, [topLevelTabs, visibleCount]);
+
+  const overflowTabsList = useMemo(() => {
+    if (visibleCount === null || visibleCount >= topLevelTabs.length) {
+      return [];
+    }
+    return topLevelTabs.slice(visibleCount);
+  }, [topLevelTabs, visibleCount]);
+
+  const isOverflowActive = useMemo(() => {
+    if (overflowTabsList.length === 0) return false;
+    return overflowTabsList.some((tab: any) => {
+      if (tab.id === activeTabId) return true;
+      const subtabs = sortedVisibleTabs.filter((sub: any) => sub.parentId === tab.id);
+      return subtabs.some((sub: any) => sub.id === activeTabId);
+    });
+  }, [overflowTabsList, activeTabId, sortedVisibleTabs]);
+
+  const activeOverflowTab = useMemo(() => {
+    if (!isOverflowActive) return null;
+    return overflowTabsList.find((tab: any) => {
+      if (tab.id === activeTabId) return true;
+      const subtabs = sortedVisibleTabs.filter((sub: any) => sub.parentId === tab.id);
+      return subtabs.some((sub: any) => sub.id === activeTabId);
+    });
+  }, [isOverflowActive, overflowTabsList, activeTabId, sortedVisibleTabs]);
+
+  const activeOverflowSubTab = useMemo(() => {
+    if (!isOverflowActive || !activeOverflowTab) return null;
+    const subtabs = sortedVisibleTabs.filter((sub: any) => sub.parentId === activeOverflowTab.id);
+    return subtabs.find((sub: any) => sub.id === activeTabId) || null;
+  }, [isOverflowActive, activeOverflowTab, activeTabId, sortedVisibleTabs]);
+
+  const activeDisplayLabel = useMemo(() => {
+    if (!isOverflowActive) return null;
+    return activeOverflowSubTab ? activeOverflowSubTab.label : activeOverflowTab?.label;
+  }, [isOverflowActive, activeOverflowSubTab, activeOverflowTab]);
+
+  const overflowHasErrors = useMemo(() => {
+    return overflowTabsList.some((tab: any) => {
+      if (failedTabSeverities[tab.id] === 'error') return true;
+      const subtabs = sortedVisibleTabs.filter((sub: any) => sub.parentId === tab.id);
+      return subtabs.some((sub: any) => failedTabSeverities[sub.id] === 'error');
+    });
+  }, [overflowTabsList, failedTabSeverities, sortedVisibleTabs]);
+
+  const overflowHasWarnings = useMemo(() => {
+    return overflowTabsList.some((tab: any) => {
+      if (failedTabSeverities[tab.id] === 'warning') return true;
+      const subtabs = sortedVisibleTabs.filter((sub: any) => sub.parentId === tab.id);
+      return subtabs.some((sub: any) => failedTabSeverities[sub.id] === 'warning');
+    });
+  }, [overflowTabsList, failedTabSeverities, sortedVisibleTabs]);
+
+  const filteredOverflowTabs = useMemo(() => {
+    if (!overflowSearchQuery.trim()) return overflowTabsList;
+    const q = overflowSearchQuery.toLowerCase();
+    return overflowTabsList.filter((tab: any) => {
+      if (tab.label?.toLowerCase().includes(q)) return true;
+      const subtabs = sortedVisibleTabs.filter((sub: any) => sub.parentId === tab.id);
+      return subtabs.some((sub: any) => sub.label?.toLowerCase().includes(q));
+    });
+  }, [overflowTabsList, overflowSearchQuery, sortedVisibleTabs]);
 
   const fieldToGroupMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -1457,22 +1627,46 @@ export const RecordDetailView = ({
     let updatedData = { ...(editDataRef.current || editData) };
     updatedData[fieldId] = val;
     
+    const field = allFields.find(f => f.id === fieldId);
+    if (field?.name) {
+      updatedData[field.name] = val;
+    }
+
     const groupId = fieldToGroupMap[fieldId];
     if (groupId) {
-      updatedData[groupId] = { ...(updatedData[groupId] || {}), [fieldId]: val };
+      updatedData[groupId] = { 
+        ...(updatedData[groupId] || {}), 
+        [fieldId]: val,
+        ...(field?.name ? { [field.name]: val } : {})
+      };
     }
     
     // Execute Lookup Output Mappings
-    const field = allFields.find(f => f.id === fieldId);
-    if ((field?.type === 'lookup' || field?.lookupSource === 'connector') && field.lookupOutputMappings?.length) {
+    if ((field?.type === 'lookup' || field?.type === 'party' || field?.lookupSource === 'connector') && field.lookupOutputMappings?.length) {
       // ONLY clear and populate if the lookup value itself has changed.
       // This prevents wiping mapped fields on simple auto-saves (blur events)
       // while ensuring old values are cleared when a new record is selected.
-      if (val !== editData[fieldId]) {
+      const currentVal = getFieldValue(editData, fieldId, field?.name);
+      if (val !== currentVal) {
         // First, null out all target fields to clear any previously mapped values
         field.lookupOutputMappings.forEach(mapping => {
           if (mapping.targetFieldId) {
-            updatedData[mapping.targetFieldId] = null;
+            const targetFieldId = mapping.targetFieldId;
+            const targetField = allFields.find(f => f.id === targetFieldId);
+            const targetGroupId = fieldToGroupMap[targetFieldId];
+
+            if (targetGroupId) {
+              updatedData[targetGroupId] = {
+                ...(updatedData[targetGroupId] || {}),
+                [targetFieldId]: null,
+                ...(targetField?.name ? { [targetField.name]: null } : {})
+              };
+            } else {
+              updatedData[targetFieldId] = null;
+              if (targetField?.name) {
+                updatedData[targetField.name] = null;
+              }
+            }
           }
         });
 
@@ -1480,9 +1674,30 @@ export const RecordDetailView = ({
         if (metadata && typeof metadata === 'object') {
           field.lookupOutputMappings.forEach(mapping => {
             if (mapping.sourceFieldId && mapping.targetFieldId) {
-              const sourceValue = metadata[mapping.sourceFieldId];
+              const targetFieldId = mapping.targetFieldId;
+              const targetField = allFields.find(f => f.id === targetFieldId);
+              const targetGroupId = fieldToGroupMap[targetFieldId];
+
+              const sourceValue = 
+                metadata[mapping.sourceFieldId] ?? 
+                getFieldValue(metadata, mapping.sourceFieldId) ?? 
+                (mapping.sourceFieldId.includes('.') 
+                  ? mapping.sourceFieldId.split('.').reduce((obj: any, key: string) => obj?.[key], metadata)
+                  : undefined);
+
               if (sourceValue !== undefined) {
-                updatedData[mapping.targetFieldId] = sourceValue;
+                if (targetGroupId) {
+                  updatedData[targetGroupId] = {
+                    ...(updatedData[targetGroupId] || {}),
+                    [targetFieldId]: sourceValue,
+                    ...(targetField?.name ? { [targetField.name]: sourceValue } : {})
+                  };
+                } else {
+                  updatedData[targetFieldId] = sourceValue;
+                  if (targetField?.name) {
+                    updatedData[targetField.name] = sourceValue;
+                  }
+                }
               }
             }
           });
@@ -1702,24 +1917,42 @@ export const RecordDetailView = ({
       // 3. Selective Payload (PATCH)
       const payload: any = { moduleId };
       if (fieldIdBeingSaved) {
+        const savedField = allFields.find(f => f.id === fieldIdBeingSaved);
+        const valToSave = getFieldValue(currentData, fieldIdBeingSaved, savedField?.name);
+
         // Always include the primary field being saved
-        payload[fieldIdBeingSaved] = getFieldValue(currentData, fieldIdBeingSaved);
+        payload[fieldIdBeingSaved] = valToSave;
+        if (savedField?.name) {
+          payload[savedField.name] = valToSave;
+        }
         
         const groupId = fieldToGroupMap[fieldIdBeingSaved];
         if (groupId) {
           payload[groupId] = {
             ...(currentData[groupId] || {}),
-            [fieldIdBeingSaved]: getFieldValue(currentData, fieldIdBeingSaved)
+            [fieldIdBeingSaved]: valToSave,
+            ...(savedField?.name ? { [savedField.name]: valToSave } : {})
           };
         }
         
         // Also include any other fields that have changed (e.g. from lookup mappings or calculations)
         allFields.forEach(f => {
           if (f.id !== fieldIdBeingSaved) {
-            const newVal = getFieldValue(currentData, f.id);
-            const oldVal = getFieldValue(record, f.id);
+            const newVal = getFieldValue(currentData, f.id, f.name);
+            const oldVal = getFieldValue(record, f.id, f.name);
             if (newVal !== undefined && newVal !== oldVal) {
               payload[f.id] = newVal;
+              if (f.name) {
+                payload[f.name] = newVal;
+              }
+              const targetGroupId = fieldToGroupMap[f.id];
+              if (targetGroupId) {
+                payload[targetGroupId] = {
+                  ...(payload[targetGroupId] || currentData[targetGroupId] || {}),
+                  [f.id]: newVal,
+                  ...(f.name ? { [f.name]: newVal } : {})
+                };
+              }
             }
           }
         });
@@ -2645,7 +2878,7 @@ export const RecordDetailView = ({
               })()}
               onChange={(val, metadata) => {
                 const withCalculations = handleFieldChange(nestedField.id, val, metadata);
-                if (['date', 'time', 'user', 'select', 'choice', 'status_pill', 'boolean', 'toggle', 'rating', 'colorpicker'].includes(nestedField.type)) {
+                if (['date', 'time', 'user', 'select', 'choice', 'status_pill', 'boolean', 'toggle', 'rating', 'colorpicker', 'party', 'lookup'].includes(nestedField.type)) {
                   handleUpdateEntry(withCalculations, nestedField.id, true);
                 }
               }}
@@ -2807,18 +3040,18 @@ export const RecordDetailView = ({
                         <FieldInput 
                           field={field!}
                           value={(() => {
-                            const edited = getFieldValue(editData, field!.id);
+                            const edited = getFieldValue(editData, field!.id, field!.name);
                             const rawVal = edited !== undefined
                               ? edited
                               : (() => {
-                                  const original = getFieldValue(record, field!.id);
+                                  const original = getFieldValue(record, field!.id, field!.name);
                                   return original !== undefined ? original : calculateDefaultValue(field!, editData);
                                 })();
                             return isSecMasked ? formatMaskedFieldValue(rawVal) : rawVal;
                           })()}
                           onChange={(val, metadata) => {
                             const withCalculations = handleFieldChange(field!.id, val, metadata);
-                            if (['date', 'time', 'user', 'select', 'choice', 'status_pill', 'boolean', 'toggle', 'rating', 'colorpicker'].includes(field!.type)) {
+                            if (['date', 'time', 'user', 'select', 'choice', 'status_pill', 'boolean', 'toggle', 'rating', 'colorpicker', 'party', 'lookup'].includes(field!.type)) {
                               handleUpdateEntry(withCalculations, field!.id, true);
                             }
                           }}
@@ -3110,7 +3343,7 @@ export const RecordDetailView = ({
                   })()}
                   onChange={(val, metadata) => {
                     const withCalculations = handleFieldChange(field.id, val, metadata);
-                    if (['date', 'time', 'user', 'select', 'choice', 'status_pill', 'boolean', 'toggle', 'rating', 'colorpicker'].includes(field.type)) {
+                    if (['date', 'time', 'user', 'select', 'choice', 'status_pill', 'boolean', 'toggle', 'rating', 'colorpicker', 'party', 'lookup'].includes(field.type)) {
                       handleUpdateEntry(withCalculations, field.id, true);
                     }
                   }}
@@ -3679,98 +3912,232 @@ export const RecordDetailView = ({
         /* Edge-to-Edge Tabbed View */
         <div className="flex-1 w-full min-h-0 relative z-10 flex flex-col overflow-hidden">
           {moduleData?.tabs && moduleData.tabs.length > 0 && (
-            <div className="shrink-0 relative group/tabs overflow-hidden border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 h-10 box-border flex items-center">
-              <AnimatePresence>
-                {showLeftScroll && (
-                  <motion.div 
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -10 }}
-                    className="absolute left-0 top-0 bottom-0 w-16 z-10 pointer-events-none"
-                  >
-                    <div className="w-full h-full bg-gradient-to-r from-white dark:from-zinc-900 via-white/40 dark:via-zinc-900/40 to-transparent flex items-center justify-start pl-3 opacity-0 group-hover/tabs:opacity-100 transition-opacity duration-300">
-                      <button 
-                        onClick={() => handleScroll('left')}
-                        className="p-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-full shadow-md pointer-events-auto transition-all hover:scale-110 active:scale-95"
-                      >
-                        <ChevronLeft size={13} />
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
+            <>
+              {/* Offscreen Tab Width Measurer */}
               <div 
-                ref={tabContainerRef}
-                onScroll={checkScroll}
-                className="flex gap-6 overflow-x-auto no-scrollbar scroll-smooth px-5 py-0 h-full items-center"
+                ref={measureContainerRef}
+                aria-hidden="true"
+                className="absolute top-0 left-0 -z-50 pointer-events-none flex gap-6 px-5 h-0 overflow-hidden"
+                style={{ visibility: 'hidden', position: 'absolute', top: -9999, left: -9999 }}
               >
-                {sortedVisibleTabs.filter((t: any) => !t.parentId).map((tab: any) => {
+                {topLevelTabs.map((tab: any) => {
                   const subtabs = sortedVisibleTabs.filter((sub: any) => sub.parentId === tab.id);
                   const isParent = subtabs.length > 0;
-                  const isParentActive = isParent && subtabs.some((sub: any) => sub.id === activeTabId);
-                  const isActive = activeTabId === tab.id || isParentActive;
-
-                  const hasErrors = failedTabSeverities[tab.id] === 'error' || (isParent && subtabs.some((sub: any) => failedTabSeverities[sub.id] === 'error'));
-                  const hasWarnings = failedTabSeverities[tab.id] === 'warning' || (isParent && subtabs.some((sub: any) => failedTabSeverities[sub.id] === 'warning'));
-
                   return (
                     <div 
-                      key={tab.id}
-                      className="relative h-full flex items-center"
-                      onMouseEnter={(e) => {
-                        setHoveredTabId(tab.id);
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        setHoveredTabRect({ bottom: rect.bottom, left: rect.left });
-                      }}
-                      onMouseLeave={() => {
-                        setHoveredTabId(null);
-                        setHoveredTabRect(null);
-                      }}
+                      key={`measure-${tab.id}`}
+                      data-tab-id={tab.id}
+                      className="flex items-center gap-1.5 px-0.5 text-xs whitespace-nowrap shrink-0 font-medium"
                     >
+                      {interfaceSettings.detail?.showTabIcons && (
+                        <span className="w-3.5 h-3.5 shrink-0" />
+                      )}
+                      <span>{tab.label}</span>
+                      {isParent && <span className="w-2.5 h-2.5 ml-0.5 shrink-0" />}
+                    </div>
+                  );
+                })}
+                <div 
+                  data-more-button="true"
+                  className="flex items-center gap-1.5 px-2 text-xs whitespace-nowrap shrink-0 font-medium"
+                >
+                  <span className="w-3.5 h-3.5 shrink-0" />
+                  <span>More</span>
+                  <span className="w-2.5 h-2.5 ml-0.5 shrink-0" />
+                </div>
+              </div>
+
+              {/* Tab Bar Header */}
+              <div 
+                ref={tabBarContainerRef}
+                className="shrink-0 relative border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 h-10 box-border flex items-center px-5 overflow-hidden"
+              >
+                <div className="flex gap-6 h-full items-center overflow-hidden flex-1 min-w-0">
+                  {visibleTabsList.map((tab: any) => {
+                    const subtabs = sortedVisibleTabs.filter((sub: any) => sub.parentId === tab.id);
+                    const isParent = subtabs.length > 0;
+                    const isParentActive = isParent && subtabs.some((sub: any) => sub.id === activeTabId);
+                    const isActive = activeTabId === tab.id || isParentActive;
+
+                    const hasErrors = failedTabSeverities[tab.id] === 'error' || (isParent && subtabs.some((sub: any) => failedTabSeverities[sub.id] === 'error'));
+                    const hasWarnings = failedTabSeverities[tab.id] === 'warning' || (isParent && subtabs.some((sub: any) => failedTabSeverities[sub.id] === 'warning'));
+
+                    return (
+                      <div 
+                        key={tab.id}
+                        className="relative h-full flex items-center shrink-0"
+                        onMouseEnter={(e) => {
+                          setHoveredTabId(tab.id);
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setHoveredTabRect({ bottom: rect.bottom, left: rect.left });
+                        }}
+                        onMouseLeave={() => {
+                          setHoveredTabId(null);
+                          setHoveredTabRect(null);
+                        }}
+                      >
+                        <button
+                          onClick={() => {
+                            if (isParent) {
+                              setActiveTabId(subtabs[0].id);
+                            } else {
+                              setActiveTabId(tab.id);
+                            }
+                          }}
+                          className={cn(
+                            "relative h-full flex items-center gap-1.5 px-0.5 text-xs transition-colors whitespace-nowrap cursor-pointer select-none group/tab",
+                            isActive
+                              ? "text-zinc-950 dark:text-white font-bold"
+                              : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-medium"
+                          )}
+                        >
+                          {interfaceSettings.detail?.showTabIcons && (
+                            <DynamicIcon 
+                              name={tab.iconName || (isParent ? 'Folder' : 'Layout')} 
+                              size={13} 
+                              className={cn(
+                                "shrink-0 transition-colors",
+                                isActive
+                                  ? "text-indigo-600 dark:text-indigo-400"
+                                  : "text-zinc-400 dark:text-zinc-500 group-hover/tab:text-zinc-600 dark:group-hover/tab:text-zinc-300"
+                              )} 
+                            />
+                          )}
+                          <span>{tab.label}</span>
+                          {isParent && (
+                            <ChevronDown 
+                              size={10} 
+                              className={cn(
+                                "ml-0.5 transition-transform", 
+                                hoveredTabId === tab.id ? "rotate-180" : "",
+                                isActive ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-400"
+                              )} 
+                            />
+                          )}
+                          {hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />}
+                          {hasWarnings && !hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />}
+
+                          {/* Animated Active Tab Underline Indicator */}
+                          {isActive && (
+                            <motion.div
+                              layoutId="activeTabUnderline"
+                              className="absolute bottom-0 left-0 right-0 h-[2px] bg-indigo-600 dark:bg-indigo-400 rounded-t-full shadow-[0_0_8px_rgba(99,102,241,0.5)] z-20"
+                              transition={{ type: "spring", stiffness: 500, damping: 38 }}
+                            />
+                          )}
+                        </button>
+
+                        {/* Mega Menu Dropdown */}
+                        {isParent && hoveredTabId === tab.id && hoveredTabRect && (
+                          <div 
+                            style={{
+                              position: 'fixed',
+                              top: `${hoveredTabRect.bottom + 4}px`,
+                              left: `${hoveredTabRect.left}px`,
+                            }}
+                            className="w-52 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl p-1.5 z-[9999] animate-in fade-in slide-in-from-top-1 duration-200 flex flex-col gap-0.5"
+                            onMouseEnter={() => {
+                              setHoveredTabId(tab.id);
+                            }}
+                            onMouseLeave={() => {
+                              setHoveredTabId(null);
+                              setHoveredTabRect(null);
+                            }}
+                          >
+                            {subtabs.map((sub: any) => {
+                              const subHasErrors = failedTabSeverities[sub.id] === 'error';
+                              const subHasWarnings = failedTabSeverities[sub.id] === 'warning';
+                              return (
+                                <button
+                                  key={sub.id}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveTabId(sub.id);
+                                    setHoveredTabId(null);
+                                    setHoveredTabRect(null);
+                                  }}
+                                  className={cn(
+                                    "w-full text-left px-3 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-between cursor-pointer",
+                                    activeTabId === sub.id
+                                      ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white font-bold"
+                                      : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-white"
+                                  )}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    {interfaceSettings.detail?.showTabIcons && (
+                                      <DynamicIcon name={sub.iconName || 'Layout'} size={12} className="shrink-0" />
+                                    )}
+                                    <span>{sub.label}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    {subHasErrors && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />}
+                                    {subHasWarnings && !subHasErrors && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />}
+                                    {activeTabId === sub.id && <div className="w-1.5 h-1.5 rounded-full bg-zinc-900 dark:bg-white" />}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* Overflow More Tabs Trigger */}
+                  {overflowTabsList.length > 0 && (
+                    <div className="relative h-full flex items-center shrink-0">
                       <button
+                        ref={overflowButtonRef}
+                        type="button"
                         onClick={() => {
-                          if (isParent) {
-                            setActiveTabId(subtabs[0].id);
-                          } else {
-                            setActiveTabId(tab.id);
+                          if (!showOverflowDropdown) {
+                            const rect = overflowButtonRef.current?.getBoundingClientRect();
+                            if (rect) {
+                              setOverflowRect({
+                                top: rect.bottom + 4,
+                                right: Math.max(8, window.innerWidth - rect.right),
+                              });
+                            }
                           }
+                          setShowOverflowDropdown(!showOverflowDropdown);
                         }}
                         className={cn(
-                          "relative h-full flex items-center gap-1.5 px-0.5 text-xs transition-colors whitespace-nowrap cursor-pointer select-none group/tab",
-                          isActive
+                          "relative h-full flex items-center gap-1.5 px-1.5 text-xs transition-colors whitespace-nowrap cursor-pointer select-none group/tab",
+                          isOverflowActive
                             ? "text-zinc-950 dark:text-white font-bold"
                             : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 font-medium"
                         )}
+                        title="More tabs"
                       >
-                        {interfaceSettings.detail?.showTabIcons && (
-                          <DynamicIcon 
-                            name={tab.iconName || (isParent ? 'Folder' : 'Layout')} 
-                            size={13} 
-                            className={cn(
-                              "shrink-0 transition-colors",
-                              isActive
-                                ? "text-indigo-600 dark:text-indigo-400"
-                                : "text-zinc-400 dark:text-zinc-500 group-hover/tab:text-zinc-600 dark:group-hover/tab:text-zinc-300"
-                            )} 
-                          />
+                        <MoreHorizontal 
+                          size={14} 
+                          className={cn(
+                            "shrink-0 transition-colors",
+                            isOverflowActive
+                              ? "text-indigo-600 dark:text-indigo-400"
+                              : "text-zinc-400 dark:text-zinc-500 group-hover/tab:text-zinc-600 dark:group-hover/tab:text-zinc-300"
+                          )} 
+                        />
+                        <span>
+                          {isOverflowActive && activeDisplayLabel ? activeDisplayLabel : 'More'}
+                        </span>
+                        <ChevronDown 
+                          size={10} 
+                          className={cn(
+                            "ml-0.5 transition-transform duration-200", 
+                            showOverflowDropdown ? "rotate-180" : "",
+                            isOverflowActive ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-400"
+                          )} 
+                        />
+                        
+                        {overflowHasErrors && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />
                         )}
-                        <span>{tab.label}</span>
-                        {isParent && (
-                          <ChevronDown 
-                            size={10} 
-                            className={cn(
-                              "ml-0.5 transition-transform", 
-                              hoveredTabId === tab.id ? "rotate-180" : "",
-                              isActive ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-400"
-                            )} 
-                          />
+                        {overflowHasWarnings && !overflowHasErrors && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />
                         )}
-                        {hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />}
-                        {hasWarnings && !hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />}
 
-                        {/* Animated Active Tab Underline Indicator */}
-                        {isActive && (
+                        {isOverflowActive && (
                           <motion.div
                             layoutId="activeTabUnderline"
                             className="absolute bottom-0 left-0 right-0 h-[2px] bg-indigo-600 dark:bg-indigo-400 rounded-t-full shadow-[0_0_8px_rgba(99,102,241,0.5)] z-20"
@@ -3778,84 +4145,152 @@ export const RecordDetailView = ({
                           />
                         )}
                       </button>
+                    </div>
+                  )}
+                </div>
+              </div>
 
-                      {/* Mega Menu Dropdown */}
-                      {isParent && hoveredTabId === tab.id && hoveredTabRect && (
-                        <div 
-                          style={{
-                            position: 'fixed',
-                            top: `${hoveredTabRect.bottom + 4}px`,
-                            left: `${hoveredTabRect.left}px`,
-                          }}
-                          className="w-52 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl p-1.5 z-[9999] animate-in fade-in slide-in-from-top-1 duration-200 flex flex-col gap-0.5"
-                          onMouseEnter={() => {
-                            setHoveredTabId(tab.id);
-                          }}
-                          onMouseLeave={() => {
-                            setHoveredTabId(null);
-                            setHoveredTabRect(null);
-                          }}
-                        >
-                          {subtabs.map((sub: any) => {
-                            const subHasErrors = failedTabSeverities[sub.id] === 'error';
-                            const subHasWarnings = failedTabSeverities[sub.id] === 'warning';
+              {/* Overflow Dropdown Portal */}
+              {showOverflowDropdown && overflowRect && (
+                createPortal(
+                  <div 
+                    className="fixed inset-0 z-[9999] pointer-events-auto" 
+                    onClick={() => {
+                      setShowOverflowDropdown(false);
+                      setOverflowSearchQuery('');
+                    }}
+                  >
+                    <motion.div
+                      initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                      transition={{ duration: 0.15, ease: "easeOut" }}
+                      style={{
+                        position: 'fixed',
+                        top: `${overflowRect.top}px`,
+                        right: `${overflowRect.right}px`,
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-64 max-h-88 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl p-1.5 z-[9999] overflow-hidden flex flex-col font-sans"
+                    >
+                      {overflowTabsList.length > 5 && (
+                        <div className="px-2 py-1.5 border-b border-zinc-100 dark:border-zinc-800/80 mb-1 shrink-0">
+                          <div className="relative flex items-center">
+                            <Search size={12} className="absolute left-2 text-zinc-400 pointer-events-none" />
+                            <input
+                              type="text"
+                              placeholder="Search tabs..."
+                              value={overflowSearchQuery}
+                              onChange={(e) => setOverflowSearchQuery(e.target.value)}
+                              className="w-full bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 text-xs pl-6 pr-2 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                              autoFocus
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="overflow-y-auto max-h-72 custom-scrollbar p-0.5 space-y-0.5">
+                        {filteredOverflowTabs.length === 0 ? (
+                          <div className="py-4 text-center text-xs text-zinc-400">
+                            No matching tabs
+                          </div>
+                        ) : (
+                          filteredOverflowTabs.map((tab: any) => {
+                            const subtabs = sortedVisibleTabs.filter((sub: any) => sub.parentId === tab.id);
+                            const isParent = subtabs.length > 0;
+                            const isParentActive = isParent && subtabs.some((sub: any) => sub.id === activeTabId);
+                            const isTabActive = activeTabId === tab.id || isParentActive;
+
+                            const hasErrors = failedTabSeverities[tab.id] === 'error' || (isParent && subtabs.some((sub: any) => failedTabSeverities[sub.id] === 'error'));
+                            const hasWarnings = failedTabSeverities[tab.id] === 'warning' || (isParent && subtabs.some((sub: any) => failedTabSeverities[sub.id] === 'warning'));
+
+                            if (isParent) {
+                              return (
+                                <div key={tab.id} className="py-1 border-b border-zinc-100 dark:border-zinc-900 last:border-b-0">
+                                  <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400 dark:text-zinc-500 flex items-center gap-1.5">
+                                    {interfaceSettings.detail?.showTabIcons && (
+                                      <DynamicIcon name={tab.iconName || 'Folder'} size={11} className="shrink-0" />
+                                    )}
+                                    <span>{tab.label}</span>
+                                  </div>
+                                  <div className="space-y-0.5 mt-0.5">
+                                    {subtabs.map((sub: any) => {
+                                      const subActive = activeTabId === sub.id;
+                                      const subHasErrors = failedTabSeverities[sub.id] === 'error';
+                                      const subHasWarnings = failedTabSeverities[sub.id] === 'warning';
+                                      return (
+                                        <button
+                                          key={sub.id}
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveTabId(sub.id);
+                                            setShowOverflowDropdown(false);
+                                            setOverflowSearchQuery('');
+                                          }}
+                                          className={cn(
+                                            "w-full text-left pl-5 pr-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center justify-between cursor-pointer",
+                                            subActive
+                                              ? "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-bold"
+                                              : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-white"
+                                          )}
+                                        >
+                                          <div className="flex items-center gap-2">
+                                            {interfaceSettings.detail?.showTabIcons && (
+                                              <DynamicIcon name={sub.iconName || 'Layout'} size={12} className="shrink-0" />
+                                            )}
+                                            <span>{sub.label}</span>
+                                          </div>
+                                          <div className="flex items-center gap-1.5">
+                                            {subHasErrors && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />}
+                                            {subHasWarnings && !subHasErrors && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />}
+                                            {subActive && <Check size={12} className="text-indigo-600 dark:text-indigo-400 shrink-0" />}
+                                          </div>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            }
+
                             return (
                               <button
-                                key={sub.id}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveTabId(sub.id);
-                                  setHoveredTabId(null);
-                                  setHoveredTabRect(null);
+                                key={tab.id}
+                                type="button"
+                                onClick={() => {
+                                  setActiveTabId(tab.id);
+                                  setShowOverflowDropdown(false);
+                                  setOverflowSearchQuery('');
                                 }}
                                 className={cn(
-                                  "w-full text-left px-3 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-between cursor-pointer",
-                                  activeTabId === sub.id
-                                    ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white font-bold"
-                                    : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-white"
+                                  "w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-between cursor-pointer",
+                                  isTabActive
+                                    ? "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-bold"
+                                    : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-white"
                                 )}
                               >
                                 <div className="flex items-center gap-2">
                                   {interfaceSettings.detail?.showTabIcons && (
-                                    <DynamicIcon name={sub.iconName || 'Layout'} size={12} className="shrink-0" />
+                                    <DynamicIcon name={tab.iconName || 'Layout'} size={12} className="shrink-0" />
                                   )}
-                                  <span>{sub.label}</span>
+                                  <span>{tab.label}</span>
                                 </div>
                                 <div className="flex items-center gap-1.5">
-                                  {subHasErrors && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />}
-                                  {subHasWarnings && !subHasErrors && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />}
-                                  {activeTabId === sub.id && <div className="w-1.5 h-1.5 rounded-full bg-zinc-900 dark:bg-white" />}
+                                  {hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />}
+                                  {hasWarnings && !hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />}
+                                  {isTabActive && <Check size={12} className="text-indigo-600 dark:text-indigo-400 shrink-0" />}
                                 </div>
                               </button>
                             );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              <AnimatePresence>
-                {showRightScroll && (
-                  <motion.div 
-                    initial={{ opacity: 0, x: 10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 10 }}
-                    className="absolute right-0 top-0 bottom-0 w-16 z-10 pointer-events-none"
-                  >
-                    <div className="w-full h-full bg-gradient-to-l from-white dark:from-zinc-900 via-white/40 dark:via-zinc-900/40 to-transparent flex items-center justify-end pr-3 opacity-0 group-hover/tabs:opacity-100 transition-opacity duration-300">
-                      <button 
-                        onClick={() => handleScroll('right')}
-                        className="p-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-indigo-500 dark:hover:text-indigo-400 rounded-full shadow-md pointer-events-auto transition-all hover:scale-110 active:scale-95"
-                      >
-                        <ChevronRight size={13} />
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+                          })
+                        )}
+                      </div>
+                    </motion.div>
+                  </div>,
+                  document.body
+                )
+              )}
+            </>
           )}
 
           <div className="p-4 sm:p-5 flex-1 min-h-0 overflow-y-auto custom-scrollbar bg-zinc-50 dark:bg-[#101010]">
@@ -3907,7 +4342,7 @@ export const RecordDetailView = ({
           isCloning={isCloning}
           onOpenMove={() => setShowMoveModal(true)}
           onCopyLink={handleCopyRecordLink}
-          onExportPdf={() => window.print()}
+          onExportPdf={() => setShowExportPdfModal(true)}
           onDeleteRecord={() => setShowDeleteModal(true)}
           fullViewUrl={isEmbedded ? `/workspace/modules/${routeModuleId || moduleId}/records/${recordId}` : undefined}
           onToggleParticipant={handleToggleParticipant}
@@ -3979,6 +4414,22 @@ export const RecordDetailView = ({
       </AnimatePresence>,
       document.body
     )}
+
+      {/* Export Record PDF / Overview Modal */}
+      <RecordPdfExportModal
+        isOpen={showExportPdfModal}
+        onClose={() => setShowExportPdfModal(false)}
+        record={record}
+        moduleId={typeof moduleId === 'string' ? moduleId : moduleData?.id}
+        moduleData={moduleData}
+        allFields={allFields}
+        members={members || []}
+        tenant={tenant}
+        currentUserName={effectiveCurrentUserName}
+        currentUser={platformUser || supabaseUser}
+        editData={editData}
+        lookupData={lookupData}
+      />
 
       {/* Share Record Modal */}
       <ShareRecordModal

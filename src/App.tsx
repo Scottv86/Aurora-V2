@@ -9,12 +9,15 @@ import { PlatformProvider } from './context/PlatformContext';
 import { DigitalTwinProvider } from './context/DigitalTwinContext';
 import { UserProfileCardProvider } from './context/UserProfileCardContext';
 import { UserProfileHoverCard } from './components/Common/UserProfileHoverCard';
+import { PartyProfileCardProvider } from './context/PartyProfileCardContext';
 import { ServiceDeskProvider } from './context/ServiceDeskContext';
+import { ChatProvider } from './context/ChatContext';
 import { AIContextProvider } from './context/AIContextProvider';
 import { ModalStackProvider } from './context/ModalStackContext';
 import { NewModuleModalProvider } from './context/NewModuleModalContext';
 import { NewModuleModal } from './components/Modals/NewModuleModal';
 import { StackedModalManager } from './components/UI/StackedModal';
+import { TooltipProvider } from './components/UI/Tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { usePlatform } from './hooks/usePlatform';
 import { useAuth } from './hooks/useAuth';
@@ -246,6 +249,12 @@ const PlatformToaster = () => {
   return (
     <Toaster 
       key={`toaster-${position}-${expand}-${closeButton}`}
+      theme="dark"
+      toastOptions={{
+        style: {
+          maxWidth: 'min(460px, calc(100vw - 32px))'
+        }
+      }}
       position={position} 
       expand={expand} 
       closeButton={closeButton} 
@@ -264,10 +273,13 @@ const App = () => {
               <BrandTokenApplier />
               <DigitalTwinProvider>
                 <ServiceDeskProvider>
+                <ChatProvider>
                 <ModalStackProvider>
                   <NewModuleModalProvider>
                     <Router>
+                      <TooltipProvider>
                       <UserProfileCardProvider>
+                      <PartyProfileCardProvider>
                       <PlatformToaster />
                       <StackedModalManager />
                       <NewModuleModal />
@@ -282,11 +294,6 @@ const App = () => {
                 {/* Aurora Chat (Unified all-in-one sidebar/screen) */}
                 <Route path="/workspace/aurora-vibe" element={<ProtectedRoute><AntigravityChat /></ProtectedRoute>} />
                 <Route path="/workspace/aurora-vibe/:sessionId" element={<ProtectedRoute><AntigravityChat /></ProtectedRoute>} />
-
-                {/* Aurora Dedicated Full-Screen Chat (Without App Shell) */}
-                <Route path="/workspace/apps/chat" element={<ProtectedRoute><ChatApp /></ProtectedRoute>} />
-                <Route path="/workspace/apps/chat/:conversationId" element={<ProtectedRoute><ChatApp /></ProtectedRoute>} />
-                <Route path="/workspace/chat" element={<Navigate to="/workspace/apps/chat" replace />} />
 
                {/* Platform Operations & Administration (SuperAdmin Suite) */}
               <Route path="/admin" element={<ProtectedRoute requireAdmin><PlatformShell><SuperAdminOverview /></PlatformShell></ProtectedRoute>} />
@@ -402,7 +409,10 @@ const App = () => {
                 <Route path="apps/calculator" element={<CalculatorApp />} />
                 <Route path="calculator" element={<Navigate to="/workspace/apps/calculator" replace />} />
                 <Route path="apps/service-desk" element={<ServiceDeskApp />} />
-                <Route path="service-desk" element={<Navigate to="/workspace/apps/service-desk" replace />} />
+                <Route path="service-desk" element={<NavigateWithSearch to="/workspace/apps/service-desk" replace />} />
+                <Route path="apps/chat" element={<ChatApp />} />
+                <Route path="apps/chat/:conversationId" element={<ChatApp />} />
+                <Route path="chat" element={<NavigateWithSearch to="/workspace/apps/chat" replace />} />
 
                 {/* Federated Searches (Consumer Runtime) */}
                 <Route path="searches" element={<SearchesDirectoryPage />} />
@@ -549,10 +559,13 @@ const App = () => {
               <Route path="*" element={<Navigate to="/workspace" replace />} />
               </Routes>
               </Suspense>
+                      </PartyProfileCardProvider>
                       </UserProfileCardProvider>
+                      </TooltipProvider>
               </Router>
               </NewModuleModalProvider>
             </ModalStackProvider>
+                </ChatProvider>
                 </ServiceDeskProvider>
           </DigitalTwinProvider>
             </PlatformProvider>

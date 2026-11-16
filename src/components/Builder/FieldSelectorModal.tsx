@@ -55,7 +55,8 @@ const getFieldIcon = (type: FieldType) => {
     case 'booking':
     case 'booking_slot': return CalendarClock;
     case 'checkbox': return CheckSquare;
-    case 'lookup': return Database;
+    case 'lookup':
+    case 'party': return Database;
     case 'user': return Users;
     case 'longText':
     case 'textarea': return AlignLeft;

@@ -430,50 +430,91 @@ model AuditLog {
 }
 
 model Party {
-  id                  String                 @id @default(cuid())
-  tenantId            String                 @map("tenant_id")
-  partyType           PartyType              @map("party_type")
-  status              EntityStatus           @default(DRAFT)
-  createdAt           DateTime               @default(now()) @map("created_at")
-  updatedAt           DateTime               @updatedAt @map("updated_at")
-  createdBySwarmId    String?                @map("created_by_swarm_id")
-  creationContextLog  String?                @map("creation_context_log")
-  embeddings          Unsupported("vector")?
-  organization        Organization?
-  tenant              Tenant                 @relation(fields: [tenantId], references: [id])
-  sourceRelationships PartyRelationship[]    @relation("SourceParty")
-  targetRelationships PartyRelationship[]    @relation("TargetParty")
-  person              Person?
-  invoices            Invoice[]
-  bills               Bill[]
-  posOrders           PosOrder[]
-  vouchers            Voucher[]
-  journalLines        JournalLine[]
-  paymentTransactions PaymentTransaction[]
-  returnRequests      ReturnRequest[]
+  id                     String                 @id @default(cuid())
+  tenantId               String                 @map("tenant_id")
+  partyType              PartyType              @map("party_type")
+  partyCode              String?                @map("party_code")
+  displayName            String?                @map("display_name")
+  status                 EntityStatus           @default(ACTIVE)
+  email                  String?                @map("email")
+  secondaryEmail         String?                @map("secondary_email")
+  phone                  String?                @map("phone")
+  mobile                 String?                @map("mobile")
+  website                String?                @map("website")
+  avatarUrl              String?                @map("avatar_url")
+  classifications        String[]               @default([]) @map("classifications")
+  tags                   String[]               @default([]) @map("tags")
+  addresses              Json?                  @default("[]") @map("addresses")
+  socialLinks            Json?                  @default("{}") @map("social_links")
+  preferredContactMethod String?                @default("EMAIL") @map("preferred_contact_method")
+  timezone               String?                @map("timezone")
+  currency               String?                @default("AUD") @map("currency")
+  accountOwnerMemberId   String?                @map("account_owner_member_id")
+  notesSummary           String?                @db.Text @map("notes_summary")
+  customData             Json?                  @default("{}") @map("custom_data")
+  isStarred              Boolean                @default(false) @map("is_starred")
+  lastContactedAt        DateTime?              @map("last_contacted_at")
+  createdAt              DateTime               @default(now()) @map("created_at")
+  updatedAt              DateTime               @updatedAt @map("updated_at")
+  createdBySwarmId       String?                @map("created_by_swarm_id")
+  creationContextLog     String?                @map("creation_context_log")
+  embeddings             Unsupported("vector")?
+  organization           Organization?
+  tenant                 Tenant                 @relation(fields: [tenantId], references: [id])
+  sourceRelationships    PartyRelationship[]    @relation("SourceParty")
+  targetRelationships    PartyRelationship[]    @relation("TargetParty")
+  person                 Person?
+  invoices               Invoice[]
+  bills                  Bill[]
+  posOrders              PosOrder[]
+  vouchers               Voucher[]
+  journalLines           JournalLine[]
+  paymentTransactions    PaymentTransaction[]
+  returnRequests         ReturnRequest[]
 
   @@index([tenantId])
+  @@index([tenantId, partyType])
+  @@index([tenantId, email])
+  @@index([tenantId, status])
   @@map("parties")
 }
 
 model Person {
-  partyId       String    @id @map("party_id")
-  firstName     String    @map("first_name")
-  lastName      String    @map("last_name")
-  dateOfBirth   DateTime? @map("date_of_birth")
-  isHumanInLoop Boolean   @default(false) @map("is_human_in_loop")
-  party         Party     @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  partyId           String    @id @map("party_id")
+  salutation        String?   @map("salutation")
+  firstName         String    @map("first_name")
+  middleName        String?   @map("middle_name")
+  lastName          String    @map("last_name")
+  preferredName     String?   @map("preferred_name")
+  jobTitle          String?   @map("job_title")
+  department        String?   @map("department")
+  primaryOrgPartyId String?   @map("primary_org_party_id")
+  primaryOrgName    String?   @map("primary_org_name")
+  dateOfBirth       DateTime? @map("date_of_birth")
+  isHumanInLoop     Boolean   @default(false) @map("is_human_in_loop")
+  party             Party     @relation(fields: [partyId], references: [id], onDelete: Cascade)
 
+  @@index([primaryOrgPartyId])
   @@map("persons")
 }
 
 model Organization {
-  partyId           String    @id @map("party_id")
-  legalName         String    @map("legal_name")
-  orgStructureType  String    @map("org_structure_type")
-  incorporationDate DateTime? @map("incorporation_date")
-  taxIdentifier     String?   @map("tax_identifier")
-  party             Party     @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  partyId                   String    @id @map("party_id")
+  legalName                 String    @map("legal_name")
+  tradingName               String?   @map("trading_name")
+  orgStructureType          String    @map("org_structure_type")
+  incorporationDate         DateTime? @map("incorporation_date")
+  taxIdentifier             String?   @map("tax_identifier")
+  companyRegistrationNumber String?   @map("company_registration_number")
+  industry                  String?   @map("industry")
+  subIndustry               String?   @map("sub_industry")
+  companySize               String?   @map("company_size")
+  annualRevenue             String?   @map("annual_revenue")
+  billingEmail              String?   @map("billing_email")
+  paymentTerms              String?   @default("NET_30") @map("payment_terms")
+  creditLimit               Decimal?  @map("credit_limit") @db.Decimal(14, 2)
+  primaryContactPartyId     String?   @map("primary_contact_party_id")
+  party                     Party     @relation(fields: [partyId], references: [id], onDelete: Cascade)
 
   @@map("organizations")
 }
@@ -484,6 +525,10 @@ model PartyRelationship {
   sourcePartyId       String    @map("source_party_id")
   targetPartyId       String    @map("target_party_id")
   relationshipType    String    @map("relationship_type")
+  roleTitle           String?   @map("role_title")
+  department          String?   @map("department")
+  isPrimary           Boolean   @default(false) @map("is_primary")
+  notes               String?   @db.Text @map("notes")
   ownershipPercentage Decimal?  @map("ownership_percentage") @db.Decimal(5, 2)
   validFrom           DateTime  @default(now()) @map("valid_from")
   validTo             DateTime? @map("valid_to")
@@ -492,6 +537,8 @@ model PartyRelationship {
   tenant              Tenant    @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
+  @@index([sourcePartyId])
+  @@index([targetPartyId])
   @@map("party_relationships")
 }
 
@@ -571,13 +618,24 @@ model Timesheet {
 }
 
 model TimesheetEntry {
-  id          String    @id @default(cuid())
-  timesheetId String    @map("timesheet_id")
-  date        DateTime
-  hours       Float
-  description String?
-  timesheet   Timesheet @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
+  id              String    @id @default(cuid())
+  timesheetId     String    @map("timesheet_id")
+  date            DateTime
+  hours           Float
+  description     String?
+  partyId         String?   @map("party_id")
+  catalogItemId   String?   @map("catalog_item_id")
+  hourlyRate      Float?    @map("hourly_rate")
+  currency        String    @default("AUD")
+  isBillable      Boolean   @default(true) @map("is_billable")
+  billingStatus   String    @default("UNBILLED") @map("billing_status")
+  matterRecordId  String?   @map("matter_record_id")
+  invoiceId       String?   @map("invoice_id")
+  invoiceLineId   String?   @map("invoice_line_id")
+  timesheet       Timesheet @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
 
+  @@index([partyId, billingStatus])
+  @@index([invoiceId])
   @@map("timesheet_entries")
 }
 
@@ -683,6 +741,10 @@ enum EntityStatus {
   PENDING_REVIEW
   ACTIVE
   INACTIVE
+  VERIFIED
+  UNVERIFIED
+  FLAGGED
+  ARCHIVED
 }
 
 model IndustryBlueprint {

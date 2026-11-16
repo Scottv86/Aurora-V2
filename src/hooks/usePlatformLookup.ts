@@ -163,12 +163,43 @@ export const usePlatformLookup = (field: any) => {
     return false;
   }, [lookupSource, effectiveSource, platformEntity, usersLoading, teamsLoading, positionsLoading, groupsLoading, gLoading]);
 
-  // 2. Async Data Source (State management for network fetches)
-  const [asyncData, setAsyncData] = useState<LookupItem[]>([]);
+  const isDirectoryLookup =
+    (effectiveSource === 'platform' &&
+      ((platformEntity === 'modules' && targetPlatformModuleId === 'people-organisations') ||
+        platformEntity === 'people-organisations' ||
+        platformEntity === 'directory')) ||
+    field?.type === 'party';
+
+  // 2. Async Data Source (State management for network fetches — synchronously pre-hydrated for Directory)
+  const [asyncData, setAsyncData] = useState<LookupItem[]>(() => {
+    const cached = lookupCache.get(configKey);
+    if (cached && cached.data.length > 0) return cached.data;
+    if (isDirectoryLookup) {
+      try {
+        const raw = localStorage.getItem('aurora_directory_summary_cache_v1');
+        if (raw) {
+          const entries: [string, any][] = JSON.parse(raw);
+          if (Array.isArray(entries)) {
+            return entries.map(([id, r]) => ({
+              id,
+              name: r.displayName || 'Unnamed Entity',
+              ...r,
+              ...(r.person || {}),
+              ...(r.organization || {}),
+            }));
+          }
+        }
+      } catch {
+        // Ignore storage read error
+      }
+    }
+    return [];
+  });
   const [asyncLoading, setAsyncLoading] = useState(false);
-  
+
   const isAsync = (effectiveSource === 'module_records' && targetModuleId) || 
                   (effectiveSource === 'platform' && platformEntity === 'modules' && targetPlatformModuleId) ||
+                  isDirectoryLookup ||
                   (effectiveSource === 'connector' && field?.connectorId);
 
   // Determine final data and loading state
@@ -180,13 +211,17 @@ export const usePlatformLookup = (field: any) => {
   useEffect(() => {
     const isAsync = (effectiveSource === 'module_records' && targetModuleId) || 
                     (effectiveSource === 'platform' && platformEntity === 'modules' && targetPlatformModuleId) ||
+                    isDirectoryLookup ||
                     (effectiveSource === 'connector' && field?.connectorId);
 
-    if (!isAsync) return;
+    if (!isAsync || !tenant?.id) return;
 
-    // Check cache first
+    const token = (import.meta as any).env?.VITE_DEV_TOKEN || session?.access_token || localStorage.getItem('aurora_token');
+    if (!token) return;
+
+    // Check cache first (ignore cached empty array if it was cached during initial load)
     const cached = lookupCache.get(configKey);
-    if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
+    if (cached && cached.data.length > 0 && (Date.now() - cached.timestamp < CACHE_TTL)) {
       setAsyncData(cached.data);
       setAsyncLoading(false);
       return;
@@ -214,17 +249,18 @@ export const usePlatformLookup = (field: any) => {
       const fetchPromise = (async () => {
         try {
           let results: any[] = [];
+          let fetchOk = false;
           
           if (lookupSource === 'module_records' && targetModuleId) {
             const url = `${API_BASE_URL}/api/data/records?moduleId=${targetModuleId}`;
-            console.log(`[usePlatformLookup] Fetching module records: ${url}`, { tenantId: tenant?.id });
             const res = await fetch(url, {
               headers: {
-                'Authorization': `Bearer ${session?.access_token}`,
+                'Authorization': `Bearer ${token}`,
                 'x-tenant-id': tenant?.id || ''
               }
             });
             if (res.ok) {
+              fetchOk = true;
               const json = await res.json();
               results = (json.records || []).map((r: any) => ({
                 id: r.id,
@@ -232,26 +268,43 @@ export const usePlatformLookup = (field: any) => {
                 ...r
               }));
             }
-          } else if (lookupSource === 'platform' && platformEntity === 'modules' && targetPlatformModuleId) {
-            const platformMod = PLATFORM_MODULES.find(m => m.id === targetPlatformModuleId);
+          } else if (
+            (lookupSource === 'platform' && platformEntity === 'modules' && targetPlatformModuleId) ||
+            isDirectoryLookup
+          ) {
+            const effectiveModId = isDirectoryLookup ? 'people-organisations' : targetPlatformModuleId;
+            const platformMod = PLATFORM_MODULES.find(m => m.id === effectiveModId);
             if (platformMod) {
               const url = `${API_BASE_URL}${platformMod.apiEndpoint}`;
               const res = await fetch(url, {
                 headers: {
-                  'Authorization': `Bearer ${session?.access_token}`,
+                  'Authorization': `Bearer ${token}`,
                   'x-tenant-id': tenant?.id || ''
                 }
               });
               if (res.ok) {
+                fetchOk = true;
                 const json = await res.json();
-                console.log(`[usePlatformLookup] Platform module response:`, json);
                 const rawItems = Array.isArray(json) ? json : (json.records || json.parties || json.items || []);
                 results = rawItems.map((r: any) => {
                   let item = { ...r };
                   if (platformMod.id === 'people-organisations') {
                     const personName = r.person ? `${r.person.firstName || ''} ${r.person.lastName || ''}`.trim() : '';
-                    const orgName = r.organization?.legalName || '';
-                    item = { ...item, ...(r.person || {}), ...(r.organization || {}), name: r.partyType === 'PERSON' ? personName : orgName };
+                    const orgName = r.organization?.legalName || r.organization?.tradingName || '';
+                    const resolvedName = r.displayName || (r.partyType === 'PERSON' ? personName : orgName) || 'Unnamed Entity';
+                    const primaryAddr = Array.isArray(r.addresses) && r.addresses[0]
+                      ? [r.addresses[0].line1, r.addresses[0].city, r.addresses[0].state, r.addresses[0].postalCode].filter(Boolean).join(', ')
+                      : '';
+                    item = {
+                      ...item,
+                      ...(r.person || {}),
+                      ...(r.organization || {}),
+                      ...(r.customData || {}),
+                      name: resolvedName,
+                      fullName: resolvedName,
+                      displayName: resolvedName,
+                      primaryAddress: primaryAddr,
+                    };
                   }
                   const displayName = (lookupDisplayField && item[lookupDisplayField]) ? String(item[lookupDisplayField]) : (item.name || item.fullName || item.id || 'Unnamed Record');
                   return { id: r.id, name: displayName, ...item };
@@ -260,12 +313,11 @@ export const usePlatformLookup = (field: any) => {
             }
           } else if (effectiveSource === 'connector' && field?.connectorId) {
             const url = `${API_BASE_URL}/api/nexus-proxy/execute`;
-            console.log(`[usePlatformLookup] Fetching connector options: ${url} for connectorId=${field.connectorId}`);
             const res = await fetch(url, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${session?.access_token}`,
+                'Authorization': `Bearer ${token}`,
                 'x-tenant-id': tenant?.id || ''
               },
               body: JSON.stringify({
@@ -276,6 +328,7 @@ export const usePlatformLookup = (field: any) => {
               })
             });
             if (res.ok) {
+              fetchOk = true;
               const json = await res.json();
               const rawData = json.data || json;
               const arrayData = Array.isArray(rawData) ? rawData : (rawData && typeof rawData === 'object' && Object.keys(rawData).length > 0) ? [rawData] : [];
@@ -292,8 +345,10 @@ export const usePlatformLookup = (field: any) => {
             }
           }
 
-          // Update cache
-          lookupCache.set(configKey, { data: results, timestamp: Date.now() });
+          // Update cache only when fetch succeeded
+          if (fetchOk) {
+            lookupCache.set(configKey, { data: results, timestamp: Date.now() });
+          }
           return results;
         } catch (err) {
           console.error('Lookup fetch error:', err);
@@ -311,7 +366,17 @@ export const usePlatformLookup = (field: any) => {
     };
 
     fetchData();
-  }, [configKey, session?.access_token, lookupDisplayField, effectiveSource, lookupSource, optionsSource, targetModuleId, targetPlatformModuleId, activeModuleId, field?.connectorId, field?.connectorLabelField, field?.connectorValueField]);
+
+    const handleDirectoryUpdate = () => {
+      if (isDirectoryLookup) {
+        lookupCache.delete(configKey);
+        lastConfigRef.current = '';
+        fetchData();
+      }
+    };
+    window.addEventListener('aurora:directory-updated', handleDirectoryUpdate);
+    return () => window.removeEventListener('aurora:directory-updated', handleDirectoryUpdate);
+  }, [configKey, tenant?.id, session?.access_token, isDirectoryLookup, lookupDisplayField, effectiveSource, lookupSource, optionsSource, targetModuleId, targetPlatformModuleId, activeModuleId, field?.connectorId, field?.connectorLabelField, field?.connectorValueField]);
 
 
 

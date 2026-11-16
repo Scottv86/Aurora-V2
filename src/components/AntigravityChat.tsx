@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { cn, slugify } from '../lib/utils';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { io, Socket } from 'socket.io-client';
 import { Navbar } from './Navigation/Navbar';
 import { GlobalDrawers } from './Navigation/GlobalDrawers';
+import { AppViewSwitcher } from './WorkspaceApps/AppViewSwitcher';
+import { SideDockedAppPanel } from './WorkspaceApps/SideDockedAppPanel';
+import { BottomDockedAppsBar } from './WorkspaceApps/BottomDockedAppsBar';
 import { 
   Sparkles, Bot, Terminal, Play, CheckCircle2, AlertCircle, 
   Loader2, Trash2, Send, Mic, MicOff, Plus, FileText, CheckSquare, 
@@ -417,6 +420,8 @@ const QueryResultVisualizer = ({ result }: { result: any[] }) => {
 
 export const AntigravityChat = () => {
   const { sessionId } = useParams();
+  const [searchParams] = useSearchParams();
+  const isStandalone = searchParams.get('standalone') === 'true';
   const navigate = useNavigate();
   let lastPlatformPath = localStorage.getItem('lastPlatformPath') || '/workspace';
   if (lastPlatformPath.includes('/settings')) {
@@ -2516,7 +2521,7 @@ export const AntigravityChat = () => {
       style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, height: '100vh', width: '100vw' }}
       className="flex flex-col bg-zinc-50 dark:bg-zinc-950 font-sans text-zinc-800 dark:text-zinc-100 antialiased overflow-hidden"
     >
-      <Navbar />
+      {!isStandalone && <Navbar />}
       
       <div className="flex-1 flex min-h-0 relative z-10">
       <div 
@@ -2530,6 +2535,15 @@ export const AntigravityChat = () => {
 
         {/* Explorer links & sessions */}
         <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin">
+          {/* Consistent View Switcher */}
+          <div className="bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200/80 dark:border-zinc-800 rounded-xl p-1.5">
+            <AppViewSwitcher
+              appId="ai-assistant"
+              currentMode={isStandalone ? 'fullscreen' : 'in_app'}
+              variant="footer"
+            />
+          </div>
+
           {/* New Conversation Button */}
           <button 
             onClick={createSession}
@@ -4318,6 +4332,8 @@ export const AntigravityChat = () => {
         projects={folders.map(f => f.name).length > 0 ? folders.map(f => f.name) : ['aurora']}
       />
 
+      <SideDockedAppPanel />
+      <BottomDockedAppsBar />
       <GlobalDrawers />
 
       </div>

@@ -35,8 +35,11 @@ import { TransitionBar } from '../UI/TransitionBar';
 import { ConnectionErrorPage } from '../Error/ConnectionErrorPage';
 import { DockedCalculatorPanel } from '../Calculator/DockedCalculatorPanel';
 import { SideDockedServiceDeskPanel } from '../ServiceDesk/SideDockedServiceDeskPanel';
-import { FacebookDockedServiceDesk } from '../ServiceDesk/FacebookDockedServiceDesk';
 import { ServiceDeskWrapUpModal } from '../ServiceDesk/ServiceDeskWrapUpModal';
+import { SideDockedAppPanel } from '../WorkspaceApps/SideDockedAppPanel';
+import { BottomDockedAppsBar } from '../WorkspaceApps/BottomDockedAppsBar';
+import { AppViewSwitcher } from '../WorkspaceApps/AppViewSwitcher';
+import { getWorkspaceAppById, getWorkspaceAppByPath } from '../../config/workspaceAppViews';
 
 
 const SidebarItemRenderer = ({ 
@@ -216,9 +219,10 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     dockedCalculatorWidth,
     setDockedCalculatorWidth,
     setIsQuickCalculatorOpen,
-    isServiceDeskFacebookDocked,
     isServiceDeskSideDocked,
-    dockedServiceDeskWidth
+    dockedServiceDeskWidth,
+    sideDockedAppId,
+    sideDockedAppWidth
   } = usePlatform();
 
   const isTenantAdmin = isDeveloper || 
@@ -240,6 +244,8 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
 
   const isStandaloneApp = searchParams.get('standalone') === 'true';
   const isServiceDeskPage = location.pathname.includes('/apps/service-desk');
+  const isChatPage = location.pathname.includes('/apps/chat');
+  const activeWorkspaceApp = getWorkspaceAppByPath(location.pathname);
   const isModuleBuilder = location.pathname.includes('/builder') || 
                           location.pathname.includes('/ai-builder') ||
                           location.pathname.includes('/agent-builder') ||
@@ -253,7 +259,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
     (pathnames[0] === 'workspace' && pathnames[1] === 'pages' && pathnames[3] === 'modules' && pathnames[4] && pathnames[5] !== 'records');
   const isQueueMainView = (pathnames[0] === 'workspace' && pathnames[1] === 'queues' && pathnames[2] && pathnames[3] !== 'records');
   const isPageMainView = (pathnames[0] === 'workspace' && pathnames[1] === 'pages' && pathnames[2] && pathnames[3] !== 'modules');
-  const isPosPage = location.pathname.includes('/pos') || isServiceDeskPage;
+  const isPosPage = location.pathname.includes('/pos') || isServiceDeskPage || isChatPage;
   const shouldHideShellBreadcrumbs = isModuleMainView || isQueueMainView || isPageMainView || isPosPage;
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     if (location.pathname === '/workspace/settings/builder/new') return false;
@@ -1175,9 +1181,18 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         <main 
           style={{ 
             marginLeft: `${currentMainMargin}px`,
-            marginRight: (isServiceDeskSideDocked && !isServiceDeskPage)
-              ? `${dockedServiceDeskWidth + (isCalculatorDocked ? dockedCalculatorWidth : 0)}px`
-              : (isCalculatorDocked ? `${dockedCalculatorWidth}px` : undefined)
+            marginRight: (() => {
+              const serviceDeskWidth = isServiceDeskSideDocked && !isServiceDeskPage ? dockedServiceDeskWidth : 0;
+              const calcWidth = isCalculatorDocked ? dockedCalculatorWidth : 0;
+              const sideApp = sideDockedAppId ? getWorkspaceAppById(sideDockedAppId) : undefined;
+              const onSideAppRoute = Boolean(sideApp && location.pathname.startsWith(sideApp.route));
+              const genericSideWidth =
+                sideDockedAppId && sideDockedAppId !== 'service-desk' && !onSideAppRoute
+                  ? sideDockedAppWidth
+                  : 0;
+              const totalRight = serviceDeskWidth + calcWidth + genericSideWidth;
+              return totalRight > 0 ? `${totalRight}px` : undefined;
+            })()
           }}
           className={cn(
             "flex-1 flex flex-col min-h-0",
@@ -1197,9 +1212,30 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
             {pathnames.length > 0 && !isModuleBuilder && !isBuilderFullscreen && !shouldHideShellBreadcrumbs && (isSettingsMode || tenant?.branding?.show_breadcrumbs !== false || isTenantAdmin) && (
               <div className="sticky top-0 z-30 h-9 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between px-5 shrink-0">
                 <Breadcrumbs />
-                {getContextualAction()}
+                <div className="flex items-center gap-2">
+                  {activeWorkspaceApp && !['chat', 'service-desk'].includes(activeWorkspaceApp.id) && (
+                    <AppViewSwitcher
+                      appId={activeWorkspaceApp.id}
+                      currentMode="in_app"
+                      variant="toolbar"
+                    />
+                  )}
+                  {getContextualAction()}
+                </div>
               </div>
             )}
+            {activeWorkspaceApp &&
+              !['chat', 'service-desk'].includes(activeWorkspaceApp.id) &&
+              (isStandaloneApp || isBuilderFullscreen || shouldHideShellBreadcrumbs) && (
+                <div className="fixed top-2.5 right-3 z-40">
+                  <AppViewSwitcher
+                    appId={activeWorkspaceApp.id}
+                    currentMode={isStandaloneApp ? 'fullscreen' : 'in_app'}
+                    variant="toolbar"
+                    className="shadow-md"
+                  />
+                </div>
+              )}
             {children}
           </div>
         </main>
@@ -1220,9 +1256,9 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
           <SideDockedServiceDeskPanel />
         )}
 
-        {isServiceDeskFacebookDocked && !isServiceDeskPage && (
-          <FacebookDockedServiceDesk />
-        )}
+        <SideDockedAppPanel />
+
+        <BottomDockedAppsBar />
 
         <ServiceDeskWrapUpModal />
 

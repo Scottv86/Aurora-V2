@@ -35,6 +35,7 @@ import { DigitalTwinSettingsModal } from '../Twin/DigitalTwinSettingsModal';
 import { MorningHandoverModal } from '../Twin/MorningHandoverModal';
 import { AccountModal } from '../Settings/AccountModal';
 import { WorkspaceCommandPalette } from './WorkspaceCommandPalette';
+import { WidgetBar } from './Widgets/WidgetBar';
 
 export const Navbar = () => {
   const { 
@@ -274,7 +275,10 @@ export const Navbar = () => {
         </button>
       </div>
 
-      <div className="flex items-center gap-4 flex-1 justify-end h-full">
+      <div className="flex items-center gap-2.5 flex-1 justify-end h-full">
+        {/* Ambient Configurable Header Widgets */}
+        <WidgetBar />
+
         {!isAdminPath && !isSuperAdminUser && (
           <button 
             onClick={() => {
@@ -292,7 +296,8 @@ export const Navbar = () => {
                 ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/10" 
                 : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
             )}
-            title="App Launcher"
+            data-tooltip="App Launcher"
+            data-tooltip-side="bottom"
           >
             <LayoutGrid size={20} />
           </button>
@@ -314,7 +319,8 @@ export const Navbar = () => {
               ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-lg shadow-indigo-500/10"
               : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
           )}
-          title={safeRunningTasks.length > 0 ? `${safeRunningTasks.length} Scheduled Task(s) Running...` : "Notifications"}
+          data-tooltip={safeRunningTasks.length > 0 ? `${safeRunningTasks.length} Scheduled Task(s) Running...` : "Notifications"}
+          data-tooltip-side="bottom"
         >
           <div className="relative flex items-center justify-center">
             <Bell size={20} />

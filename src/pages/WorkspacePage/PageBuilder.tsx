@@ -2334,8 +2334,9 @@ const QueueDropdown = ({ selectedWidget, setWidgets, tenant, modules, menuConfig
     if (menuConfig?.sections) {
       menuConfig.sections.forEach((sec: any) => walk(sec.items || []));
     }
-    if ((tenant?.menuConfig as any)?.sections) {
-      (tenant.menuConfig as any).sections.forEach((sec: any) => walk(sec.items || []));
+    const tenantSections = (tenant?.menuConfig as any)?.sections || (tenant?.menuConfig as any)?.default?.sections;
+    if (tenantSections) {
+      tenantSections.forEach((sec: any) => walk(sec.items || []));
     }
 
     // Also check modules

@@ -3,10 +3,10 @@ import {
   Check, Info, AlertTriangle, XCircle, 
   Smile, ArrowRight, Star, Trash2,
   ChevronDown, Search, ArrowRightLeft,
-  CalendarClock, Calendar
+  CalendarClock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn, evaluateFormattingRules } from '../lib/utils';
+import { cn, evaluateFormattingRules, getFieldValue } from '../lib/utils';
 import { RichTextEditor } from './UI/RichTextEditor';
 import { SignaturePad } from './UI/SignaturePad';
 import { DynamicIcon } from './UI/DynamicIcon';
@@ -22,6 +22,10 @@ import { useAuth } from '../hooks/useAuth';
 import { API_BASE_URL } from '../config';
 import { useParams } from 'react-router-dom';
 import { DocumentField } from './Platform/DocumentField';
+import { PartyEntityBadge } from './Common/PartyProfileHoverCard';
+import { PartyProfileTrigger, usePartyProfileCard } from '../context/PartyProfileCardContext';
+import { CreatePartyModal } from './Platform/CreatePartyModal';
+import { Building2, User as UserIcon, Plus } from 'lucide-react';
 
 const SearchableLookup = ({ 
   value, 
@@ -34,7 +38,9 @@ const SearchableLookup = ({
   platformEntity,
   onBlur,
   onKeyDown,
-  field
+  field,
+  recordData,
+  autoFocus = false
 }: any) => {
   const [isOpen, setIsOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
@@ -146,12 +152,12 @@ const SearchableLookup = ({
     }
   }, [isOpen]);
 
-  // Auto-focus when becoming editable
+  // Only auto-focus if explicitly requested via autoFocus prop
   React.useEffect(() => {
-    if (!readonly && inputRef.current) {
+    if (autoFocus && !readonly && inputRef.current) {
       inputRef.current.focus();
     }
-  }, [readonly]);
+  }, [autoFocus, readonly]);
 
   React.useLayoutEffect(() => {
     if (isOpen && containerRef.current) {
@@ -162,15 +168,64 @@ const SearchableLookup = ({
   }, [isOpen]);
   const [activeIndex, setActiveIndex] = React.useState(0);
   const [localName, setLocalName] = React.useState('');
+  const [isCreatePartyModalOpen, setIsCreatePartyModalOpen] = React.useState(false);
+  const { getPartySummary, directoryMap } = usePartyProfileCard();
+
+  const isDirectoryLookup = Boolean(
+    field?.type === 'party' ||
+      field?.targetPlatformModuleId === 'people-organisations' ||
+      field?.platformEntity === 'people-organisations' ||
+      field?.platformEntity === 'directory'
+  );
 
   const selectedItem = React.useMemo(() => {
     const found = results.find((r: any) => r.id === value);
     if (found) return found;
+    if (isDirectoryLookup && value) {
+      const partyId = typeof value === 'string' ? value : value?.id;
+      const summary = getPartySummary(partyId);
+      if (summary) {
+        return {
+          ...summary,
+          id: summary.id,
+          name: summary.displayName,
+        };
+      }
+      // Instant synchronous fallback from mapped output fields on recordData (0ms even on cold cache)
+      const mappings = Array.isArray(field?.lookupOutputMappings) ? field.lookupOutputMappings : [];
+      if (mappings.length > 0 && recordData && typeof recordData === 'object') {
+        let first = '';
+        let last = '';
+        let legal = '';
+        let full = '';
+        let pType: 'PERSON' | 'ORGANIZATION' | undefined;
+        for (const m of mappings) {
+          const src = m.sourceField || m.sourceProperty;
+          const tgt = m.targetFieldId || m.targetField;
+          const val = tgt ? (recordData[tgt] ?? getFieldValue(recordData, tgt)) : undefined;
+          if (!val || typeof val !== 'string') continue;
+          if (src === 'firstName') first = val;
+          else if (src === 'lastName') last = val;
+          else if (src === 'legalName' || src === 'tradingName') legal = val;
+          else if (src === 'displayName' || src === 'fullName' || src === 'name') full = val;
+          else if (src === 'partyType' && (val === 'PERSON' || val === 'ORGANIZATION')) pType = val;
+        }
+        const derivedName = full || `${first} ${last}`.trim() || legal;
+        if (derivedName) {
+          return {
+            id: partyId,
+            name: derivedName,
+            displayName: derivedName,
+            partyType: pType || (legal && !first ? 'ORGANIZATION' : 'PERSON'),
+          };
+        }
+      }
+    }
     if (value && isConnector) {
       return { id: value, name: value };
     }
     return null;
-  }, [results, value, isConnector]);
+  }, [results, value, isConnector, isDirectoryLookup, getPartySummary, directoryMap, field?.lookupOutputMappings, recordData]);
   
   // Sync local name with selected item when not focused
   React.useEffect(() => {
@@ -180,9 +235,29 @@ const SearchableLookup = ({
   }, [selectedItem, isOpen]);
 
   const filteredResults = React.useMemo(() => {
-    if (!search) return results;
-    return results.filter((r: any) => (r.name || '').toLowerCase().includes(search.toLowerCase()));
-  }, [results, search]);
+    let base = results;
+    if (isDirectoryLookup) {
+      if (field?.partyTypeFilter && field.partyTypeFilter !== 'ALL') {
+        base = base.filter((r: any) => r.partyType === field.partyTypeFilter);
+      }
+      if (field?.classificationFilter && field.classificationFilter !== 'ALL') {
+        base = base.filter(
+          (r: any) =>
+            Array.isArray(r.classifications) &&
+            r.classifications.includes(field.classificationFilter)
+        );
+      }
+    }
+    if (!search) return base;
+    const q = search.toLowerCase();
+    return base.filter(
+      (r: any) =>
+        (r.name || '').toLowerCase().includes(q) ||
+        (r.email || '').toLowerCase().includes(q) ||
+        (r.partyCode || '').toLowerCase().includes(q) ||
+        (r.taxIdentifier || '').toLowerCase().includes(q)
+    );
+  }, [results, search, isDirectoryLookup, field?.partyTypeFilter, field?.classificationFilter]);
 
   React.useEffect(() => {
     setActiveIndex(0);
@@ -245,20 +320,86 @@ const SearchableLookup = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // If readonly and this is a Directory lookup with a value, render the interactive MS365 hover badge directly
+  if (readonly && isDirectoryLookup && value) {
+    const resolvedPartyId = typeof value === 'string' ? value : value?.id;
+    return (
+      <div className={cn(inputClasses, 'flex items-center justify-between pointer-events-auto cursor-pointer')}>
+        <PartyEntityBadge
+          partyId={resolvedPartyId}
+          fallbackName={selectedItem?.name || (typeof value === 'string' ? undefined : value?.name)}
+          partyType={selectedItem?.partyType}
+          showSubtitle={true}
+          onClickBehavior="hover_only"
+        />
+        <PartyProfileTrigger
+          partyId={resolvedPartyId}
+          fallbackData={selectedItem || undefined}
+          onClickBehavior="open_card"
+          className="px-2 py-0.5 rounded-md bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/25 text-sky-600 dark:text-sky-400 text-[10px] font-bold flex items-center gap-1 cursor-pointer shrink-0"
+        >
+          <span>Profile</span>
+        </PartyProfileTrigger>
+      </div>
+    );
+  }
+
   return (
     <div className="relative w-full" ref={containerRef}>
       <div className="relative group">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-indigo-500 transition-colors" size={14} />
+        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none">
+          {isDirectoryLookup && value && selectedItem && !isOpen ? (
+            selectedItem.avatarUrl ? (
+              <img
+                src={selectedItem.avatarUrl}
+                alt={selectedItem.name}
+                className="w-5 h-5 rounded-md object-cover border border-zinc-200 dark:border-zinc-700 shadow-sm shrink-0"
+              />
+            ) : (
+              <span
+                className={cn(
+                  'w-5 h-5 rounded-md flex items-center justify-center shrink-0 text-[10px] font-bold',
+                  selectedItem.partyType === 'ORGANIZATION'
+                    ? 'bg-violet-500/15 text-violet-600 dark:text-violet-400 border border-violet-500/20'
+                    : 'bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/20'
+                )}
+              >
+                {selectedItem.partyType === 'ORGANIZATION' ? <Building2 size={11} /> : <UserIcon size={11} />}
+              </span>
+            )
+          ) : (
+            <Search className="text-zinc-400 group-focus-within:text-indigo-500 transition-colors" size={14} />
+          )}
+        </div>
         <input 
           ref={inputRef}
           type="text"
-          placeholder={displayLoading ? 'Loading...' : placeholder || `Search ${platformEntity || 'records'}...`}
-          value={isOpen ? search : (localName || selectedItem?.name || (typeof value === 'string' ? value : (value?.name || value?.label || '')))}
-          onChange={(e) => setSearch(e.target.value)}
+          placeholder={displayLoading && !value ? 'Loading...' : placeholder || (isDirectoryLookup ? 'Search Directory entities...' : `Search ${platformEntity || 'records'}...`)}
+          value={
+            isOpen
+              ? search
+              : localName ||
+                selectedItem?.name ||
+                (isDirectoryLookup && typeof value === 'string'
+                  ? (selectedItem?.name || '')
+                  : typeof value === 'string'
+                  ? value
+                  : value?.name || value?.label || '')
+          }
+          onChange={(e) => {
+            setSearch(e.target.value);
+            if (!isOpen && !readonly) setIsOpen(true);
+          }}
+          onClick={() => {
+            if (readonly) return;
+            if (!isOpen) {
+              setIsOpen(true);
+              setSearch('');
+            }
+          }}
           onFocus={() => {
             if (readonly) return;
-            setIsOpen(true);
-            setSearch('');
+            // Focus styling without auto-opening dropdown on initial render / tab
           }}
           readOnly={readonly}
           onBlur={onBlur}
@@ -266,11 +407,25 @@ const SearchableLookup = ({
           className={cn(
             inputClasses, 
             "pl-11", 
-            isConnector && field.searchMode === 'manual' && isOpen ? "pr-28" : "pr-10", 
+            isConnector && field.searchMode === 'manual' && isOpen 
+              ? "pr-28" 
+              : isDirectoryLookup && value 
+                ? "pr-24" 
+                : "pr-10", 
             readonly ? "cursor-pointer pointer-events-none" : "cursor-text"
           )}
         />
-        <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+        <div 
+          onClick={() => {
+            if (readonly) return;
+            setIsOpen(prev => !prev);
+            if (!isOpen) {
+              setSearch('');
+              if (inputRef.current) inputRef.current.focus();
+            }
+          }}
+          className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2 cursor-pointer"
+        >
           {isConnector && field.searchMode === 'manual' && isOpen && (
             <button
               type="button"
@@ -286,6 +441,16 @@ const SearchableLookup = ({
               <Search size={10} />
               <span>Search</span>
             </button>
+          )}
+          {value && isDirectoryLookup && (
+            <PartyProfileTrigger
+              partyId={typeof value === 'string' ? value : value?.id}
+              fallbackData={selectedItem || undefined}
+              className="px-2 py-0.5 rounded-md bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/25 text-sky-600 dark:text-sky-400 text-[10px] font-bold flex items-center gap-1 cursor-pointer shrink-0 pointer-events-auto"
+            >
+              {selectedItem?.partyType === 'ORGANIZATION' ? <Building2 size={11} /> : <UserIcon size={11} />}
+              <span>Card</span>
+            </PartyProfileTrigger>
           )}
           {value && !readonly && (
             <button 
@@ -350,16 +515,119 @@ const SearchableLookup = ({
                           : "text-zinc-600 dark:text-zinc-300"
                     )}
                   >
-                    <span className="truncate">{item.name}</span>
+                    <div className="min-w-0 flex items-center gap-2.5 flex-1">
+                      {isDirectoryLookup && (
+                        item.avatarUrl ? (
+                          <img
+                            src={item.avatarUrl}
+                            alt={item.name}
+                            className="w-6 h-6 rounded-lg object-cover shrink-0 border border-zinc-200 dark:border-zinc-700"
+                          />
+                        ) : (
+                          <span
+                            className={cn(
+                              'w-6 h-6 rounded-lg flex items-center justify-center shrink-0',
+                              value === item.id
+                                ? 'bg-white/20 text-white'
+                                : item.partyType === 'ORGANIZATION'
+                                ? 'bg-violet-500/10 text-violet-600 dark:text-violet-400'
+                                : 'bg-sky-500/10 text-sky-600 dark:text-sky-400'
+                            )}
+                          >
+                            {item.partyType === 'ORGANIZATION' ? <Building2 size={12} /> : <UserIcon size={12} />}
+                          </span>
+                        )
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <span className="truncate block font-semibold">{item.name}</span>
+                        {isDirectoryLookup && (item.jobTitle || item.industry || item.email || item.partyCode) && (
+                          <span
+                            className={cn(
+                              'truncate block text-[10px]',
+                              value === item.id ? 'text-white/80' : 'text-zinc-400'
+                            )}
+                          >
+                            {[item.partyCode, item.jobTitle || item.industry, item.email]
+                              .filter(Boolean)
+                              .join(' • ')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                     {value === item.id && <Check size={14} />}
                     {(value !== item.id && activeIndex === idx) && <ArrowRight size={12} className="translate-x-0 transition-all text-zinc-400" />}
                   </button>
                 ))
               )}
             </div>
+
+            {isDirectoryLookup && field?.allowInlineCreate !== false && (
+              <div className="p-2 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-950/60 shrink-0">
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsOpen(false);
+                    setIsCreatePartyModalOpen(true);
+                  }}
+                  className="w-full py-2 px-3 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 text-[11px] font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Plus size={13} />
+                  <span>
+                    {search.trim()
+                      ? `Register "${search.trim()}" in Directory`
+                      : 'Register New Entity in Directory'}
+                  </span>
+                </button>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
+
+      {isDirectoryLookup && isCreatePartyModalOpen && (
+        <CreatePartyModal
+          isOpen={isCreatePartyModalOpen}
+          onClose={() => setIsCreatePartyModalOpen(false)}
+          initialPartyType={
+            field?.partyTypeFilter === 'ORGANIZATION' ? 'ORGANIZATION' : 'PERSON'
+          }
+          initialName={search.trim()}
+          onSuccess={(createdParty) => {
+            if (createdParty?.id) {
+              const resolvedName =
+                createdParty.displayName ||
+                (createdParty.partyType === 'PERSON'
+                  ? `${createdParty.person?.firstName || ''} ${createdParty.person?.lastName || ''}`.trim()
+                  : createdParty.organization?.legalName || 'Entity');
+              const primaryAddr =
+                Array.isArray(createdParty.addresses) && createdParty.addresses[0]
+                  ? [
+                      createdParty.addresses[0].line1,
+                      createdParty.addresses[0].city,
+                      createdParty.addresses[0].state,
+                      createdParty.addresses[0].postalCode,
+                    ]
+                      .filter(Boolean)
+                      .join(', ')
+                  : '';
+              const flattened = {
+                ...createdParty,
+                ...(createdParty.person || {}),
+                ...(createdParty.organization || {}),
+                ...(createdParty.customData || {}),
+                name: resolvedName,
+                fullName: resolvedName,
+                displayName: resolvedName,
+                primaryAddress: primaryAddr,
+              };
+              setLocalName(resolvedName);
+              onChange(createdParty.id, flattened);
+            }
+          }}
+        />
+      )}
     </div>
   );
 };
@@ -457,7 +725,7 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
   const maxConstraint = (type === 'date' || type === 'time') ? resolveConstraint(field, 'max', recordData) : undefined;
 
   const { data: lookupResults, loading: lookupLoading } = usePlatformLookup(
-    (lookupSource || (optionsSource && optionsSource !== 'manual') || type === 'datatable') ? field : null
+    (lookupSource || (optionsSource && optionsSource !== 'manual') || type === 'datatable' || type === 'party') ? field : null
   );
   const inputRef = React.useRef<any>(null);
 
@@ -1356,11 +1624,12 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
     );
   }
 
-  if (type === 'lookup') {
+  if (type === 'lookup' || type === 'party') {
     return (
       <LookupInput 
         field={field}
         value={localValue}
+        recordData={recordData}
         onChange={(val: any, metadata?: any) => { 
           updateLocalValue(val); 
           triggerSave(val, metadata);
@@ -1371,6 +1640,7 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
         inputClasses={inputClasses}
         lookupResults={lookupResults}
         lookupLoading={lookupLoading}
+        autoFocus={autoFocus}
       />
     );
   }
@@ -1459,14 +1729,14 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}
       onChange={(e) => { setIsFocused(true); updateLocalValue(e.target.value); }}
-      autoFocus={!readonly}
+      autoFocus={autoFocus}
       readOnly={readonly}
       className={inputClasses}
     />
   );
 };
 
-const LookupInput = ({ field, value, onChange, onBlur, onKeyDown, readonly, inputClasses, lookupResults, lookupLoading }: any) => {
+const LookupInput = ({ field, value, recordData, onChange, onBlur, onKeyDown, readonly, inputClasses, lookupResults, lookupLoading, autoFocus = false }: any) => {
   const { lookupSource, platformEntity } = field;
 
   if (lookupSource === 'connector') {
@@ -1483,6 +1753,8 @@ const LookupInput = ({ field, value, onChange, onBlur, onKeyDown, readonly, inpu
         onBlur={onBlur}
         onKeyDown={onKeyDown}
         field={field}
+        recordData={recordData}
+        autoFocus={autoFocus}
       />
     );
   }
@@ -1500,6 +1772,8 @@ const LookupInput = ({ field, value, onChange, onBlur, onKeyDown, readonly, inpu
       onBlur={onBlur}
       onKeyDown={onKeyDown}
       field={field}
+      recordData={recordData}
+      autoFocus={autoFocus}
     />
   );
 };

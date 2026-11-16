@@ -47,7 +47,7 @@ const ChatAppContent: React.FC = () => {
   const activeDmAvatar = activeContact?.avatarUrl || matchedActiveUser?.avatarUrl;
 
   return (
-    <div className="fixed inset-0 z-40 w-screen h-screen bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white overflow-hidden flex">
+    <div className="w-full h-full bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white overflow-hidden flex">
       {/* 1. Left Sidebar: Channels & Direct Messages */}
       <ChatSidebar onOpenNewModal={(type) => setNewModalType(type)} />
 

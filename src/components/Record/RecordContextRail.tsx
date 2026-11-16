@@ -44,12 +44,14 @@ import {
   CopyPlus,
   FolderInput,
   FileText,
-  UserPlus
+  UserPlus,
+  DollarSign
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, formatLocalizedDate } from '../../lib/utils';
 import { API_BASE_URL } from '../../config';
 import { useAuth } from '../../hooks/useAuth';
+import { RecordTimeBillingTab } from './RecordTimeBillingTab';
 import { usePlatform } from '../../hooks/usePlatform';
 import { getSharedSocket } from '../../lib/socketClient';
 import { ActivityEventCard, ActivityEvent } from '../Platform/ActivityEventCard';
@@ -73,7 +75,7 @@ import {
 } from '../../lib/workflowProcessUtils';
 import { TransitionRequirementsModal } from '../Platform/TransitionRequirementsModal';
 
-export type ContextRailTab = 'overview' | 'workflow' | 'activity' | 'notes' | 'files' | 'tasks';
+export type ContextRailTab = 'overview' | 'workflow' | 'activity' | 'notes' | 'files' | 'tasks' | 'time';
 
 export interface StatusOptionItem {
   id?: string;
@@ -146,7 +148,8 @@ const tabOrder: Record<ContextRailTab, number> = {
   activity: 2,
   notes: 3,
   files: 4,
-  tasks: 5
+  tasks: 5,
+  time: 6
 };
 
 export const RecordContextRail: React.FC<RecordContextRailProps> = ({
@@ -1072,7 +1075,8 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
       { id: 'activity', label: 'Activity Feed', icon: History, count: meaningfulActivities.length, isLoading: activityLoading && activities.length === 0 },
       { id: 'notes', label: 'Notes', icon: StickyNote, count: notes.length, isLoading: notesLoading && notes.length === 0 },
       { id: 'files', label: 'Files & Documents', icon: Files, count: files.length, isLoading: filesLoading && files.length === 0 },
-      { id: 'tasks', label: 'Tasks & Reminders', icon: Calendar, count: tasks.filter(t => t.status !== 'COMPLETED').length, isLoading: tasksLoading && tasks.length === 0 }
+      { id: 'tasks', label: 'Tasks & Reminders', icon: Calendar, count: tasks.filter(t => t.status !== 'COMPLETED').length, isLoading: tasksLoading && tasks.length === 0 },
+      { id: 'time', label: 'Time & Billing', icon: DollarSign, count: 0, isLoading: false }
     );
     return tabs;
   }, [workflow, pendingRequiredSubstepsCount, isTransitioning, meaningfulActivities.length, activityLoading, activities.length, notes.length, notesLoading, files.length, filesLoading, tasks, tasksLoading]);
@@ -1091,6 +1095,8 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
         return { title: 'Files & Documents', icon: Files, count: files.length };
       case 'tasks':
         return { title: 'Tasks & Reminders', icon: Calendar, count: tasks.filter(t => t.status !== 'COMPLETED').length };
+      case 'time':
+        return { title: 'Time & Billing', icon: DollarSign, count: undefined };
     }
   }, [activeTab, pendingRequiredSubstepsCount, meaningfulActivities.length, notes.length, files.length, tasks]);
 
@@ -1136,7 +1142,8 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
                 type="button"
                 onClick={onToggleCollapse}
                 className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-                title="Close Drawer [⌘\]"
+                data-tooltip="Close Drawer [⌘\]"
+                data-tooltip-side="bottom"
               >
                 <X size={14} />
               </button>
@@ -2768,6 +2775,16 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
               )}
             </div>
           )}
+
+          {/* E. TIME & BILLING TAB */}
+          {activeTab === 'time' && (
+            <RecordTimeBillingTab
+              record={record}
+              moduleId={moduleId}
+              allFields={propAllFields}
+              recordTitle={recordKey}
+            />
+          )}
                   </div>
                 )}
               </motion.div>
@@ -2784,7 +2801,8 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
             type="button"
             onClick={onToggleCollapse}
             className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer shadow-2xs"
-            title={isCollapsed ? "Expand Details [⌘\\]" : "Collapse Details [⌘\\]"}
+            data-tooltip={isCollapsed ? "Expand Details [⌘\\]" : "Collapse Details [⌘\\]"}
+            data-tooltip-side="left"
           >
             {isCollapsed ? <PanelRightOpen size={15} /> : <PanelRightClose size={15} />}
           </button>
@@ -2806,7 +2824,8 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
                     ? "text-indigo-600 dark:text-indigo-400 font-bold"
                     : "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/60"
                 )}
-                title={tab.label}
+                data-tooltip={tab.label}
+                data-tooltip-side="left"
               >
                 {/* Animated Gliding Left Accent Indicator */}
                 {isActive && (
