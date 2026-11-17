@@ -386,7 +386,7 @@ export const RelationshipGraph = ({
 
       <div className="absolute bottom-4 left-5 right-5 px-4 py-2.5 bg-indigo-600/10 border border-indigo-500/20 rounded-xl backdrop-blur-md">
         <p className="text-[11px] text-indigo-700 dark:text-indigo-300 font-medium text-center">
-          Click any node to inspect its MS365-style Profile Card • Double-click to open full 360° Command Center • Drag to rearrange
+          Click any node to inspect its Profile Card • Double-click to open Directory Profile • Drag to rearrange
         </p>
       </div>
     </div>

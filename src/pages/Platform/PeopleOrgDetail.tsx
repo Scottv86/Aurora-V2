@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   User,
@@ -36,6 +36,7 @@ import {
   ChevronRight,
   ArrowRight,
   Eye,
+  Users,
 } from 'lucide-react';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
@@ -43,30 +44,34 @@ import { API_BASE_URL } from '../../config';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
 import { Button, Input, Select, Badge, AuroraSpinner } from '../../components/UI/Primitives';
-import { Skeleton } from '../../components/UI/Skeleton';
+import { PageLoader } from '../../components/UI/PageLoader';
 import { DeleteConfirmationModal } from '../../components/Common/DeleteConfirmationModal';
 import { RelationshipGraph } from '../../components/Platform/RelationshipGraph';
 import { AddRelationshipModal } from '../../components/Platform/AddRelationshipModal';
 import { EntityAvatarUpload } from '../../components/Platform/EntityAvatarUpload';
 import { PartyProfileTrigger } from '../../context/PartyProfileCardContext';
 import { UserAvatarWithPresence, UserProfileTrigger } from '../../components/Common/UserPresenceBadge';
+import { useRegisterActiveEntity } from '../../context/ActiveEntityContext';
+import { DirectoryLookup } from '../../components/Common/DirectoryLookup';
+import { AuroraModal } from '../../components/UI/AuroraModal';
+import { CreatePartyModal } from '../../components/Platform/CreatePartyModal';
+import { DatePicker } from '../../components/UI/DatePicker';
+import { UserSelector } from '../../components/Common/UserSelector';
 
 
 // Standardized Workspace Form Controls (aligned with RecordDetailView / CollapsibleFieldGroup)
-const FormSection = ({ title, icon: Icon, actions, children, className }: {
+const FormSection = ({ title, actions, children, className }: {
   title: string;
-  icon?: any;
   actions?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
 }) => (
   <div className={cn(
-    "rounded-xl bg-white dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-zinc-800/80 shadow-xs overflow-hidden",
+    "rounded-xl bg-white dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-zinc-800/80 shadow-xs",
     className
   )}>
-    <div className="px-3.5 py-2.5 flex items-center justify-between select-none border-b border-zinc-200/60 dark:border-zinc-800/60">
+    <div className="px-3.5 py-2.5 flex items-center justify-between select-none border-b border-zinc-200/60 dark:border-zinc-800/60 rounded-t-xl">
       <div className="flex items-center gap-2 min-w-0">
-        {Icon && <Icon size={14} className="text-zinc-400 shrink-0" />}
         <h5 className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider truncate">
           {title}
         </h5>
@@ -213,6 +218,14 @@ export const PeopleOrgDetail = () => {
   const [editingRelationship, setEditingRelationship] = useState<any | null>(null);
   const [showGraphInRelTab, setShowGraphInRelTab] = useState(true);
 
+  // Organisation Contacts state
+  const [orgContacts, setOrgContacts] = useState<any[]>([]);
+  const [isAddContactModalOpen, setIsAddContactModalOpen] = useState(false);
+  const [selectedPersonToLink, setSelectedPersonToLink] = useState('');
+  const [linkingContact, setLinkingContact] = useState(false);
+  const [linkAsPrimary, setLinkAsPrimary] = useState(false);
+  const [isCreatePersonModalOpen, setIsCreatePersonModalOpen] = useState(false);
+
   // Notes, Reminders, Audit Logs
   const [notes, setNotes] = useState<any[]>([]);
   const [newNoteTitle, setNewNoteTitle] = useState('');
@@ -284,6 +297,50 @@ export const PeopleOrgDetail = () => {
     },
   });
 
+  // Real-time AI Assistant active entity registration
+  const activeEntityContext = useMemo(() => {
+    if (!party || !party.id) return null;
+    const isPerson = party.type === 'INDIVIDUAL' || party.type === 'PERSON';
+    const domain = isPerson ? ('directory_person' as const) : ('directory_org' as const);
+    const title = party.displayName || party.name || (isPerson ? `${party.firstName || ''} ${party.lastName || ''}`.trim() : 'Directory Entity');
+    const subtitle = isPerson
+      ? (party.jobTitle ? `${party.jobTitle}${party.orgName ? ` at ${party.orgName}` : ''}` : 'Individual Contact')
+      : (party.industry || 'Organization');
+    
+    return {
+      domain,
+      id: String(party.id),
+      title,
+      subtitle: `${subtitle} • ${party.stage || 'Active'}`,
+      status: party.stage || 'Active',
+      activeTab,
+      keyAttributes: {
+        'Entity Type': isPerson ? 'Individual (Person)' : 'Organization (Company)',
+        'Email': party.email || party.workEmail || null,
+        'Phone': party.phone || party.workPhone || party.mobile || null,
+        'Job Title': party.jobTitle || null,
+        'Organization': party.orgName || party.organization?.name || null,
+        'Lifecycle Stage': party.stage || null,
+        'Owner / Manager': party.assignedUser?.name || party.assignedToName || null,
+        'City': party.address?.city || party.city || null,
+        'Country': party.address?.country || party.country || null,
+        'Website': party.website || null,
+        'Industry': party.industry || null,
+      },
+      relatedCounts: {
+        relationships: relationships?.length || undefined,
+        notes: notes?.length || undefined,
+        documents: linkedData?.records?.length || undefined,
+      },
+      rawUrl: window.location.pathname + window.location.search,
+    };
+  }, [party, activeTab, relationships?.length, notes?.length, linkedData?.records?.length]);
+
+  useRegisterActiveEntity(activeEntityContext, {
+    priority: 10,
+    enabled: Boolean(party?.id),
+  });
+
   const getToken = useCallback(() => {
     return (
       (import.meta as any).env?.VITE_DEV_TOKEN ||
@@ -317,6 +374,11 @@ export const PeopleOrgDetail = () => {
       }
 
       setParty(data);
+      if (Array.isArray(data.contacts)) {
+        setOrgContacts(data.contacts);
+      } else {
+        setOrgContacts([]);
+      }
       setFormData({
         status: data.status || 'ACTIVE',
         avatarUrl: data.avatarUrl || null,
@@ -489,6 +551,11 @@ export const PeopleOrgDetail = () => {
       } else {
         toast.success('Entity profile saved');
         setParty(data);
+      if (Array.isArray(data.contacts)) {
+        setOrgContacts(data.contacts);
+      } else {
+        setOrgContacts([]);
+      }
         window.dispatchEvent(new CustomEvent('aurora:directory-updated'));
         fetchLinkedEverything();
         fetchExtras();
@@ -538,6 +605,92 @@ export const PeopleOrgDetail = () => {
     } finally {
       setIsDeleting(false);
       setShowDeleteModal(false);
+    }
+  };
+
+  const handleSetPrimaryContact = async (personPartyId: string | null) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/people-organisations/${id}/primary-contact`, {
+        method: 'PATCH',
+        headers: getHeaders(),
+        body: JSON.stringify({ personPartyId }),
+      });
+      if (res.ok) {
+        setFormData((prev: any) => ({
+          ...prev,
+          organization: {
+            ...prev.organization,
+            primaryContactPartyId: personPartyId || '',
+          },
+        }));
+        setOrgContacts((prev) =>
+          prev.map((c) => ({
+            ...c,
+            isPrimaryContact: c.id === personPartyId,
+          }))
+        );
+        toast.success(personPartyId ? 'Updated primary contact' : 'Cleared primary contact');
+        window.dispatchEvent(new CustomEvent('aurora:directory-updated'));
+      }
+    } catch {
+      toast.error('Failed to update primary contact');
+    }
+  };
+
+  const handleLinkContact = async () => {
+    if (!selectedPersonToLink) return;
+    setLinkingContact(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/people-organisations/${id}/contacts`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          personPartyId: selectedPersonToLink,
+          setAsPrimary: linkAsPrimary,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to link contact');
+      }
+      toast.success('Contact added to organisation');
+      setIsAddContactModalOpen(false);
+      setSelectedPersonToLink('');
+      setLinkAsPrimary(false);
+      await fetchParty();
+      window.dispatchEvent(new CustomEvent('aurora:directory-updated'));
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLinkingContact(false);
+    }
+  };
+
+  const handleUnlinkContact = async (personPartyId: string, contactName: string) => {
+    if (!confirm(`Are you sure you want to unlink ${contactName} from this organisation?`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/people-organisations/${id}/contacts/${personPartyId}`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+      });
+      if (res.ok) {
+        setOrgContacts((prev) => prev.filter((c) => c.id !== personPartyId));
+        if (formData.organization.primaryContactPartyId === personPartyId) {
+          setFormData((prev: any) => ({
+            ...prev,
+            organization: {
+              ...prev.organization,
+              primaryContactPartyId: '',
+            },
+          }));
+        }
+        toast.success(`Unlinked ${contactName}`);
+        window.dispatchEvent(new CustomEvent('aurora:directory-updated'));
+      }
+    } catch {
+      toast.error('Failed to unlink contact');
     }
   };
 
@@ -708,30 +861,8 @@ export const PeopleOrgDetail = () => {
 
   if (loading) {
     return (
-      <div className="flex flex-col h-full w-full bg-zinc-50 dark:bg-[#101010] overflow-hidden">
-        <div className="h-14 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between px-5 shrink-0 bg-white dark:bg-zinc-900">
-          <div className="flex items-center gap-3">
-            <Skeleton width={32} height={32} variant="rounded" />
-            <Skeleton width={180} height={20} variant="rounded" />
-          </div>
-          <div className="flex items-center gap-2">
-            <Skeleton width={80} height={32} variant="rounded" />
-            <Skeleton width={80} height={32} variant="rounded" />
-          </div>
-        </div>
-        <div className="flex-1 flex overflow-hidden">
-          <div className="flex-1 p-6 space-y-6">
-            <Skeleton height={40} variant="rounded" />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Skeleton height={320} variant="rounded" />
-              <Skeleton height={320} variant="rounded" />
-            </div>
-          </div>
-          <div className="w-80 xl:w-88 border-l border-zinc-200/80 dark:border-zinc-800 p-4 space-y-4 hidden lg:block">
-            <Skeleton height={36} variant="rounded" />
-            <Skeleton height={200} variant="rounded" />
-          </div>
-        </div>
+      <div className="flex flex-col h-full w-full bg-zinc-50 dark:bg-[#101010] items-center justify-center">
+        <PageLoader label="Loading Directory Profile..." fullscreen={false} className="border-none bg-transparent" />
       </div>
     );
   }
@@ -993,6 +1124,15 @@ export const PeopleOrgDetail = () => {
         <div className="flex gap-6 h-full items-center overflow-x-auto flex-1 min-w-0">
           {[
             { id: 'overview', label: 'Overview' },
+            ...(!isPerson
+              ? [
+                  {
+                    id: 'contacts',
+                    label: 'Contacts',
+                    badge: orgContacts.length,
+                  },
+                ]
+              : []),
             {
               id: 'linked',
               label: 'Activity',
@@ -1559,13 +1699,11 @@ export const PeopleOrgDetail = () => {
           {/* ================================================================ */}
           {activeTab === 'overview' && (
             <div className="space-y-4">
-              {/* SECTION 1: IDENTITY & REGISTRATION */}
-              <FormSection
-                title={isPerson ? 'Identity' : 'Company Information'}
-                icon={isPerson ? User : Building}
-              >
-                {isPerson ? (
-                  <>
+              {/* 2-COLUMN DOSSIER GRID: PERSON / COMPANY on LEFT, ORG / GOVERNANCE on RIGHT */}
+              {isPerson ? (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {/* Left Column: Personal Details */}
+                  <FormSection title="Personal Details">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <FormField label="Salutation">
                         <FormSelect
@@ -1623,18 +1761,77 @@ export const PeopleOrgDetail = () => {
                         />
                       </FormField>
                       <FormField label="Date of Birth">
-                        <FormInput
-                          type="date"
+                        <DatePicker
                           value={formData.person.dateOfBirth}
-                          onChange={(e) =>
+                          onChange={(val) =>
                             setFormData({
                               ...formData,
-                              person: { ...formData.person, dateOfBirth: e.target.value },
+                              person: { ...formData.person, dateOfBirth: val },
                             })
                           }
+                          placeholder="Select date of birth..."
                         />
                       </FormField>
                     </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <FormField label="Personal Email">
+                        <FormInput
+                          type="email"
+                          value={formData.email}
+                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        />
+                      </FormField>
+                      <FormField label="Mobile Phone">
+                        <FormInput
+                          type="tel"
+                          value={formData.mobile}
+                          onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
+                        />
+                      </FormField>
+                    </div>
+
+                    <label className="flex items-center gap-2.5 p-3 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.person.isHumanInLoop}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            person: { ...formData.person, isHumanInLoop: e.target.checked },
+                          })
+                        }
+                        className="w-4 h-4 text-indigo-600 rounded border-zinc-300 dark:border-zinc-700 focus:ring-indigo-500"
+                      />
+                      <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                        Human Signatory Verification Required
+                      </span>
+                    </label>
+                  </FormSection>
+
+                  {/* Right Column: Organisation & Employment */}
+                  <FormSection title="Organisation & Employment">
+                    <FormField label="Primary Organisation">
+                      <DirectoryLookup
+                        value={formData.person.primaryOrgPartyId}
+                        onChange={(partyId, matchedOrg) => {
+                          setFormData({
+                            ...formData,
+                            person: {
+                              ...formData.person,
+                              primaryOrgPartyId: partyId,
+                              primaryOrgName:
+                                matchedOrg?.displayName ||
+                                matchedOrg?.organization?.legalName ||
+                                '',
+                            },
+                          });
+                        }}
+                        filterPartyType="ORGANIZATION"
+                        includeInternalOption={false}
+                        placeholder="Search organisations in directory..."
+                      />
+                    </FormField>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <FormField label="Job Title">
@@ -1663,58 +1860,72 @@ export const PeopleOrgDetail = () => {
                       </FormField>
                     </div>
 
-                    <FormField label="Primary Organisation">
-                      <FormSelect
-                        value={formData.person.primaryOrgPartyId}
-                        onChange={(e) => {
-                          const orgId = e.target.value;
-                          const matchedOrg = allParties.find((p) => p.id === orgId);
-                          setFormData({
-                            ...formData,
-                            person: {
-                              ...formData.person,
-                              primaryOrgPartyId: orgId,
-                              primaryOrgName:
-                                matchedOrg?.displayName ||
-                                matchedOrg?.organization?.legalName ||
-                                '',
-                            },
-                          });
-                        }}
-                        options={[
-                          { label: '— Independent / No Primary Organisation —', value: '' },
-                          ...allParties
-                            .filter((p) => p.partyType === 'ORGANIZATION')
-                            .map((org) => ({
-                              label:
-                                org.displayName ||
-                                org.organization?.legalName ||
-                                'Organization',
-                              value: org.id,
-                            })),
-                        ]}
-                      />
-                    </FormField>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <FormField label="Work Email">
+                        <FormInput
+                          type="email"
+                          value={formData.secondaryEmail}
+                          onChange={(e) =>
+                            setFormData({ ...formData, secondaryEmail: e.target.value })
+                          }
+                        />
+                      </FormField>
+                      <FormField label="Office Phone">
+                        <FormInput
+                          type="tel"
+                          value={formData.phone}
+                          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        />
+                      </FormField>
+                    </div>
 
-                    <label className="flex items-center gap-2.5 p-3 bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.person.isHumanInLoop}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            person: { ...formData.person, isHumanInLoop: e.target.checked },
-                          })
-                        }
-                        className="w-4 h-4 text-indigo-600 rounded border-zinc-300 dark:border-zinc-700 focus:ring-indigo-500"
-                      />
-                      <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                        Human Signatory Verification Required
-                      </span>
-                    </label>
-                  </>
-                ) : (
-                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <FormField label="Account Owner">
+                        <UserSelector
+                          value={formData.accountOwnerMemberId}
+                          onChange={(userId) =>
+                            setFormData({ ...formData, accountOwnerMemberId: userId })
+                          }
+                          placeholder="Select account owner..."
+                        />
+                      </FormField>
+                      <FormField label="Website / Portfolio">
+                        <FormInput
+                          placeholder="https://..."
+                          value={formData.website}
+                          onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                        />
+                      </FormField>
+                    </div>
+
+                    <FormField label="Classifications">
+                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                        {availableClassifications.map((tag) => {
+                          const active = formData.classifications.includes(tag);
+                          return (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={() => toggleClassification(tag)}
+                              className={cn(
+                                'px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer',
+                                active
+                                  ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30 font-bold'
+                                  : 'bg-zinc-50 dark:bg-zinc-950 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:text-zinc-700 dark:hover:text-zinc-200'
+                              )}
+                            >
+                              {active ? `✓ ${tag}` : `+ ${tag}`}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </FormField>
+                  </FormSection>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {/* Left Column: Company Details */}
+                  <FormSection title="Company Details">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <FormField label="Legal Name" required>
                         <FormInput
@@ -1803,15 +2014,94 @@ export const PeopleOrgDetail = () => {
                         />
                       </FormField>
                       <FormField label="Incorporation Date">
-                        <FormInput
-                          type="date"
+                        <DatePicker
                           value={formData.organization.incorporationDate}
-                          onChange={(e) =>
+                          onChange={(val) =>
                             setFormData({
                               ...formData,
                               organization: {
                                 ...formData.organization,
-                                incorporationDate: e.target.value,
+                                incorporationDate: val,
+                              },
+                            })
+                          }
+                          placeholder="Select incorporation date..."
+                        />
+                      </FormField>
+                    </div>
+
+                    <FormField label="Industry">
+                      <FormInput
+                        placeholder="e.g. Financial Services, Technology"
+                        value={formData.organization.industry}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            organization: {
+                              ...formData.organization,
+                              industry: e.target.value,
+                            },
+                          })
+                        }
+                      />
+                    </FormField>
+                  </FormSection>
+
+                  {/* Right Column: Contact & Governance */}
+                  <FormSection title="Contact & Governance">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <FormField label="Primary Contact">
+                        <DirectoryLookup
+                          value={formData.organization.primaryContactPartyId}
+                          onChange={(partyId) =>
+                            setFormData({
+                              ...formData,
+                              organization: {
+                                ...formData.organization,
+                                primaryContactPartyId: partyId,
+                              },
+                            })
+                          }
+                          filterPartyType="PERSON"
+                          includeInternalOption={false}
+                          placeholder="Select primary contact..."
+                        />
+                      </FormField>
+                      <FormField label="Account Owner">
+                        <UserSelector
+                          value={formData.accountOwnerMemberId}
+                          onChange={(userId) =>
+                            setFormData({
+                              ...formData,
+                              accountOwnerMemberId: userId,
+                            })
+                          }
+                          placeholder="Select account owner..."
+                        />
+                      </FormField>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <FormField label="Primary Email">
+                        <FormInput
+                          type="email"
+                          value={formData.email}
+                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        />
+                      </FormField>
+                      <FormField label="Billing Email">
+                        <FormInput
+                          type="email"
+                          value={
+                            formData.organization.billingEmail || formData.secondaryEmail
+                          }
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              secondaryEmail: e.target.value,
+                              organization: {
+                                ...formData.organization,
+                                billingEmail: e.target.value,
                               },
                             })
                           }
@@ -1820,171 +2110,215 @@ export const PeopleOrgDetail = () => {
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <FormField label="Industry">
+                      <FormField label="Office Phone">
                         <FormInput
-                          placeholder="e.g. Financial Services, Technology"
-                          value={formData.organization.industry}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              organization: {
-                                ...formData.organization,
-                                industry: e.target.value,
-                              },
-                            })
-                          }
+                          type="tel"
+                          value={formData.phone}
+                          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                         />
                       </FormField>
-                      <FormField label="Primary Contact">
-                        <FormSelect
-                          value={formData.organization.primaryContactPartyId}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              organization: {
-                                ...formData.organization,
-                                primaryContactPartyId: e.target.value,
-                              },
-                            })
-                          }
-                          options={[
-                            { label: '— None Selected —', value: '' },
-                            ...allParties
-                              .filter((p) => p.partyType === 'PERSON')
-                              .map((per) => ({
-                                label:
-                                  per.displayName ||
-                                  `${per.person?.firstName || ''} ${
-                                    per.person?.lastName || ''
-                                  }`.trim(),
-                                value: per.id,
-                              })),
-                          ]}
+                      <FormField label="Mobile Phone">
+                        <FormInput
+                          type="tel"
+                          value={formData.mobile}
+                          onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
                         />
                       </FormField>
                     </div>
-                  </>
-                )}
-              </FormSection>
 
-              {/* SECTION 2: CONTACT CHANNELS & ACCOUNT OWNERSHIP */}
-              <FormSection
-                title="Contact & Ownership"
-                icon={Mail}
-              >
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FormField label="Primary Email">
-                    <FormInput
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    />
-                  </FormField>
-                  <FormField label="Secondary Email">
-                    <FormInput
-                      type="email"
-                      value={
-                        isPerson
-                          ? formData.secondaryEmail
-                          : formData.organization.billingEmail || formData.secondaryEmail
-                      }
-                      onChange={(e) =>
-                        isPerson
-                          ? setFormData({ ...formData, secondaryEmail: e.target.value })
-                          : setFormData({
-                              ...formData,
-                              secondaryEmail: e.target.value,
-                              organization: {
-                                ...formData.organization,
-                                billingEmail: e.target.value,
-                              },
-                            })
-                      }
-                    />
-                  </FormField>
+                    <FormField label="Website">
+                      <FormInput
+                        placeholder="https://..."
+                        value={formData.website}
+                        onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                      />
+                    </FormField>
+
+                    <FormField label="Classifications">
+                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                        {availableClassifications.map((tag) => {
+                          const active = formData.classifications.includes(tag);
+                          return (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={() => toggleClassification(tag)}
+                              className={cn(
+                                'px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer',
+                                active
+                                  ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30 font-bold'
+                                  : 'bg-zinc-50 dark:bg-zinc-950 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:text-zinc-700 dark:hover:text-zinc-200'
+                              )}
+                            >
+                              {active ? `✓ ${tag}` : `+ ${tag}`}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </FormField>
+                  </FormSection>
                 </div>
+              )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FormField label="Office Phone">
-                    <FormInput
-                      type="tel"
-                      value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    />
-                  </FormField>
-                  <FormField label="Mobile Phone">
-                    <FormInput
-                      type="tel"
-                      value={formData.mobile}
-                      onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
-                    />
-                  </FormField>
-                </div>
+              {/* SECTION: CONTACTS & KEY PERSONNEL (ORGANISATIONS ONLY) */}
+              {!isPerson && (
+                <FormSection
+                  title={`Contacts & Key Personnel (${orgContacts.length})`}
+                  actions={
+                    <button
+                      type="button"
+                      onClick={() => setIsAddContactModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      <Plus size={13} />
+                      <span>Add Contact</span>
+                    </button>
+                  }
+                >
+                  {orgContacts.length === 0 ? (
+                    <div className="p-8 text-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl bg-zinc-50/50 dark:bg-zinc-950/30">
+                      <Users className="w-8 h-8 mx-auto text-zinc-300 dark:text-zinc-600 mb-2" />
+                      <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                        No contacts connected to {displayName || 'this organisation'} yet
+                      </p>
+                      <p className="text-[11px] text-zinc-500 mt-1 max-w-md mx-auto">
+                        Link existing people in your directory or register new staff members with this company as their primary organisation.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setIsAddContactModalOpen(true)}
+                        className="mt-3.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-500 transition-colors cursor-pointer"
+                      >
+                        <Plus size={13} />
+                        <span>Add Contact</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {orgContacts.map((contact) => {
+                        const isPrimary =
+                          contact.isPrimaryContact ||
+                          contact.id === formData.organization.primaryContactPartyId;
+                        const contactFullName =
+                          contact.displayName ||
+                          `${contact.person?.firstName || ''} ${contact.person?.lastName || ''}`.trim() ||
+                          'Contact';
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FormField label="Website">
-                    <FormInput
-                      placeholder="https://..."
-                      value={formData.website}
-                      onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                    />
-                  </FormField>
-                  <FormField label="Account Owner">
-                    <FormSelect
-                      value={formData.accountOwnerMemberId}
-                      onChange={(e) =>
-                        setFormData({ ...formData, accountOwnerMemberId: e.target.value })
-                      }
-                      options={[
-                        { label: '— Unassigned —', value: '' },
-                        ...tenantMembers.map((m: any) => ({
-                          label: `${m.name || m.email} (${m.role || 'Member'})`,
-                          value: m.id,
-                        })),
-                      ]}
-                    />
-                  </FormField>
-                </div>
+                        return (
+                          <div
+                            key={contact.id}
+                            className={cn(
+                              "relative p-3.5 rounded-2xl border transition-all flex flex-col justify-between gap-3 group/contact",
+                              isPrimary
+                                ? "bg-amber-50/40 dark:bg-amber-500/5 border-amber-500/40 ring-1 ring-amber-500/20 shadow-xs"
+                                : "bg-white dark:bg-zinc-950/60 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
+                            )}
+                          >
+                            <div className="space-y-2">
+                              {/* Header row: Avatar, Name & Primary Badge */}
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <div className="w-8 h-8 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden border border-indigo-500/20">
+                                    {contact.avatarUrl ? (
+                                      <img
+                                        src={contact.avatarUrl}
+                                        alt={contactFullName}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      contactFullName
+                                        .split(' ')
+                                        .slice(0, 2)
+                                        .map((p: string) => p[0])
+                                        .join('')
+                                        .toUpperCase()
+                                    )}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => navigate(`/workspace/apps/directory/${contact.id}`)}
+                                      className="text-xs font-bold text-zinc-900 dark:text-white truncate hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline block text-left cursor-pointer"
+                                    >
+                                      {contactFullName}
+                                    </button>
+                                    <p className="text-[11px] text-zinc-500 truncate">
+                                      {contact.person?.jobTitle || 'No Title'}
+                                      {contact.person?.department ? ` • ${contact.person.department}` : ''}
+                                    </p>
+                                  </div>
+                                </div>
 
-                <FormField label="Profile Summary">
-                  <FormTextarea
-                    rows={3}
-                    value={formData.notesSummary}
-                    onChange={(e) =>
-                      setFormData({ ...formData, notesSummary: e.target.value })
-                    }
-                    placeholder="Brief description or context..."
-                  />
-                </FormField>
+                                {isPrimary ? (
+                                  <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-[10px] font-bold">
+                                    <Star size={10} className="fill-amber-500 text-amber-500" />
+                                    <span>Primary</span>
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSetPrimaryContact(contact.id)}
+                                    title="Set as Primary Contact for this organisation"
+                                    className="opacity-0 group-hover/contact:opacity-100 text-[10px] font-bold text-zinc-400 hover:text-amber-600 dark:hover:text-amber-400 px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-800 hover:border-amber-500/30 transition-all shrink-0 cursor-pointer"
+                                  >
+                                    Make Primary
+                                  </button>
+                                )}
+                              </div>
 
-                <FormField label="Classifications">
-                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                    {availableClassifications.map((tag) => {
-                      const active = formData.classifications.includes(tag);
-                      return (
-                        <button
-                          key={tag}
-                          type="button"
-                          onClick={() => toggleClassification(tag)}
-                          className={cn(
-                            'px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer',
-                            active
-                              ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30 font-bold'
-                              : 'bg-zinc-50 dark:bg-zinc-950 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:text-zinc-700 dark:hover:text-zinc-200'
-                          )}
-                        >
-                          {active ? `✓ ${tag}` : `+ ${tag}`}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </FormField>
-              </FormSection>
+                              {/* Communication Details */}
+                              <div className="space-y-1 text-[11px] text-zinc-500 pt-1 border-t border-zinc-100 dark:border-zinc-800/60">
+                                {contact.email && (
+                                  <a
+                                    href={`mailto:${contact.email}`}
+                                    className="flex items-center gap-1.5 hover:text-indigo-600 dark:hover:text-indigo-400 truncate"
+                                  >
+                                    <Mail size={12} className="shrink-0 text-zinc-400" />
+                                    <span className="truncate">{contact.email}</span>
+                                  </a>
+                                )}
+                                {(contact.phone || contact.mobile) && (
+                                  <a
+                                    href={`tel:${contact.phone || contact.mobile}`}
+                                    className="flex items-center gap-1.5 hover:text-indigo-600 dark:hover:text-indigo-400 truncate"
+                                  >
+                                    <Phone size={12} className="shrink-0 text-zinc-400" />
+                                    <span className="truncate">{contact.phone || contact.mobile}</span>
+                                  </a>
+                                )}
+                              </div>
+                            </div>
 
-              {/* SECTION 3: ADDRESSES */}
+                            {/* Card Footer Actions */}
+                            <div className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800/60 text-[11px]">
+                              <button
+                                type="button"
+                                onClick={() => navigate(`/workspace/apps/directory/${contact.id}`)}
+                                className="inline-flex items-center gap-1 font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                              >
+                                <span>Open Dossier</span>
+                                <ExternalLink size={10} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleUnlinkContact(contact.id, contactFullName)}
+                                title="Unlink contact from this organisation"
+                                className="text-zinc-400 hover:text-rose-500 transition-colors p-1 cursor-pointer"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </FormSection>
+              )}
+
+              {/* SECTION: ADDRESSES */}
               <FormSection
                 title="Addresses"
-                icon={MapPin}
                 actions={
                   <button
                     type="button"
@@ -2058,11 +2392,24 @@ export const PeopleOrgDetail = () => {
                 )}
               </FormSection>
 
-              {/* SECTION 4: CUSTOM ENTERPRISE FIELDS */}
+              {/* SECTION: PROFILE SUMMARY */}
+              <FormSection title="Profile Summary">
+                <FormField>
+                  <FormTextarea
+                    rows={3}
+                    value={formData.notesSummary}
+                    onChange={(e) =>
+                      setFormData({ ...formData, notesSummary: e.target.value })
+                    }
+                    placeholder="Brief description or context..."
+                  />
+                </FormField>
+              </FormSection>
+
+              {/* SECTION: CUSTOM ENTERPRISE FIELDS */}
               {applicableCustomFields.length > 0 && (
                 <FormSection
                   title="Custom Fields"
-                  icon={Sparkles}
                 >
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {applicableCustomFields.map((field: any) => (
@@ -2087,9 +2434,23 @@ export const PeopleOrgDetail = () => {
                               })),
                             ]}
                           />
+                        ) : field.type === 'date' ? (
+                          <DatePicker
+                            value={formData.customData?.[field.key] || ''}
+                            onChange={(val) =>
+                              setFormData({
+                                ...formData,
+                                customData: {
+                                  ...formData.customData,
+                                  [field.key]: val,
+                                },
+                              })
+                            }
+                            placeholder={`Select ${field.label.toLowerCase()}...`}
+                          />
                         ) : (
                           <FormInput
-                            type={field.type === 'date' ? 'date' : field.type === 'number' ? 'number' : 'text'}
+                            type={field.type === 'number' ? 'number' : 'text'}
                             value={formData.customData?.[field.key] || ''}
                             onChange={(e) =>
                               setFormData({
@@ -2109,6 +2470,175 @@ export const PeopleOrgDetail = () => {
               )}
             </div>
           )}
+
+          {/* ================================================================ */}
+          {/* TAB: CONTACTS (ORGANISATIONS ONLY)                               */}
+          {/* ================================================================ */}
+          {activeTab === 'contacts' && !isPerson && (
+            <div className="space-y-4">
+              <div className="rounded-xl bg-white dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-zinc-800/80 shadow-xs p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-zinc-200/60 dark:border-zinc-800/60">
+                  <div>
+                    <h4 className="text-sm font-bold text-zinc-900 dark:text-white">
+                      Organisation Contacts ({orgContacts.length})
+                    </h4>
+                    <p className="text-xs text-zinc-500">
+                      People and staff members affiliated with {displayName}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsAddContactModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-500 transition-colors cursor-pointer"
+                    >
+                      <Plus size={13} />
+                      <span>Add Contact</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pt-4">
+                  {orgContacts.length === 0 ? (
+                    <div className="p-12 text-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl bg-zinc-50/50 dark:bg-zinc-950/30">
+                      <Users className="w-10 h-10 mx-auto text-zinc-300 dark:text-zinc-600 mb-2" />
+                      <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                        No contacts found for {displayName}
+                      </p>
+                      <p className="text-[11px] text-zinc-500 mt-1 max-w-md mx-auto">
+                        Link existing contacts from your directory or register a new staff member.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setIsAddContactModalOpen(true)}
+                        className="mt-3.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-500 transition-colors cursor-pointer"
+                      >
+                        <Plus size={13} />
+                        <span>Add Contact</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                      {orgContacts.map((contact) => {
+                        const isPrimary =
+                          contact.isPrimaryContact ||
+                          contact.id === formData.organization.primaryContactPartyId;
+                        const contactFullName =
+                          contact.displayName ||
+                          `${contact.person?.firstName || ''} ${contact.person?.lastName || ''}`.trim() ||
+                          'Contact';
+
+                        return (
+                          <div
+                            key={contact.id}
+                            className={cn(
+                              "relative p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3 group/contact",
+                              isPrimary
+                                ? "bg-amber-50/40 dark:bg-amber-500/5 border-amber-500/40 ring-1 ring-amber-500/20 shadow-xs"
+                                : "bg-white dark:bg-zinc-950/60 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
+                            )}
+                          >
+                            <div className="space-y-2.5">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-sm shrink-0 overflow-hidden border border-indigo-500/20">
+                                    {contact.avatarUrl ? (
+                                      <img
+                                        src={contact.avatarUrl}
+                                        alt={contactFullName}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      contactFullName
+                                        .split(' ')
+                                        .slice(0, 2)
+                                        .map((p: string) => p[0])
+                                        .join('')
+                                        .toUpperCase()
+                                    )}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => navigate(`/workspace/apps/directory/${contact.id}`)}
+                                      className="text-xs font-bold text-zinc-900 dark:text-white truncate hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline block text-left cursor-pointer"
+                                    >
+                                      {contactFullName}
+                                    </button>
+                                    <p className="text-[11px] text-zinc-500 truncate">
+                                      {contact.person?.jobTitle || 'No Title'}
+                                      {contact.person?.department ? ` • ${contact.person.department}` : ''}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {isPrimary ? (
+                                  <span className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-[10px] font-bold">
+                                    <Star size={11} className="fill-amber-500 text-amber-500" />
+                                    <span>Primary</span>
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSetPrimaryContact(contact.id)}
+                                    title="Designate as the primary point of contact for this organisation"
+                                    className="opacity-0 group-hover/contact:opacity-100 text-[10px] font-bold text-zinc-400 hover:text-amber-600 dark:hover:text-amber-400 px-2 py-0.5 rounded-lg border border-zinc-200 dark:border-zinc-800 hover:border-amber-500/30 transition-all shrink-0 cursor-pointer"
+                                  >
+                                    Set Primary
+                                  </button>
+                                )}
+                              </div>
+
+                              <div className="space-y-1 text-xs text-zinc-500 pt-1.5 border-t border-zinc-100 dark:border-zinc-800/60">
+                                {contact.email && (
+                                  <a
+                                    href={`mailto:${contact.email}`}
+                                    className="flex items-center gap-1.5 hover:text-indigo-600 dark:hover:text-indigo-400 truncate"
+                                  >
+                                    <Mail size={13} className="shrink-0 text-zinc-400" />
+                                    <span className="truncate">{contact.email}</span>
+                                  </a>
+                                )}
+                                {(contact.phone || contact.mobile) && (
+                                  <a
+                                    href={`tel:${contact.phone || contact.mobile}`}
+                                    className="flex items-center gap-1.5 hover:text-indigo-600 dark:hover:text-indigo-400 truncate"
+                                  >
+                                    <Phone size={13} className="shrink-0 text-zinc-400" />
+                                    <span className="truncate">{contact.phone || contact.mobile}</span>
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-2.5 border-t border-zinc-100 dark:border-zinc-800/60 text-xs">
+                              <button
+                                type="button"
+                                onClick={() => navigate(`/workspace/apps/directory/${contact.id}`)}
+                                className="inline-flex items-center gap-1 font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                              >
+                                <span>Open Full Dossier</span>
+                                <ExternalLink size={11} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleUnlinkContact(contact.id, contactFullName)}
+                                title="Unlink contact from this organisation"
+                                className="text-zinc-400 hover:text-rose-500 transition-colors p-1 cursor-pointer"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ================================================================ */}
           {/* TAB 3: RELATIONSHIPS & ORG GRAPH                                 */}
           {/* ================================================================ */}
@@ -2689,6 +3219,118 @@ export const PeopleOrgDetail = () => {
         }}
         sourcePartyId={id!}
         editingRelationship={editingRelationship}
+      />
+
+      {/* Link Contact Modal */}
+      <AuroraModal
+        isOpen={isAddContactModalOpen}
+        onClose={() => {
+          setIsAddContactModalOpen(false);
+          setSelectedPersonToLink('');
+          setLinkAsPrimary(false);
+        }}
+        title="Add Contact to Organisation"
+        className="max-w-md w-full bg-white dark:bg-zinc-900 rounded-3xl p-6 shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-visible"
+      >
+        <div className="space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-zinc-200 dark:border-zinc-800">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                <Users size={18} />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-zinc-900 dark:text-white">
+                  Add Contact to {displayName}
+                </h4>
+                <p className="text-xs text-zinc-500">
+                  Select an existing person or register a new one
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
+                Select Person from Directory
+              </label>
+              <DirectoryLookup
+                value={selectedPersonToLink}
+                onChange={(partyId) => setSelectedPersonToLink(partyId)}
+                filterPartyType="PERSON"
+                placeholder="Search people in directory..."
+                includeInternalOption={false}
+                dropdownWidth="w-full"
+              />
+            </div>
+
+            <label className="flex items-center gap-2.5 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={linkAsPrimary}
+                onChange={(e) => setLinkAsPrimary(e.target.checked)}
+                className="w-4 h-4 text-indigo-600 rounded border-zinc-300 dark:border-zinc-700 focus:ring-indigo-500"
+              />
+              <div>
+                <div className="text-xs font-bold text-zinc-900 dark:text-white flex items-center gap-1">
+                  <Star size={11} className="text-amber-500 fill-amber-500" />
+                  <span>Set as Primary Contact</span>
+                </div>
+                <div className="text-[11px] text-zinc-500">
+                  Designate as the main point of contact for this organisation
+                </div>
+              </div>
+            </label>
+
+            <div className="pt-2 flex items-center justify-between border-t border-zinc-200 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddContactModalOpen(false);
+                  setIsCreatePersonModalOpen(true);
+                }}
+                className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer flex items-center gap-1"
+              >
+                <Plus size={13} />
+                <span>Create New Person</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setIsAddContactModalOpen(false);
+                    setSelectedPersonToLink('');
+                    setLinkAsPrimary(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={!selectedPersonToLink || linkingContact}
+                  onClick={handleLinkContact}
+                >
+                  {linkingContact ? 'Adding...' : 'Link Contact'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </AuroraModal>
+
+      {/* Create New Person Modal */}
+      <CreatePartyModal
+        isOpen={isCreatePersonModalOpen}
+        onClose={() => setIsCreatePersonModalOpen(false)}
+        initialPartyType="PERSON"
+        initialPrimaryOrgPartyId={id}
+        onSuccess={() => {
+          fetchParty();
+          fetchExtras();
+        }}
       />
     </div>
   );

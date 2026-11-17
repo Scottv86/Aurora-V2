@@ -537,7 +537,7 @@ export const PeopleOrgSettings = () => {
                       Custom Metadata Fields
                     </h3>
                     <p className="text-xs text-zinc-500">
-                      Extend Directory records with tenant-specific attributes rendered in Create Modals, 360° Profiles, and Lookup Mappings.
+                      Extend Directory records with tenant-specific attributes rendered in Create Modals, Directory Profiles, and Lookup Mappings.
                     </p>
                   </div>
                   <button
@@ -879,7 +879,7 @@ export const PeopleOrgSettings = () => {
                   <CheckCircle2 size={13} /> MS365-Style Hover Cards Active
                 </p>
                 <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
-                  Any module field configured as a Directory Lookup automatically renders live hover profile cards and indexes into the entity's 360° "Anything Linked" view.
+                  Any module field configured as a Directory Lookup automatically renders live hover profile cards and indexes into the entity's "Anything Linked" view.
                 </p>
               </div>
               <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl">

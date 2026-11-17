@@ -347,28 +347,34 @@ const SearchableLookup = ({
   return (
     <div className="relative w-full" ref={containerRef}>
       <div className="relative group">
-        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none">
+        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center justify-center">
           {isDirectoryLookup && value && selectedItem && !isOpen ? (
-            selectedItem.avatarUrl ? (
-              <img
-                src={selectedItem.avatarUrl}
-                alt={selectedItem.name}
-                className="w-5 h-5 rounded-md object-cover border border-zinc-200 dark:border-zinc-700 shadow-sm shrink-0"
-              />
-            ) : (
-              <span
-                className={cn(
-                  'w-5 h-5 rounded-md flex items-center justify-center shrink-0 text-[10px] font-bold',
-                  selectedItem.partyType === 'ORGANIZATION'
-                    ? 'bg-violet-500/15 text-violet-600 dark:text-violet-400 border border-violet-500/20'
-                    : 'bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/20'
-                )}
-              >
-                {selectedItem.partyType === 'ORGANIZATION' ? <Building2 size={11} /> : <UserIcon size={11} />}
-              </span>
-            )
+            <PartyProfileTrigger
+              partyId={typeof value === 'string' ? value : value?.id}
+              fallbackData={selectedItem || undefined}
+              className="pointer-events-auto cursor-pointer"
+            >
+              {selectedItem.avatarUrl ? (
+                <img
+                  src={selectedItem.avatarUrl}
+                  alt={selectedItem.name}
+                  className="w-5 h-5 rounded-md object-cover border border-zinc-200 dark:border-zinc-700 shadow-sm shrink-0 hover:scale-105 transition-transform"
+                />
+              ) : (
+                <span
+                  className={cn(
+                    'w-5 h-5 rounded-md flex items-center justify-center shrink-0 text-[10px] font-bold hover:scale-105 transition-transform',
+                    selectedItem.partyType === 'ORGANIZATION'
+                      ? 'bg-violet-500/15 text-violet-600 dark:text-violet-400 border border-violet-500/20'
+                      : 'bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/20'
+                  )}
+                >
+                  {selectedItem.partyType === 'ORGANIZATION' ? <Building2 size={11} /> : <UserIcon size={11} />}
+                </span>
+              )}
+            </PartyProfileTrigger>
           ) : (
-            <Search className="text-zinc-400 group-focus-within:text-indigo-500 transition-colors" size={14} />
+            <Search className="text-zinc-400 group-focus-within:text-indigo-500 transition-colors pointer-events-none" size={14} />
           )}
         </div>
         <input 

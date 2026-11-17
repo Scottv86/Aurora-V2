@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { usePositions } from '../../hooks/usePositions';
+import { useRegisterActiveEntity } from '../../context/ActiveEntityContext';
 import { API_BASE_URL } from '../../config';
 import { 
   Clock, RefreshCw, Send, ChevronRight, CheckCircle, 
@@ -128,6 +129,48 @@ export const TriageInboxPage = () => {
   const [triageModule, setTriageModule] = useState<any>(null);
   const [records, setRecords] = useState<any[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
+
+  // Real-time AI Assistant active entity registration
+  const activeTriageContext = useMemo(() => {
+    if (!selectedRecord || !selectedRecord.id) return null;
+    const fields = getRecordFields(selectedRecord);
+    const title = fields.name || fields.subject || fields.submitted_by || fields.title || `Submission #${selectedRecord.id.slice(0, 8)}`;
+    const sourceChannel = fields._submissionSource || selectedRecord._submissionSource || 'Public Portal Intake';
+
+    const cleanAttributes: Record<string, any> = {
+      'Source Channel': sourceChannel,
+      'Submitter': fields.submitted_by || fields.name || fields.contact_name || null,
+      'Email': fields.email || fields.work_email || null,
+      'Phone': fields.phone || null,
+      'SLA Status': selectedRecord.slaStatus || 'ON_TRACK',
+      'Target Deadline': selectedRecord.slaDeadline ? new Date(selectedRecord.slaDeadline).toLocaleString() : null,
+      'Workflow State': selectedRecord.workflowState?.currentNodeId || selectedRecord.status || 'UNASSIGNED',
+    };
+
+    let added = 0;
+    for (const [k, v] of Object.entries(fields)) {
+      if (added >= 6) break;
+      if (k.startsWith('_') || cleanAttributes[k] || typeof v === 'object') continue;
+      cleanAttributes[k] = String(v);
+      added++;
+    }
+
+    return {
+      domain: 'triage_submission' as const,
+      id: String(selectedRecord.id),
+      title: String(title),
+      subtitle: `${sourceChannel} • SLA: ${selectedRecord.slaStatus || 'Active'}`,
+      status: selectedRecord.status || 'NEW',
+      slaStatus: selectedRecord.slaStatus,
+      keyAttributes: cleanAttributes,
+      rawUrl: window.location.pathname + window.location.search,
+    };
+  }, [selectedRecord]);
+
+  useRegisterActiveEntity(activeTriageContext, {
+    priority: 20,
+    enabled: Boolean(selectedRecord?.id),
+  });
   const [loading, setLoading] = useState(false);
   const [suggestedMatches, setSuggestedMatches] = useState<any[]>([]);
   const [executionRuns, setExecutionRuns] = useState<any[]>([]);

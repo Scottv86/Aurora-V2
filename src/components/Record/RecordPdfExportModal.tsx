@@ -19,7 +19,13 @@ import {
   Shield,
   Tag,
   ExternalLink,
-  Info
+  Info,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  PanelLeft,
+  PanelLeftClose,
+  LayoutGrid
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AuroraModal } from '../UI/AuroraModal';
@@ -150,8 +156,36 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
   const [showOptionsDropdown, setShowOptionsDropdown] = useState(false);
   const [showBrandDropdown, setShowBrandDropdown] = useState(false);
 
+  // Pages Sidebar & Zoom States
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [activePage, setActivePage] = useState(1);
+  const [zoom, setZoom] = useState(100);
+  const [showZoomDropdown, setShowZoomDropdown] = useState(false);
+  const [wheelZoomDirect, setWheelZoomDirect] = useState(false);
+
   const brandDropdownRef = useRef<HTMLDivElement>(null);
   const optionsDropdownRef = useRef<HTMLDivElement>(null);
+  const zoomDropdownRef = useRef<HTMLDivElement>(null);
+  const canvasScrollRef = useRef<HTMLDivElement>(null);
+
+  // Mouse wheel zoom handler (supports Ctrl+Wheel, Alt+Wheel, Meta+Wheel, or Direct Wheel Zoom)
+  useEffect(() => {
+    const canvas = canvasScrollRef.current;
+    if (!canvas || !isOpen) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (wheelZoomDirect || e.ctrlKey || e.metaKey || e.altKey) {
+        e.preventDefault();
+        const delta = e.deltaY < 0 ? 5 : -5;
+        setZoom(prev => Math.min(Math.max(prev + delta, 40), 200));
+      }
+    };
+
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      canvas.removeEventListener('wheel', handleWheel);
+    };
+  }, [isOpen, wheelZoomDirect]);
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -162,12 +196,15 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
       if (optionsDropdownRef.current && !optionsDropdownRef.current.contains(e.target as Node)) {
         setShowOptionsDropdown(false);
       }
+      if (zoomDropdownRef.current && !zoomDropdownRef.current.contains(e.target as Node)) {
+        setShowZoomDropdown(false);
+      }
     };
-    if (showBrandDropdown || showOptionsDropdown) {
+    if (showBrandDropdown || showOptionsDropdown || showZoomDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [showBrandDropdown, showOptionsDropdown]);
+  }, [showBrandDropdown, showOptionsDropdown, showZoomDropdown]);
 
   // Dynamic audit/notes state if not provided as props
   const [localNotes, setLocalNotes] = useState<UniversalNote[]>(propNotes || []);
@@ -831,14 +868,196 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
     });
   }, [moduleData, allFields, mergedData, currentUser, tenant, dateFormat, resolvedEntities, directoryMap, lookupData]);
 
-  // Handle Triggering Isolated Clean Multi-Page Print
-  const handlePrint = () => {
-    const printElement = document.getElementById('record-print-document');
-    if (!printElement) {
-      window.print();
-      return;
+  // Filtered tab sections based on visibility
+  const visibleTabSections = useMemo(() => {
+    return tabSections.map(tab => ({
+      ...tab,
+      groups: tab.groups.map(group => ({
+        ...group,
+        fields: group.fields.filter(f => includeEmptyFields || !f.isEmpty)
+      })).filter(group => group.fields.length > 0)
+    })).filter(tab => tab.groups.length > 0);
+  }, [tabSections, includeEmptyFields]);
+
+  // Page item interface for deterministic pagination
+  interface PageItem {
+    id: string;
+    type: 'group' | 'notes' | 'activity';
+    tabTitle?: string;
+    showTabHeader?: boolean;
+    group?: FieldGroupSection;
+    estimatedHeight: number;
+  }
+
+  interface DocumentPage {
+    pageNumber: number;
+    isFirstPage: boolean;
+    isLastPage: boolean;
+    items: PageItem[];
+  }
+
+  // Calculate discrete A4 pages
+  const documentPages = useMemo<DocumentPage[]>(() => {
+    const allItems: PageItem[] = [];
+
+    // 1. Gather all groups from visible tabs
+    visibleTabSections.forEach((tab) => {
+      tab.groups.forEach((group, groupIdx) => {
+        let fieldHeight = 0;
+        let pendingColSpan = 0;
+
+        group.fields.forEach(field => {
+          const isFull = field.colSpan === 12 || field.type === 'textarea' || field.type === 'richtext' || field.type === 'repeatableGroup';
+          if (isFull) {
+            if (pendingColSpan > 0) {
+              fieldHeight += 44;
+              pendingColSpan = 0;
+            }
+            if (field.type === 'repeatableGroup') {
+              fieldHeight += 95;
+            } else if (field.type === 'textarea' || field.type === 'richtext') {
+              fieldHeight += 80;
+            } else {
+              fieldHeight += 50;
+            }
+          } else {
+            pendingColSpan += 6;
+            if (pendingColSpan >= 12) {
+              fieldHeight += 44;
+              pendingColSpan = 0;
+            }
+          }
+        });
+
+        if (pendingColSpan > 0) {
+          fieldHeight += 44;
+        }
+
+        const showTabHeader = visibleTabSections.length > 1 && groupIdx === 0;
+        const totalEstimated = fieldHeight + 45 + (showTabHeader ? 35 : 0) + (group.description ? 20 : 0);
+
+        allItems.push({
+          id: group.id,
+          type: 'group',
+          tabTitle: tab.title,
+          showTabHeader,
+          group,
+          estimatedHeight: totalEstimated
+        });
+      });
+    });
+
+    // 2. Notes
+    const hasNotes = includeNotes && (localNotes.length > 0 || (propNotes && propNotes.length > 0));
+    if (hasNotes) {
+      const notesList = propNotes || localNotes;
+      const notesHeight = 50 + Math.min(notesList.length, 10) * 55;
+      allItems.push({
+        id: 'section_notes',
+        type: 'notes',
+        estimatedHeight: notesHeight
+      });
     }
 
+    // 3. Activity
+    const hasActivity = includeActivity && (localActivities.length > 0 || (propActivities && propActivities.length > 0));
+    if (hasActivity) {
+      const actList = (propActivities || localActivities).slice(0, 8);
+      const actHeight = 45 + actList.length * 28;
+      allItems.push({
+        id: 'section_activity',
+        type: 'activity',
+        estimatedHeight: actHeight
+      });
+    }
+
+    // Page 1 budget: ~1040px total printable height minus letterhead, metadata and margins
+    const page1HeaderHeight = (letterheadBanner ? 100 : 0) + 160 + (includeMetadata ? 150 : 0) + 70;
+    const page1Budget = Math.max(300, 1040 - page1HeaderHeight);
+    const subsequentPageBudget = 900;
+
+    const pages: DocumentPage[] = [];
+    let currentItems: PageItem[] = [];
+    let currentHeight = 0;
+    let budget = page1Budget;
+
+    for (const item of allItems) {
+      if (currentItems.length > 0 && currentHeight + item.estimatedHeight > budget) {
+        pages.push({
+          pageNumber: pages.length + 1,
+          isFirstPage: pages.length === 0,
+          isLastPage: false,
+          items: currentItems
+        });
+        currentItems = [item];
+        budget = subsequentPageBudget;
+        currentHeight = item.estimatedHeight;
+      } else {
+        currentItems.push(item);
+        currentHeight += item.estimatedHeight;
+      }
+    }
+
+    pages.push({
+      pageNumber: pages.length + 1,
+      isFirstPage: pages.length === 0,
+      isLastPage: true,
+      items: currentItems
+    });
+
+    if (pages.length > 0) {
+      pages[pages.length - 1].isLastPage = true;
+    }
+
+    return pages;
+  }, [
+    visibleTabSections, 
+    includeNotes, 
+    propNotes, 
+    localNotes, 
+    includeActivity, 
+    propActivities, 
+    localActivities, 
+    letterheadBanner, 
+    includeMetadata
+  ]);
+
+  // Zoom handlers
+  const handleZoomIn = () => setZoom(prev => Math.min(prev + 10, 200));
+  const handleZoomOut = () => setZoom(prev => Math.max(prev - 10, 40));
+  const handleResetZoom = () => setZoom(100);
+
+  // Scroll to selected page from sidebar
+  const handleScrollToPage = (pageNum: number) => {
+    setActivePage(pageNum);
+    const target = document.getElementById(`record-page-${pageNum}`);
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
+  // Sync active page indicator as user scrolls the canvas
+  const handleCanvasScroll = () => {
+    if (!canvasScrollRef.current) return;
+    const container = canvasScrollRef.current;
+    const scrollTop = container.scrollTop;
+    const midY = scrollTop + container.clientHeight / 3;
+
+    for (const page of documentPages) {
+      const el = document.getElementById(`record-page-${page.pageNumber}`);
+      if (el) {
+        const top = el.offsetTop;
+        const bottom = top + el.offsetHeight;
+        if (midY >= top && midY <= bottom) {
+          setActivePage(page.pageNumber);
+          break;
+        }
+      }
+    }
+  };
+
+  // Handle Triggering Isolated Clean Multi-Page Print
+  const handlePrint = () => {
     try {
       // Create hidden iframe for isolated clean printing
       const iframe = document.createElement('iframe');
@@ -856,6 +1075,15 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
         .map(el => el.outerHTML)
         .join('\n');
 
+      const pagesHtml = documentPages.map(page => {
+        const pageEl = document.getElementById(`record-page-${page.pageNumber}`);
+        return `
+          <div class="record-page-sheet" style="page-break-after: ${page.isLastPage ? 'avoid' : 'always'}; break-after: ${page.isLastPage ? 'avoid' : 'page'};">
+            ${pageEl ? pageEl.innerHTML : ''}
+          </div>
+        `;
+      }).join('\n');
+
       doc.open();
       doc.write(`
         <!DOCTYPE html>
@@ -867,7 +1095,7 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
             <style>
               @page {
                 size: A4 portrait;
-                margin: 12mm 15mm;
+                margin: 10mm 12mm;
               }
               * {
                 -webkit-print-color-adjust: exact !important;
@@ -884,7 +1112,7 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
                 overflow: visible !important;
                 font-family: ${bodyFont !== 'inherit' ? `"${bodyFont}", ui-sans-serif, system-ui, sans-serif` : 'ui-sans-serif, system-ui, sans-serif'} !important;
               }
-              .record-print-wrapper {
+              .record-page-sheet {
                 width: 100% !important;
                 max-width: 100% !important;
                 background: #ffffff !important;
@@ -894,21 +1122,19 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
                 box-shadow: none !important;
                 border: none !important;
                 border-radius: 0 !important;
+                min-height: 100vh !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: space-between !important;
               }
               .print-avoid-break {
                 break-inside: avoid !important;
                 page-break-inside: avoid !important;
               }
-              .print-header-break {
-                break-after: avoid !important;
-                page-break-after: avoid !important;
-              }
             </style>
           </head>
           <body style="background: #ffffff !important; background-color: #ffffff !important; margin: 0; padding: 0;">
-            <div class="record-print-wrapper">
-              ${printElement.innerHTML}
-            </div>
+            ${pagesHtml}
           </body>
         </html>
       `);
@@ -922,7 +1148,7 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
             document.body.removeChild(iframe);
           }
         }, 2000);
-      }, 250);
+      }, 350);
     } catch (err) {
       console.warn('Iframe print error, falling back to window.print():', err);
       window.print();
@@ -957,314 +1183,327 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
     setTimeout(() => setCopiedSummary(false), 2000);
   };
 
-  // Shared Document Sheet Renderer (used both for screen modal preview and clean body print portal)
-  const renderDocumentContent = (isPrint = false) => {
+  // Single Page Renderer (used for screen pages, thumbnail previews, and print sheets)
+  const renderSinglePage = (page: DocumentPage, totalPages: number, _isThumbnail: boolean = false) => {
     return (
-      <div 
-        id={isPrint ? 'record-print-document-print' : 'record-print-document'}
-        className={cn(
-          "w-full text-zinc-900 leading-normal select-text",
-          isPrint 
-            ? "bg-white p-0 m-0" 
-            : "w-full max-w-3xl bg-white rounded-2xl shadow-2xl p-8 sm:p-12 border border-zinc-200 shrink-0 my-4 mb-24 flex flex-col min-h-[842px] h-auto"
-        )}
-        style={{
-          fontFamily: bodyFont !== 'inherit' ? `"${bodyFont}", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif` : undefined
-        }}
-      >
-        {/* Document Content Body */}
-        <div className="flex-1 space-y-6">
-          {/* Optional Official Letterhead Banner from Brand Assets */}
-          {letterheadBanner && (
-            <div className="w-full mb-6 rounded-xl overflow-hidden max-h-28 print-avoid-break">
-              <img src={letterheadBanner} alt={brandName} className="w-full h-full object-cover object-center" />
-            </div>
-          )}
-
-          {/* 1. DOCUMENT HEADER (LETTERHEAD FORMAT FROM BRAND BUILDER) */}
-          <div 
-            className="border-b-2 pb-5 mb-6 flex items-start justify-between print-avoid-break gap-4"
-            style={{ borderColor: primaryColor }}
-          >
-            <div className="space-y-1.5 min-w-0 pr-2">
-              <div className="space-y-0.5">
-                <h2 
-                  className="text-base sm:text-lg font-black tracking-tight"
-                  style={{ 
-                    fontFamily: headingFont !== 'inherit' ? `"${headingFont}", sans-serif` : undefined,
-                    color: primaryColor 
-                  }}
-                >
-                  {brandName.toUpperCase()}
-                </h2>
-                {tagline && (
-                  <p className="text-[11px] text-zinc-500 font-medium">
-                    {tagline}
-                  </p>
-                )}
-              </div>
-
-              <div className="pt-1.5">
-                <h1 
-                  className="text-xl sm:text-2xl font-black text-zinc-900 tracking-tight"
-                  style={{ fontFamily: headingFont !== 'inherit' ? `"${headingFont}", sans-serif` : undefined }}
-                >
-                  {moduleData?.name || moduleData?.title || 'Record'} Overview
-                </h1>
-                <p className="text-xs text-zinc-500 font-medium mt-0.5">
-                  Official structured document summary • Generated via Aurora System
-                </p>
-              </div>
-            </div>
-
-            <div className="text-right space-y-2 shrink-0 flex flex-col items-end">
-              {/* Brand Logo or Monogram */}
-              {brandLogo ? (
-                <img src={brandLogo} alt={brandName} className="h-8 sm:h-9 w-auto max-w-[150px] object-contain" />
-              ) : (
-                <div 
-                  className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl flex items-center justify-center text-white font-black text-xs shadow-xs"
-                  style={{ backgroundColor: primaryColor }}
-                >
-                  {brandName.substring(0, 2).toUpperCase()}
+      <div className="flex-1 flex flex-col justify-between h-full space-y-6">
+        <div className="space-y-6">
+          {/* Page 1: Official Letterhead Banner, Header & Metadata */}
+          {page.isFirstPage ? (
+            <>
+              {letterheadBanner && (
+                <div className="w-full mb-6 rounded-xl overflow-hidden max-h-28 print-avoid-break">
+                  <img src={letterheadBanner} alt={brandName} className="w-full h-full object-cover object-center" />
                 </div>
               )}
 
+              {/* Document Header (Letterhead format from Brand Builder) */}
               <div 
-                className="inline-block px-3 py-1 text-white rounded-lg font-mono font-bold text-xs tracking-wider shadow-2xs"
-                style={{ backgroundColor: primaryColor }}
+                className="border-b-2 pb-5 mb-6 flex items-start justify-between print-avoid-break gap-4"
+                style={{ borderColor: primaryColor }}
               >
-                {recordKey}
-              </div>
-
-              <div className="text-right text-[11px] text-zinc-500 space-y-0.5 font-medium">
-                <p>Date: {formatLocalizedDate(new Date(), dateFormat, true)}</p>
-                <p className="text-[10px] text-zinc-400">Exported by: {currentUserName}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* 2. EXECUTIVE METADATA & STATUS BAR */}
-          {includeMetadata && (
-            <div 
-              className="mb-6 p-4 rounded-xl bg-zinc-50/70 border print-avoid-break"
-              style={{ borderColor: `${primaryColor}25` }}
-            >
-              <h2 
-                className="text-[10px] font-bold uppercase tracking-wider mb-3 flex items-center gap-1.5"
-                style={{ color: primaryColor }}
-              >
-                <Info size={12} style={{ color: primaryColor }} />
-                <span>Executive Record Metadata</span>
-              </h2>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-                {/* Workflow Status */}
-                <div className="space-y-1">
-                  <span className="text-[10px] text-zinc-500 font-semibold block uppercase">Status</span>
-                  <div>
-                    <span 
-                      className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border"
+                <div className="space-y-1.5 min-w-0 pr-2">
+                  <div className="space-y-0.5">
+                    <h2 
+                      className="text-base sm:text-lg font-black tracking-tight"
                       style={{ 
-                        backgroundColor: `${primaryColor}12`, 
-                        color: primaryColor, 
-                        borderColor: `${primaryColor}30` 
+                        fontFamily: headingFont !== 'inherit' ? `"${headingFont}", sans-serif` : undefined,
+                        color: primaryColor 
                       }}
                     >
-                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: primaryColor }} />
-                      {recordMetadata.status}
-                    </span>
+                      {brandName.toUpperCase()}
+                    </h2>
+                    {tagline && (
+                      <p className="text-[11px] text-zinc-500 font-medium">
+                        {tagline}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="pt-1.5">
+                    <h1 
+                      className="text-xl sm:text-2xl font-black text-zinc-900 tracking-tight"
+                      style={{ fontFamily: headingFont !== 'inherit' ? `"${headingFont}", sans-serif` : undefined }}
+                    >
+                      {moduleData?.name || moduleData?.title || 'Record'} Overview
+                    </h1>
+                    <p className="text-xs text-zinc-500 font-medium mt-0.5">
+                      Official structured document summary • Generated via Aurora System
+                    </p>
                   </div>
                 </div>
 
-                {/* Primary Assignee */}
-                <div className="space-y-1">
-                  <span className="text-[10px] text-zinc-500 font-semibold block uppercase">Assignee</span>
-                  <div className="font-semibold text-zinc-800 flex items-center gap-1.5">
-                    <User size={12} className="text-zinc-400" />
-                    <span>{recordMetadata.assignee?.name || 'Unassigned'}</span>
-                  </div>
-                </div>
-
-                {/* Created By & Date */}
-                <div className="space-y-1">
-                  <span className="text-[10px] text-zinc-500 font-semibold block uppercase">Created</span>
-                  <div className="text-zinc-800 font-medium">
-                    {formatLocalizedDate(recordMetadata.createdDate, dateFormat, true) || '—'}
-                  </div>
-                  <div className="text-[10px] text-zinc-500">
-                    by {recordMetadata.creator?.name || 'System'}
-                  </div>
-                </div>
-
-                {/* Last Updated */}
-                <div className="space-y-1">
-                  <span className="text-[10px] text-zinc-500 font-semibold block uppercase">Last Updated</span>
-                  <div className="text-zinc-800 font-medium">
-                    {formatLocalizedDate(recordMetadata.updatedDate, dateFormat, true) || '—'}
-                  </div>
-                  {recordMetadata.source && (
-                    <div className="text-[10px] text-zinc-500">
-                      via {recordMetadata.source}
+                <div className="text-right space-y-2 shrink-0 flex flex-col items-end">
+                  {brandLogo ? (
+                    <img src={brandLogo} alt={brandName} className="h-8 sm:h-9 w-auto max-w-[150px] object-contain" />
+                  ) : (
+                    <div 
+                      className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl flex items-center justify-center text-white font-black text-xs shadow-xs"
+                      style={{ backgroundColor: primaryColor }}
+                    >
+                      {brandName.substring(0, 2).toUpperCase()}
                     </div>
                   )}
+
+                  <div 
+                    className="inline-block px-3 py-1 text-white rounded-lg font-mono font-bold text-xs tracking-wider shadow-2xs"
+                    style={{ backgroundColor: primaryColor }}
+                  >
+                    {recordKey}
+                  </div>
+
+                  <div className="text-right text-[11px] text-zinc-500 space-y-0.5 font-medium">
+                    <p>Date: {formatLocalizedDate(new Date(), dateFormat, true)}</p>
+                    <p className="text-[10px] text-zinc-400">Exported by: {currentUserName}</p>
+                  </div>
                 </div>
               </div>
 
-              {/* Participants row if any exist */}
-              {recordMetadata.participants && recordMetadata.participants.length > 0 && (
-                <div className="mt-3 pt-2.5 border-t border-zinc-200/80 flex items-center gap-2 text-xs">
-                  <Users size={12} className="text-zinc-400 shrink-0" />
-                  <span className="text-zinc-500 font-medium">Participants:</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {recordMetadata.participants.map(p => (
-                      <span key={p.id} className="px-2 py-0.5 rounded bg-white border border-zinc-200 text-zinc-700 text-[11px] font-medium">
-                        {p.name}
-                      </span>
-                    ))}
+              {/* Executive Metadata & Status Bar */}
+              {includeMetadata && (
+                <div 
+                  className="mb-6 p-4 rounded-xl bg-zinc-50/70 border print-avoid-break"
+                  style={{ borderColor: `${primaryColor}25` }}
+                >
+                  <h2 
+                    className="text-[10px] font-bold uppercase tracking-wider mb-3 flex items-center gap-1.5"
+                    style={{ color: primaryColor }}
+                  >
+                    <Info size={12} style={{ color: primaryColor }} />
+                    <span>Executive Record Metadata</span>
+                  </h2>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-zinc-500 font-semibold block uppercase">Status</span>
+                      <div>
+                        <span 
+                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border"
+                          style={{ 
+                            backgroundColor: `${primaryColor}12`, 
+                            color: primaryColor, 
+                            borderColor: `${primaryColor}30` 
+                          }}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: primaryColor }} />
+                          {recordMetadata.status}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-zinc-500 font-semibold block uppercase">Assignee</span>
+                      <div className="font-semibold text-zinc-800 flex items-center gap-1.5">
+                        <User size={12} className="text-zinc-400" />
+                        <span>{recordMetadata.assignee?.name || 'Unassigned'}</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-zinc-500 font-semibold block uppercase">Created</span>
+                      <div className="text-zinc-800 font-medium">
+                        {formatLocalizedDate(recordMetadata.createdDate, dateFormat, true) || '—'}
+                      </div>
+                      <div className="text-[10px] text-zinc-500">
+                        by {recordMetadata.creator?.name || 'System'}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-zinc-500 font-semibold block uppercase">Last Updated</span>
+                      <div className="text-zinc-800 font-medium">
+                        {formatLocalizedDate(recordMetadata.updatedDate, dateFormat, true) || '—'}
+                      </div>
+                      {recordMetadata.source && (
+                        <div className="text-[10px] text-zinc-500">
+                          via {recordMetadata.source}
+                        </div>
+                      )}
+                    </div>
                   </div>
+
+                  {recordMetadata.participants && recordMetadata.participants.length > 0 && (
+                    <div className="mt-3 pt-2.5 border-t border-zinc-200/80 flex items-center gap-2 text-xs">
+                      <Users size={12} className="text-zinc-400 shrink-0" />
+                      <span className="text-zinc-500 font-medium">Participants:</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {recordMetadata.participants.map(p => (
+                          <span key={p.id} className="px-2 py-0.5 rounded bg-white border border-zinc-200 text-zinc-700 text-[11px] font-medium">
+                            {p.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
+            </>
+          ) : (
+            /* Subsequent Page Running Header */
+            <div 
+              className="border-b-2 pb-3 mb-6 flex items-center justify-between gap-4 shrink-0 print-avoid-break"
+              style={{ borderColor: primaryColor }}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                {brandLogo ? (
+                  <img src={brandLogo} alt={brandName} className="h-6 w-auto max-w-[100px] object-contain shrink-0" />
+                ) : (
+                  <div 
+                    className="h-6 w-6 rounded-lg flex items-center justify-center text-white font-black text-[10px] shrink-0"
+                    style={{ backgroundColor: primaryColor }}
+                  >
+                    {brandName.substring(0, 2).toUpperCase()}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <h2 
+                    className="text-xs font-black tracking-tight truncate"
+                    style={{ 
+                      fontFamily: headingFont !== 'inherit' ? `"${headingFont}", sans-serif` : undefined,
+                      color: primaryColor 
+                    }}
+                  >
+                    {brandName.toUpperCase()}
+                  </h2>
+                  <p className="text-[10px] text-zinc-500 font-medium truncate">
+                    {moduleData?.name || moduleData?.title || 'Record'} Overview • {recordKey}
+                  </p>
+                </div>
+              </div>
+
+              <div className="text-right text-[10px] text-zinc-400 font-mono font-medium shrink-0">
+                Page {page.pageNumber} of {totalPages}
+              </div>
             </div>
           )}
 
-          {/* 3. GROUPED FIELDS & SECTIONS */}
-          <div className="space-y-6">
-            {tabSections.map(tab => {
-              // Filter groups based on empty field settings
-              const visibleGroups = tab.groups.map(group => ({
-                ...group,
-                fields: group.fields.filter(f => includeEmptyFields || !f.isEmpty)
-              })).filter(group => group.fields.length > 0);
-
-              if (visibleGroups.length === 0) return null;
-
-              const showTabHeader = tabSections.length > 1;
-
-              return (
-                <div key={tab.id} className="space-y-4 print-avoid-break">
-                  {showTabHeader && (
-                    <div 
-                      className="pt-2 pb-1 border-b flex items-center gap-2 print-header-break"
-                      style={{ borderColor: `${primaryColor}30` }}
-                    >
-                      <Layers size={14} style={{ color: primaryColor }} />
-                      <h2 
-                        className="text-xs font-black uppercase tracking-wider"
-                        style={{ 
-                          fontFamily: headingFont !== 'inherit' ? `"${headingFont}", sans-serif` : undefined,
-                          color: primaryColor 
-                        }}
-                      >
-                        {tab.title}
-                      </h2>
-                    </div>
-                  )}
-
-                  <div className="space-y-4">
-                    {visibleGroups.map(group => (
+          {/* Page Content Items */}
+          <div className="space-y-5">
+            {page.items.map((item) => {
+              if (item.type === 'group' && item.group) {
+                const group = item.group;
+                return (
+                  <div key={item.id} className="space-y-3 print-avoid-break">
+                    {item.showTabHeader && (
                       <div 
-                        key={group.id} 
-                        className="p-4 rounded-xl border border-zinc-200 bg-white shadow-2xs print-avoid-break space-y-3"
+                        className="pt-1 pb-1 border-b flex items-center gap-2 print-header-break"
+                        style={{ borderColor: `${primaryColor}30` }}
                       >
-                        {/* Group Header */}
-                        <div className="border-b border-zinc-100 pb-2">
-                          <h3 
-                            className="text-xs font-bold uppercase tracking-wider text-zinc-800"
-                            style={{ fontFamily: headingFont !== 'inherit' ? `"${headingFont}", sans-serif` : undefined }}
-                          >
-                            {group.title}
-                          </h3>
-                          {group.description && (
-                            <p className="text-[10px] text-zinc-500 mt-0.5">{group.description}</p>
-                          )}
-                        </div>
-
-                        {/* Fields Grid */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 text-xs">
-                          {group.fields.map(field => {
-                            const isFullWidth = field.colSpan === 12 || field.type === 'textarea' || field.type === 'richtext' || field.type === 'repeatableGroup';
-                            return (
-                              <div 
-                                key={field.id} 
-                                className={cn(
-                                  "space-y-1",
-                                  isFullWidth ? "col-span-1 sm:col-span-2" : "col-span-1"
-                                )}
-                              >
-                                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
-                                  {field.label}
-                                </span>
-                                <div>
-                                  {field.formattedDisplay}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
+                        <Layers size={13} style={{ color: primaryColor }} />
+                        <h2 
+                          className="text-xs font-black uppercase tracking-wider"
+                          style={{ 
+                            fontFamily: headingFont !== 'inherit' ? `"${headingFont}", sans-serif` : undefined,
+                            color: primaryColor 
+                          }}
+                        >
+                          {item.tabTitle}
+                        </h2>
                       </div>
-                    ))}
+                    )}
+
+                    <div className="p-4 rounded-xl border border-zinc-200 bg-white shadow-2xs space-y-3">
+                      <div className="border-b border-zinc-100 pb-2">
+                        <h3 
+                          className="text-xs font-bold uppercase tracking-wider text-zinc-800"
+                          style={{ fontFamily: headingFont !== 'inherit' ? `"${headingFont}", sans-serif` : undefined }}
+                        >
+                          {group.title}
+                        </h3>
+                        {group.description && (
+                          <p className="text-[10px] text-zinc-500 mt-0.5">{group.description}</p>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-xs">
+                        {group.fields.map(field => {
+                          const isFullWidth = field.colSpan === 12 || field.type === 'textarea' || field.type === 'richtext' || field.type === 'repeatableGroup';
+                          return (
+                            <div 
+                              key={field.id} 
+                              className={cn(
+                                "space-y-1",
+                                isFullWidth ? "col-span-1 sm:col-span-2" : "col-span-1"
+                              )}
+                            >
+                              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider block">
+                                {field.label}
+                              </span>
+                              <div>
+                                {field.formattedDisplay}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              );
+                );
+              }
+
+              if (item.type === 'notes') {
+                const notesList = propNotes || localNotes;
+                return (
+                  <div key="notes_block" className="mt-4 p-4 rounded-xl border border-zinc-200 bg-zinc-50/50 print-avoid-break space-y-3">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-800 flex items-center gap-1.5">
+                      <FileText size={13} style={{ color: primaryColor }} />
+                      <span>Internal Notes & Remarks</span>
+                    </h3>
+                    <div className="space-y-2">
+                      {notesList.map((note, idx) => (
+                        <div key={note.id || idx} className="p-2.5 rounded-lg bg-white border border-zinc-200/80 text-xs space-y-1">
+                          <div className="flex items-center justify-between text-[10px] text-zinc-500">
+                            <span className="font-semibold text-zinc-700">{note.authorName || 'Staff'}</span>
+                            <span>{formatLocalizedDate(note.createdAt, dateFormat, true)}</span>
+                          </div>
+                          <p className="text-zinc-800 whitespace-pre-wrap leading-relaxed">{note.content}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
+
+              if (item.type === 'activity') {
+                const actList = (propActivities || localActivities).slice(0, 8);
+                return (
+                  <div key="activity_block" className="mt-4 p-4 rounded-xl border border-zinc-200 bg-zinc-50/50 print-avoid-break space-y-3">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-800 flex items-center gap-1.5">
+                      <Clock size={13} style={{ color: primaryColor }} />
+                      <span>Recent Audit Trail</span>
+                    </h3>
+                    <div className="space-y-1.5">
+                      {actList.map((act, idx) => (
+                        <div key={act.id || idx} className="flex items-center justify-between text-xs py-1 border-b border-zinc-100 last:border-0">
+                          <div className="flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-zinc-400" />
+                            <span className="font-medium text-zinc-800">{act.action || act.title || 'Event'}</span>
+                            <span className="text-zinc-500 text-[11px]">— {act.actor?.name || 'System'}</span>
+                          </div>
+                          <span className="text-[10px] text-zinc-400 font-mono">
+                            {formatLocalizedDate(act.timestamp || act.createdAt, dateFormat, true)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
+
+              return null;
             })}
           </div>
-
-          {/* 4. OPTIONAL NOTES SECTION */}
-          {includeNotes && (localNotes.length > 0 || (propNotes && propNotes.length > 0)) && (
-            <div className="mt-6 p-4 rounded-xl border border-zinc-200 bg-zinc-50/50 print-avoid-break space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-800 flex items-center gap-1.5">
-                <FileText size={13} style={{ color: primaryColor }} />
-                <span>Internal Notes & Remarks</span>
-              </h3>
-              <div className="space-y-2">
-                {(propNotes || localNotes).map((note, idx) => (
-                  <div key={note.id || idx} className="p-2.5 rounded-lg bg-white border border-zinc-200/80 text-xs space-y-1">
-                    <div className="flex items-center justify-between text-[10px] text-zinc-500">
-                      <span className="font-semibold text-zinc-700">{note.authorName || 'Staff'}</span>
-                      <span>{formatLocalizedDate(note.createdAt, dateFormat, true)}</span>
-                    </div>
-                    <p className="text-zinc-800 whitespace-pre-wrap leading-relaxed">{note.content}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* 5. OPTIONAL AUDIT & ACTIVITY TIMELINE */}
-          {includeActivity && (localActivities.length > 0 || (propActivities && propActivities.length > 0)) && (
-            <div className="mt-6 p-4 rounded-xl border border-zinc-200 bg-zinc-50/50 print-avoid-break space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-800 flex items-center gap-1.5">
-                <Clock size={13} style={{ color: primaryColor }} />
-                <span>Recent Audit Trail</span>
-              </h3>
-              <div className="space-y-1.5">
-                {(propActivities || localActivities).slice(0, 8).map((act, idx) => (
-                  <div key={act.id || idx} className="flex items-center justify-between text-xs py-1 border-b border-zinc-100 last:border-0">
-                    <div className="flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-zinc-400" />
-                      <span className="font-medium text-zinc-800">{act.action || act.title || 'Event'}</span>
-                      <span className="text-zinc-500 text-[11px]">— {act.actor?.name || 'System'}</span>
-                    </div>
-                    <span className="text-[10px] text-zinc-400 font-mono">
-                      {formatLocalizedDate(act.timestamp || act.createdAt, dateFormat, true)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* 6. DOCUMENT FOOTER (LETTERHEAD FORMAT FROM BRAND BUILDER) */}
-        <div className="mt-10 pt-4 border-t border-zinc-200 flex items-center justify-between text-[10px] text-zinc-400 shrink-0 print-avoid-break">
+        {/* Running Document Footer */}
+        <div className="mt-8 pt-3 border-t border-zinc-200 flex items-center justify-between text-[10px] text-zinc-400 shrink-0 print-avoid-break">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-zinc-600">{website}</span>
             <span>•</span>
             <span>Confidential & Proprietary</span>
           </div>
           <div>
-            <span>Record Key: {recordKey} • {brandName}</span>
+            <span>Record Key: {recordKey} • {brandName} • Page {page.pageNumber} of {totalPages}</span>
           </div>
         </div>
       </div>
@@ -1276,14 +1515,14 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
       <AuroraModal
         isOpen={isOpen}
         onClose={onClose}
-        className="max-w-4xl w-full bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl p-0 overflow-hidden flex flex-col max-h-[95vh] text-zinc-100"
+        className="max-w-5xl lg:max-w-6xl w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl shadow-2xl p-0 overflow-hidden flex flex-col h-[92vh] text-zinc-900 dark:text-zinc-100"
       >
         {/* Print Stylesheet: isolates #record-print-portal on document.body, hides app & modal */}
         <style dangerouslySetInnerHTML={{ __html: `
           @media print {
             @page {
               size: A4 portrait;
-              margin: 12mm 15mm;
+              margin: 10mm 12mm;
             }
             html, body {
               background: #ffffff !important;
@@ -1299,7 +1538,6 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
               font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
             }
 
-            /* Neutralize any dark modal wrappers and hide UI chrome */
             .fixed,
             [class*="fixed"],
             [class*="backdrop-blur"],
@@ -1319,7 +1557,6 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
               visibility: hidden !important;
             }
 
-            /* Show only the dedicated record print portal */
             #record-print-portal {
               display: block !important;
               position: static !important;
@@ -1335,6 +1572,29 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
               visibility: visible !important;
             }
 
+            .record-page-sheet {
+              width: 100% !important;
+              max-width: 100% !important;
+              background: #ffffff !important;
+              color: #111827 !important;
+              padding: 0 !important;
+              margin: 0 !important;
+              box-shadow: none !important;
+              border: none !important;
+              border-radius: 0 !important;
+              min-height: 100vh !important;
+              display: flex !important;
+              flex-direction: column !important;
+              justify-content: space-between !important;
+              page-break-after: always !important;
+              break-after: page !important;
+            }
+
+            .record-page-sheet:last-child {
+              page-break-after: avoid !important;
+              break-after: avoid !important;
+            }
+
             .print-avoid-break {
               break-inside: avoid !important;
               page-break-inside: avoid !important;
@@ -1348,14 +1608,30 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
         ` }} />
 
         {/* Top Modal Controls (Screen Only) */}
-        <div className="px-5 py-3 bg-zinc-950 border-b border-zinc-800/80 flex items-center justify-between shrink-0 no-print">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 flex items-center justify-center shrink-0">
+        <div className="px-4 py-2.5 bg-zinc-50 dark:bg-zinc-950 border-b border-zinc-200 dark:border-zinc-800/80 flex items-center justify-between shrink-0 no-print gap-3">
+          {/* Left Group: Sidebar Toggle + Title */}
+          <div className="flex items-center gap-2.5 min-w-0">
+            <button
+              type="button"
+              onClick={() => setShowSidebar(!showSidebar)}
+              className={cn(
+                "h-8 w-8 rounded-lg border transition-all flex items-center justify-center cursor-pointer shadow-2xs active:scale-[0.96]",
+                showSidebar 
+                  ? "bg-zinc-200/80 dark:bg-zinc-800 text-zinc-900 dark:text-white border-zinc-300 dark:border-zinc-700" 
+                  : "bg-white dark:bg-zinc-900 text-zinc-500 hover:text-zinc-900 dark:hover:text-white border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              )}
+              title={showSidebar ? "Hide Pages Sidebar" : "Show Pages Sidebar"}
+            >
+              {showSidebar ? <PanelLeftClose size={15} /> : <PanelLeft size={15} />}
+            </button>
+
+            <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-200/80 dark:border-indigo-500/20 flex items-center justify-center shrink-0">
               <FileText size={16} />
             </div>
-            <div className="min-w-0">
+
+            <div className="min-w-0 hidden sm:block">
               <div className="flex items-center gap-2">
-                <h3 className="text-white font-bold text-sm tracking-tight truncate">Export Record Overview</h3>
+                <h3 className="text-zinc-900 dark:text-white font-bold text-sm tracking-tight truncate">Export Record Overview</h3>
                 <span 
                   className="font-mono text-[11px] px-1.5 py-0.5 rounded font-bold border shrink-0"
                   style={{ 
@@ -1367,13 +1643,121 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
                   {recordKey}
                 </span>
               </div>
-              <p className="text-[11px] text-zinc-400 truncate">
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate">
                 Formatted, printable document summary ready for export
               </p>
             </div>
           </div>
 
+          {/* Right Group: Zoom Controls + Brand Profile + Options + Export Actions */}
           <div className="flex items-center gap-1.5 shrink-0">
+            {/* Zoom Controls Pill */}
+            <div className="relative flex items-center rounded-lg border border-zinc-200 dark:border-zinc-700/80 bg-white dark:bg-zinc-800/80 overflow-visible shadow-2xs" ref={zoomDropdownRef}>
+              <button
+                type="button"
+                onClick={handleZoomOut}
+                disabled={zoom <= 50}
+                className="h-8 px-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-700/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer rounded-l-lg"
+                title="Zoom Out"
+              >
+                <ZoomOut size={13} />
+              </button>
+
+              <div className="h-3.5 w-px bg-zinc-200 dark:bg-zinc-700" />
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowZoomDropdown(!showZoomDropdown);
+                  setShowBrandDropdown(false);
+                  setShowOptionsDropdown(false);
+                }}
+                className="h-8 px-2 text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-700/70 transition-colors flex items-center gap-1 cursor-pointer select-none"
+                title="Zoom Options"
+              >
+                <span>{zoom}%</span>
+                <ChevronDown size={10} className={cn("text-zinc-400 transition-transform duration-200", showZoomDropdown && "rotate-180")} />
+              </button>
+
+              <div className="h-3.5 w-px bg-zinc-200 dark:bg-zinc-700" />
+
+              <button
+                type="button"
+                onClick={handleZoomIn}
+                disabled={zoom >= 150}
+                className="h-8 px-2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-700/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                title="Zoom In"
+              >
+                <ZoomIn size={13} />
+              </button>
+
+              <div className="h-3.5 w-px bg-zinc-200 dark:bg-zinc-700" />
+
+              <button
+                type="button"
+                onClick={handleResetZoom}
+                className="h-8 px-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-700/70 transition-colors cursor-pointer rounded-r-lg"
+                title="Reset to 100%"
+              >
+                <Maximize2 size={12} />
+              </button>
+
+              {/* Zoom Presets Dropdown */}
+              {showZoomDropdown && (
+                <div className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 w-44 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl p-1.5 z-50 text-xs space-y-0.5 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100">
+                  <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400 border-b border-zinc-100 dark:border-zinc-800 mb-1">
+                    Zoom Presets
+                  </div>
+                  {[
+                    { label: '50%', value: 50 },
+                    { label: '75%', value: 75 },
+                    { label: '90%', value: 90 },
+                    { label: '100% (Default)', value: 100 },
+                    { label: '125%', value: 125 },
+                    { label: '150%', value: 150 },
+                    { label: '175%', value: 175 },
+                    { label: '200%', value: 200 },
+                    { label: 'Fit Width (85%)', value: 85 },
+                    { label: 'Fit Page (65%)', value: 65 }
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => {
+                        setZoom(preset.value);
+                        setShowZoomDropdown(false);
+                      }}
+                      className={cn(
+                        "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors text-left cursor-pointer",
+                        zoom === preset.value
+                          ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white font-semibold"
+                          : "text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 hover:text-zinc-900 dark:hover:text-white"
+                      )}
+                    >
+                      <span>{preset.label}</span>
+                      {zoom === preset.value && <Check size={12} className="text-emerald-500 shrink-0" />}
+                    </button>
+                  ))}
+
+                  <div className="pt-1 mt-1 border-t border-zinc-100 dark:border-zinc-800">
+                    <button
+                      type="button"
+                      onClick={() => setWheelZoomDirect(!wheelZoomDirect)}
+                      className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-zinc-50 dark:hover:bg-zinc-800/60 text-zinc-700 dark:text-zinc-300 cursor-pointer"
+                    >
+                      <span>Direct wheel zoom</span>
+                      <input
+                        type="checkbox"
+                        checked={wheelZoomDirect}
+                        onChange={(e) => setWheelZoomDirect(e.target.checked)}
+                        className="rounded bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-0 cursor-pointer"
+                      />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Brand Switcher Pill Dropdown */}
             {(brandKits.length > 0 || brand) && (
               <div className="relative" ref={brandDropdownRef}>
@@ -1384,12 +1768,14 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
                     if (brandKits.length > 1) {
                       setShowBrandDropdown(!showBrandDropdown);
                       setShowOptionsDropdown(false);
+                      setShowZoomDropdown(false);
                     }
                   }}
                   className={cn(
-                    "h-8 px-2.5 rounded-lg bg-zinc-800/80 text-zinc-300 text-xs font-medium border border-zinc-700/80 transition-all flex items-center gap-2 select-none shadow-2xs",
+                    "h-8 px-2.5 rounded-lg text-xs font-medium border transition-all flex items-center gap-2 select-none shadow-2xs",
+                    "bg-white dark:bg-zinc-800/80 text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700/80",
                     brandKits.length > 1 
-                      ? "hover:bg-zinc-700/80 hover:text-white cursor-pointer active:scale-[0.98]" 
+                      ? "hover:bg-zinc-100 dark:hover:bg-zinc-700/80 hover:text-zinc-900 dark:hover:text-white cursor-pointer active:scale-[0.98]" 
                       : "cursor-default opacity-90"
                   )}
                   title={brandKits.length > 1 ? "Switch Brand Profile" : `Active Brand: ${brandName}`}
@@ -1398,15 +1784,15 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
                     className="w-2.5 h-2.5 rounded-full shrink-0 shadow-2xs"
                     style={{ backgroundColor: primaryColor }}
                   />
-                  <span className="max-w-[130px] truncate">{brandName}</span>
+                  <span className="max-w-[110px] sm:max-w-[130px] truncate">{brandName}</span>
                   {brandKits.length > 1 && (
-                    <ChevronDown size={11} className={cn("text-zinc-500 transition-transform duration-200", showBrandDropdown && "rotate-180")} />
+                    <ChevronDown size={11} className={cn("text-zinc-400 dark:text-zinc-500 transition-transform duration-200", showBrandDropdown && "rotate-180")} />
                   )}
                 </button>
 
                 {showBrandDropdown && (
-                  <div className="absolute right-0 top-full mt-1.5 w-64 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl p-1.5 z-50 text-xs space-y-0.5 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100">
-                    <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500 border-b border-zinc-800/80 mb-1 flex items-center justify-between">
+                  <div className="absolute right-0 top-full mt-1.5 w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl p-1.5 z-50 text-xs space-y-0.5 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100">
+                    <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 border-b border-zinc-100 dark:border-zinc-800/80 mb-1 flex items-center justify-between">
                       <span>Brand Identity</span>
                       <span className="text-[9px] text-zinc-400 font-normal">{brandKits.length} kits</span>
                     </div>
@@ -1425,19 +1811,19 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
                             className={cn(
                               "w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs transition-colors text-left cursor-pointer",
                               isSelected
-                                ? "bg-zinc-800 text-white font-semibold"
-                                : "text-zinc-300 hover:bg-zinc-800/60 hover:text-white"
+                                ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white font-semibold"
+                                : "text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 hover:text-zinc-900 dark:hover:text-white"
                             )}
                           >
                             <div className="flex items-center gap-2 min-w-0">
                               <span
-                                className="w-3 h-3 rounded-full shrink-0 border border-white/20"
+                                className="w-3 h-3 rounded-full shrink-0 border border-black/10 dark:border-white/20"
                                 style={{ backgroundColor: bPrimary }}
                               />
                               <div className="flex flex-col min-w-0">
                                 <span className="truncate">{b.name}</span>
                                 {b.voiceAndTone?.tagline && (
-                                  <span className="text-[10px] text-zinc-500 truncate font-normal">
+                                  <span className="text-[10px] text-zinc-400 dark:text-zinc-500 truncate font-normal">
                                     {b.voiceAndTone.tagline}
                                   </span>
                                 )}
@@ -1445,11 +1831,11 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
                             </div>
                             <div className="flex items-center gap-1 shrink-0 ml-2">
                               {b.isDefault && (
-                                <span className="text-[9px] px-1 py-0.2 rounded bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/30">
+                                <span className="text-[9px] px-1 py-0.2 rounded bg-indigo-50 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-500/30">
                                   Default
                                 </span>
                               )}
-                              {isSelected && <Check size={13} className="text-emerald-400" />}
+                              {isSelected && <Check size={13} className="text-emerald-500 dark:text-emerald-400" />}
                             </div>
                           </button>
                         );
@@ -1467,19 +1853,20 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
                 onClick={() => {
                   setShowOptionsDropdown(!showOptionsDropdown);
                   setShowBrandDropdown(false);
+                  setShowZoomDropdown(false);
                 }}
-                className="h-8 px-2.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700/80 text-zinc-300 hover:text-white text-xs font-medium border border-zinc-700/80 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs select-none active:scale-[0.98]"
+                className="h-8 px-2.5 rounded-lg bg-white dark:bg-zinc-800/80 hover:bg-zinc-100 dark:hover:bg-zinc-700/80 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white text-xs font-medium border border-zinc-200 dark:border-zinc-700/80 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs select-none active:scale-[0.98]"
               >
                 <SlidersHorizontal size={13} className="text-zinc-400" />
-                <span>Options</span>
-                <ChevronDown size={11} className={cn("text-zinc-500 transition-transform duration-200", showOptionsDropdown && "rotate-180")} />
+                <span className="hidden sm:inline">Options</span>
+                <ChevronDown size={11} className={cn("text-zinc-400 dark:text-zinc-500 transition-transform duration-200", showOptionsDropdown && "rotate-180")} />
               </button>
 
               {showOptionsDropdown && (
-                <div className="absolute right-0 top-full mt-1.5 w-60 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl p-1.5 z-50 text-xs space-y-0.5 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100">
+                <div className="absolute right-0 top-full mt-1.5 w-60 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl p-1.5 z-50 text-xs space-y-0.5 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100">
                   {brandKits.length > 1 && (
-                    <div className="mb-2 pb-2 border-b border-zinc-800/80">
-                      <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1 flex items-center justify-between">
+                    <div className="mb-2 pb-2 border-b border-zinc-100 dark:border-zinc-800/80">
+                      <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1 flex items-center justify-between">
                         <span>Brand Profile</span>
                       </div>
                       <div className="space-y-0.5 max-h-36 overflow-y-auto custom-scrollbar">
@@ -1493,8 +1880,8 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
                               className={cn(
                                 "w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors text-left cursor-pointer",
                                 isSelected
-                                  ? "bg-zinc-800 text-white font-semibold"
-                                  : "text-zinc-300 hover:bg-zinc-800/60 hover:text-white"
+                                  ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white font-semibold"
+                                  : "text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 hover:text-zinc-900 dark:hover:text-white"
                               )}
                             >
                               <div className="flex items-center gap-2 min-w-0">
@@ -1504,7 +1891,7 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
                                 />
                                 <span className="truncate">{b.name}</span>
                               </div>
-                              {isSelected && <Check size={12} className="text-emerald-400 shrink-0" />}
+                              {isSelected && <Check size={12} className="text-emerald-500 dark:text-emerald-400 shrink-0" />}
                             </button>
                           );
                         })}
@@ -1512,43 +1899,43 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
                     </div>
                   )}
 
-                  <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500 border-b border-zinc-800/80 mb-1">
+                  <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 border-b border-zinc-100 dark:border-zinc-800/80 mb-1">
                     Export Configuration
                   </div>
-                  <label className="flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-zinc-800 text-zinc-300 hover:text-white cursor-pointer transition-colors">
+                  <label className="flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white cursor-pointer transition-colors">
                     <span>System Metadata</span>
                     <input
                       type="checkbox"
                       checked={includeMetadata}
                       onChange={(e) => setIncludeMetadata(e.target.checked)}
-                      className="rounded bg-zinc-950 border-zinc-700 text-indigo-600 focus:ring-0 cursor-pointer"
+                      className="rounded bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-0 cursor-pointer"
                     />
                   </label>
-                  <label className="flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-zinc-800 text-zinc-300 hover:text-white cursor-pointer transition-colors">
+                  <label className="flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white cursor-pointer transition-colors">
                     <span>Empty Fields</span>
                     <input
                       type="checkbox"
                       checked={includeEmptyFields}
                       onChange={(e) => setIncludeEmptyFields(e.target.checked)}
-                      className="rounded bg-zinc-950 border-zinc-700 text-indigo-600 focus:ring-0 cursor-pointer"
+                      className="rounded bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-0 cursor-pointer"
                     />
                   </label>
-                  <label className="flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-zinc-800 text-zinc-300 hover:text-white cursor-pointer transition-colors">
+                  <label className="flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white cursor-pointer transition-colors">
                     <span>Internal Notes</span>
                     <input
                       type="checkbox"
                       checked={includeNotes}
                       onChange={(e) => setIncludeNotes(e.target.checked)}
-                      className="rounded bg-zinc-950 border-zinc-700 text-indigo-600 focus:ring-0 cursor-pointer"
+                      className="rounded bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-0 cursor-pointer"
                     />
                   </label>
-                  <label className="flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-zinc-800 text-zinc-300 hover:text-white cursor-pointer transition-colors">
+                  <label className="flex items-center justify-between px-2.5 py-1.5 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white cursor-pointer transition-colors">
                     <span>Audit Activity</span>
                     <input
                       type="checkbox"
                       checked={includeActivity}
                       onChange={(e) => setIncludeActivity(e.target.checked)}
-                      className="rounded bg-zinc-950 border-zinc-700 text-indigo-600 focus:ring-0 cursor-pointer"
+                      className="rounded bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-0 cursor-pointer"
                     />
                   </label>
                 </div>
@@ -1559,22 +1946,22 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
             <button
               type="button"
               onClick={handleCopySummary}
-              className="h-8 px-2.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700/80 text-zinc-300 hover:text-white text-xs font-medium border border-zinc-700/80 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs select-none active:scale-[0.98]"
+              className="h-8 px-2.5 rounded-lg bg-white dark:bg-zinc-800/80 hover:bg-zinc-100 dark:hover:bg-zinc-700/80 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white text-xs font-medium border border-zinc-200 dark:border-zinc-700/80 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs select-none active:scale-[0.98]"
               title="Copy markdown summary"
             >
-              {copiedSummary ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} className="text-zinc-400" />}
-              <span>{copiedSummary ? 'Copied' : 'Copy'}</span>
+              {copiedSummary ? <Check size={13} className="text-emerald-500 dark:text-emerald-400" /> : <Copy size={13} className="text-zinc-400" />}
+              <span className="hidden sm:inline">{copiedSummary ? 'Copied' : 'Copy'}</span>
             </button>
 
             {/* Divider */}
-            <div className="h-4 w-px bg-zinc-800 mx-0.5" />
+            <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 mx-0.5" />
 
             {/* Primary Print / Save PDF Button */}
             <button
               type="button"
               onClick={handlePrint}
               style={{ backgroundColor: primaryColor }}
-              className="h-8 px-3.5 rounded-lg hover:brightness-110 active:brightness-90 text-white text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer shadow-sm select-none whitespace-nowrap active:scale-[0.98]"
+              className="h-8 px-3 sm:px-3.5 rounded-lg hover:brightness-110 active:brightness-90 text-white text-xs font-semibold transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer shadow-sm select-none whitespace-nowrap active:scale-[0.98]"
             >
               <Printer size={13} />
               <span>Print / Export PDF</span>
@@ -1584,7 +1971,7 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="h-8 w-8 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800/80 border border-transparent hover:border-zinc-700/60 transition-all flex items-center justify-center cursor-pointer ml-0.5 active:scale-[0.96]"
+              className="h-8 w-8 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800/80 border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700/60 transition-all flex items-center justify-center cursor-pointer ml-0.5 active:scale-[0.96]"
               title="Close modal"
             >
               <X size={15} />
@@ -1592,16 +1979,159 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
           </div>
         </div>
 
-        {/* Screen Preview Canvas (scrollable preview inside the modal) */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-zinc-950 custom-scrollbar flex flex-col items-center">
-          {renderDocumentContent(false)}
+        {/* Modal Main Body: Left Pages Sidebar + Right Preview Canvas */}
+        <div className="flex-1 flex overflow-hidden min-h-0 bg-zinc-100/90 dark:bg-zinc-950">
+          {/* Left Pages Sidebar */}
+          {showSidebar && (
+            <div className="w-40 sm:w-48 shrink-0 bg-zinc-50/95 dark:bg-zinc-900/95 border-r border-zinc-200 dark:border-zinc-800 flex flex-col z-10 select-none overflow-hidden animate-in slide-in-from-left-4 duration-200">
+              {/* Sidebar Header */}
+              <div className="px-3.5 py-2.5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs shrink-0">
+                <div className="flex items-center gap-1.5 font-bold text-zinc-700 dark:text-zinc-300">
+                  <LayoutGrid size={13} className="text-zinc-400" />
+                  <span>Pages</span>
+                </div>
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-zinc-200/70 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
+                  {documentPages.length}
+                </span>
+              </div>
+
+              {/* Thumbnails Scroll Column */}
+              <div className="flex-1 overflow-y-auto p-3 space-y-4 custom-scrollbar">
+                {documentPages.map((page) => {
+                  const isActive = activePage === page.pageNumber;
+                  return (
+                    <div
+                      key={page.pageNumber}
+                      onClick={() => handleScrollToPage(page.pageNumber)}
+                      className="group flex flex-col items-center cursor-pointer"
+                    >
+                      {/* Live Mini Preview Thumbnail */}
+                      <div 
+                        className={cn(
+                          "w-[110px] h-[155px] bg-white rounded-lg shadow-xs overflow-hidden relative transition-all duration-150 border-2",
+                          isActive 
+                            ? "shadow-md ring-2 ring-offset-1 dark:ring-offset-zinc-900" 
+                            : "border-zinc-200 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-500 group-hover:shadow-sm"
+                        )}
+                        style={{
+                          borderColor: isActive ? primaryColor : undefined,
+                          ['--tw-ring-color' as any]: isActive ? `${primaryColor}40` : undefined,
+                        }}
+                      >
+                        <div 
+                          style={{ 
+                            width: '794px', 
+                            minHeight: '1123px', 
+                            transform: 'scale(0.1385)', 
+                            transformOrigin: 'top left',
+                            pointerEvents: 'none',
+                            userSelect: 'none'
+                          }}
+                        >
+                          {renderSinglePage(page, documentPages.length, true)}
+                        </div>
+                      </div>
+
+                      {/* Page Label */}
+                      <span 
+                        className={cn(
+                          "mt-1.5 text-[11px] font-semibold px-2 py-0.5 rounded transition-colors",
+                          isActive 
+                            ? "text-white shadow-2xs" 
+                            : "text-zinc-500 dark:text-zinc-400 group-hover:text-zinc-800 dark:group-hover:text-zinc-200"
+                        )}
+                        style={{
+                          backgroundColor: isActive ? primaryColor : undefined
+                        }}
+                      >
+                        Page {page.pageNumber}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Right Scrollable Preview Canvas with Scaled Pages */}
+          <div 
+            ref={canvasScrollRef}
+            onScroll={handleCanvasScroll}
+            className="flex-1 overflow-auto p-4 sm:p-8 custom-scrollbar flex flex-col items-center relative"
+          >
+            {/* Mouse Wheel Zoom Floating Hint & Mode Switcher */}
+            <div className="sticky top-0 self-end z-20 flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/95 dark:bg-zinc-800/95 border border-zinc-200/90 dark:border-zinc-700/90 shadow-md text-[11px] text-zinc-600 dark:text-zinc-400 select-none backdrop-blur-md mb-2">
+              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: primaryColor }} />
+              <span>{wheelZoomDirect ? 'Mouse wheel zooms' : 'Ctrl + Wheel to zoom'}</span>
+              <span className="text-zinc-300 dark:text-zinc-600">•</span>
+              <button
+                type="button"
+                onClick={() => setWheelZoomDirect(!wheelZoomDirect)}
+                className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+              >
+                {wheelZoomDirect ? 'Switch to scroll' : 'Direct zoom'}
+              </button>
+            </div>
+
+            {/* Outer width-compensated container for smooth zoom scrolling */}
+            <div 
+              style={{
+                width: `${794 * (zoom / 100)}px`,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: `${28 * (zoom / 100)}px`,
+                transition: 'width 0.15s ease-out, gap 0.15s ease-out',
+                paddingBottom: '6rem',
+                transformOrigin: 'top center',
+              }}
+            >
+              {/* Inner scaled container */}
+              <div
+                style={{
+                  transform: `scale(${zoom / 100})`,
+                  transformOrigin: 'top center',
+                  width: '794px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '28px',
+                  transition: 'transform 0.15s ease-out',
+                }}
+              >
+                {documentPages.map((page) => (
+                  <div 
+                    key={page.pageNumber}
+                    id={`record-page-${page.pageNumber}`}
+                    className="w-[794px] min-h-[1123px] bg-white rounded-2xl shadow-xl border border-zinc-200/90 p-8 sm:p-12 flex flex-col justify-between select-text text-zinc-900 leading-normal shrink-0"
+                    style={{
+                      fontFamily: bodyFont !== 'inherit' ? `"${bodyFont}", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif` : undefined
+                    }}
+                  >
+                    {renderSinglePage(page, documentPages.length, false)}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </AuroraModal>
 
       {/* Direct Body Portal for Clean Native Print / Save as PDF */}
       {typeof document !== 'undefined' && isOpen && createPortal(
         <div id="record-print-portal" className="hidden print:block">
-          {renderDocumentContent(true)}
+          {documentPages.map((page) => (
+            <div 
+              key={`portal-page-${page.pageNumber}`}
+              className="record-page-sheet bg-white text-zinc-900 p-0 m-0"
+              style={{
+                fontFamily: bodyFont !== 'inherit' ? `"${bodyFont}", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif` : undefined,
+                pageBreakAfter: page.isLastPage ? 'avoid' : 'always',
+                breakAfter: page.isLastPage ? 'avoid' : 'page',
+              }}
+            >
+              {renderSinglePage(page, documentPages.length, false)}
+            </div>
+          ))}
         </div>,
         document.body
       )}

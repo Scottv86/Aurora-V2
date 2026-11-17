@@ -830,9 +830,45 @@ export const runAgentLoop = async (
   - Path: "${context.path}"
   - Page/Component Type: "${context.type || 'Unknown'}"
   - Object/Module ID: "${context.id || 'None'}"
-  - Name/Title: "${context.name || 'None'}"
-  
-Use this information to ground your understanding. For example, if they ask to add a field, create an automation, or query data, they likely refer to the active module/page they are currently viewing listed above.\n`;
+  - Name/Title: "${context.name || 'None'}"\n`;
+  }
+
+  if (context && context.activeEntity) {
+    const ae = context.activeEntity;
+    let attrLines = "";
+    if (ae.keyAttributes && typeof ae.keyAttributes === 'object') {
+      attrLines = Object.entries(ae.keyAttributes)
+        .filter(([_, v]) => v !== null && v !== undefined && v !== '')
+        .map(([k, v]) => `    * ${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`)
+        .join('\n');
+    }
+
+    let relLines = "";
+    if (ae.relatedCounts && typeof ae.relatedCounts === 'object') {
+      const parts = Object.entries(ae.relatedCounts)
+        .filter(([_, c]) => typeof c === 'number' && c > 0)
+        .map(([k, c]) => `${c} ${k}`);
+      if (parts.length > 0) {
+        relLines = `  - Related Linked Counts: ${parts.join(', ')}\n`;
+      }
+    }
+
+    contextBlock += `\n================================================================================
+USER'S ACTIVE RECORD IN FOCUS (GROUNDED INSTANT CONTEXT):
+  - Entity Domain: "${ae.domain}"
+  - Entity / Record ID: "${ae.id}"
+  - Display Title: "${ae.title}"
+  - Status / Lifecycle: "${ae.status || 'Active'}"
+${ae.subtitle ? `  - Subtitle / Summary: "${ae.subtitle}"\n` : ''}${ae.module?.name ? `  - Associated Module: "${ae.module.name}" (ID: "${ae.module.id}")\n` : ''}${ae.activeTab ? `  - Currently Active View Tab: "${ae.activeTab}"\n` : ''}${ae.slaStatus ? `  - SLA Status: "${ae.slaStatus}"\n` : ''}${relLines}  - Key Field Values & Attributes:
+${attrLines || '    * (No additional scalar fields)'}
+
+GROUNDING DIRECTIVE FOR ACTIVE RECORD:
+1. The user is ACTIVELY VIEWING and WORKING WITH the record above in real-time.
+2. When the user asks ambiguous or relative questions like "summarize this", "who is the contact?", "draft an email", "advance to next stage", or "what is the balance?", ALWAYS interpret these in direct reference to this active record.
+3. If the user asks to modify or perform an action on this record (e.g. updating a field, adding an activity note, generating a document), use Entity ID "${ae.id}"${ae.module?.id ? ` and Module ID "${ae.module.id}"` : ''} directly without asking the user to specify or confirm the record ID.
+================================================================================\n`;
+  } else if (context && context.path) {
+    contextBlock += `\nUse this route information to ground your understanding. For example, if they ask to add a field, create an automation, or query data, they likely refer to the active module/page they are currently viewing listed above.\n`;
   }
 
   // Resolve Chat Session Sharing & Prompter Context
@@ -1000,6 +1036,9 @@ CORE GUIDELINES:
   emitStep(socketId, { type: 'thought', content: "Getting things ready..." });
 
   let activeMetadata = (session.metadata as any) || {};
+  if (context?.activeEntity) {
+    activeMetadata.activeEntity = context.activeEntity;
+  }
 
   while (loopCount < maxLoops) {
     loopCount++;
@@ -1236,7 +1275,22 @@ export const executeAgentTool = async (
   activeMetadata: any
 ): Promise<any> => {
   let result: any = null;
-          try {
+
+  // Auto-default omitted recordId, moduleId, or partyId from active in-focus entity
+  if (activeMetadata?.activeEntity && args && typeof args === 'object') {
+    const ae = activeMetadata.activeEntity;
+    if (!args.recordId && ae.id && ae.domain === 'module_record') {
+      args.recordId = ae.id;
+    }
+    if (!args.moduleId && ae.module?.id) {
+      args.moduleId = ae.module.id;
+    }
+    if (!args.partyId && ae.id && (ae.domain === 'directory_person' || ae.domain === 'directory_org')) {
+      args.partyId = ae.id;
+    }
+  }
+
+  try {
           if (name === 'get_workspace_schema') {
             const mods = await db.module.findMany({ where: { tenantId } });
             const autos = await db.automation.findMany({ where: { tenantId } });

@@ -60,7 +60,7 @@ export const AuroraModal: React.FC<AuroraModalProps> = ({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.18 }}
             onClick={closeOnBackdropClick ? onClose : undefined}
-            className="fixed inset-0 bg-black/60 dark:bg-black/75 backdrop-blur-md cursor-pointer"
+            className="fixed inset-0 bg-black/40 dark:bg-black/75 backdrop-blur-md cursor-pointer"
           />
 
           {/* Modal / Drawer Animated Card */}

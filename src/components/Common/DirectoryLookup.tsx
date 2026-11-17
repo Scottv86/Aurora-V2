@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Building2, 
   User as UserIcon, 
@@ -85,8 +86,37 @@ export const DirectoryLookup: React.FC<DirectoryLookupProps> = ({
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const debounceTimerRef = useRef<any>(null);
+
+  const [openUp, setOpenUp] = useState(false);
+  const [triggerRect, setTriggerRect] = useState<DOMRect | null>(null);
+
+  const updatePosition = useCallback(() => {
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      setTriggerRect(rect);
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setOpenUp(spaceBelow < 340 && rect.top > 340);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      updatePosition();
+      const handleScrollOrResize = (e: Event) => {
+        if (popoverRef.current && popoverRef.current.contains(e.target as Node)) return;
+        updatePosition();
+      };
+      window.addEventListener('resize', handleScrollOrResize);
+      window.addEventListener('scroll', handleScrollOrResize, true);
+      return () => {
+        window.removeEventListener('resize', handleScrollOrResize);
+        window.removeEventListener('scroll', handleScrollOrResize, true);
+      };
+    }
+  }, [isOpen, updatePosition]);
 
   // Fetch / search directory entities
   const fetchParties = useCallback(async (query: string = '') => {
@@ -202,7 +232,10 @@ export const DirectoryLookup: React.FC<DirectoryLookupProps> = ({
   // Close on click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      const insideContainer = containerRef.current?.contains(target);
+      const insidePopover = popoverRef.current?.contains(target);
+      if (!insideContainer && !insidePopover) {
         setIsOpen(false);
       }
     };
@@ -213,6 +246,19 @@ export const DirectoryLookup: React.FC<DirectoryLookupProps> = ({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isOpen]);
+
+  // Compute effective popover width based on trigger element or dropdownWidth
+  const effectiveWidth = useMemo(() => {
+    if (!triggerRect) return 320;
+    if (dropdownWidth === 'w-full') {
+      return Math.max(triggerRect.width, 300);
+    }
+    const match = dropdownWidth.match(/w-\[(\d+)px\]/);
+    if (match) {
+      return Math.max(Number(match[1]), triggerRect.width);
+    }
+    return Math.max(320, triggerRect.width);
+  }, [triggerRect, dropdownWidth]);
 
   // Auto focus search input when opened
   useEffect(() => {
@@ -258,6 +304,7 @@ export const DirectoryLookup: React.FC<DirectoryLookupProps> = ({
     if (!isOpen) {
       if (e.key === 'ArrowDown' || e.key === 'Enter') {
         e.preventDefault();
+        updatePosition();
         setIsOpen(true);
       }
       return;
@@ -294,7 +341,14 @@ export const DirectoryLookup: React.FC<DirectoryLookupProps> = ({
         <div
           role="button"
           tabIndex={disabled ? -1 : 0}
-          onClick={() => !disabled && setIsOpen(!isOpen)}
+          onClick={() => {
+            if (!disabled) {
+              if (!isOpen) {
+                updatePosition();
+              }
+              setIsOpen(prev => !prev);
+            }
+          }}
           onKeyDown={handleKeyDown}
           className={cn(
             'group flex items-center justify-between gap-1.5 px-2 py-1.5 rounded-lg border text-xs transition-all cursor-pointer',
@@ -368,20 +422,35 @@ export const DirectoryLookup: React.FC<DirectoryLookupProps> = ({
             />
           </div>
         </div>
+      </div>
 
-        {/* Search Popover Dropdown */}
+      {/* Floating Popover Dropdown Portal */}
+      {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
-          {isOpen && (
+          {isOpen && triggerRect && (
             <motion.div
-              initial={{ opacity: 0, y: 4, scale: 0.98 }}
+              ref={popoverRef}
+              initial={{ opacity: 0, y: openUp ? -6 : 6, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 4, scale: 0.98 }}
+              exit={{ opacity: 0, y: openUp ? -6 : 6, scale: 0.98 }}
               transition={{ duration: 0.15 }}
-              className={cn(
-                'absolute left-0 top-full mt-1.5 z-[100] flex flex-col',
-                'bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl overflow-hidden',
-                dropdownWidth
-              )}
+              style={{
+                position: 'fixed',
+                ...(openUp
+                  ? { bottom: Math.max(12, window.innerHeight - triggerRect.top + 6) }
+                  : { top: Math.min(triggerRect.bottom + 6, window.innerHeight - 340) }
+                ),
+                left: Math.min(
+                  Math.max(12, triggerRect.left),
+                  (typeof window !== 'undefined' ? window.innerWidth : 1000) - Math.min(effectiveWidth, (typeof window !== 'undefined' ? window.innerWidth - 24 : 320)) - 12
+                ),
+                width: `${Math.min(effectiveWidth, typeof window !== 'undefined' ? window.innerWidth - 24 : 320)}px`,
+                maxHeight: 'calc(100vh - 24px)',
+                zIndex: 10050,
+              }}
+              className="flex flex-col bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
             >
               {/* Search Bar Header */}
               <div className="p-2 border-b border-zinc-100 dark:border-zinc-800/80 bg-zinc-50/70 dark:bg-zinc-950/70">
@@ -409,56 +478,58 @@ export const DirectoryLookup: React.FC<DirectoryLookupProps> = ({
                   ) : null}
                 </div>
 
-                {/* Filter Tabs (All / Orgs / People) */}
-                <div className="flex items-center gap-1 mt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTypeFilter('ALL');
-                      setActiveIndex(0);
-                    }}
-                    className={cn(
-                      'px-2 py-0.5 rounded text-[10px] font-semibold transition-colors',
-                      typeFilter === 'ALL'
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-zinc-200/60 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800'
-                    )}
-                  >
-                    All
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTypeFilter('ORGANIZATION');
-                      setActiveIndex(0);
-                    }}
-                    className={cn(
-                      'flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold transition-colors',
-                      typeFilter === 'ORGANIZATION'
-                        ? 'bg-violet-600 text-white'
-                        : 'bg-zinc-200/60 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800'
-                    )}
-                  >
-                    <Building size={10} />
-                    <span>Companies</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTypeFilter('PERSON');
-                      setActiveIndex(0);
-                    }}
-                    className={cn(
-                      'flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold transition-colors',
-                      typeFilter === 'PERSON'
-                        ? 'bg-sky-600 text-white'
-                        : 'bg-zinc-200/60 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800'
-                    )}
-                  >
-                    <UserIcon size={10} />
-                    <span>People</span>
-                  </button>
-                </div>
+                {/* Filter Tabs (All / Orgs / People) - Only show if caller did not filter by a single type */}
+                {filterPartyType === 'ALL' && (
+                  <div className="flex items-center gap-1 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTypeFilter('ALL');
+                        setActiveIndex(0);
+                      }}
+                      className={cn(
+                        'px-2 py-0.5 rounded text-[10px] font-semibold transition-colors',
+                        typeFilter === 'ALL'
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-zinc-200/60 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800'
+                      )}
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTypeFilter('ORGANIZATION');
+                        setActiveIndex(0);
+                      }}
+                      className={cn(
+                        'flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold transition-colors',
+                        typeFilter === 'ORGANIZATION'
+                          ? 'bg-violet-600 text-white'
+                          : 'bg-zinc-200/60 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800'
+                      )}
+                    >
+                      <Building size={10} />
+                      <span>Companies</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTypeFilter('PERSON');
+                        setActiveIndex(0);
+                      }}
+                      className={cn(
+                        'flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold transition-colors',
+                        typeFilter === 'PERSON'
+                          ? 'bg-sky-600 text-white'
+                          : 'bg-zinc-200/60 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800'
+                      )}
+                    >
+                      <UserIcon size={10} />
+                      <span>People</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* List of Directory Entities */}
@@ -581,7 +652,13 @@ export const DirectoryLookup: React.FC<DirectoryLookupProps> = ({
                     className="flex items-center gap-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 transition-colors"
                   >
                     <Plus size={12} />
-                    <span>New Directory Client</span>
+                    <span>
+                      {filterPartyType === 'PERSON'
+                        ? 'New Person'
+                        : filterPartyType === 'ORGANIZATION'
+                          ? 'New Organisation'
+                          : 'New Directory Client'}
+                    </span>
                   </button>
 
                   <span className="text-[10px] text-zinc-400">
@@ -591,8 +668,9 @@ export const DirectoryLookup: React.FC<DirectoryLookupProps> = ({
               )}
             </motion.div>
           )}
-        </AnimatePresence>
-      </div>
+        </AnimatePresence>,
+        document.body
+      )}
 
       {/* Quick Create Party Modal */}
       {isCreateModalOpen && (

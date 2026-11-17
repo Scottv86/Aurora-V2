@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Users,
@@ -46,6 +46,7 @@ import { Breadcrumbs } from '../../components/Navigation/Breadcrumbs';
 import { EntityAvatarUpload } from '../../components/Platform/EntityAvatarUpload';
 import { UserAvatarWithPresence, UserProfileTrigger } from '../../components/Common/UserPresenceBadge';
 import { PartyProfileTrigger } from '../../context/PartyProfileCardContext';
+import { useRegisterActiveEntity } from '../../context/ActiveEntityContext';
 import { Modal } from '../../components/UI/TabsAndModal';
 import { Button, Badge, AuroraSpinner } from '../../components/UI/Primitives';
 import { toast } from 'sonner';
@@ -108,6 +109,45 @@ export const PeopleOrgDirectory = () => {
   const [inspectorData, setInspectorData] = useState<any | null>(null);
   const [inspectorLinked, setInspectorLinked] = useState<any | null>(null);
   const [inspectorLoading, setInspectorLoading] = useState(false);
+
+  // Register active inspector entity for AI assistant when split view is open
+  const activeInspectorContext = useMemo(() => {
+    if (viewMode !== 'split' || !inspectorData || !inspectorData.id) return null;
+    const isPerson = inspectorData.partyType === 'PERSON' || inspectorData.type === 'INDIVIDUAL';
+    const domain = isPerson ? ('directory_person' as const) : ('directory_org' as const);
+    const title = inspectorData.displayName || (isPerson ? `${inspectorData.person?.firstName || ''} ${inspectorData.person?.lastName || ''}`.trim() : 'Directory Entity');
+    const subtitle = isPerson
+      ? (inspectorData.person?.jobTitle ? `${inspectorData.person.jobTitle}${inspectorData.primaryOrganization ? ` at ${inspectorData.primaryOrganization.displayName}` : ''}` : 'Individual Contact')
+      : (inspectorData.organization?.industry || 'Organization');
+
+    return {
+      domain,
+      id: String(inspectorData.id),
+      title,
+      subtitle: `${subtitle} • ${inspectorData.status || 'Active'}`,
+      status: inspectorData.status || 'Active',
+      keyAttributes: {
+        'Entity Type': isPerson ? 'Individual (Person)' : 'Organization (Company)',
+        'Code': inspectorData.partyCode || null,
+        'Email': inspectorData.email || null,
+        'Phone': inspectorData.phone || null,
+        'Job Title': inspectorData.person?.jobTitle || null,
+        'Organization': inspectorData.primaryOrganization?.displayName || null,
+        'Lifecycle Stage': inspectorData.stage || inspectorData.status || null,
+        'Lifetime Value': inspectorData.financialSnapshot?.lifetimeValue ? `$${Number(inspectorData.financialSnapshot.lifetimeValue).toLocaleString()}` : null,
+        'Outstanding AR': inspectorData.financialSnapshot?.outstandingAR ? `$${Number(inspectorData.financialSnapshot.outstandingAR).toLocaleString()}` : null,
+      },
+      relatedCounts: {
+        documents: inspectorData.linkedSummary?.totalLinked || undefined,
+      },
+      rawUrl: window.location.pathname + window.location.search,
+    };
+  }, [viewMode, inspectorData]);
+
+  useRegisterActiveEntity(activeInspectorContext, {
+    priority: 20,
+    enabled: viewMode === 'split' && Boolean(inspectorData?.id),
+  });
 
   // Deduplication Studio modal
   const [isDedupeModalOpen, setIsDedupeModalOpen] = useState(false);
@@ -601,7 +641,7 @@ export const PeopleOrgDirectory = () => {
                   setSelectedInspectorId(entities[0].id);
                 }
               }}
-              title="Split 360° Inspector View"
+              title="Split Inspector View"
               className={cn(
                 'p-1 rounded-md transition-all cursor-pointer',
                 viewMode === 'split'
@@ -931,7 +971,7 @@ export const PeopleOrgDirectory = () => {
                   <th className="py-2.5 px-3">Contact Channels</th>
                   <th className="py-2.5 px-3">Classifications</th>
                   <th className="py-2.5 px-3">Account Owner</th>
-                  <th className="py-2.5 px-3">360° Activity</th>
+                  <th className="py-2.5 px-3">Linked Activity</th>
                   <th className="py-2.5 px-3">Status</th>
                   <th className="py-2.5 pl-3 pr-5 text-right w-24">Actions</th>
                 </tr>
@@ -1252,7 +1292,7 @@ export const PeopleOrgDirectory = () => {
                                 }}
                                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-all"
                               >
-                                <span>360°</span>
+                                <span>Profile</span>
                                 <ChevronRight size={13} />
                               </button>
                             </td>
@@ -1490,7 +1530,7 @@ export const PeopleOrgDirectory = () => {
                           }
                           className="gap-1.5"
                         >
-                          <span>Full 360° Command Center</span>
+                          <span>Full Profile</span>
                           <ExternalLink size={13} />
                         </Button>
                       </div>

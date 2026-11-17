@@ -299,7 +299,7 @@ export const EntityAvatarUpload: React.FC<EntityAvatarUploadProps> = ({
           )}
         </div>
         <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-          Click or drag & drop PNG, JPG, WebP, or SVG (auto-optimized for 360° cards).
+          Click or drag & drop PNG, JPG, WebP, or SVG (auto-optimized for directory cards).
         </p>
       </div>
     </div>

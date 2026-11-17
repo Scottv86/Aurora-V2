@@ -25,7 +25,7 @@ const BottomDockedAppPod: React.FC<BottomDockedAppPodProps> = ({ appId }) => {
 
   if (minimized) {
     return (
-      <div className="pointer-events-auto h-10 rounded-t-xl bg-zinc-900 dark:bg-zinc-900 hover:bg-zinc-800 text-white px-3.5 flex items-center gap-2.5 shadow-xl border border-b-0 border-zinc-700 cursor-pointer transition-colors">
+      <div className="pointer-events-auto h-10 rounded-t-xl bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-900 dark:text-white px-3.5 flex items-center gap-2.5 shadow-xl border border-b-0 border-zinc-200 dark:border-zinc-700 cursor-pointer transition-colors">
         <div
           onClick={() => setMinimized(false)}
           className="flex items-center gap-2 flex-1 min-w-0"
@@ -43,7 +43,7 @@ const BottomDockedAppPod: React.FC<BottomDockedAppPodProps> = ({ appId }) => {
             e.stopPropagation();
             removeBottomDockedApp(appId);
           }}
-          className="p-1 rounded hover:bg-white/15 text-zinc-400 hover:text-white cursor-pointer"
+          className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-white/15 text-zinc-400 hover:text-zinc-900 dark:hover:text-white cursor-pointer"
           title="Close Bottom Mount"
         >
           <X size={12} />

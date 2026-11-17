@@ -227,7 +227,7 @@ export const PendingApprovals = ({ onRefresh }: PendingApprovalsProps) => {
                 className="text-xs font-bold text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1.5 transition-colors"
               >
                 <ExternalLink size={14} />
-                Open 360° Profile
+                Open Directory Profile
               </button>
               <div className="flex items-center gap-2">
                 <button

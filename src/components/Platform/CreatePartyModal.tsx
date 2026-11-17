@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   User,
   Building2,
@@ -13,6 +14,16 @@ import {
   Trash2,
   ExternalLink,
   Sliders,
+  ArrowRight,
+  ArrowLeft,
+  ChevronDown,
+  ChevronUp,
+  X,
+  Phone,
+  Globe,
+  Briefcase,
+  Layers,
+  CheckCircle2,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { usePlatform } from '../../hooks/usePlatform';
@@ -24,7 +35,7 @@ import { EntityAvatarUpload } from './EntityAvatarUpload';
 import { toast } from 'sonner';
 
 const selectClassName =
-  'w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500';
+  'w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3.5 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all';
 
 interface CreatePartyModalProps {
   isOpen: boolean;
@@ -32,6 +43,7 @@ interface CreatePartyModalProps {
   onSuccess: (createdParty?: any) => void;
   initialPartyType?: 'PERSON' | 'ORGANIZATION';
   initialName?: string;
+  initialPrimaryOrgPartyId?: string;
 }
 
 const DEFAULT_CLASSIFICATIONS = [
@@ -51,12 +63,16 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
   onSuccess,
   initialPartyType = 'PERSON',
   initialName = '',
+  initialPrimaryOrgPartyId = '',
 }) => {
   const { session } = useAuth();
   const { tenant, members } = usePlatform();
 
+  // Wizard Step: 1 = Identity & Basics, 2 = Contact & Relationship, 3 = Location & Governance, 4 = Custom Fields (if any)
+  const [currentStep, setCurrentStep] = useState<number>(1);
+  const [showMoreDetails, setShowMoreDetails] = useState<boolean>(false);
+
   const [partyType, setPartyType] = useState<'PERSON' | 'ORGANIZATION'>(initialPartyType);
-  const [activeSection, setActiveSection] = useState<'identity' | 'contact' | 'address' | 'custom'>('identity');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [duplicateConflict, setDuplicateConflict] = useState<{ message: string; existingPartyId: string } | null>(
@@ -142,7 +158,12 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
+      setCurrentStep(1);
+      setShowMoreDetails(false);
       setPartyType(initialPartyType);
+      if (initialPrimaryOrgPartyId) {
+        setPrimaryOrgPartyId(initialPrimaryOrgPartyId);
+      }
       if (initialName) {
         if (initialPartyType === 'PERSON') {
           const parts = initialName.trim().split(' ');
@@ -182,7 +203,8 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
   };
 
   const resetForm = () => {
-    setActiveSection('identity');
+    setCurrentStep(1);
+    setShowMoreDetails(false);
     setAvatarUrl(null);
     setFirstName('');
     setMiddleName('');
@@ -231,16 +253,59 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
     setDuplicateConflict(null);
   };
 
+  const isStep1Valid = useMemo(() => {
+    if (partyType === 'PERSON') {
+      return Boolean(firstName.trim() && lastName.trim());
+    }
+    return Boolean(legalName.trim());
+  }, [partyType, firstName, lastName, legalName]);
+
+  const steps = useMemo(() => {
+    const list = [
+      { id: 1, title: 'Identity', subtitle: partyType === 'PERSON' ? 'Person' : 'Entity', icon: partyType === 'PERSON' ? User : Building2 },
+      { id: 2, title: 'Contact', subtitle: 'Channels & Role', icon: Mail },
+      { id: 3, title: 'Details', subtitle: 'Address & Governance', icon: MapPin },
+    ];
+    if (customFieldDefs.length > 0) {
+      list.push({ id: 4, title: 'Custom', subtitle: `${customFieldDefs.length} Fields`, icon: Sliders });
+    }
+    return list;
+  }, [partyType, customFieldDefs.length]);
+
+  const totalSteps = steps.length;
+
+  const handleNext = () => {
+    if (currentStep === 1 && !isStep1Valid) {
+      setError(
+        partyType === 'PERSON'
+          ? 'First Name and Last Name are required to proceed.'
+          : 'Registered Legal Name is required to proceed.'
+      );
+      return;
+    }
+    setError(null);
+    if (currentStep < totalSteps) {
+      setCurrentStep((prev) => prev + 1);
+    }
+  };
+
+  const handleBack = () => {
+    setError(null);
+    if (currentStep > 1) {
+      setCurrentStep((prev) => prev - 1);
+    }
+  };
+
   const submitParty = async (skipDeduplication = false) => {
     if (!tenant?.id) return;
     if (partyType === 'PERSON' && (!firstName.trim() || !lastName.trim())) {
       setError('First Name and Last Name are required for a Person.');
-      setActiveSection('identity');
+      setCurrentStep(1);
       return;
     }
     if (partyType === 'ORGANIZATION' && !legalName.trim()) {
       setError('Legal Name is required for an Organisation.');
-      setActiveSection('identity');
+      setCurrentStep(1);
       return;
     }
 
@@ -273,7 +338,7 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
       notesSummary: notesSummary.trim() || null,
       customData,
       skipDeduplication,
-      creationContextLog: 'Created via Aurora Directory Studio',
+      creationContextLog: 'Created via Aurora Directory Studio Wizard',
       ...(partyType === 'PERSON'
         ? {
             person: {
@@ -353,81 +418,92 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title="Register Directory Entity"
-      className="max-w-3xl w-full bg-white dark:bg-zinc-900 rounded-3xl p-6 shadow-2xl border border-zinc-200 dark:border-zinc-800 max-h-[90vh] overflow-y-auto"
+      className="max-w-3xl w-full bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col max-h-[90vh] overflow-hidden p-0"
     >
-      <div className="space-y-5">
-        <div className="flex items-center justify-between pb-3 border-b border-zinc-200 dark:border-zinc-800">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
-              <Sparkles size={18} />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-zinc-900 dark:text-white">
-                Register Directory Entity
-              </h3>
-              <p className="text-xs text-zinc-500">
-                Master People & Corporate Entity Registry
-              </p>
-            </div>
+      {/* Modal Header */}
+      <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/70 dark:bg-zinc-950/60 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+            <Sparkles size={18} />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-zinc-900 dark:text-white leading-tight">
+              Register Directory Entity
+            </h3>
+            <p className="text-xs text-zinc-500">
+              Quickly add people and organisations to your master directory
+            </p>
           </div>
         </div>
-        {/* Persona Type Switcher */}
-        <div className="grid grid-cols-2 gap-3 p-1.5 bg-zinc-100 dark:bg-zinc-950 rounded-2xl border border-zinc-200 dark:border-zinc-800">
-          <button
-            type="button"
-            onClick={() => setPartyType('PERSON')}
-            className={`flex items-center justify-center gap-2.5 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
-              partyType === 'PERSON'
-                ? 'bg-white dark:bg-zinc-900 text-sky-600 dark:text-sky-400 shadow-sm border border-zinc-200/60 dark:border-zinc-800'
-                : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
-            }`}
-          >
-            <User size={16} />
-            <span>Individual Person (Contact / Client / Director)</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setPartyType('ORGANIZATION')}
-            className={`flex items-center justify-center gap-2.5 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
-              partyType === 'ORGANIZATION'
-                ? 'bg-white dark:bg-zinc-900 text-violet-600 dark:text-violet-400 shadow-sm border border-zinc-200/60 dark:border-zinc-800'
-                : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
-            }`}
-          >
-            <Building2 size={16} />
-            <span>Corporate Entity (Organisation / Supplier / Trust)</span>
-          </button>
-        </div>
+        <button
+          onClick={onClose}
+          className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+        >
+          <X size={18} />
+        </button>
+      </div>
 
-        {/* Section Tabs */}
-        <div className="flex items-center gap-1 border-b border-zinc-200 dark:border-zinc-800 text-xs font-bold">
-          {[
-            { id: 'identity', label: '1. Identity & Role', icon: partyType === 'PERSON' ? User : Building2 },
-            { id: 'contact', label: '2. Contact & Classifications', icon: Mail },
-            { id: 'address', label: `3. Addresses (${addresses.length})`, icon: MapPin },
-            ...(customFieldDefs.length > 0
-              ? [{ id: 'custom', label: `4. Custom Fields (${customFieldDefs.length})`, icon: Sliders }]
-              : []),
-          ].map((tab) => {
-            const Icon = tab.icon;
+      {/* Modern Stepper Indicator */}
+      <div className="px-6 py-3 border-b border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/40 dark:bg-zinc-950/40 shrink-0">
+        <div className="flex items-center justify-between">
+          {steps.map((s, index) => {
+            const Icon = s.icon;
+            const isCurrent = currentStep === s.id;
+            const isCompleted = currentStep > s.id;
+            const isClickable = s.id < currentStep || (s.id === currentStep + 1 && isStep1Valid);
+
             return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveSection(tab.id as any)}
-                className={`flex items-center gap-1.5 px-3.5 py-2.5 border-b-2 transition-colors cursor-pointer ${
-                  activeSection === tab.id
-                    ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                    : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
-                }`}
-              >
-                <Icon size={14} />
-                <span>{tab.label}</span>
-              </button>
+              <React.Fragment key={s.id}>
+                <button
+                  type="button"
+                  disabled={!isClickable}
+                  onClick={() => {
+                    if (isClickable) {
+                      setError(null);
+                      setCurrentStep(s.id);
+                    }
+                  }}
+                  className={`flex items-center gap-2 group text-left cursor-pointer transition-all disabled:cursor-not-allowed ${
+                    isCurrent
+                      ? 'text-indigo-600 dark:text-indigo-400'
+                      : isCompleted
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : 'text-zinc-400 dark:text-zinc-500 opacity-70'
+                  }`}
+                >
+                  <div
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold transition-all ${
+                      isCurrent
+                        ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-500/30'
+                        : isCompleted
+                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700'
+                    }`}
+                  >
+                    {isCompleted ? <Check size={14} /> : s.id}
+                  </div>
+                  <div className="hidden sm:block">
+                    <div className="text-xs font-bold leading-none">{s.title}</div>
+                    <div className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-0.5">{s.subtitle}</div>
+                  </div>
+                </button>
+                {index < steps.length - 1 && (
+                  <div
+                    className={`flex-1 h-[2px] mx-3 rounded-full transition-colors ${
+                      currentStep > index + 1
+                        ? 'bg-emerald-500/60'
+                        : 'bg-zinc-200 dark:bg-zinc-800'
+                    }`}
+                  />
+                )}
+              </React.Fragment>
             );
           })}
         </div>
+      </div>
 
+      {/* Scrollable Content Body */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-5">
         {/* Duplicate Conflict Guardrail Banner */}
         {duplicateConflict && (
           <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 space-y-2.5">
@@ -459,6 +535,7 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
           </div>
         )}
 
+        {/* Validation / API Error Banner */}
         {error && (
           <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center gap-2.5 text-rose-600 dark:text-rose-400 text-xs font-semibold">
             <AlertCircle size={16} className="shrink-0" />
@@ -466,41 +543,80 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
           </div>
         )}
 
-        {/* SECTION 1: IDENTITY & ROLE */}
-        {activeSection === 'identity' && (
-          <div className="space-y-4">
-            <div className="p-3.5 rounded-2xl bg-zinc-50/80 dark:bg-zinc-950/60 border border-zinc-200/70 dark:border-zinc-800/70">
-              <EntityAvatarUpload
-                avatarUrl={avatarUrl}
-                partyType={partyType}
-                displayName={
-                  partyType === 'PERSON' ? `${firstName} ${lastName}`.trim() : legalName
-                }
-                size="md"
-                showControlsBeside
-                onChange={(nextUrl) => setAvatarUrl(nextUrl)}
-              />
+        {/* STEP 1: IDENTITY & BASICS */}
+        {currentStep === 1 && (
+          <div className="space-y-5">
+            {/* Persona Switcher: Clean modern cards */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setPartyType('PERSON')}
+                className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-3 ${
+                  partyType === 'PERSON'
+                    ? 'border-indigo-500/60 bg-indigo-50/50 dark:bg-indigo-500/10 text-indigo-900 dark:text-white shadow-xs ring-1 ring-indigo-500/20'
+                    : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700 text-zinc-600 dark:text-zinc-400'
+                }`}
+              >
+                <div
+                  className={`p-2.5 rounded-xl ${
+                    partyType === 'PERSON'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500'
+                  }`}
+                >
+                  <User size={18} />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-zinc-900 dark:text-white">Individual Person</div>
+                  <div className="text-[11px] text-zinc-500 dark:text-zinc-400">Contact, client, director or member</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPartyType('ORGANIZATION')}
+                className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-3 ${
+                  partyType === 'ORGANIZATION'
+                    ? 'border-violet-500/60 bg-violet-50/50 dark:bg-violet-500/10 text-violet-900 dark:text-white shadow-xs ring-1 ring-violet-500/20'
+                    : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700 text-zinc-600 dark:text-zinc-400'
+                }`}
+              >
+                <div
+                  className={`p-2.5 rounded-xl ${
+                    partyType === 'ORGANIZATION'
+                      ? 'bg-violet-600 text-white'
+                      : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500'
+                  }`}
+                >
+                  <Building2 size={18} />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-zinc-900 dark:text-white">Corporate Entity</div>
+                  <div className="text-[11px] text-zinc-500 dark:text-zinc-400">Company, supplier, trust or partner</div>
+                </div>
+              </button>
             </div>
 
+            {/* Avatar / Logo & Core Names */}
             {partyType === 'PERSON' ? (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <div className="space-y-4">
+                {/* Profile Photo / Avatar */}
+                <div className="p-3.5 rounded-2xl bg-zinc-50/70 dark:bg-zinc-950/40 border border-zinc-200/80 dark:border-zinc-800/80">
+                  <EntityAvatarUpload
+                    avatarUrl={avatarUrl}
+                    partyType="PERSON"
+                    displayName={`${firstName} ${lastName}`.trim()}
+                    size="md"
+                    showControlsBeside
+                    onChange={(nextUrl) => setAvatarUrl(nextUrl)}
+                  />
+                </div>
+
+                {/* Primary Names: Full-width 2-column grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   <div>
                     <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
-                      Salutation
-                    </label>
-                    <select className={selectClassName} value={salutation} onChange={(e) => setSalutation(e.target.value)}>
-                      <option value="">None</option>
-                      <option value="Mr">Mr</option>
-                      <option value="Ms">Ms</option>
-                      <option value="Mrs">Mrs</option>
-                      <option value="Dr">Dr</option>
-                      <option value="Prof">Prof</option>
-                    </select>
-                  </div>
-                  <div className="sm:col-span-1">
-                    <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
-                      First Name *
+                      First Name <span className="text-rose-500">*</span>
                     </label>
                     <Input
                       required
@@ -509,19 +625,9 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
                       placeholder="e.g. Sarah"
                     />
                   </div>
-                  <div className="sm:col-span-1">
+                  <div>
                     <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
-                      Middle Name
-                    </label>
-                    <Input
-                      value={middleName}
-                      onChange={(e) => setMiddleName(e.target.value)}
-                      placeholder="Optional"
-                    />
-                  </div>
-                  <div className="sm:col-span-1">
-                    <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
-                      Last Name *
+                      Last Name <span className="text-rose-500">*</span>
                     </label>
                     <Input
                       required
@@ -532,7 +638,7 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
                       Job Title / Role
@@ -545,19 +651,13 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
-                      Department
-                    </label>
-                    <Input
-                      value={department}
-                      onChange={(e) => setDepartment(e.target.value)}
-                      placeholder="e.g. Finance & Legal"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
                       Primary Organisation
                     </label>
-                    <select className={selectClassName} value={primaryOrgPartyId} onChange={(e) => setPrimaryOrgPartyId(e.target.value)}>
+                    <select
+                      className={selectClassName}
+                      value={primaryOrgPartyId}
+                      onChange={(e) => setPrimaryOrgPartyId(e.target.value)}
+                    >
                       <option value="">Independent / Unlinked</option>
                       {existingOrgs.map((org) => (
                         <option key={org.id} value={org.id}>
@@ -568,61 +668,101 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5 mb-1.5">
-                      <Calendar size={13} className="text-zinc-400" /> Date of Birth
-                    </label>
-                    <DatePicker value={dob} onChange={(val) => setDob(val)} />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
-                      Preferred Name / Nickname
-                    </label>
-                    <Input
-                      value={preferredName}
-                      onChange={(e) => setPreferredName(e.target.value)}
-                      placeholder="Optional"
-                    />
-                  </div>
-                </div>
+                {/* Optional Expandable Details */}
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowMoreDetails(!showMoreDetails)}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 cursor-pointer"
+                  >
+                    {showMoreDetails ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    <span>{showMoreDetails ? 'Hide additional identity fields' : 'Add salutation, nickname, department, DOB'}</span>
+                  </button>
 
-                <div
-                  onClick={() => setIsHitl(!isHitl)}
-                  className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 flex items-center justify-between cursor-pointer hover:border-indigo-500/40 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`p-2 rounded-xl ${
-                        isHitl ? 'bg-indigo-600 text-white' : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-500'
-                      }`}
+                  {showMoreDetails && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      className="mt-3.5 space-y-3 p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800"
                     >
-                      <Shield size={16} />
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-zinc-900 dark:text-white">
-                        Human-in-the-Loop (HITL) Governance Authority
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
+                            Salutation
+                          </label>
+                          <select className={selectClassName} value={salutation} onChange={(e) => setSalutation(e.target.value)}>
+                            <option value="">None</option>
+                            <option value="Mr">Mr</option>
+                            <option value="Ms">Ms</option>
+                            <option value="Mrs">Mrs</option>
+                            <option value="Dr">Dr</option>
+                            <option value="Prof">Prof</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
+                            Middle Name
+                          </label>
+                          <Input
+                            value={middleName}
+                            onChange={(e) => setMiddleName(e.target.value)}
+                            placeholder="Optional"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
+                            Preferred Name / Nickname
+                          </label>
+                          <Input
+                            value={preferredName}
+                            onChange={(e) => setPreferredName(e.target.value)}
+                            placeholder="Optional"
+                          />
+                        </div>
                       </div>
-                      <div className="text-[11px] text-zinc-500">
-                        Authorised to sign off on high-risk AI workflow decisions and compliance gates
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
+                            Department
+                          </label>
+                          <Input
+                            value={department}
+                            onChange={(e) => setDepartment(e.target.value)}
+                            placeholder="e.g. Finance & Operations"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5 mb-1.5">
+                            <Calendar size={13} className="text-zinc-400" /> Date of Birth
+                          </label>
+                          <DatePicker value={dob} onChange={(val) => setDob(val)} />
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={isHitl}
-                    onChange={() => {}}
-                    className="w-4 h-4 accent-indigo-600 rounded"
+                    </motion.div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* ORGANISATION FIELDS */
+              <div className="space-y-4">
+                {/* Organisation Logo */}
+                <div className="p-3.5 rounded-2xl bg-zinc-50/70 dark:bg-zinc-950/40 border border-zinc-200/80 dark:border-zinc-800/80">
+                  <EntityAvatarUpload
+                    avatarUrl={avatarUrl}
+                    partyType="ORGANIZATION"
+                    displayName={legalName}
+                    size="md"
+                    showControlsBeside
+                    onChange={(nextUrl) => setAvatarUrl(nextUrl)}
                   />
                 </div>
-              </>
-            ) : (
-              /* ORGANIZATION FIELDS */
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+                {/* Company Names: Full-width 2-column grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   <div>
                     <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
-                      Registered Legal Name *
+                      Registered Legal Name <span className="text-rose-500">*</span>
                     </label>
                     <Input
                       required
@@ -650,38 +790,13 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
                     </label>
                     <select className={selectClassName} value={orgType} onChange={(e) => setOrgType(e.target.value)}>
                       <option value="Corporate">Corporate (Pty Ltd / Inc / LLC)</option>
-                      <option value="Trust">Trust / Superannuation Fund</option>
+                      <option value="Trust">Trust / Super Fund</option>
                       <option value="Partnership">Partnership</option>
-                      <option value="Government">Government / Public Sector</option>
+                      <option value="Government">Government / Public</option>
                       <option value="Non-Profit">Non-Profit / Charity</option>
                       <option value="Sole Trader">Sole Trader</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
-                      Tax Identifier (ABN / EIN / VAT)
-                    </label>
-                    <Input
-                      value={taxId}
-                      onChange={(e) => setTaxId(e.target.value)}
-                      placeholder="e.g. 51 824 753 556"
-                      className="font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
-                      Company Number (ACN / CRN)
-                    </label>
-                    <Input
-                      value={companyNumber}
-                      onChange={(e) => setCompanyNumber(e.target.value)}
-                      placeholder="e.g. 004 085 616"
-                      className="font-mono"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
                       Industry Sector
@@ -689,7 +804,7 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
                     <Input
                       value={industry}
                       onChange={(e) => setIndustry(e.target.value)}
-                      placeholder="e.g. Financial Services, Construction"
+                      placeholder="e.g. Financial Services"
                     />
                   </div>
                   <div>
@@ -709,59 +824,81 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
                       ))}
                     </select>
                   </div>
-                  <div>
-                    <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
-                      Incorporation Date
-                    </label>
-                    <DatePicker value={incDate} onChange={(val) => setIncDate(val)} />
-                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
-                      Default Payment Terms
-                    </label>
-                    <select className={selectClassName} value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)}>
-                      <option value="DUE_ON_RECEIPT">Due on Receipt</option>
-                      <option value="NET_7">Net 7 Days</option>
-                      <option value="NET_14">Net 14 Days</option>
-                      <option value="NET_30">Net 30 Days</option>
-                      <option value="NET_60">Net 60 Days</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
-                      Credit Limit ($)
-                    </label>
-                    <Input
-                      type="number"
-                      value={creditLimit}
-                      onChange={(e) => setCreditLimit(e.target.value)}
-                      placeholder="e.g. 50000"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
-                      Company Size
-                    </label>
-                    <select className={selectClassName} value={companySize} onChange={(e) => setCompanySize(e.target.value)}>
-                      <option value="">Select Size...</option>
-                      <option value="1-10">1–10 employees</option>
-                      <option value="11-50">11–50 employees</option>
-                      <option value="51-200">51–200 employees</option>
-                      <option value="201-1000">201–1,000 employees</option>
-                      <option value="1000+">1,000+ employees</option>
-                    </select>
-                  </div>
+                {/* Optional Expandable Details */}
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowMoreDetails(!showMoreDetails)}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-violet-600 dark:text-violet-400 hover:text-violet-700 cursor-pointer"
+                  >
+                    {showMoreDetails ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    <span>{showMoreDetails ? 'Hide registration & legal identifiers' : 'Add ABN/Tax ID, Company No, Inc. Date, Size'}</span>
+                  </button>
+
+                  {showMoreDetails && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      className="mt-3.5 space-y-3 p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800"
+                    >
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
+                            Tax Identifier (ABN / EIN / VAT)
+                          </label>
+                          <Input
+                            value={taxId}
+                            onChange={(e) => setTaxId(e.target.value)}
+                            placeholder="e.g. 51 824 753 556"
+                            className="font-mono text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
+                            Company Number (ACN / CRN)
+                          </label>
+                          <Input
+                            value={companyNumber}
+                            onChange={(e) => setCompanyNumber(e.target.value)}
+                            placeholder="e.g. 004 085 616"
+                            className="font-mono text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
+                            Company Size
+                          </label>
+                          <select className={selectClassName} value={companySize} onChange={(e) => setCompanySize(e.target.value)}>
+                            <option value="">Select Size...</option>
+                            <option value="1-10">1–10 employees</option>
+                            <option value="11-50">11–50 employees</option>
+                            <option value="51-200">51–200 employees</option>
+                            <option value="201-1000">201–1,000 employees</option>
+                            <option value="1000+">1,000+ employees</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
+                            Incorporation Date
+                          </label>
+                          <DatePicker value={incDate} onChange={(val) => setIncDate(val)} />
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
                 </div>
-              </>
+              </div>
             )}
           </div>
         )}
 
-        {/* SECTION 2: CONTACT & CLASSIFICATIONS */}
-        {activeSection === 'contact' && (
+        {/* STEP 2: CONTACT & CLASSIFICATIONS */}
+        {currentStep === 2 && (
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -772,7 +909,7 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="contact@domain.com"
+                  placeholder="name@domain.com"
                 />
               </div>
               <div>
@@ -824,12 +961,12 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
               </div>
             </div>
 
-            {/* Classifications Multi-Select */}
-            <div>
-              <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
-                Directory Classifications (Select all that apply)
+            {/* Classifications Chips */}
+            <div className="p-4 rounded-2xl bg-zinc-50/70 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 space-y-2">
+              <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block">
+                Directory Classifications <span className="text-[11px] font-normal text-zinc-400">(Select all that apply)</span>
               </label>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-1.5 pt-1">
                 {DEFAULT_CLASSIFICATIONS.map((cls) => {
                   const active = classifications.includes(cls);
                   return (
@@ -837,13 +974,14 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
                       key={cls}
                       type="button"
                       onClick={() => toggleClassification(cls)}
-                      className={`px-3 py-1 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                         active
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                          : 'bg-zinc-50 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300'
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700'
                       }`}
                     >
-                      {cls}
+                      {active && <Check size={12} />}
+                      <span>{cls}</span>
                     </button>
                   );
                 })}
@@ -853,7 +991,7 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
-                  Internal Account Owner
+                  Account Owner
                 </label>
                 <select
                   className={selectClassName}
@@ -896,204 +1034,313 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
                 </select>
               </div>
             </div>
+          </div>
+        )}
 
+        {/* STEP 3: LOCATION & GOVERNANCE */}
+        {currentStep === 3 && (
+          <div className="space-y-4">
+            {/* Address Management */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                  Addresses ({addresses.length})
+                </span>
+                <span className="text-[11px] text-zinc-400">Optional - can be added later</span>
+              </div>
+
+              {addresses.map((addr, idx) => (
+                <div
+                  key={idx}
+                  className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 space-y-2.5"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <MapPin size={14} className="text-indigo-500" />
+                      <select
+                        value={addr.type}
+                        onChange={(e) => {
+                          const next = [...addresses];
+                          next[idx].type = e.target.value;
+                          setAddresses(next);
+                        }}
+                        className="text-xs font-bold bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1"
+                      >
+                        <option value="PRIMARY">Primary Address</option>
+                        <option value="BILLING">Billing Address</option>
+                        <option value="SHIPPING">Shipping / Delivery Address</option>
+                        <option value="PHYSICAL">Physical / Registered Office</option>
+                        <option value="MAILING">Postal / Mailing Address</option>
+                      </select>
+                    </div>
+                    {addresses.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setAddresses(addresses.filter((_, i) => i !== idx))}
+                        className="text-rose-500 hover:text-rose-600 text-xs flex items-center gap-1 cursor-pointer"
+                      >
+                        <Trash2 size={13} /> Remove
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <Input
+                      value={addr.line1}
+                      onChange={(e) => {
+                        const next = [...addresses];
+                        next[idx].line1 = e.target.value;
+                        setAddresses(next);
+                      }}
+                      placeholder="Street Address Line 1"
+                    />
+                    <Input
+                      value={addr.line2}
+                      onChange={(e) => {
+                        const next = [...addresses];
+                        next[idx].line2 = e.target.value;
+                        setAddresses(next);
+                      }}
+                      placeholder="Suite / Unit / Building (Line 2)"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <Input
+                      value={addr.city}
+                      onChange={(e) => {
+                        const next = [...addresses];
+                        next[idx].city = e.target.value;
+                        setAddresses(next);
+                      }}
+                      placeholder="City / Suburb"
+                    />
+                    <Input
+                      value={addr.state}
+                      onChange={(e) => {
+                        const next = [...addresses];
+                        next[idx].state = e.target.value;
+                        setAddresses(next);
+                      }}
+                      placeholder="State / Province"
+                    />
+                    <Input
+                      value={addr.postalCode}
+                      onChange={(e) => {
+                        const next = [...addresses];
+                        next[idx].postalCode = e.target.value;
+                        setAddresses(next);
+                      }}
+                      placeholder="Postcode / ZIP"
+                    />
+                    <Input
+                      value={addr.country}
+                      onChange={(e) => {
+                        const next = [...addresses];
+                        next[idx].country = e.target.value;
+                        setAddresses(next);
+                      }}
+                      placeholder="Country"
+                    />
+                  </div>
+                </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={() =>
+                  setAddresses([
+                    ...addresses,
+                    {
+                      type: 'BILLING',
+                      line1: '',
+                      line2: '',
+                      city: '',
+                      state: '',
+                      postalCode: '',
+                      country: 'Australia',
+                      isPrimary: false,
+                    },
+                  ])
+                }
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+              >
+                <Plus size={14} /> Add Another Address (e.g. Billing or Branch)
+              </button>
+            </div>
+
+            {/* Governance / Corporate Operations */}
+            {partyType === 'PERSON' ? (
+              <div
+                onClick={() => setIsHitl(!isHitl)}
+                className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition-colors ${
+                  isHitl
+                    ? 'bg-indigo-50/50 dark:bg-indigo-500/10 border-indigo-500/40'
+                    : 'bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`p-2 rounded-xl ${
+                      isHitl ? 'bg-indigo-600 text-white' : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-500'
+                    }`}
+                  >
+                    <Shield size={16} />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-zinc-900 dark:text-white">
+                      Human-in-the-Loop (HITL) Governance Authority
+                    </div>
+                    <div className="text-[11px] text-zinc-500">
+                      Authorised to sign off on high-risk AI workflow decisions and compliance gates
+                    </div>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={isHitl}
+                  onChange={() => {}}
+                  className="w-4 h-4 accent-indigo-600 rounded"
+                />
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800">
+                <div>
+                  <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
+                    Default Payment Terms
+                  </label>
+                  <select className={selectClassName} value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)}>
+                    <option value="DUE_ON_RECEIPT">Due on Receipt</option>
+                    <option value="NET_7">Net 7 Days</option>
+                    <option value="NET_14">Net 14 Days</option>
+                    <option value="NET_30">Net 30 Days</option>
+                    <option value="NET_60">Net 60 Days</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
+                    Credit Limit ($)
+                  </label>
+                  <Input
+                    type="number"
+                    value={creditLimit}
+                    onChange={(e) => setCreditLimit(e.target.value)}
+                    placeholder="e.g. 50000"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Notes Summary */}
             <div>
               <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
-                Executive Summary / Notes
+                Executive Notes & Context
               </label>
               <textarea
                 rows={2}
                 value={notesSummary}
                 onChange={(e) => setNotesSummary(e.target.value)}
-                placeholder="Background context, key relationship notes, or onboarding instructions..."
-                className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                placeholder="Background notes, onboarding instructions, or relationship history..."
+                className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3.5 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
               />
             </div>
           </div>
         )}
 
-        {/* SECTION 3: ADDRESSES */}
-        {activeSection === 'address' && (
-          <div className="space-y-3">
-            {addresses.map((addr, idx) => (
-              <div
-                key={idx}
-                className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 space-y-3"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <MapPin size={14} className="text-indigo-500" />
+        {/* STEP 4: CUSTOM FIELDS (IF CONFIGURED) */}
+        {currentStep === 4 && customFieldDefs.length > 0 && (
+          <div className="space-y-4">
+            <div className="text-xs text-zinc-500">
+              Tenant-configured metadata fields for {partyType === 'PERSON' ? 'people' : 'organisations'}.
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {customFieldDefs.map((field: any) => (
+                <div key={field.id}>
+                  <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
+                    {field.label} {field.required ? '*' : ''}
+                  </label>
+                  {field.type === 'select' ? (
                     <select
-                      value={addr.type}
-                      onChange={(e) => {
-                        const next = [...addresses];
-                        next[idx].type = e.target.value;
-                        setAddresses(next);
-                      }}
-                      className="text-xs font-bold bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1"
+                      className={selectClassName}
+                      value={customData[field.key] || ''}
+                      onChange={(e) => setCustomData({ ...customData, [field.key]: e.target.value })}
                     >
-                      <option value="PRIMARY">Primary Address</option>
-                      <option value="BILLING">Billing Address</option>
-                      <option value="SHIPPING">Shipping / Delivery Address</option>
-                      <option value="PHYSICAL">Physical / Registered Office</option>
-                      <option value="MAILING">Postal / Mailing Address</option>
+                      <option value="">Select...</option>
+                      {(field.options || []).map((opt: string) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
                     </select>
-                  </div>
-                  {addresses.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setAddresses(addresses.filter((_, i) => i !== idx))}
-                      className="text-rose-500 hover:text-rose-600 text-xs flex items-center gap-1 cursor-pointer"
-                    >
-                      <Trash2 size={13} /> Remove
-                    </button>
+                  ) : field.type === 'boolean' ? (
+                    <label className="flex items-center gap-2 text-xs cursor-pointer mt-2">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(customData[field.key])}
+                        onChange={(e) => setCustomData({ ...customData, [field.key]: e.target.checked })}
+                        className="w-4 h-4 rounded accent-indigo-600"
+                      />
+                      <span>Enabled / Yes</span>
+                    </label>
+                  ) : (
+                    <Input
+                      type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
+                      value={customData[field.key] || ''}
+                      onChange={(e) => setCustomData({ ...customData, [field.key]: e.target.value })}
+                      placeholder={field.placeholder || `Enter ${field.label}...`}
+                    />
                   )}
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <Input
-                    value={addr.line1}
-                    onChange={(e) => {
-                      const next = [...addresses];
-                      next[idx].line1 = e.target.value;
-                      setAddresses(next);
-                    }}
-                    placeholder="Street Address Line 1"
-                  />
-                  <Input
-                    value={addr.line2}
-                    onChange={(e) => {
-                      const next = [...addresses];
-                      next[idx].line2 = e.target.value;
-                      setAddresses(next);
-                    }}
-                    placeholder="Suite / Unit / Building (Line 2)"
-                  />
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                  <Input
-                    value={addr.city}
-                    onChange={(e) => {
-                      const next = [...addresses];
-                      next[idx].city = e.target.value;
-                      setAddresses(next);
-                    }}
-                    placeholder="City / Suburb"
-                  />
-                  <Input
-                    value={addr.state}
-                    onChange={(e) => {
-                      const next = [...addresses];
-                      next[idx].state = e.target.value;
-                      setAddresses(next);
-                    }}
-                    placeholder="State / Province"
-                  />
-                  <Input
-                    value={addr.postalCode}
-                    onChange={(e) => {
-                      const next = [...addresses];
-                      next[idx].postalCode = e.target.value;
-                      setAddresses(next);
-                    }}
-                    placeholder="Postcode / ZIP"
-                  />
-                  <Input
-                    value={addr.country}
-                    onChange={(e) => {
-                      const next = [...addresses];
-                      next[idx].country = e.target.value;
-                      setAddresses(next);
-                    }}
-                    placeholder="Country"
-                  />
-                </div>
-              </div>
-            ))}
-
-            <button
-              type="button"
-              onClick={() =>
-                setAddresses([
-                  ...addresses,
-                  {
-                    type: 'BILLING',
-                    line1: '',
-                    line2: '',
-                    city: '',
-                    state: '',
-                    postalCode: '',
-                    country: 'Australia',
-                    isPrimary: false,
-                  },
-                ])
-              }
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-            >
-              <Plus size={14} /> Add Another Address (e.g. Billing / Shipping)
-            </button>
+              ))}
+            </div>
           </div>
         )}
+      </div>
 
-        {/* SECTION 4: CUSTOM METADATA FIELDS */}
-        {activeSection === 'custom' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {customFieldDefs.map((field: any) => (
-              <div key={field.id}>
-                <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
-                  {field.label} {field.required ? '*' : ''}
-                </label>
-                {field.type === 'select' ? (
-                  <select
-                    className={selectClassName}
-                    value={customData[field.key] || ''}
-                    onChange={(e) => setCustomData({ ...customData, [field.key]: e.target.value })}
-                  >
-                    <option value="">Select...</option>
-                    {(field.options || []).map((opt: string) => (
-                      <option key={opt} value={opt}>
-                        {opt}
-                      </option>
-                    ))}
-                  </select>
-                ) : field.type === 'boolean' ? (
-                  <label className="flex items-center gap-2 text-xs cursor-pointer mt-2">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(customData[field.key])}
-                      onChange={(e) => setCustomData({ ...customData, [field.key]: e.target.checked })}
-                      className="w-4 h-4 rounded accent-indigo-600"
-                    />
-                    <span>Enabled / Yes</span>
-                  </label>
-                ) : (
-                  <Input
-                    type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
-                    value={customData[field.key] || ''}
-                    onChange={(e) => setCustomData({ ...customData, [field.key]: e.target.value })}
-                    placeholder={field.placeholder || `Enter ${field.label}...`}
-                  />
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="flex items-center justify-between w-full pt-4 border-t border-zinc-200 dark:border-zinc-800">
-          <div className="text-xs text-zinc-400">
-            All fields sync automatically across Modules, Inbox, Service Desk & Finance.
-          </div>
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" onClick={onClose}>
+      {/* Modal Sticky Footer with Wizard Navigation */}
+      <div className="px-6 py-4 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-950/60 flex items-center justify-between shrink-0">
+        <div>
+          {currentStep === 1 ? (
+            <Button variant="ghost" size="sm" onClick={onClose}>
               Cancel
             </Button>
+          ) : (
+            <Button variant="outline" size="sm" onClick={handleBack} className="gap-1.5">
+              <ArrowLeft size={14} />
+              <span>Back</span>
+            </Button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Quick Create option if required fields are satisfied and not on last step */}
+          {currentStep < totalSteps && isStep1Valid && (
+            <button
+              type="button"
+              onClick={() => submitParty(false)}
+              disabled={loading}
+              className="text-xs font-bold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 px-3 py-2 cursor-pointer transition-colors"
+            >
+              {loading ? 'Creating...' : `Quick Create (${partyType === 'PERSON' ? 'Person' : 'Org'})`}
+            </button>
+          )}
+
+          {currentStep < totalSteps ? (
             <Button
               variant="primary"
+              size="sm"
+              onClick={handleNext}
+              disabled={!isStep1Valid}
+              className="gap-1.5 px-5"
+            >
+              <span>Next</span>
+              <ArrowRight size={14} />
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              size="sm"
               onClick={() => submitParty(false)}
-              disabled={
-                loading ||
-                (partyType === 'PERSON' ? !firstName.trim() || !lastName.trim() : !legalName.trim())
-              }
+              disabled={loading || !isStep1Valid}
               className="gap-2 px-6"
             >
               {loading ? (
@@ -1108,7 +1355,7 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
                 </>
               )}
             </Button>
-          </div>
+          )}
         </div>
       </div>
     </AuroraModal>

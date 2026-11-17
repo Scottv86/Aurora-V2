@@ -1432,7 +1432,7 @@ const BlockThumbnail = ({ type }: { type: string }) => {
               <Building2 size={10} className="text-indigo-500 shrink-0" />
               <div className="h-1 w-2/3 bg-indigo-500/20 rounded-full" />
             </div>
-            <span className="text-[7px] font-black text-indigo-500 uppercase">360°</span>
+            <span className="text-[7px] font-black text-indigo-500 uppercase">Directory</span>
           </div>
         </div>
       ) : type === 'calculation' ? (
@@ -5494,7 +5494,7 @@ export const ModuleEditor = () => {
                       </span>
                     </div>
                     <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold uppercase shrink-0">
-                      360° Directory
+                      Directory
                     </span>
                   </div>
                 </div>
@@ -7565,7 +7565,7 @@ export const ModuleEditor = () => {
                       </span>
                     </div>
                     <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold uppercase shrink-0">
-                      360° Directory
+                      Directory
                     </span>
                   </div>
                 </div>
@@ -8659,7 +8659,7 @@ export const ModuleEditor = () => {
                       </span>
                     </div>
                     <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold uppercase shrink-0">
-                      360° Directory
+                      Directory
                     </span>
                   </div>
                 </div>
@@ -15841,7 +15841,7 @@ export const ModuleEditor = () => {
                               </span>
                             </div>
                             <p className="text-[10px] text-zinc-500 leading-relaxed">
-                              Links records to the centralized People &amp; Organisations Directory with MS365 hover profile cards and 360° ecosystem tracking.
+                              Links records to the centralized People &amp; Organisations Directory with hover profile cards and linked activity tracking.
                             </p>
                           </div>
 

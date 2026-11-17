@@ -13,6 +13,7 @@ import { PartyProfileCardProvider } from './context/PartyProfileCardContext';
 import { ServiceDeskProvider } from './context/ServiceDeskContext';
 import { ChatProvider } from './context/ChatContext';
 import { AIContextProvider } from './context/AIContextProvider';
+import { ActiveEntityProvider } from './context/ActiveEntityContext';
 import { ModalStackProvider } from './context/ModalStackContext';
 import { NewModuleModalProvider } from './context/NewModuleModalContext';
 import { NewModuleModal } from './components/Modals/NewModuleModal';
@@ -269,7 +270,8 @@ const App = () => {
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <AIContextProvider>
-            <PlatformProvider>
+            <ActiveEntityProvider>
+              <PlatformProvider>
               <BrandTokenApplier />
               <DigitalTwinProvider>
                 <ServiceDeskProvider>
@@ -569,6 +571,7 @@ const App = () => {
                 </ServiceDeskProvider>
           </DigitalTwinProvider>
             </PlatformProvider>
+            </ActiveEntityProvider>
           </AIContextProvider>
         </AuthProvider>
       </QueryClientProvider>

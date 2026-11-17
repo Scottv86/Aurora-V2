@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useRegisterActiveEntity } from '../../context/ActiveEntityContext';
 import { 
   Activity, 
   Trash2, 
@@ -49,6 +50,30 @@ export const TeamDetailView = () => {
       setBreadcrumbOverride(id, team.name);
     }
   }, [id, team?.name, setBreadcrumbOverride]);
+
+  // Real-time AI Assistant active entity registration
+  const activeTeamContext = useMemo(() => {
+    if (!team || !team.id) return null;
+    return {
+      domain: 'workforce_team' as const,
+      id: String(team.id),
+      title: team.name || 'Workforce Team',
+      subtitle: `Team • ${team.members?.length || 0} Members`,
+      status: 'ACTIVE',
+      activeTab,
+      keyAttributes: {
+        'Team Name': team.name,
+        'Description': team.description || null,
+        'Member Count': team.members?.length || 0,
+      },
+      rawUrl: window.location.pathname + window.location.search,
+    };
+  }, [team, activeTab]);
+
+  useRegisterActiveEntity(activeTeamContext, {
+    priority: 10,
+    enabled: Boolean(team?.id),
+  });
 
   const handleSave = async () => {
     setIsSaving(true);

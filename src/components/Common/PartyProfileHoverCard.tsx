@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import {
   User,
@@ -53,6 +54,40 @@ interface PartyProfileHoverCardProps {
   onRefresh: () => void;
 }
 
+const CARD_WIDTH = 390;
+const CARD_DEFAULT_HEIGHT = 380;
+const VIEWPORT_PADDING = 12;
+
+function computeCardCoords(
+  anchorRect: DOMRect,
+  cardHeight: number,
+  cardWidth = CARD_WIDTH
+): { top: number; left: number } {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  // Prefer placing below anchor; if insufficient viewport room, place above
+  let top = anchorRect.bottom + 8;
+  if (top + cardHeight > vh - VIEWPORT_PADDING) {
+    const aboveTop = anchorRect.top - cardHeight - 8;
+    top =
+      aboveTop >= VIEWPORT_PADDING
+        ? aboveTop
+        : Math.max(VIEWPORT_PADDING, vh - cardHeight - VIEWPORT_PADDING);
+  }
+
+  // Horizontal positioning with viewport boundary clamping
+  let left = anchorRect.left;
+  if (left + cardWidth > vw - VIEWPORT_PADDING) {
+    left = Math.max(VIEWPORT_PADDING, vw - cardWidth - VIEWPORT_PADDING);
+  }
+  if (left < VIEWPORT_PADDING) {
+    left = VIEWPORT_PADDING;
+  }
+
+  return { top, left };
+}
+
 export const PartyProfileHoverCard: React.FC<PartyProfileHoverCardProps> = ({
   partyId,
   anchorRect,
@@ -71,6 +106,7 @@ export const PartyProfileHoverCard: React.FC<PartyProfileHoverCardProps> = ({
   const navigate = useNavigate();
   const { session } = useAuth();
   const { tenant } = usePlatform();
+  const cardRef = useRef<HTMLDivElement>(null);
 
   const [activeTab, setActiveTab] = useState<'overview' | 'linked' | 'relationships'>('overview');
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -78,6 +114,7 @@ export const PartyProfileHoverCard: React.FC<PartyProfileHoverCardProps> = ({
   const [quickText, setQuickText] = useState('');
   const [quickDueAt, setQuickDueAt] = useState('');
   const [isSavingQuick, setIsSavingQuick] = useState(false);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
 
   // Reset tab when switching only if not navigating history
   useEffect(() => {
@@ -85,20 +122,58 @@ export const PartyProfileHoverCard: React.FC<PartyProfileHoverCardProps> = ({
     setQuickText('');
   }, [partyId]);
 
-  // Smart viewport positioning
-  const cardWidth = 390;
-  const cardHeight = 490;
-  const padding = 14;
+  // Compute viewport-clamped position dynamically based on actual rendered card height
+  useLayoutEffect(() => {
+    if (!anchorRect) {
+      setCoords(null);
+      return;
+    }
 
-  let top = anchorRect.bottom + 8;
-  let left = anchorRect.left;
+    const updateCoords = () => {
+      const height = cardRef.current?.offsetHeight || CARD_DEFAULT_HEIGHT;
+      const width = cardRef.current?.offsetWidth || CARD_WIDTH;
+      setCoords(computeCardCoords(anchorRect, height, width));
+    };
 
-  if (top + cardHeight > window.innerHeight - padding) {
-    top = Math.max(padding, anchorRect.top - cardHeight - 8);
-  }
-  if (left + cardWidth > window.innerWidth - padding) {
-    left = Math.max(padding, window.innerWidth - cardWidth - padding);
-  }
+    updateCoords();
+
+    let ro: ResizeObserver | null = null;
+    if (cardRef.current && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => {
+        updateCoords();
+      });
+      ro.observe(cardRef.current);
+    }
+
+    return () => {
+      if (ro) ro.disconnect();
+    };
+  }, [anchorRect, data, activeTab, quickMode, isLoading, partyId]);
+
+  // Close on Escape key
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  // Close on outside click when pinned
+  useEffect(() => {
+    if (!isPinned) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (cardRef.current && !cardRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [isPinned, onClose]);
+
+  const activeCoords = coords ?? computeCardCoords(anchorRect, CARD_DEFAULT_HEIGHT, CARD_WIDTH);
 
   const isOrg = data?.partyType === 'ORGANIZATION';
   const displayName =
@@ -215,12 +290,26 @@ export const PartyProfileHoverCard: React.FC<PartyProfileHoverCardProps> = ({
   };
 
   return createPortal(
-    <div
-      style={{ top, left, width: cardWidth }}
+    <motion.div
+      key={partyId}
+      ref={cardRef}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.12, ease: 'easeOut' }}
+      style={{
+        position: 'fixed',
+        top: activeCoords.top,
+        left: activeCoords.left,
+        width: CARD_WIDTH,
+        maxHeight: 'calc(100vh - 24px)',
+        zIndex: 9999,
+      }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onClick={(e) => e.stopPropagation()}
-      className="fixed z-[9999] bg-white dark:bg-zinc-900 border border-zinc-200/90 dark:border-zinc-800 rounded-2xl shadow-2xl overflow-hidden text-zinc-900 dark:text-zinc-100 animate-in fade-in zoom-in-95 duration-150"
+      className="bg-white dark:bg-zinc-900 border border-zinc-200/90 dark:border-zinc-800 rounded-2xl shadow-2xl shadow-zinc-950/20 dark:shadow-black/60 overflow-hidden text-zinc-900 dark:text-zinc-100"
+      role="dialog"
+      aria-label={`Profile card for ${displayName}`}
     >
       {/* Top Banner Accent */}
       <div
@@ -264,8 +353,10 @@ export const PartyProfileHoverCard: React.FC<PartyProfileHoverCardProps> = ({
             type="button"
             onClick={onPinToggle}
             title={isPinned ? 'Unpin card' : 'Pin card to screen'}
-            className={`p-1.5 rounded-lg backdrop-blur-md transition-colors cursor-pointer ${
-              isPinned ? 'bg-white/30 text-white' : 'bg-black/20 text-white/80 hover:bg-black/35 hover:text-white'
+            className={`p-1.5 rounded-lg border backdrop-blur-md transition-colors cursor-pointer ${
+              isPinned
+                ? 'bg-white/30 border-white/40 text-white shadow-xs'
+                : 'bg-black/25 border-white/10 text-white/90 hover:bg-black/40 hover:text-white'
             }`}
           >
             {isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
@@ -274,7 +365,7 @@ export const PartyProfileHoverCard: React.FC<PartyProfileHoverCardProps> = ({
             type="button"
             onClick={onClose}
             title="Close card"
-            className="p-1.5 rounded-lg bg-black/20 text-white/80 hover:bg-black/35 hover:text-white backdrop-blur-md transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg bg-black/25 border border-white/10 text-white/90 hover:bg-black/40 hover:text-white backdrop-blur-md transition-colors cursor-pointer"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -305,7 +396,7 @@ export const PartyProfileHoverCard: React.FC<PartyProfileHoverCardProps> = ({
           </div>
 
           {/* Quick Action Buttons */}
-          <div className="flex items-center gap-1 pb-0.5">
+          <div className="flex items-center gap-1.5 pb-0.5">
             {data?.email && (
               <button
                 type="button"
@@ -314,7 +405,7 @@ export const PartyProfileHoverCard: React.FC<PartyProfileHoverCardProps> = ({
                   navigate(`/workspace/apps/inbox?composeTo=${encodeURIComponent(data.email!)}`);
                 }}
                 title={`Email ${data.email} in Aurora Inbox`}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-semibold transition-colors shadow-xs cursor-pointer"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white text-[11px] font-semibold transition-all shadow-xs hover:shadow cursor-pointer shrink-0"
               >
                 <Mail className="w-3 h-3" />
                 <span>Email</span>
@@ -323,26 +414,28 @@ export const PartyProfileHoverCard: React.FC<PartyProfileHoverCardProps> = ({
             <button
               type="button"
               onClick={() => setQuickMode((prev) => (prev === 'note' ? 'none' : 'note'))}
-              title="Add Quick Note"
-              className={`p-1.5 rounded-lg border text-xs transition-colors cursor-pointer ${
+              title={quickMode === 'note' ? 'Close Quick Note' : 'Add Quick Note'}
+              className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg border text-[11px] font-medium transition-all shadow-2xs hover:shadow-xs cursor-pointer shrink-0 ${
                 quickMode === 'note'
-                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-400'
-                  : 'border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'
+                  ? 'bg-amber-100 dark:bg-amber-950/70 border-amber-300 dark:border-amber-700/80 text-amber-800 dark:text-amber-200 shadow-xs'
+                  : 'bg-zinc-100 dark:bg-zinc-800 border-zinc-200/90 dark:border-zinc-700 hover:bg-zinc-200/70 dark:hover:bg-zinc-700/80 text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white'
               }`}
             >
-              <StickyNote className="w-3.5 h-3.5" />
+              <StickyNote className="w-3 h-3 text-amber-500 dark:text-amber-400" />
+              <span>Note</span>
             </button>
             <button
               type="button"
               onClick={() => setQuickMode((prev) => (prev === 'reminder' ? 'none' : 'reminder'))}
-              title="Schedule Quick Reminder"
-              className={`p-1.5 rounded-lg border text-xs transition-colors cursor-pointer ${
+              title={quickMode === 'reminder' ? 'Close Quick Reminder' : 'Schedule Quick Reminder'}
+              className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg border text-[11px] font-medium transition-all shadow-2xs hover:shadow-xs cursor-pointer shrink-0 ${
                 quickMode === 'reminder'
-                  ? 'bg-purple-500/15 border-purple-500/40 text-purple-600 dark:text-purple-400'
-                  : 'border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300'
+                  ? 'bg-purple-100 dark:bg-purple-950/70 border-purple-300 dark:border-purple-700/80 text-purple-800 dark:text-purple-200 shadow-xs'
+                  : 'bg-zinc-100 dark:bg-zinc-800 border-zinc-200/90 dark:border-zinc-700 hover:bg-zinc-200/70 dark:hover:bg-zinc-700/80 text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white'
               }`}
             >
-              <Bell className="w-3.5 h-3.5" />
+              <Bell className="w-3 h-3 text-purple-500 dark:text-purple-400" />
+              <span>Remind</span>
             </button>
             <button
               type="button"
@@ -350,11 +443,11 @@ export const PartyProfileHoverCard: React.FC<PartyProfileHoverCardProps> = ({
                 onClose();
                 navigate(`/workspace/apps/directory/${partyId}`);
               }}
-              title="Open Full 360° Directory Profile"
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-[11px] font-semibold text-zinc-700 dark:text-zinc-200 transition-colors cursor-pointer"
+              title="Open Directory Profile"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border bg-zinc-100 dark:bg-zinc-800 border-zinc-200/90 dark:border-zinc-700 hover:bg-zinc-200/70 dark:hover:bg-zinc-700/80 text-[11px] font-semibold text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white transition-all shadow-2xs hover:shadow-xs cursor-pointer shrink-0"
             >
-              <span>360°</span>
-              <ExternalLink className="w-3 h-3" />
+              <span>Profile</span>
+              <ExternalLink className="w-3 h-3 text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-200" />
             </button>
           </div>
         </div>
@@ -486,7 +579,7 @@ export const PartyProfileHoverCard: React.FC<PartyProfileHoverCardProps> = ({
                   className="text-[10px] px-2 py-1 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700"
                 />
               ) : (
-                <span className="text-[10px] text-zinc-400">Saved to 360° Timeline & Notes</span>
+                <span className="text-[10px] text-zinc-400">Saved to Timeline & Notes</span>
               )}
               <button
                 type="button"
@@ -890,7 +983,7 @@ export const PartyProfileHoverCard: React.FC<PartyProfileHoverCardProps> = ({
               }}
               className="w-full py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 font-bold text-[11px] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
             >
-              <span>Explore Full 360° Linked Ecosystem</span>
+              <span>View All Linked Records</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
@@ -942,7 +1035,7 @@ export const PartyProfileHoverCard: React.FC<PartyProfileHoverCardProps> = ({
           </div>
         )}
       </div>
-    </div>,
+    </motion.div>,
     document.body
   );
 };

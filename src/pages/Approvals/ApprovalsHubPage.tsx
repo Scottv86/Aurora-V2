@@ -22,6 +22,7 @@ import { usePlatform } from '../../context/PlatformContext';
 import { useAuth } from '../../hooks/useAuth';
 import { API_BASE_URL } from '../../config';
 import { toast } from 'sonner';
+import { useRegisterActiveEntity } from '../../context/ActiveEntityContext';
 
 interface ApprovalItem {
   id: string;
@@ -59,6 +60,33 @@ export const ApprovalsHubPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
   const [activeDetailItem, setActiveDetailItem] = useState<ApprovalItem | null>(null);
+
+  // Real-time AI Assistant active entity registration
+  const activeApprovalContext = useMemo(() => {
+    if (!activeDetailItem || !activeDetailItem.id) return null;
+    return {
+      domain: 'approval_item' as const,
+      id: String(activeDetailItem.id),
+      title: activeDetailItem.title,
+      subtitle: `${activeDetailItem.category} Approval • ${activeDetailItem.urgency || 'MEDIUM'} Priority`,
+      status: activeDetailItem.status,
+      keyAttributes: {
+        'Category': activeDetailItem.category,
+        'Requester': activeDetailItem.requester?.name || null,
+        'Requested Amount': activeDetailItem.amount !== undefined ? `${activeDetailItem.currency || '$'}${activeDetailItem.amount.toLocaleString()}` : null,
+        'Urgency': activeDetailItem.urgency,
+        'Submitted At': activeDetailItem.submittedAt ? new Date(activeDetailItem.submittedAt).toLocaleString() : null,
+        'Description': activeDetailItem.description || null,
+        'Quorum Progress': `${activeDetailItem.quorum?.current || 0} / ${activeDetailItem.quorum?.required || 1} required`,
+      },
+      rawUrl: window.location.pathname + window.location.search,
+    };
+  }, [activeDetailItem]);
+
+  useRegisterActiveEntity(activeApprovalContext, {
+    priority: 25,
+    enabled: Boolean(activeDetailItem?.id),
+  });
   
   // Decision modal state
   const [decisionNotes, setDecisionNotes] = useState('');

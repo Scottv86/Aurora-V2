@@ -69,6 +69,8 @@ import {
   isFieldMaskedBySecurity,
   formatMaskedFieldValue,
 } from '../../utils/fieldSecurity';
+import { useRegisterActiveEntity } from '../../context/ActiveEntityContext';
+import { sanitizeRecordKeyAttributes, resolveRecordTitle } from '../../utils/activeContextSanitizer';
 
 
 interface WorkflowState {
@@ -784,6 +786,35 @@ export const RecordDetailView = ({
     const raw = flattenFields(moduleData?.layout || []) as ModuleField[];
     return raw.filter((f: ModuleField) => !isFieldHiddenBySecurity(f.id, moduleData, platformUser || supabaseUser));
   }, [moduleData, platformUser, supabaseUser]);
+
+  // Real-time AI Assistant active entity registration
+  const activeRecordContext = useMemo(() => {
+    if (!record || !record.id) return null;
+    const title = resolveRecordTitle(record, moduleData, allFields);
+    const wfState = record.workflowState || record.workflow_state;
+    const stageName = (typeof wfState === 'object' ? wfState?.currentNodeId : record.status) || record.status || 'Active';
+    const cleanFields = sanitizeRecordKeyAttributes(record.data || record, allFields, {
+      user: platformUser || supabaseUser,
+      module: moduleData,
+    });
+    return {
+      domain: 'module_record' as const,
+      id: String(record.id),
+      title,
+      subtitle: `${moduleData?.name || 'Record'} • ${stageName}`,
+      status: stageName,
+      slaStatus: record.slaStatus || record.sla_status,
+      activeTab: activeRailTab || activeTabId || 'overview',
+      module: moduleData ? { id: moduleData.id, name: moduleData.name } : undefined,
+      keyAttributes: cleanFields,
+      rawUrl: window.location.pathname + window.location.search,
+    };
+  }, [record, moduleData, allFields, activeRailTab, activeTabId, platformUser, supabaseUser]);
+
+  useRegisterActiveEntity(activeRecordContext, {
+    priority: isModal ? 30 : isEmbedded ? 20 : 10,
+    enabled: Boolean(record?.id),
+  });
 
   const activeValidations = useMemo(() => {
     const rules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];

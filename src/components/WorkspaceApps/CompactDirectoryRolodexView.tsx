@@ -554,7 +554,7 @@ export const CompactDirectoryRolodexView: React.FC<CompactDirectoryRolodexViewPr
                           navigate(`/workspace/apps/directory/${entity.id}`);
                         }}
                         className="p-1.5 rounded-lg text-zinc-400 hover:text-indigo-500 hover:bg-indigo-500/10 transition-colors cursor-pointer shrink-0"
-                        title="Open Full 360° Profile"
+                        title="Open Profile"
                       >
                         <ExternalLink size={12} />
                       </button>
@@ -665,9 +665,9 @@ export const CompactDirectoryRolodexView: React.FC<CompactDirectoryRolodexViewPr
                               navigate(`/workspace/apps/directory/${activeEntity.id}`)
                             }
                             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold transition-colors cursor-pointer"
-                            title="Open Full 360° Directory Profile"
+                            title="Open Directory Profile"
                           >
-                            <span>360°</span>
+                            <span>Profile</span>
                             <ExternalLink size={10} />
                           </button>
                         </div>

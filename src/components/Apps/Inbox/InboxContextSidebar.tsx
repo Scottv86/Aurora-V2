@@ -262,7 +262,7 @@ export const InboxContextSidebar: React.FC<InboxContextSidebarProps> = ({
                     onClick={() => navigate(`/workspace/people-organisations/${contactParty.id}`)}
                     className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5 cursor-pointer"
                   >
-                    <span>View 360° Profile</span>
+                    <span>View Profile</span>
                     <ExternalLink size={10} />
                   </button>
                 )}

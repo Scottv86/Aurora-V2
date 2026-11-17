@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useRegisterActiveEntity } from '../../context/ActiveEntityContext';
 import { motion } from 'motion/react';
 import { 
   User, 
@@ -118,6 +119,39 @@ export const MemberDetailView = () => {
   const [showContractModal, setShowContractModal] = useState(false);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+
+  // Real-time AI Assistant active entity registration
+  const activeMemberContext = useMemo(() => {
+    if (!member || !member.id) return null;
+    const fullName = `${member.firstName || ''} ${(member as any).familyName || (member as any).lastName || ''}`.trim() || 'Workforce Member';
+    const positionTitle = typeof member.position === 'object' ? (member.position as any)?.title : (positions?.find(p => p.id === member.position)?.title || 'Team Member');
+    const teamName = typeof member.team === 'object' ? (member.team as any)?.name : (teams?.find(t => t.id === member.team)?.name || 'Unassigned Team');
+
+    return {
+      domain: 'workforce_member' as const,
+      id: String(member.id),
+      title: fullName,
+      subtitle: `${positionTitle} • ${teamName}`,
+      status: member.status || 'ACTIVE',
+      activeTab,
+      keyAttributes: {
+        'Full Name': fullName,
+        'Work Email': member.workEmail || member.email || null,
+        'Phone': (member as any).phone || null,
+        'Position': positionTitle,
+        'Department / Team': teamName,
+        'License Type': member.licenceType || 'STANDARD',
+        'Status': member.status || 'ACTIVE',
+        'Role': (member as any).roleId || member.role || null,
+      },
+      rawUrl: window.location.pathname + window.location.search,
+    };
+  }, [member, activeTab, positions, teams]);
+
+  useRegisterActiveEntity(activeMemberContext, {
+    priority: 10,
+    enabled: Boolean(member?.id),
+  });
 
   // Real HR Data from Database
   const [hrData, setHrData] = useState<{

@@ -2141,10 +2141,165 @@ router.get('/:id', async (req: TenantRequest, res) => {
       accountOwner = formatTenantMember(rawOwner);
     }
 
+    let contacts: any[] = [];
+    if (party.partyType === 'ORGANIZATION') {
+      const affiliatedPeople = await db.person.findMany({
+        where: {
+          primaryOrgPartyId: id,
+          party: { tenantId: req.tenantId },
+        },
+        include: {
+          party: true,
+        },
+        orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+      });
+
+      contacts = affiliatedPeople.map((p) => {
+        const enriched = enrichPartyRecord(p.party);
+        return {
+          ...enriched,
+          person: p,
+          isPrimaryContact: party.organization?.primaryContactPartyId === p.partyId,
+        };
+      });
+    }
+
     res.json({
       ...enrichPartyRecord(party),
       accountOwner,
+      contacts,
     });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================================
+// Organisation Contacts Management Routes
+// ============================================================================
+router.post('/:id/contacts', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db || globalPrisma;
+    const { id } = req.params;
+    const { personPartyId, setAsPrimary } = req.body;
+
+    if (!personPartyId) {
+      return res.status(400).json({ error: 'personPartyId is required' });
+    }
+
+    const orgParty = await db.party.findUnique({
+      where: { id, tenantId: req.tenantId },
+      include: { organization: true },
+    });
+    if (!orgParty || orgParty.partyType !== 'ORGANIZATION') {
+      return res.status(404).json({ error: 'Organisation not found' });
+    }
+
+    const personParty = await db.party.findUnique({
+      where: { id: personPartyId, tenantId: req.tenantId },
+      include: { person: true },
+    });
+    if (!personParty || personParty.partyType !== 'PERSON') {
+      return res.status(404).json({ error: 'Person not found' });
+    }
+
+    const orgName = orgParty.organization?.legalName || orgParty.displayName || 'Organisation';
+
+    await db.person.update({
+      where: { partyId: personPartyId },
+      data: {
+        primaryOrgPartyId: id,
+        primaryOrgName: orgName,
+      },
+    });
+
+    if (setAsPrimary) {
+      await db.organization.update({
+        where: { partyId: id },
+        data: { primaryContactPartyId: personPartyId },
+      });
+    }
+
+    res.json({ success: true, message: 'Contact linked to organisation' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/:id/contacts/:personPartyId', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db || globalPrisma;
+    const { id, personPartyId } = req.params;
+
+    const orgParty = await db.party.findUnique({
+      where: { id, tenantId: req.tenantId },
+      include: { organization: true },
+    });
+    if (!orgParty) {
+      return res.status(404).json({ error: 'Organisation not found' });
+    }
+
+    await db.person.update({
+      where: { partyId: personPartyId },
+      data: {
+        primaryOrgPartyId: null,
+        primaryOrgName: null,
+      },
+    });
+
+    if (orgParty.organization?.primaryContactPartyId === personPartyId) {
+      await db.organization.update({
+        where: { partyId: id },
+        data: { primaryContactPartyId: null },
+      });
+    }
+
+    res.json({ success: true, message: 'Contact unlinked from organisation' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/:id/primary-contact', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db || globalPrisma;
+    const { id } = req.params;
+    const { personPartyId } = req.body;
+
+    const orgParty = await db.party.findUnique({
+      where: { id, tenantId: req.tenantId },
+      include: { organization: true },
+    });
+    if (!orgParty || orgParty.partyType !== 'ORGANIZATION') {
+      return res.status(404).json({ error: 'Organisation not found' });
+    }
+
+    if (personPartyId) {
+      const personParty = await db.party.findUnique({
+        where: { id: personPartyId, tenantId: req.tenantId },
+        include: { person: true },
+      });
+      if (!personParty || personParty.partyType !== 'PERSON') {
+        return res.status(404).json({ error: 'Person not found' });
+      }
+
+      if (personParty.person && personParty.person.primaryOrgPartyId !== id) {
+        await db.person.update({
+          where: { partyId: personPartyId },
+          data: {
+            primaryOrgPartyId: id,
+            primaryOrgName: orgParty.organization?.legalName || orgParty.displayName || null,
+          },
+        });
+      }
+    }
+
+    await db.organization.update({
+      where: { partyId: id },
+      data: { primaryContactPartyId: personPartyId || null },
+    });
+
+    res.json({ success: true, primaryContactPartyId: personPartyId || null });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

@@ -31,6 +31,7 @@ import { DrivePickerModal } from '../../components/Drive/DrivePickerModal';
 import { DeleteConfirmModal } from '../../components/Drive/DeleteConfirmModal';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
+import { useRegisterActiveEntity } from '../../context/ActiveEntityContext';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
 
@@ -55,6 +56,35 @@ export const DocEditor = () => {
   const [docContent, setDocContent] = useState('');
   const [isPreviewMerged, setIsPreviewMerged] = useState(false);
   const [isSaved, setIsSaved] = useState(true);
+
+  // Real-time AI Assistant active entity registration
+  const activeDocContext = useMemo(() => {
+    if (!documentItem || !documentItem.id) return null;
+    const strippedText = docContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    const excerpt = strippedText ? (strippedText.length > 180 ? strippedText.slice(0, 177) + '...' : strippedText) : 'Empty document';
+
+    return {
+      domain: 'document' as const,
+      id: String(documentItem.id),
+      title: docTitle || documentItem.name || 'Untitled Document',
+      subtitle: `${documentItem.recordsMetadata?.classification || 'Standard'} Document`,
+      status: documentItem.recordsMetadata?.isLegalHold ? 'LEGAL_HOLD' : (isSaved ? 'SAVED' : 'UNSAVED_CHANGES'),
+      keyAttributes: {
+        'Document Title': docTitle || documentItem.name,
+        'Classification': documentItem.recordsMetadata?.classification || 'UNCLASSIFIED',
+        'Legal Hold': documentItem.recordsMetadata?.isLegalHold ? `FROZEN (${documentItem.recordsMetadata.legalHoldReason || 'Active Investigation'})` : 'No',
+        'Save Status': isSaved ? 'Saved' : 'Unsaved changes',
+        'Drive Type': documentItem.driveType || 'WORKSPACE',
+        'Content Excerpt': excerpt,
+      },
+      rawUrl: window.location.pathname + window.location.search,
+    };
+  }, [documentItem, docTitle, docContent, isSaved]);
+
+  useRegisterActiveEntity(activeDocContext, {
+    priority: 10,
+    enabled: Boolean(documentItem?.id),
+  });
 
   // Drawers & Modals
   const [isDrivePickerOpen, setIsDrivePickerOpen] = useState(false);

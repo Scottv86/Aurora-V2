@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Send,
   Sparkles,
@@ -12,6 +12,8 @@ import {
   CheckCircle2,
   History,
   ShieldAlert,
+  Pin,
+  X,
 } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -20,6 +22,7 @@ import { cn, slugify } from '../../lib/utils';
 import { API_BASE_URL } from '../../config';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
+import { useActiveEntityContext } from '../../context/ActiveEntityContext';
 import { DriveService } from '../../services/driveService';
 
 export interface CompactAIAssistantViewProps {
@@ -60,7 +63,7 @@ const CompactUserAvatar: React.FC<{
         alt={displayName || 'User'}
         title={displayName || undefined}
         onError={() => setImgFailed(true)}
-        className="w-6 h-6 rounded-full object-cover shrink-0 mt-0.5 border border-zinc-700"
+        className="w-6 h-6 rounded-full object-cover shrink-0 mt-0.5 border border-zinc-200 dark:border-zinc-700"
       />
     );
   }
@@ -75,7 +78,7 @@ const CompactUserAvatar: React.FC<{
   return (
     <div
       title={displayName || undefined}
-      className="w-6 h-6 rounded-full bg-zinc-800 text-zinc-200 flex items-center justify-center shrink-0 mt-0.5 text-[10px] font-semibold border border-zinc-700"
+      className="w-6 h-6 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 flex items-center justify-center shrink-0 mt-0.5 text-[10px] font-semibold border border-zinc-200 dark:border-zinc-700"
     >
       {initials || <UserIcon className="w-3.5 h-3.5" />}
     </div>
@@ -99,7 +102,7 @@ const CompactMarkdown: React.FC<{ text: string }> = ({ text }) => {
           return (
             <pre
               key={i}
-              className="p-2 rounded-lg bg-zinc-950/80 border border-zinc-800 text-[11px] font-mono text-zinc-200 overflow-x-auto whitespace-pre-wrap"
+              className="p-2 rounded-lg bg-zinc-100 dark:bg-zinc-950/80 border border-zinc-200 dark:border-zinc-800 text-[11px] font-mono text-zinc-800 dark:text-zinc-200 overflow-x-auto whitespace-pre-wrap"
             >
               {inner.trim()}
             </pre>
@@ -114,7 +117,7 @@ const CompactMarkdown: React.FC<{ text: string }> = ({ text }) => {
                   {parts.map((part, pIdx) => {
                     if (part.startsWith('**') && part.endsWith('**')) {
                       return (
-                        <strong key={pIdx} className="font-semibold text-white">
+                        <strong key={pIdx} className="font-semibold text-zinc-900 dark:text-white">
                           {part.slice(2, -2)}
                         </strong>
                       );
@@ -123,7 +126,7 @@ const CompactMarkdown: React.FC<{ text: string }> = ({ text }) => {
                       return (
                         <code
                           key={pIdx}
-                          className="px-1 py-0.5 rounded bg-zinc-800 text-indigo-300 font-mono text-[11px]"
+                          className="px-1 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-indigo-600 dark:text-indigo-300 font-mono text-[11px]"
                         >
                           {part.slice(1, -1)}
                         </code>
@@ -146,6 +149,7 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
   const location = useLocation();
   const { tenant, modules, user: platformUser, members: platformMembers } = usePlatform();
   const { session: authSession, user: authUser } = useAuth();
+  const { activeContext, rawActiveContext, isPinned, isDetached, setIsPinned, setIsDetached } = useActiveEntityContext();
 
   const token =
     authSession?.access_token ||
@@ -466,7 +470,10 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
         body: JSON.stringify({
           message: userMsg,
           socketId: socketRef.current?.id,
-          context: buildRouteContext(),
+          context: {
+            ...buildRouteContext(),
+            activeEntity: activeContext,
+          },
           model: modelName,
           attachments: [],
         }),
@@ -570,10 +577,76 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
     return text;
   };
 
+  const domainStarters = useMemo(() => {
+    if (!activeContext) {
+      return [
+        "What are the latest records in this workspace?",
+        "How do I set up an automated email rule?",
+        "Summarize tenant system load",
+      ];
+    }
+    switch (activeContext.domain) {
+      case 'module_record':
+        return [
+          `Summarize ${activeContext.title}`,
+          "What are the missing fields or validation gaps?",
+          "Draft a follow-up email for this record",
+          "Suggest next workflow stage action",
+        ];
+      case 'directory_person':
+        return [
+          `Draft an intro email to ${activeContext.title}`,
+          "Show organizational relationships & manager",
+          "Check linked open deals & support tickets",
+        ];
+      case 'directory_org':
+        return [
+          `Summarize ${activeContext.title}'s company profile`,
+          "Show associated contacts & decision makers",
+          "Review financial history & lifetime value",
+        ];
+      case 'workforce_member':
+        return [
+          `Show ${activeContext.title}'s team & manager hierarchy`,
+          "Review access privileges & role permissions",
+          "Draft a team communication / update",
+        ];
+      case 'triage_submission':
+        return [
+          "Recommend destination module & mapping",
+          "Check if this submitter already exists in directory",
+          "Summarize SLA urgency & deadline risk",
+        ];
+      case 'approval_item':
+        return [
+          "Audit financial risks & quorum requirements",
+          "Check whether this expense is within budget",
+          "Summarize request justification",
+        ];
+      case 'service_ticket':
+        return [
+          "Draft a helpful resolution response for customer",
+          "Analyze customer sentiment and escalation risk",
+          "Search knowledge base for matching solutions",
+        ];
+      case 'document':
+        return [
+          `Proofread and polish "${activeContext.title}"`,
+          "Draft an executive summary of this document",
+          "Check legal hold & records retention status",
+        ];
+      default:
+        return [
+          `Summarize ${activeContext.title}`,
+          "What actions can I take on this entity?",
+        ];
+    }
+  }, [activeContext]);
+
   return (
-    <div className="h-full flex flex-col bg-zinc-950 text-zinc-100">
+    <div className="h-full flex flex-col bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100">
       {/* Session & Action Strip */}
-      <div className="px-2.5 py-1.5 border-b border-zinc-800/80 bg-zinc-900/60 flex items-center justify-between gap-1.5 shrink-0">
+      <div className="px-2.5 py-1.5 border-b border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/70 dark:bg-zinc-900/60 flex items-center justify-between gap-1.5 shrink-0">
         <div className="flex items-center gap-1 min-w-0">
           <button
             type="button"
@@ -582,7 +655,7 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
               'inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer',
               showSessions
                 ? 'bg-indigo-600 text-white'
-                : 'text-zinc-300 hover:bg-zinc-800'
+                : 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white'
             )}
             title="Switch AI conversation"
           >
@@ -596,7 +669,7 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
           <button
             type="button"
             onClick={handleNewChat}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
             title="New AI Conversation"
           >
             <Plus className="w-3 h-3" />
@@ -613,7 +686,7 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
                 : '/workspace/aurora-vibe'
             )
           }
-          className="inline-flex items-center gap-1 text-[10px] font-medium text-indigo-400 hover:text-indigo-300 cursor-pointer shrink-0"
+          className="inline-flex items-center gap-1 text-[10px] font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 cursor-pointer shrink-0"
           title="Open conversation in Aurora Vibe"
         >
           Full Canvas
@@ -623,16 +696,16 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
 
       {/* Session Picker Drawer OR Active Chat */}
       {showSessions ? (
-        <div className="flex-1 overflow-y-auto p-2.5 space-y-1">
+        <div className="flex-1 overflow-y-auto p-2.5 space-y-1 bg-white dark:bg-zinc-950">
           {sessionsLoading ? (
-            <div className="h-32 flex items-center justify-center text-zinc-500">
+            <div className="h-32 flex items-center justify-center text-zinc-400 dark:text-zinc-500">
               <Loader2 className="w-4 h-4 animate-spin" />
             </div>
           ) : sessions.length === 0 ? (
-            <div className="h-40 flex flex-col items-center justify-center text-center text-zinc-500 px-4">
+            <div className="h-40 flex flex-col items-center justify-center text-center text-zinc-400 dark:text-zinc-500 px-4">
               <Sparkles className="w-6 h-6 mb-2 opacity-40" />
-              <p className="text-xs text-zinc-300 font-medium">No conversations yet</p>
-              <p className="text-[11px] mt-0.5">Send a prompt below to start one.</p>
+              <p className="text-xs text-zinc-700 dark:text-zinc-300 font-medium">No conversations yet</p>
+              <p className="text-[11px] mt-0.5 text-zinc-500 dark:text-zinc-400">Send a prompt below to start one.</p>
             </div>
           ) : (
             sessions.slice(0, 25).map((s) => (
@@ -643,13 +716,13 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
                 className={cn(
                   'w-full text-left px-2.5 py-2 rounded-lg text-xs transition-colors flex items-center justify-between gap-2 cursor-pointer',
                   s.id === activeSessionId
-                    ? 'bg-indigo-600/20 border border-indigo-500/40 text-white'
-                    : 'hover:bg-zinc-900 text-zinc-300 border border-transparent'
+                    ? 'bg-indigo-50 dark:bg-indigo-600/20 border border-indigo-200 dark:border-indigo-500/40 text-indigo-900 dark:text-white font-medium'
+                    : 'hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-700 dark:text-zinc-300 border border-transparent'
                 )}
               >
                 <span className="truncate font-medium">{s.title || 'Untitled Chat'}</span>
                 {s.updatedAt && (
-                  <span className="text-[10px] text-zinc-500 shrink-0">
+                  <span className="text-[10px] text-zinc-400 dark:text-zinc-500 shrink-0">
                     {new Date(s.updatedAt).toLocaleDateString([], {
                       month: 'short',
                       day: 'numeric',
@@ -661,20 +734,35 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
           )}
         </div>
       ) : (
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3 bg-white dark:bg-zinc-950">
           {messagesLoading ? (
-            <div className="h-32 flex items-center justify-center text-zinc-500">
+            <div className="h-32 flex items-center justify-center text-zinc-400 dark:text-zinc-500">
               <Loader2 className="w-4 h-4 animate-spin" />
             </div>
           ) : messages.length === 0 && !sending ? (
             <div className="h-full flex flex-col items-center justify-center text-center px-4 py-6">
-              <div className="w-10 h-10 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-500/15 border border-indigo-200 dark:border-indigo-500/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 mb-3 shadow-sm">
                 <Sparkles className="w-5 h-5" />
               </div>
-              <p className="text-xs font-semibold text-zinc-200">Aurora AI Co-Pilot</p>
-              <p className="text-[11px] text-zinc-400 mt-1 max-w-[260px]">
-                Connected to live workspace tools, records, and modules on your current route.
+              <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-200">Aurora AI Co-Pilot</p>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 max-w-[260px]">
+                {activeContext ? `Active context: ${activeContext.title}` : 'Connected to live workspace tools, records, and modules on your current route.'}
               </p>
+              <div className="mt-4 w-full max-w-[280px] space-y-1.5 text-left">
+                <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider text-center mb-1">
+                  Suggested Prompts
+                </p>
+                {domainStarters.map((starter: string, sIdx: number) => (
+                  <button
+                    key={sIdx}
+                    type="button"
+                    onClick={() => setInput(starter)}
+                    className="w-full text-left text-[11px] px-2.5 py-1.5 rounded-lg bg-zinc-50 hover:bg-zinc-100 dark:bg-zinc-900 dark:hover:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white transition-all cursor-pointer truncate shadow-sm"
+                  >
+                    💡 {starter}
+                  </button>
+                ))}
+              </div>
             </div>
           ) : (
             messages.map((m) => (
@@ -683,16 +771,16 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
                 className={cn('flex gap-2', m.role === 'user' ? 'justify-end' : 'justify-start')}
               >
                 {m.role !== 'user' && (
-                  <div className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
+                  <div className="w-6 h-6 rounded-full bg-indigo-50 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 mt-0.5 border border-indigo-100 dark:border-transparent">
                     <Bot className="w-3.5 h-3.5" />
                   </div>
                 )}
                 <div
                   className={cn(
-                    'max-w-[85%] rounded-xl px-3 py-2',
+                    'max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed',
                     m.role === 'user'
-                      ? 'bg-blue-600 text-white rounded-br-none text-xs leading-relaxed whitespace-pre-wrap'
-                      : 'bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-bl-none'
+                      ? 'bg-blue-600 text-white rounded-br-none whitespace-pre-wrap shadow-sm'
+                      : 'bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-800 dark:text-zinc-200 rounded-bl-none shadow-sm'
                   )}
                 >
                   {m.role === 'user' ? (
@@ -717,21 +805,21 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
           {/* Live tool trace & streaming output */}
           {(sending || streamingText || agentTrace.length > 0) && (
             <div className="flex gap-2 justify-start">
-              <div className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
+              <div className="w-6 h-6 rounded-full bg-indigo-50 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 mt-0.5 border border-indigo-100 dark:border-transparent">
                 <Bot className="w-3.5 h-3.5" />
               </div>
-              <div className="max-w-[85%] rounded-xl rounded-bl-none px-3 py-2 bg-zinc-900 border border-zinc-800 text-zinc-200 space-y-1.5">
+              <div className="max-w-[85%] rounded-xl rounded-bl-none px-3 py-2 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-800 dark:text-zinc-200 space-y-1.5 shadow-sm">
                 {agentTrace.length > 0 && (
                   <div className="flex flex-wrap gap-1">
                     {agentTrace.map((t, idx) => (
                       <span
                         key={idx}
-                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-800 text-[10px] text-zinc-300"
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-[10px] text-zinc-700 dark:text-zinc-300"
                       >
                         {t.status === 'running' ? (
-                          <Wrench className="w-2.5 h-2.5 animate-pulse text-amber-400" />
+                          <Wrench className="w-2.5 h-2.5 animate-pulse text-amber-500 dark:text-amber-400" />
                         ) : (
-                          <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
+                          <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400" />
                         )}
                         {t.name}
                       </span>
@@ -742,8 +830,8 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
                 {streamingText ? (
                   <CompactMarkdown text={streamingText} />
                 ) : (
-                  <div className="flex items-center gap-1.5 text-[11px] text-zinc-400">
-                    <Loader2 className="w-3 h-3 animate-spin text-indigo-400" />
+                  <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+                    <Loader2 className="w-3 h-3 animate-spin text-indigo-600 dark:text-indigo-400" />
                     <span>{agentThought || 'Processing...'}</span>
                   </div>
                 )}
@@ -752,9 +840,9 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
           )}
 
           {approvalRequired && (
-            <div className="p-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10 space-y-2">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-300">
-                <ShieldAlert className="w-4 h-4" />
+            <div className="p-2.5 rounded-xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-800 dark:text-amber-300">
+                <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                 Action requires your approval
               </div>
               <div className="flex items-center gap-2">
@@ -768,7 +856,7 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
                 <button
                   type="button"
                   onClick={() => handleApproval('reject')}
-                  className="px-2.5 py-1 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[11px] font-medium cursor-pointer"
+                  className="px-2.5 py-1 rounded-md bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-[11px] font-medium cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -778,15 +866,67 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
         </div>
       )}
 
+      {/* Active Context Pill & Controls */}
+      {activeContext ? (
+        <div className="px-2.5 py-1.5 bg-indigo-50 dark:bg-indigo-950/40 border-t border-indigo-100 dark:border-indigo-900/60 flex items-center justify-between gap-1.5 shrink-0 text-xs">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 dark:bg-indigo-400 animate-pulse shrink-0" />
+            <span className="text-[10px] uppercase font-bold text-indigo-600 dark:text-indigo-400 tracking-wider shrink-0">
+              In Context:
+            </span>
+            <span className="font-semibold text-zinc-800 dark:text-zinc-100 truncate" title={activeContext.title}>
+              {activeContext.title}
+            </span>
+            {activeContext.subtitle && (
+              <span className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate hidden sm:inline">
+                ({activeContext.subtitle})
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsPinned(!isPinned)}
+              title={isPinned ? 'Unpin context (follows active view)' : 'Pin context (persists across navigation)'}
+              className={cn(
+                'p-1 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors cursor-pointer',
+                isPinned ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
+              )}
+            >
+              <Pin size={12} className={cn(isPinned && 'fill-current text-indigo-600 dark:text-indigo-400')} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsDetached(true)}
+              title="Detach context for this query"
+              className="p-1 rounded text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors cursor-pointer"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        </div>
+      ) : isDetached && rawActiveContext ? (
+        <div className="px-2.5 py-1 bg-zinc-100 dark:bg-zinc-900/60 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-[11px] text-zinc-500 dark:text-zinc-400 shrink-0">
+          <span className="italic truncate">Context detached</span>
+          <button
+            type="button"
+            onClick={() => setIsDetached(false)}
+            className="text-indigo-600 dark:text-indigo-400 hover:underline font-semibold text-[11px] cursor-pointer"
+          >
+            Re-attach {rawActiveContext.title.slice(0, 18)}...
+          </button>
+        </div>
+      ) : null}
+
       {/* Composer */}
-      <form onSubmit={handleSend} className="p-2.5 border-t border-zinc-800 flex items-center gap-2 shrink-0">
-        <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+      <form onSubmit={handleSend} className="p-2.5 border-t border-zinc-200 dark:border-zinc-800 flex items-center gap-2 shrink-0 bg-white dark:bg-zinc-950">
+        <Sparkles className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400 shrink-0" />
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask Aurora AI..."
           disabled={sending}
-          className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder:text-zinc-500 outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
+          className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
         />
         {sending ? (
           <button

@@ -41,6 +41,7 @@ import {
 } from 'lucide-react';
 import { useServiceDesk } from '../../context/ServiceDeskContext';
 import { usePlatform } from '../../hooks/usePlatform';
+import { useRegisterActiveEntity } from '../../context/ActiveEntityContext';
 import { ServiceDeskMessageBubble } from '../../components/ServiceDesk/ServiceDeskMessageBubble';
 import { ServiceDeskOperatorStatus } from '../../types/serviceDesk';
 import { ServiceDeskService } from '../../services/serviceDeskService';
@@ -156,6 +157,36 @@ export const ServiceDeskApp: React.FC = () => {
   const [selectedSiteId, setSelectedSiteId] = useState<string>('ALL');
   const [channelTab, setChannelTab] = useState<'ALL' | 'UNREAD' | 'SITE_CHAT' | 'VOICE_CALL'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Real-time AI Assistant active entity registration
+  const activeTicketContext = useMemo(() => {
+    if (!activeSession || !activeSession.id) return null;
+    const lastMsg = activeSession.messages && activeSession.messages.length > 0
+      ? activeSession.messages[activeSession.messages.length - 1]?.content
+      : null;
+    const title = activeSession.visitorName ? `Ticket: ${activeSession.visitorName}` : `Support Session #${activeSession.id.slice(0, 8)}`;
+    return {
+      domain: 'service_ticket' as const,
+      id: String(activeSession.id),
+      title,
+      subtitle: `${activeSession.channelType || 'Support'} • ${activeSession.status || 'Active'}`,
+      status: activeSession.status || 'ACTIVE',
+      keyAttributes: {
+        'Visitor / Customer': activeSession.visitorName || 'Guest User',
+        'Channel': activeSession.channelType || 'LIVE_CHAT',
+        'Priority': activeSession.priority || 'NORMAL',
+        'Status': activeSession.status || 'ACTIVE',
+        'Assigned Agent': (activeSession as any).allocatedOperatorId || (activeSession as any).assignedOperatorId || 'Unassigned',
+        'Latest Message Excerpt': lastMsg ? (lastMsg.length > 150 ? lastMsg.slice(0, 147) + '...' : lastMsg) : 'No messages yet',
+      },
+      rawUrl: window.location.pathname + window.location.search,
+    };
+  }, [activeSession]);
+
+  useRegisterActiveEntity(activeTicketContext, {
+    priority: 20,
+    enabled: Boolean(activeSession?.id),
+  });
 
   // Composer State
   const [composerText, setComposerText] = useState('');

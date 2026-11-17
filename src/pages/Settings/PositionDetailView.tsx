@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useRegisterActiveEntity } from '../../context/ActiveEntityContext';
 import { 
   Briefcase, 
   Activity, 
@@ -52,6 +53,33 @@ export const PositionDetailView = () => {
       setBreadcrumbOverride(id, position.title);
     }
   }, [id, position?.title, setBreadcrumbOverride]);
+
+  // Real-time AI Assistant active entity registration
+  const activePositionContext = useMemo(() => {
+    if (!position || !position.id) return null;
+    const parentPos = allPositions?.find((p) => p.id === position.parentId);
+    return {
+      domain: 'workforce_position' as const,
+      id: String(position.id),
+      title: position.title || 'Position',
+      subtitle: `Position #${position.positionNumber || ''}`,
+      status: 'ACTIVE',
+      activeTab,
+      keyAttributes: {
+        'Position Title': position.title,
+        'Position Number': position.positionNumber,
+        'Reports To': parentPos?.title || 'None (Top Level)',
+        'Description': position.description || null,
+        'Successor Count': position.successors?.length || 0,
+      },
+      rawUrl: window.location.pathname + window.location.search,
+    };
+  }, [position, allPositions, activeTab]);
+
+  useRegisterActiveEntity(activePositionContext, {
+    priority: 10,
+    enabled: Boolean(position?.id),
+  });
 
   const [successors, setSuccessors] = useState<any[]>([]);
   const { members: allMembers } = useUsers();

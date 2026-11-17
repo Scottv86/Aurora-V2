@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useLayoutEffect } from 'react';
-import { Search, ChevronDown, Check, Users, ArrowRight } from 'lucide-react';
+import { Search, ChevronDown, Check, Users, ArrowRight, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { useUsers, TenantMember } from '../../hooks/useUsers';
@@ -13,6 +13,7 @@ interface UserSelectorProps {
   className?: string;
   error?: boolean;
   readonly?: boolean;
+  allowClear?: boolean;
   onBlur?: () => void;
 }
 
@@ -23,6 +24,7 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
   className,
   error = false,
   readonly = false,
+  allowClear = true,
   onBlur
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -200,10 +202,25 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
             </>
           )}
         </div>
-        <ChevronDown 
-          size={14} 
-          className={cn("text-zinc-400 transition-transform duration-300", isOpen && "rotate-180 text-indigo-500")} 
-        />
+        <div className="flex items-center gap-1.5 shrink-0">
+          {allowClear && selectedUser && !readonly && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange('', null as any);
+              }}
+              className="p-1 rounded-md text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-200/50 dark:hover:bg-zinc-800 transition-colors"
+              title="Clear selection"
+            >
+              <X size={12} />
+            </button>
+          )}
+          <ChevronDown 
+            size={14} 
+            className={cn("text-zinc-400 transition-transform duration-300", isOpen && "rotate-180 text-indigo-500")} 
+          />
+        </div>
       </div>
 
       {/* Dropdown */}
