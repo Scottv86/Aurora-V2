@@ -308,7 +308,7 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
 
       if (typeof rawVal === 'string') {
         const isCuid = /^c[a-z0-9]{20,}$/i.test(rawVal);
-        if (isDir || isCuid || field.type === 'party' || field.type === 'lookup') {
+        if (isDir || isCuid || field.type === 'party') {
           if (!resolvedEntities[rawVal]) {
             const summary = getPartySummary?.(rawVal) || directoryMap?.get(rawVal);
             if (summary) {
@@ -320,7 +320,7 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
                   code: (summary as any).partyCode,
                 },
               }));
-            } else if (isDir || field.type === 'party' || isCuid) {
+            } else {
               partyIdsToFetch.add(rawVal);
             }
           }
@@ -541,14 +541,16 @@ export const RecordPdfExportModal: React.FC<RecordPdfExportModalProps> = ({
           }
         }
 
-        if (!resolvedLabel && typeof rawVal === 'string') {
+        const isDir = isDirectoryEntityField(field);
+        const isCuid = typeof rawVal === 'string' && /^c[a-z0-9]{20,}$/i.test(rawVal);
+
+        if (!resolvedLabel && typeof rawVal === 'string' && (isDir || isCuid || field.type === 'party')) {
           const sum = getPartySummary?.(rawVal) || directoryMap?.get(rawVal) || resolvedEntities[rawVal];
           if (sum) {
             resolvedLabel = sum.displayName || sum.name;
           }
         }
 
-        const isCuid = typeof rawVal === 'string' && /^c[a-z0-9]{20,}$/i.test(rawVal);
         const finalStr = resolvedLabel || (isCuid ? 'Linked Record' : String(rawVal));
 
         return {

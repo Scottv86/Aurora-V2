@@ -44,6 +44,13 @@ export const builderCache = {
     } catch (e) {}
   },
 
+  delete: (key: string): void => {
+    memoryCache.delete(key);
+    try {
+      sessionStorage.removeItem(`aurora_builder_cache_${key}`);
+    } catch (e) {}
+  },
+
   clear: (): void => {
     memoryCache.clear();
   }

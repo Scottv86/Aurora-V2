@@ -28,6 +28,7 @@ import { ScheduledTasksView } from './chat/ScheduledTasksView';
 import { NewScheduledTaskModal, ScheduledTaskData } from './chat/NewScheduledTaskModal';
 import { ShareChatModal } from './chat/ShareChatModal';
 import { DriveService } from '../services/driveService';
+import { AgentExecutionTrace } from './AI/AgentExecutionTrace';
 
 import { 
   InlineChartRenderer, InlineMapRenderer, ThoughtTraceAccordion, MediaCarousel, 
@@ -1317,12 +1318,67 @@ export const AntigravityChat = () => {
         setAgentThought(step.content);
       } else if (step.type === 'tool_call') {
         setAgentTrace(prev => [...prev, { name: step.name, arguments: step.arguments, status: 'running' }]);
+        if (step.name === 'upsert_record' && step.arguments) {
+          const targetRecId = step.arguments.recordId;
+          const rawData = step.arguments.data || {};
+          const fieldKeys = Object.keys(rawData.data && typeof rawData.data === 'object' ? rawData.data : rawData);
+          if (targetRecId && fieldKeys.length > 0) {
+            window.dispatchEvent(
+              new CustomEvent('aurora:ai-field-modifying', {
+                detail: {
+                  recordId: targetRecId,
+                  fields: fieldKeys,
+                  data: rawData,
+                  source: 'ai',
+                },
+              })
+            );
+          }
+        }
       } else if (step.type === 'tool_result') {
         setAgentTrace(prev => prev.map(t => t.name === step.name ? { ...t, result: step.result, status: 'done' } : t));
+        if (step.name === 'upsert_record') {
+          const rec = step.result?.record || step.result;
+          const targetRecId = step.result?.recordId || rec?.id;
+          const updatedFields = step.result?.updatedFields || (rec ? Object.keys(rec.data || rec) : []);
+          if (targetRecId) {
+            window.dispatchEvent(
+              new CustomEvent('aurora:ai-field-updated', {
+                detail: {
+                  recordId: targetRecId,
+                  fields: updatedFields,
+                  record: rec,
+                  data: rec?.data || rec,
+                  source: 'ai',
+                },
+              })
+            );
+            window.dispatchEvent(
+              new CustomEvent('aurora:record-added', {
+                detail: {
+                  recordId: targetRecId,
+                  record: rec,
+                },
+              })
+            );
+          }
+        }
         // Refresh workspace schema if builder tool is called
         if (step.name.includes('module') || step.name.includes('automation') || step.name.includes('connector')) {
           loadWorkspaceSchema();
         }
+      } else if (step.type === 'ai_field_modifying') {
+        window.dispatchEvent(
+          new CustomEvent('aurora:ai-field-modifying', {
+            detail: step,
+          })
+        );
+      } else if (step.type === 'ai_field_updated') {
+        window.dispatchEvent(
+          new CustomEvent('aurora:ai-field-updated', {
+            detail: step,
+          })
+        );
       } else if (step.type === 'stream_start') {
         setStreamingText('');
         setAgentThought(null);
@@ -1802,6 +1858,24 @@ export const AntigravityChat = () => {
           if (st?.result?.driveItem) {
             try { DriveService.syncDriveItem(st.result.driveItem); } catch (e) {}
           }
+          if (st?.name === 'upsert_record' && st?.result) {
+            const rec = st.result.record || st.result;
+            const targetRecId = st.result.recordId || rec?.id;
+            const updatedFields = st.result.updatedFields || (rec ? Object.keys(rec.data || rec) : []);
+            if (targetRecId) {
+              window.dispatchEvent(
+                new CustomEvent('aurora:ai-field-updated', {
+                  detail: {
+                    recordId: targetRecId,
+                    fields: updatedFields,
+                    record: rec,
+                    data: rec?.data || rec,
+                    source: 'ai',
+                  },
+                })
+              );
+            }
+          }
         });
       }
 
@@ -1832,6 +1906,7 @@ export const AntigravityChat = () => {
       setStreamingText('');
       setAttachments([]);
       fetchTelemetry();
+      window.dispatchEvent(new CustomEvent('aurora:ai-modifying-ended'));
     }
   };
 
@@ -3092,22 +3167,7 @@ export const AntigravityChat = () => {
                   <div key={m.id || idx} className="w-full space-y-3 py-2 border-b border-zinc-200/50 dark:border-zinc-900/50 pb-6 animate-fade-in">
                     {/* Collapsible Steps Trace */}
                     {Array.isArray(m.steps) && m.steps.length > 0 && (
-                      <details className="group mb-3">
-                        <summary className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-455 font-medium cursor-pointer hover:text-zinc-700 dark:hover:text-zinc-200 select-none">
-                          <span className="transition-transform group-open:rotate-90">▸</span>
-                          <span>Worked for a few seconds</span>
-                        </summary>
-                        <div className="mt-2 pl-3 space-y-1.5 border-l border-zinc-200 dark:border-zinc-800">
-                          {m.steps.map((st: any, sidx: number) => (
-                            <div key={sidx} className="flex items-center justify-between text-xs py-1">
-                              <span className="font-mono text-zinc-550 dark:text-zinc-400 pr-4">{st.name}</span>
-                              <span className="flex items-center gap-1 text-[10px] text-zinc-500">
-                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> completed
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </details>
+                      <AgentExecutionTrace steps={m.steps} compact={false} className="mb-3" />
                     )}
 
                     {/* Agent Response Markdown */}
@@ -3462,31 +3522,12 @@ export const AntigravityChat = () => {
               {/* Active agent streaming logs */}
               {loading && (agentThought || agentTrace.length > 0) && (
                 <div className="w-full space-y-3 py-2">
-                  <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-450">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-500 dark:text-indigo-400" />
-                    <span>{agentThought || 'Executing steps...'}</span>
-                  </div>
-                  
-                  {agentTrace.length > 0 && (
-                    <div className="pl-3.5 space-y-1 border-l border-zinc-205 dark:border-zinc-800">
-                      {agentTrace.map((t, idx) => (
-                        <div key={idx} className="flex items-center justify-between text-xs py-1">
-                          <span className="font-mono text-zinc-500 dark:text-zinc-400 pr-4">{t.name}</span>
-                          <span className="flex items-center gap-1.5 text-[10px] text-zinc-550">
-                            {t.status === 'running' ? (
-                              <>
-                                <Loader2 className="h-3 w-3 animate-spin text-indigo-500 dark:text-indigo-400" /> running...
-                              </>
-                            ) : (
-                              <>
-                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> completed
-                              </>
-                            )}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <AgentExecutionTrace
+                    liveTrace={agentTrace}
+                    thought={agentThought || 'Executing steps...'}
+                    isLive={true}
+                    compact={false}
+                  />
                 </div>
               )}
             </div>

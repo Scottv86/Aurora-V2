@@ -16,6 +16,7 @@ export type EntityDomain =
 export interface ActiveEntityContext {
   domain: EntityDomain;
   id: string;
+  recordKey?: string;
   title: string;
   subtitle?: string;
   status?: string;

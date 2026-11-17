@@ -110,12 +110,13 @@ router.post('/:id/restore', async (req: TenantRequest, res) => {
 
     // Restore to target table based on itemType
     try {
-      if (item.itemType === 'RECORD' && payload.moduleId) {
+      const resolvedModuleId = payload.moduleId || payload.module?.id || payload.module_id;
+      if (item.itemType === 'RECORD' && resolvedModuleId) {
         await db.record.create({
           data: {
             id: item.itemId,
             tenantId,
-            moduleId: payload.moduleId,
+            moduleId: resolvedModuleId,
             data: payload.data || payload,
             status: payload.status || 'active',
             associations: payload.associations || [],

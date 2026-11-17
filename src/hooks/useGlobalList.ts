@@ -404,15 +404,33 @@ export const useGlobalLists = () => {
   const [lists, setLists] = useState<GlobalList[]>(() => builderCache.get<GlobalList[]>(cacheKey) || []);
   const [loading, setLoading] = useState(() => !builderCache.has(cacheKey));
 
-  const fetchLists = useCallback(async () => {
+  const fetchLists = useCallback(async (force = false) => {
     if (!tenant?.id) return;
+    if (force) {
+      builderCache.delete(cacheKey);
+      setLoading(true);
+    }
     try {
+      let next: any[] = [];
       const { data, error } = await supabase
         .from('global_lists')
-        .select('*')
+        .select('*, global_list_items(count)')
         .order('name', { ascending: true });
-      if (error) throw error;
-      const next = data || [];
+
+      if (!error && data) {
+        next = data.map((l: any) => ({
+          ...l,
+          item_count: l.global_list_items?.[0]?.count ?? l.item_count ?? 0,
+        }));
+      } else {
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('global_lists')
+          .select('*')
+          .order('name', { ascending: true });
+        if (fallbackError) throw fallbackError;
+        next = fallbackData || [];
+      }
+
       setLists(next);
       builderCache.set(cacheKey, next);
     } catch (err) {

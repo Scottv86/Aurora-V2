@@ -20,6 +20,7 @@ import {
   Zap,
   RefreshCw,
   CheckCircle2,
+  Sparkles,
   Lock,
   HelpCircle,
   MoreHorizontal,
@@ -50,6 +51,7 @@ import { validateRecordRules, ValidationError } from '../../lib/validationEngine
 
 import { compactLayout } from '../../lib/layoutEngine';
 import { Module, ModuleField } from '../../types/platform';
+import { getSharedSocket } from '../../lib/socketClient';
 import { useQueryClient } from '@tanstack/react-query';
 import { calculateDefaultValue } from '../../services/fieldService';
 import { getCachedRecordById, getCachedRecords, primeRecordCache, invalidateModuleRecordsCache, updateCachedRecordInModule } from '../../services/dataService';
@@ -71,6 +73,8 @@ import {
 } from '../../utils/fieldSecurity';
 import { useRegisterActiveEntity } from '../../context/ActiveEntityContext';
 import { sanitizeRecordKeyAttributes, resolveRecordTitle } from '../../utils/activeContextSanitizer';
+import { useRecordPresence, getDeterministicColor } from '../../hooks/useRecordPresence';
+import { RecordPresenceStack } from '../../components/Record/RecordPresenceStack';
 
 
 interface WorkflowState {
@@ -86,7 +90,7 @@ interface WorkflowState {
 }
 
 const isDirectInteractableField = (type?: string) => 
-  ['date', 'time', 'datetime', 'select', 'choice', 'status_pill', 'boolean', 'toggle', 'rating', 'colorpicker', 'party', 'lookup'].includes(type || '');
+  ['date', 'time', 'datetime', 'select', 'dropdown', 'choice', 'status_pill', 'boolean', 'toggle', 'rating', 'colorpicker', 'party', 'lookup', 'user'].includes(type || '');
 
 export const RecordDetailView = ({
   moduleIdProp,
@@ -135,6 +139,50 @@ export const RecordDetailView = ({
   const [syncingConnectors, setSyncingConnectors] = useState<Record<string, boolean>>({});
   const [quickActionAutomations, setQuickActionAutomations] = useState<any[]>([]);
   const [triggeringAutomationId, setTriggeringAutomationId] = useState<string | null>(null);
+
+  // Real-time AI Assistant field modification & highlight tracking
+  const [aiModifyingFields, setAiModifyingFields] = useState<Set<string>>(new Set());
+  const [aiRecentlyUpdatedFields, setAiRecentlyUpdatedFields] = useState<Record<string, number>>({});
+  const [collabRecentlyUpdatedFields, setCollabRecentlyUpdatedFields] = useState<Record<string, { name: string; avatarUrl?: string; color?: string; timestamp: number; userId?: string }>>({});
+  const aiModifyingTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+
+  // Reset modifying fields whenever recordId changes
+  useEffect(() => {
+    aiModifyingTimersRef.current.forEach(timer => clearTimeout(timer));
+    aiModifyingTimersRef.current.clear();
+    setAiModifyingFields(new Set());
+    setAiRecentlyUpdatedFields({});
+  }, [recordId]);
+
+  const isFieldAiModifying = useCallback((f?: ModuleField | null) => {
+    if (!f || aiModifyingFields.size === 0) return false;
+    const fId = String(f.id || '').toLowerCase();
+    const fName = String(f.name || '').toLowerCase();
+    const fLabel = String(f.label || '').toLowerCase();
+    for (const key of aiModifyingFields) {
+      const k = String(key).toLowerCase();
+      if (k === fId || (fName && k === fName) || (fLabel && k === fLabel)) {
+        return true;
+      }
+    }
+    return false;
+  }, [aiModifyingFields]);
+
+  const isFieldAiUpdated = useCallback((f?: ModuleField | null) => {
+    if (!f || Object.keys(aiRecentlyUpdatedFields).length === 0) return false;
+    const fId = String(f.id || '').toLowerCase();
+    const fName = String(f.name || '').toLowerCase();
+    const fLabel = String(f.label || '').toLowerCase();
+    const now = Date.now();
+    for (const [key, ts] of Object.entries(aiRecentlyUpdatedFields)) {
+      if (now - ts > 4000) continue;
+      const k = String(key).toLowerCase();
+      if (k === fId || (fName && k === fName) || (fLabel && k === fLabel)) {
+        return true;
+      }
+    }
+    return false;
+  }, [aiRecentlyUpdatedFields]);
 
   // Synchronously update from cache when recordId changes (e.g. Prev/Next stepper or Split View click)
   useEffect(() => {
@@ -303,6 +351,10 @@ export const RecordDetailView = ({
   const initialImmediate = getImmediateRecord(recordId) || {};
   const [editData, setEditData] = useState<Record<string, any>>(() => initialImmediate);
   const editDataRef = useRef<Record<string, any>>(initialImmediate);
+  const recordRef = useRef<Record<string, any> | null>(record);
+  useEffect(() => {
+    recordRef.current = record;
+  }, [record]);
   const [prevRecordId, setPrevRecordId] = useState<string | undefined>(recordId);
 
   // Synchronously adjust record and editData during render when recordId changes
@@ -311,6 +363,7 @@ export const RecordDetailView = ({
     const immediate = getImmediateRecord(recordId);
     if (immediate) {
       setRecord(immediate);
+      recordRef.current = immediate;
       setEditData(immediate);
       editDataRef.current = immediate;
       setLoading(false);
@@ -325,6 +378,212 @@ export const RecordDetailView = ({
   });
   const [activeRailTab, setActiveRailTab] = useState<ContextRailTab>('overview');
   const effectiveRecordId = recordId || record?.id || 'current';
+
+  // Real-Time Collaboration & Presence (MS 365 / Figma style)
+  const currentPresenceUser = useMemo(() => {
+    return platformUser || supabaseUser || session?.user || null;
+  }, [platformUser, supabaseUser, session?.user]);
+
+  const canonicalRecordId = record?.id || recordId;
+  const currentPresenceKey = record?._record_key || (record?.data as any)?._record_key || editData?._record_key || (recordId && recordId !== record?.id ? recordId : undefined);
+  const {
+    collaborators: recordCollaborators,
+    otherCollaborators: recordOtherCollaborators,
+    getFieldCollaborators,
+    focusField: focusPresenceField,
+    blurField: blurPresenceField,
+    reportTyping: reportPresenceTyping,
+    sendFieldChange,
+  } = useRecordPresence({
+    recordId: canonicalRecordId ? String(canonicalRecordId) : undefined,
+    recordKey: currentPresenceKey ? String(currentPresenceKey) : undefined,
+    user: currentPresenceUser,
+    tenantId: tenant?.id,
+    token: session?.access_token || localStorage.getItem('aurora_token') || undefined,
+    enabled: Boolean(canonicalRecordId && tenant?.id),
+    onRemoteFieldChange: (fieldId: string, value: any) => {
+      // If current user is actively editing this exact field, don't interrupt their cursor
+      if (activeFieldId === fieldId) return;
+
+      const field = allFields.find(f => f.id === fieldId || f.name === fieldId);
+      const targetId = field?.id || fieldId;
+      const targetName = field?.name;
+
+      setEditData(prev => {
+        const next = {
+          ...prev,
+          [targetId]: value,
+          ...(targetName ? { [targetName]: value } : {})
+        };
+        const groupId = fieldToGroupMap[targetId];
+        if (groupId) {
+          next[groupId] = {
+            ...(next[groupId] || {}),
+            [targetId]: value,
+            ...(targetName ? { [targetName]: value } : {})
+          };
+        }
+        editDataRef.current = next;
+        return next;
+      });
+    },
+  });
+
+  // Current user identity normalization for presence filtering
+  const presenceUserId = platformUser?.id || supabaseUser?.id || session?.user?.id || (platformUser as any)?.userId;
+  const presenceMemberId = (platformUser as any)?.memberId;
+  const presenceUserEmail = platformUser?.email || supabaseUser?.email || session?.user?.email;
+  const presenceUserName = useMemo(() => {
+    const raw = platformUser?.firstName || platformUser?.lastName
+      ? `${platformUser.firstName || ''} ${platformUser.lastName || ''}`.trim()
+      : platformUser?.name || (supabaseUser as any)?.user_metadata?.full_name || presenceUserEmail?.split('@')[0] || '';
+    return raw.trim();
+  }, [platformUser, supabaseUser, presenceUserEmail]);
+
+  // Keep refs for fresh access inside socket handlers
+  const recordOtherCollaboratorsRef = useRef(recordOtherCollaborators);
+  useEffect(() => {
+    recordOtherCollaboratorsRef.current = recordOtherCollaborators;
+  }, [recordOtherCollaborators]);
+
+  const getFieldCollaboratorsRef = useRef(getFieldCollaborators);
+  useEffect(() => {
+    getFieldCollaboratorsRef.current = getFieldCollaborators;
+  }, [getFieldCollaborators]);
+
+  const currentUserRef = useRef({
+    id: presenceUserId,
+    memberId: presenceMemberId,
+    email: presenceUserEmail,
+    name: presenceUserName
+  });
+  useEffect(() => {
+    currentUserRef.current = {
+      id: presenceUserId,
+      memberId: presenceMemberId,
+      email: presenceUserEmail,
+      name: presenceUserName
+    };
+  }, [presenceUserId, presenceMemberId, presenceUserEmail, presenceUserName]);
+
+  const getFieldRecentlySaved = useCallback((f?: any) => {
+    if (!f || Object.keys(collabRecentlyUpdatedFields).length === 0) return null;
+    // The 'saved' animation should only happen when there is someone else actively viewing the record
+    if (!recordOtherCollaborators || recordOtherCollaborators.length === 0) return null;
+
+    const fId = String(f.id || '').toLowerCase();
+    const fName = String(f.name || '').toLowerCase();
+    const fLabel = String(f.label || '').toLowerCase();
+    const now = Date.now();
+    for (const [key, item] of Object.entries(collabRecentlyUpdatedFields)) {
+      if (now - item.timestamp > 2500) continue;
+      // It should only show in the other person's instance, never for the user who saved
+      const isSelf = Boolean(
+        (item.userId && (item.userId === presenceUserId || item.userId === presenceMemberId)) ||
+        (item.name && presenceUserName && item.name.trim().toLowerCase() === presenceUserName.trim().toLowerCase())
+      );
+      if (isSelf) continue;
+
+      const k = String(key).toLowerCase();
+      if (k === fId || (fName && k === fName) || (fLabel && k === fLabel)) {
+        return item;
+      }
+    }
+    return null;
+  }, [collabRecentlyUpdatedFields, recordOtherCollaborators, presenceUserId, presenceMemberId, presenceUserName]);
+
+  const renderCollaboratorFieldBadge = useCallback((f?: any) => {
+    if (!f) return null;
+    if (isFieldAiModifying(f) || isFieldAiUpdated(f)) return null;
+
+    const collabs = getFieldCollaborators(f);
+    const hasCollab = collabs && collabs.length > 0;
+    const recentlySaved = getFieldRecentlySaved(f);
+
+    if (!hasCollab && !recentlySaved) return null;
+
+    if (hasCollab) {
+      const primary = collabs[0];
+      const isAgent = primary.role === 'agent';
+      const firstName = (primary.name || 'User').split(' ')[0];
+
+      return (
+        <span
+          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold normal-case tracking-normal text-white shadow-xs ml-auto animate-in fade-in zoom-in-95 duration-200 select-none shrink-0"
+          style={{ backgroundColor: primary.color || '#6366f1' }}
+          title={`${primary.name} is currently editing`}
+        >
+          {isAgent ? (
+            <Sparkles size={10} className="animate-spin" />
+          ) : primary.avatarUrl ? (
+            <img src={primary.avatarUrl} alt="" className="w-3.5 h-3.5 rounded-full object-cover ring-1 ring-white/30" />
+          ) : (
+            <span className="w-3.5 h-3.5 rounded-full bg-white/20 flex items-center justify-center text-[8px] font-bold">
+              {firstName.charAt(0)}
+            </span>
+          )}
+          <span>{firstName}</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+        </span>
+      );
+    }
+
+    if (recentlySaved) {
+      const firstName = (recentlySaved.name || 'User').split(' ')[0];
+      return (
+        <span
+          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold normal-case tracking-normal bg-emerald-600 text-white shadow-xs ml-auto animate-in fade-in zoom-in-95 duration-200 select-none shrink-0"
+          title={`${recentlySaved.name} saved`}
+        >
+          {recentlySaved.avatarUrl ? (
+            <img src={recentlySaved.avatarUrl} alt="" className="w-3.5 h-3.5 rounded-full object-cover ring-1 ring-white/30" />
+          ) : (
+            <span className="w-3.5 h-3.5 rounded-full bg-white/20 flex items-center justify-center text-[8px] font-bold">
+              {firstName.charAt(0)}
+            </span>
+          )}
+          <span>{firstName} saved</span>
+          <CheckCircle2 size={10} />
+        </span>
+      );
+    }
+
+    return null;
+  }, [getFieldCollaborators, getFieldRecentlySaved, isFieldAiModifying, isFieldAiUpdated]);
+
+  const getCollaboratorWrapperProps = useCallback((f?: any) => {
+    if (!f) return {};
+    const collabs = getFieldCollaborators(f);
+    const hasCollab = collabs && collabs.length > 0;
+    const primary = collabs?.[0];
+    const recentlySaved = getFieldRecentlySaved(f);
+
+    return {
+      onFocusCapture: () => {
+        if (f.id) focusPresenceField(f.id);
+      },
+      onBlurCapture: (e: React.FocusEvent) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+          if (f.id) {
+            // Keep presence engaged if this field is currently saving until persistence completes
+            if (isSavingRef.current || savingFieldId === f.id) return;
+            blurPresenceField(f.id);
+            reportPresenceTyping(f.id, false);
+          }
+        }
+      },
+      style: recentlySaved && !isFieldAiModifying(f) && !isFieldAiUpdated(f) ? {
+        borderColor: '#10b981',
+        boxShadow: '0 0 0 2px rgba(16, 185, 129, 0.25), 0 0 16px rgba(16, 185, 129, 0.2)',
+      } : hasCollab && !isFieldAiModifying(f) && !isFieldAiUpdated(f) ? {
+        borderColor: primary.color,
+        boxShadow: `0 0 0 2px ${primary.color}33, 0 0 16px ${primary.color}25`,
+      } : undefined,
+      className: (hasCollab || recentlySaved) && !isFieldAiModifying(f) && !isFieldAiUpdated(f) 
+        ? cn("ring-2 ring-offset-1 p-2 -m-2", recentlySaved && "ring-emerald-500/70 bg-emerald-50/20 dark:bg-emerald-950/20")
+        : undefined,
+    };
+  }, [getFieldCollaborators, getFieldRecentlySaved, focusPresenceField, blurPresenceField, reportPresenceTyping, isFieldAiModifying, isFieldAiUpdated]);
 
   const toggleRail = useCallback(() => {
     setIsRailCollapsed(prev => {
@@ -790,18 +1049,39 @@ export const RecordDetailView = ({
   // Real-time AI Assistant active entity registration
   const activeRecordContext = useMemo(() => {
     if (!record || !record.id) return null;
-    const title = resolveRecordTitle(record, moduleData, allFields);
+    const mergedRecord = { ...record, ...editData };
+    const recKey =
+      editData?._record_key ||
+      record?._record_key ||
+      record?.data?._record_key ||
+      record?.recordKey ||
+      record?.data?.recordKey ||
+      record?.record_key ||
+      record?.data?.record_key;
+
+    const title = resolveRecordTitle(mergedRecord, moduleData, allFields);
     const wfState = record.workflowState || record.workflow_state;
-    const stageName = (typeof wfState === 'object' ? wfState?.currentNodeId : record.status) || record.status || 'Active';
-    const cleanFields = sanitizeRecordKeyAttributes(record.data || record, allFields, {
+    const workflow = moduleData?.workflow || (moduleData?.workflows && moduleData?.workflows[0]);
+    const currentNode = workflow?.nodes?.find((n: any) => n.id === wfState?.currentNodeId);
+    const stageName =
+      currentNode?.data?.label ||
+      currentNode?.name ||
+      record.status ||
+      record.data?.status ||
+      (typeof wfState === 'object' && (wfState?.currentStageName || wfState?.status)) ||
+      'Active';
+
+    const cleanFields = sanitizeRecordKeyAttributes(mergedRecord.data || mergedRecord, allFields, {
       user: platformUser || supabaseUser,
       module: moduleData,
     });
+
     return {
       domain: 'module_record' as const,
       id: String(record.id),
-      title,
-      subtitle: `${moduleData?.name || 'Record'} • ${stageName}`,
+      recordKey: recKey || undefined,
+      title: title || recKey || 'Record Details',
+      subtitle: moduleData?.name || 'Record',
       status: stageName,
       slaStatus: record.slaStatus || record.sla_status,
       activeTab: activeRailTab || activeTabId || 'overview',
@@ -809,12 +1089,323 @@ export const RecordDetailView = ({
       keyAttributes: cleanFields,
       rawUrl: window.location.pathname + window.location.search,
     };
-  }, [record, moduleData, allFields, activeRailTab, activeTabId, platformUser, supabaseUser]);
+  }, [record, editData, moduleData, allFields, activeRailTab, activeTabId, platformUser, supabaseUser]);
 
   useRegisterActiveEntity(activeRecordContext, {
     priority: isModal ? 30 : isEmbedded ? 20 : 10,
     enabled: Boolean(record?.id),
   });
+
+  // Real-time synchronization for AI Assistant field modifications & updates
+  useEffect(() => {
+    if (!recordId) return;
+
+    const isMatchForThisRecord = (item: any) => {
+      if (!item) return false;
+      const targetId = String(item.recordId || item.id || item.record?.id || '');
+      const targetKey = String(item._record_key || item.data?._record_key || item.record?._record_key || item.record?.data?._record_key || '');
+      const activeId = String(record?.id || recordId || '');
+      const activeKey = String(record?._record_key || (record?.data as any)?._record_key || editData?._record_key || '');
+
+      return Boolean(
+        (targetId && (targetId === activeId || targetId === activeKey || (recordId && targetId === recordId))) ||
+        (targetKey && (targetKey === activeKey || targetKey === activeId || (recordId && targetKey === recordId))) ||
+        (!targetId && !targetKey)
+      );
+    };
+
+    const handleModifying = (detail: any) => {
+      if (!detail || !isMatchForThisRecord(detail)) return;
+      const rawFields = detail.fields || Object.keys(detail.data || {});
+      const fields = Array.isArray(rawFields) ? rawFields : [];
+      if (fields.length > 0) {
+        setAiModifyingFields(prev => {
+          const next = new Set(prev);
+          fields.forEach((f: string) => {
+            next.add(f);
+            // Safety timeout: automatically clear modifying badge after 6s so it NEVER gets stuck
+            const existingTimer = aiModifyingTimersRef.current.get(f);
+            if (existingTimer) clearTimeout(existingTimer);
+            const timer = setTimeout(() => {
+              setAiModifyingFields(p => {
+                const n = new Set(p);
+                n.delete(f);
+                return n;
+              });
+              aiModifyingTimersRef.current.delete(f);
+            }, 6000);
+            aiModifyingTimersRef.current.set(f, timer);
+          });
+          return next;
+        });
+      }
+    };
+
+    const handleUpdated = (detail: any) => {
+      if (!detail || !isMatchForThisRecord(detail)) return;
+
+      const updatedPayload = detail.data || detail.record?.data || detail.record || detail;
+      const patch = updatedPayload.data || updatedPayload;
+      const isAi = detail.source === 'ai' || detail.source === undefined || detail.isAi === true;
+
+      const rawKeys: string[] = detail.fields && detail.fields.length > 0
+        ? detail.fields
+        : Object.keys(patch || {}).filter((k: string) => !k.startsWith('_') && k !== 'id' && k !== 'tenantId');
+
+      // AI-specific highlights and notifications: only active when update source is AI
+      if (isAi) {
+        // Clear modifying state
+        setAiModifyingFields(prev => {
+          const next = new Set(prev);
+          if (rawKeys.length > 0) {
+            rawKeys.forEach((f: string) => {
+              const lower = f.toLowerCase();
+              for (const existing of next) {
+                if (existing.toLowerCase() === lower) {
+                  next.delete(existing);
+                  const timer = aiModifyingTimersRef.current.get(existing);
+                  if (timer) clearTimeout(timer);
+                  aiModifyingTimersRef.current.delete(existing);
+                }
+              }
+              next.delete(f);
+              const timer = aiModifyingTimersRef.current.get(f);
+              if (timer) clearTimeout(timer);
+              aiModifyingTimersRef.current.delete(f);
+            });
+          } else {
+            aiModifyingTimersRef.current.forEach(timer => clearTimeout(timer));
+            aiModifyingTimersRef.current.clear();
+            next.clear();
+          }
+          return next;
+        });
+
+        // Mark fields as recently updated with timestamp
+        const now = Date.now();
+        setAiRecentlyUpdatedFields(prev => {
+          const next = { ...prev };
+          rawKeys.forEach((f: string) => {
+            next[f] = now;
+          });
+          return next;
+        });
+
+        // Automatically clear updated highlight after 3.5 seconds
+        setTimeout(() => {
+          setAiRecentlyUpdatedFields(prev => {
+            const next = { ...prev };
+            rawKeys.forEach((f: string) => {
+              if (next[f] === now) {
+                delete next[f];
+              }
+            });
+            return next;
+          });
+        }, 3500);
+
+        if (rawKeys.length > 0) {
+          toast.success(`Aurora AI updated ${rawKeys.join(', ')}`, {
+            icon: <Sparkles className="w-4 h-4 text-indigo-500" />,
+            duration: 3000
+          });
+        }
+      }
+
+      // Compute patch for interactive edit data (focusing on specifically updated fields if known)
+      const patchForEdit = detail.fields && Array.isArray(detail.fields) && detail.fields.length > 0
+        ? detail.fields.reduce((acc: any, key: string) => {
+            if (patch[key] !== undefined) acc[key] = patch[key];
+            return acc;
+          }, {})
+        : patch;
+
+      // Instantly update editData (drives interactive input components)
+      setEditData(prev => {
+        const nextEdit = {
+          ...prev,
+          ...patchForEdit
+        };
+        editDataRef.current = nextEdit;
+        return nextEdit;
+      });
+
+      // Instantly update record (drives read-only views, headers, badges)
+      setRecord(prev => {
+        if (!prev) return prev;
+        const mergedData = { ...(prev.data || prev), ...patch };
+        const nextRecord = {
+          ...prev,
+          ...(detail.record || {}),
+          ...patch,
+          data: mergedData,
+          status: detail.status || detail.record?.status || patch.status || prev.status,
+          workflowState: detail.workflowState || detail.record?.workflowState || patch.workflowState || prev.workflowState,
+          updatedAt: detail.updatedAt || patch.updatedAt || new Date().toISOString()
+        };
+        recordRef.current = nextRecord;
+        return nextRecord;
+      });
+
+      // Update builder cache and primed query cache
+      const updatedCacheRecord = {
+        ...(recordRef.current || record || {}),
+        ...patch,
+        data: { ...((recordRef.current?.data as any) || (record?.data as any) || {}), ...patch }
+      };
+      builderCache.set(recordCacheKey, updatedCacheRecord);
+      primeRecordCache(updatedCacheRecord);
+
+      // Invalidate queries so records list / board / sidebar reflect updated values
+      queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+
+      onRecordUpdate?.(detail.record || { ...record, ...patch, data: patch });
+    };
+
+    // 1. Listen for local window events
+    const onLocalModifying = (e: Event) => handleModifying((e as CustomEvent).detail);
+    const onLocalUpdated = (e: Event) => handleUpdated((e as CustomEvent).detail);
+    const onModifyingEnded = () => {
+      aiModifyingTimersRef.current.forEach(timer => clearTimeout(timer));
+      aiModifyingTimersRef.current.clear();
+      setAiModifyingFields(new Set());
+    };
+
+    window.addEventListener('aurora:ai-field-modifying', onLocalModifying as EventListener);
+    window.addEventListener('aurora:ai-field-updated', onLocalUpdated as EventListener);
+    window.addEventListener('aurora:ai-modifying-ended', onModifyingEnded as EventListener);
+
+    // 2. Listen for WebSocket updates from server
+    const token = session?.access_token || localStorage.getItem('aurora_token') || undefined;
+    const tenantId = tenant?.id;
+    const socket = tenantId ? getSharedSocket(token, tenantId) : null;
+
+    const onRemoteRecordUpdated = (rec: any) => {
+      if (!rec || !isMatchForThisRecord(rec)) return;
+      const payloadData = rec.data || rec;
+      const updatedFields: string[] = Array.isArray(rec.updatedFields) ? rec.updatedFields : [];
+
+      // Check whether this update originated from the current user in this session
+      const currentUser = currentUserRef.current;
+      const updatedByUserId = rec.updatedByUser?.id || rec.updatedByUser?.uid;
+      const updatedByMemberId = rec.updatedByUser?.memberId;
+      const updatedByEmail = rec.updatedByUser?.email;
+      const updatedByName = (rec.updatedByUser?.name || rec.updatedBy || '').trim();
+
+      const isCurrentClientSaving = Boolean(isSavingRef.current || savingFieldId);
+      const isSameUser = Boolean(
+        (updatedByUserId && (updatedByUserId === currentUser.id || updatedByUserId === currentUser.memberId)) ||
+        (updatedByMemberId && (updatedByMemberId === currentUser.id || updatedByMemberId === currentUser.memberId)) ||
+        (updatedByEmail && currentUser.email && updatedByEmail.toLowerCase() === currentUser.email.toLowerCase()) ||
+        (updatedByName && currentUser.name && updatedByName.toLowerCase() === currentUser.name.toLowerCase())
+      );
+      const isSelf = isCurrentClientSaving || isSameUser;
+
+      // Active collaborators currently viewing this record (excluding self)
+      const activeOtherCollabs = recordOtherCollaboratorsRef.current || [];
+
+      // The 'saved' animation should ONLY happen when:
+      // 1. There is someone else actively viewing the record (activeOtherCollabs.length > 0)
+      // 2. It should only show in the other person's instance (!isSelf)
+      const hasOtherLiveViewers = activeOtherCollabs.length > 0;
+
+      if (!isSelf && hasOtherLiveViewers && rec.source === 'collaborator' && updatedFields.length > 0) {
+        // Look up who was actually editing these fields from active collaborator presence map first
+        let activeEditorName: string | undefined;
+        let activeEditorAvatar: string | undefined;
+        let activeEditorColor: string | undefined;
+        let activeEditorUserId: string | undefined;
+
+        for (const f of updatedFields) {
+          const collabsOnField = getFieldCollaboratorsRef.current?.({ id: f });
+          if (collabsOnField && collabsOnField.length > 0) {
+            activeEditorName = collabsOnField[0].name;
+            activeEditorAvatar = collabsOnField[0].avatarUrl;
+            activeEditorColor = collabsOnField[0].color;
+            activeEditorUserId = collabsOnField[0].userId;
+            break;
+          }
+        }
+
+        // If not found directly on field focus, match against active collaborators viewing this record
+        if (!activeEditorName) {
+          const matchingCollab = activeOtherCollabs.find(c => {
+            if (updatedByUserId && (c.userId === updatedByUserId || (c as any).id === updatedByUserId)) return true;
+            if (updatedByEmail && c.email && c.email.toLowerCase() === updatedByEmail.toLowerCase()) return true;
+            if (updatedByName && c.name && c.name.toLowerCase() === updatedByName.toLowerCase()) return true;
+            return false;
+          });
+
+          if (matchingCollab) {
+            activeEditorName = matchingCollab.name;
+            activeEditorAvatar = matchingCollab.avatarUrl;
+            activeEditorColor = matchingCollab.color;
+            activeEditorUserId = matchingCollab.userId;
+          }
+        }
+
+        const updaterName = activeEditorName || updatedByName || 'Collaborator';
+        const updaterAvatar = activeEditorAvatar || rec.updatedByUser?.avatarUrl;
+        const updaterColor = activeEditorColor || (updaterName ? getDeterministicColor(updaterName) : undefined);
+        const now = Date.now();
+
+        setCollabRecentlyUpdatedFields(prev => {
+          const next = { ...prev };
+          updatedFields.forEach(f => {
+            next[f.toLowerCase()] = {
+              name: updaterName,
+              avatarUrl: updaterAvatar,
+              color: updaterColor,
+              userId: activeEditorUserId || updatedByUserId,
+              timestamp: now
+            };
+          });
+          return next;
+        });
+
+        setTimeout(() => {
+          setCollabRecentlyUpdatedFields(prev => {
+            const next = { ...prev };
+            updatedFields.forEach(f => {
+              if (next[f.toLowerCase()]?.timestamp === now) {
+                delete next[f.toLowerCase()];
+              }
+            });
+            return next;
+          });
+        }, 2500);
+      }
+
+      handleUpdated({
+        recordId: record?.id || recordId,
+        fields: rec.updatedFields,
+        record: rec,
+        data: payloadData,
+        source: rec.source || 'collaborator'
+      });
+    };
+
+    if (socket) {
+      socket.on('ai_record_field_modifying', handleModifying);
+      socket.on('ai_record_field_updated', (data: any) => handleUpdated({ ...data, source: 'ai' }));
+      socket.on('record_updated', onRemoteRecordUpdated);
+      socket.on('record:updated', onRemoteRecordUpdated);
+    }
+
+    return () => {
+      window.removeEventListener('aurora:ai-field-modifying', onLocalModifying as EventListener);
+      window.removeEventListener('aurora:ai-field-updated', onLocalUpdated as EventListener);
+      window.removeEventListener('aurora:ai-modifying-ended', onModifyingEnded as EventListener);
+      aiModifyingTimersRef.current.forEach(timer => clearTimeout(timer));
+      aiModifyingTimersRef.current.clear();
+      if (socket) {
+        socket.off('ai_record_field_modifying', handleModifying);
+        socket.off('ai_record_field_updated');
+        socket.off('record_updated', onRemoteRecordUpdated);
+        socket.off('record:updated', onRemoteRecordUpdated);
+      }
+    };
+  }, [recordId, record?._record_key, editData?._record_key, tenant?.id, session?.access_token, recordCacheKey, onRecordUpdate]);
 
   const activeValidations = useMemo(() => {
     const rules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
@@ -1264,23 +1855,26 @@ export const RecordDetailView = ({
 
       try {
         let recData = record;
-        if (!recData || recData.id !== recordId) {
-          const recRes = await fetch(`${DATA_API_URL}/records/${recordId}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'x-tenant-id': tenant.id
-            }
-          });
-          if (recRes.ok) {
-            recData = await recRes.json();
-            setRecord(recData);
-          } else if (recRes.status === 404) {
-            toast.error("Record not found");
-            setLoading(false);
-            return;
-          } else {
-            throw new Error(`Failed to fetch record: ${recRes.statusText}`);
+        const recRes = await fetch(`${DATA_API_URL}/records/${recordId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-tenant-id': tenant.id
           }
+        });
+        if (recRes.ok) {
+          recData = await recRes.json();
+          setRecord(recData);
+          setEditData(prev => ({ ...recData, ...prev }));
+          builderCache.set(recordCacheKey, recData);
+          primeRecordCache(recData);
+        } else if (recRes.status === 404) {
+          builderCache.invalidate(recordCacheKey);
+          setRecord(null);
+          toast.error("Record not found (it may have been deleted or moved to the Recycling Bin)");
+          setLoading(false);
+          return;
+        } else if (!recData) {
+          throw new Error(`Failed to fetch record: ${recRes.statusText}`);
         }
 
         const effectiveModuleId = moduleId || recData?.moduleId;
@@ -1758,6 +2352,10 @@ export const RecordDetailView = ({
     // Trigger data population rules on field change
     evaluateDataPopulationRules(fieldId, withCalculations);
     
+    // Broadcast active typing indicator & instant value preview to live collaborators
+    sendFieldChange(fieldId, val, metadata);
+    reportPresenceTyping(fieldId, true);
+
     return withCalculations;
   };
 
@@ -1847,7 +2445,7 @@ export const RecordDetailView = ({
 
       // 2. Change Detection
       const newValue = getFieldValue(currentData, fieldIdBeingSaved);
-      const oldValue = getFieldValue(record, fieldIdBeingSaved);
+      const oldValue = getFieldValue(recordRef.current || record, fieldIdBeingSaved);
       if (JSON.stringify(newValue) === JSON.stringify(oldValue)) {
         setActiveFieldId(prev => prev === fieldIdBeingSaved ? null : prev);
         // Still check for pending updates if they exist
@@ -2017,6 +2615,7 @@ export const RecordDetailView = ({
         setActiveFieldId(prev => prev === fieldIdBeingSaved ? null : prev);
         // Update both record and editData optimistically so the UI reflects the change immediately
         setRecord(prev => ({ ...prev, ...payload }));
+        recordRef.current = { ...(recordRef.current || record || {}), ...payload };
         setEditData(prev => ({ ...prev, ...payload }));
         editDataRef.current = { ...editDataRef.current, ...payload };
         
@@ -2039,7 +2638,11 @@ export const RecordDetailView = ({
       });
 
       if (!res.ok) {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({}));
+        if (res.status === 404) {
+          builderCache.invalidate(recordCacheKey);
+          throw new Error("This record no longer exists or was moved to the Recycling Bin.");
+        }
         throw new Error(typeof err.error === 'string' && err.error ? err.error : 'Failed to update record');
       }
 
@@ -2062,6 +2665,7 @@ export const RecordDetailView = ({
       
       // Final sync with server data - merge with current local state to preserve in-flight edits
       setRecord(updatedRecord);
+      recordRef.current = updatedRecord;
       setEditData(prev => {
         if (!fieldIdBeingSaved) return updatedRecord;
         const groupId = fieldToGroupMap[fieldIdBeingSaved];
@@ -2105,6 +2709,11 @@ export const RecordDetailView = ({
       setSavingFieldId(null);
       setActiveFieldId(prev => prev === fieldIdBeingSaved ? null : prev);
       isSavingRef.current = false;
+      
+      if (fieldIdBeingSaved) {
+        blurPresenceField(fieldIdBeingSaved);
+        reportPresenceTyping(fieldIdBeingSaved, false);
+      }
       
       // Check for PENDING updates
       if (pendingUpdateRef.current) {
@@ -2872,10 +3481,36 @@ export const RecordDetailView = ({
             </div>
           )}
 
-          <div className="space-y-1 relative">
-            <label className={cn(ds.labelSize, "font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label")}>
-              {nestedField.label}
-              {nestedField.required && <span className="text-rose-500">*</span>}
+          {(() => {
+            const collabProps = getCollaboratorWrapperProps(nestedField);
+            return (
+              <div
+                onFocusCapture={collabProps.onFocusCapture}
+                onBlurCapture={collabProps.onBlurCapture}
+                style={collabProps.style}
+                className={cn(
+                  "space-y-1 relative transition-all duration-300 rounded-xl",
+                  collabProps.className,
+                  isFieldAiModifying(nestedField) && "p-2 -m-2 ring-2 ring-indigo-500/80 shadow-[0_0_18px_rgba(99,102,241,0.35)] dark:shadow-[0_0_24px_rgba(129,140,248,0.3)] bg-indigo-50/50 dark:bg-indigo-950/30",
+                  isFieldAiUpdated(nestedField) && !isFieldAiModifying(nestedField) && "p-2 -m-2 ring-2 ring-emerald-500/70 shadow-[0_0_18px_rgba(16,185,129,0.25)] bg-emerald-50/40 dark:bg-emerald-950/20"
+                )}
+              >
+                <label className={cn(ds.labelSize, "font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label")}>
+                  {nestedField.label}
+                  {nestedField.required && <span className="text-rose-500">*</span>}
+                  {renderCollaboratorFieldBadge(nestedField)}
+                  {isFieldAiModifying(nestedField) && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-indigo-600 text-white animate-pulse shadow-xs ml-auto">
+                      <Sparkles size={10} className="animate-spin" />
+                      AI Updating...
+                    </span>
+                  )}
+                  {isFieldAiUpdated(nestedField) && !isFieldAiModifying(nestedField) && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-emerald-600 text-white shadow-xs ml-auto animate-in fade-in zoom-in-95 duration-200">
+                      <CheckCircle2 size={10} />
+                      Updated by AI
+                    </span>
+                  )}
               {nestedField.tooltip && (
                 <div className="relative cursor-help">
                   <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
@@ -2909,14 +3544,18 @@ export const RecordDetailView = ({
               })()}
               onChange={(val, metadata) => {
                 const withCalculations = handleFieldChange(nestedField.id, val, metadata);
-                if (['date', 'time', 'user', 'select', 'choice', 'status_pill', 'boolean', 'toggle', 'rating', 'colorpicker', 'party', 'lookup'].includes(nestedField.type)) {
+                if (['date', 'time', 'user', 'select', 'dropdown', 'choice', 'status_pill', 'boolean', 'toggle', 'rating', 'colorpicker', 'party', 'lookup'].includes(nestedField.type)) {
                   handleUpdateEntry(withCalculations, nestedField.id, true);
                 }
               }}
               onBlur={() => handleUpdateEntry(undefined, nestedField.id)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleUpdateEntry(undefined, nestedField.id);
-                if (e.key === 'Escape') setActiveFieldId(null);
+                if (e.key === 'Escape') {
+                  setActiveFieldId(null);
+                  blurPresenceField(nestedField.id);
+                  reportPresenceTyping(nestedField.id, false);
+                }
               }}
               readonly={isSecReadOnly || (!isDirect && activeFieldId !== nestedField.id)}
               disabled={savingFieldId === nestedField.id}
@@ -2937,6 +3576,8 @@ export const RecordDetailView = ({
               <p className={cn(ds.fontSize, "text-zinc-500 mt-0.5 font-medium px-0.5 italic absolute top-full left-0 z-10 pointer-events-none truncate max-w-full")}>{nestedField.helperText}</p>
             )}
           </div>
+            );
+          })()}
         </div>
       </div>
     );
@@ -3044,72 +3685,102 @@ export const RecordDetailView = ({
                           </div>
                         )}
                       </div>
-                    ) : (
-                      <div className="space-y-1 relative">
-                        <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
-                          {labelOverride}
-                          {isRequired && <span className="text-rose-500">*</span>}
-                          {field!.tooltip && (
-                            <div className="relative cursor-help">
-                              <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-                              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
-                                {field!.tooltip}
-                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-zinc-900" />
+                    ) : (() => {
+                      const collabProps = getCollaboratorWrapperProps(field);
+                      return (
+                        <div
+                          onFocusCapture={collabProps.onFocusCapture}
+                          onBlurCapture={collabProps.onBlurCapture}
+                          style={collabProps.style}
+                          className={cn(
+                            "space-y-1 relative transition-all duration-300 rounded-xl",
+                            collabProps.className,
+                            isFieldAiModifying(field) && "p-2 -m-2 ring-2 ring-indigo-500/80 shadow-[0_0_18px_rgba(99,102,241,0.35)] dark:shadow-[0_0_24px_rgba(129,140,248,0.3)] bg-indigo-50/50 dark:bg-indigo-950/30",
+                            isFieldAiUpdated(field) && !isFieldAiModifying(field) && "p-2 -m-2 ring-2 ring-emerald-500/70 shadow-[0_0_18px_rgba(16,185,129,0.25)] bg-emerald-50/40 dark:bg-emerald-950/20"
+                          )}
+                        >
+                          <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
+                            {labelOverride}
+                            {isRequired && <span className="text-rose-500">*</span>}
+                            {renderCollaboratorFieldBadge(field)}
+                            {isFieldAiModifying(field) && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-indigo-600 text-white animate-pulse shadow-xs ml-auto">
+                                <Sparkles size={10} className="animate-spin" />
+                                AI Updating...
+                              </span>
+                            )}
+                            {isFieldAiUpdated(field) && !isFieldAiModifying(field) && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-emerald-600 text-white shadow-xs ml-auto animate-in fade-in zoom-in-95 duration-200">
+                                <CheckCircle2 size={10} />
+                                Updated by AI
+                              </span>
+                            )}
+                            {field!.tooltip && (
+                              <div className="relative cursor-help">
+                                <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
+                                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                                  {field!.tooltip}
+                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-zinc-900" />
+                                </div>
                               </div>
+                            )}
+                            {!activeFieldId && !isDirect && (
+                              isReadOnly || ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(field!.type) ? (
+                                <Lock size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-zinc-400" />
+                              ) : (
+                                !['datatable'].includes(field!.type) && (
+                                  <Edit2 size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-indigo-500" />
+                                )
+                              )
+                            )}
+                          </label>
+                          <FieldInput 
+                            field={field!}
+                            value={(() => {
+                              const edited = getFieldValue(editData, field!.id, field!.name);
+                              const rawVal = edited !== undefined
+                                ? edited
+                                : (() => {
+                                    const original = getFieldValue(record, field!.id, field!.name);
+                                    return original !== undefined ? original : calculateDefaultValue(field!, editData);
+                                  })();
+                              return isSecMasked ? formatMaskedFieldValue(rawVal) : rawVal;
+                            })()}
+                            onChange={(val, metadata) => {
+                              const withCalculations = handleFieldChange(field!.id, val, metadata);
+                              if (['date', 'time', 'user', 'select', 'dropdown', 'choice', 'status_pill', 'boolean', 'toggle', 'rating', 'colorpicker', 'party', 'lookup'].includes(field!.type)) {
+                                handleUpdateEntry(withCalculations, field!.id, true);
+                              }
+                            }}
+                            onBlur={() => handleUpdateEntry(undefined, field!.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleUpdateEntry(undefined, field!.id);
+                              if (e.key === 'Escape') {
+                                setActiveFieldId(null);
+                                if (field?.id) blurPresenceField(field.id);
+                                if (field?.id) reportPresenceTyping(field.id, false);
+                              }
+                            }}
+                            readonly={isReadOnly || (!isDirect && activeFieldId !== field!.id)}
+                            disabled={savingFieldId === field!.id}
+                            recordData={editData}
+                            allFields={allFields}
+                          />
+                          {isErrorField && (
+                            <div className={cn(
+                              "mt-1.5 flex items-center gap-1.5 font-bold px-0.5 text-[9px] uppercase tracking-wider animate-in fade-in slide-in-from-top-1 duration-200",
+                              validationErrorField?.severity === 'warning' ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400"
+                            )}>
+                              {validationErrorField?.severity === 'warning' ? <AlertTriangle size={10} className="shrink-0" /> : <AlertCircle size={10} className="shrink-0" />}
+                              <span>{validationErrorField.message}</span>
                             </div>
                           )}
-                          {!activeFieldId && !isDirect && (
-                            isReadOnly || ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(field!.type) ? (
-                              <Lock size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-zinc-400" />
-                            ) : (
-                              !['datatable'].includes(field!.type) && (
-                                <Edit2 size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-indigo-500" />
-                              )
-                            )
+                          {field!.helperText && !isErrorField && (
+                            <p className="text-[10px] text-zinc-500 mt-0.5 font-medium px-0.5 italic absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{field!.helperText}</p>
                           )}
-                        </label>
-                        <FieldInput 
-                          field={field!}
-                          value={(() => {
-                            const edited = getFieldValue(editData, field!.id, field!.name);
-                            const rawVal = edited !== undefined
-                              ? edited
-                              : (() => {
-                                  const original = getFieldValue(record, field!.id, field!.name);
-                                  return original !== undefined ? original : calculateDefaultValue(field!, editData);
-                                })();
-                            return isSecMasked ? formatMaskedFieldValue(rawVal) : rawVal;
-                          })()}
-                          onChange={(val, metadata) => {
-                            const withCalculations = handleFieldChange(field!.id, val, metadata);
-                            if (['date', 'time', 'user', 'select', 'choice', 'status_pill', 'boolean', 'toggle', 'rating', 'colorpicker', 'party', 'lookup'].includes(field!.type)) {
-                              handleUpdateEntry(withCalculations, field!.id, true);
-                            }
-                          }}
-                          onBlur={() => handleUpdateEntry(undefined, field!.id)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleUpdateEntry(undefined, field!.id);
-                            if (e.key === 'Escape') setActiveFieldId(null);
-                          }}
-                          readonly={isReadOnly || (!isDirect && activeFieldId !== field!.id)}
-                          disabled={savingFieldId === field!.id}
-                          recordData={editData}
-                          allFields={allFields}
-                        />
-                        {isErrorField && (
-                          <div className={cn(
-                            "mt-1.5 flex items-center gap-1.5 font-bold px-0.5 text-[9px] uppercase tracking-wider animate-in fade-in slide-in-from-top-1 duration-200",
-                            validationErrorField?.severity === 'warning' ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400"
-                          )}>
-                            {validationErrorField?.severity === 'warning' ? <AlertTriangle size={10} className="shrink-0" /> : <AlertCircle size={10} className="shrink-0" />}
-                            <span>{validationErrorField.message}</span>
-                          </div>
-                        )}
-                        {field!.helperText && !isErrorField && (
-                          <p className="text-[10px] text-zinc-500 mt-0.5 font-medium px-0.5 italic absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{field!.helperText}</p>
-                        )}
-                      </div>
-                    )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </motion.div>
               );
@@ -3336,72 +4007,102 @@ export const RecordDetailView = ({
                   <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Reshaping Engine Engaged</span>
                 </div>
               </div>
-            ) : (
-              <div className="space-y-1 relative">
-                <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
-                  {field.label}
-                  {field.required && <span className="text-rose-500">*</span>}
-                  {field.tooltip && (
-                    <div className="relative cursor-help">
-                      <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-                      <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
-                        {field.tooltip}
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-zinc-900" />
+            ) : (() => {
+              const collabProps = getCollaboratorWrapperProps(field);
+              return (
+                <div
+                  onFocusCapture={collabProps.onFocusCapture}
+                  onBlurCapture={collabProps.onBlurCapture}
+                  style={collabProps.style}
+                  className={cn(
+                    "space-y-1 relative transition-all duration-300 rounded-xl",
+                    collabProps.className,
+                    isFieldAiModifying(field) && "p-2 -m-2 ring-2 ring-indigo-500/80 shadow-[0_0_18px_rgba(99,102,241,0.35)] dark:shadow-[0_0_24px_rgba(129,140,248,0.3)] bg-indigo-50/50 dark:bg-indigo-950/30",
+                    isFieldAiUpdated(field) && !isFieldAiModifying(field) && "p-2 -m-2 ring-2 ring-emerald-500/70 shadow-[0_0_18px_rgba(16,185,129,0.25)] bg-emerald-50/40 dark:bg-emerald-950/20"
+                  )}
+                >
+                  <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
+                    {field.label}
+                    {field.required && <span className="text-rose-500">*</span>}
+                    {renderCollaboratorFieldBadge(field)}
+                    {isFieldAiModifying(field) && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-indigo-600 text-white animate-pulse shadow-xs ml-auto">
+                        <Sparkles size={10} className="animate-spin" />
+                        AI Updating...
+                      </span>
+                    )}
+                    {isFieldAiUpdated(field) && !isFieldAiModifying(field) && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-emerald-600 text-white shadow-xs ml-auto animate-in fade-in zoom-in-95 duration-200">
+                        <CheckCircle2 size={10} />
+                        Updated by AI
+                      </span>
+                    )}
+                    {field.tooltip && (
+                      <div className="relative cursor-help">
+                        <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
+                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
+                          {field.tooltip}
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-zinc-900" />
+                        </div>
                       </div>
+                    )}
+                    {!activeFieldId && !isDirect && (
+                      isSecReadOnly || ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(field.type) ? (
+                        <Lock size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-zinc-400" />
+                      ) : (
+                        !['datatable'].includes(field.type) && (
+                          <Edit2 size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-indigo-500" />
+                        )
+                      )
+                    )}
+                  </label>
+                  <FieldInput 
+                    field={field}
+                    value={(() => {
+                      const edited = getFieldValue(editData, field.id, field.name);
+                      const rawVal = edited !== undefined
+                        ? edited
+                        : (() => {
+                            const original = getFieldValue(record, field.id, field.name);
+                            return original !== undefined ? original : calculateDefaultValue(field, editData);
+                          })();
+                      return isSecMasked ? formatMaskedFieldValue(rawVal) : rawVal;
+                    })()}
+                    onChange={(val, metadata) => {
+                      const withCalculations = handleFieldChange(field.id, val, metadata);
+                      if (['date', 'time', 'user', 'select', 'dropdown', 'choice', 'status_pill', 'boolean', 'toggle', 'rating', 'colorpicker', 'party', 'lookup'].includes(field.type)) {
+                        handleUpdateEntry(withCalculations, field.id, true);
+                      }
+                    }}
+                    onBlur={() => handleUpdateEntry(undefined, field.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleUpdateEntry(undefined, field.id);
+                      if (e.key === 'Escape') {
+                        setActiveFieldId(null);
+                        if (field?.id) blurPresenceField(field.id);
+                        if (field?.id) reportPresenceTyping(field.id, false);
+                      }
+                    }}
+                    readonly={isSecReadOnly || (!isDirect && activeFieldId !== field.id)}
+                    disabled={savingFieldId === field.id}
+                    recordData={editData}
+                    allFields={allFields}
+                  />
+                  {isErrorField && (
+                    <div className={cn(
+                      "mt-1.5 flex items-center gap-1.5 font-bold px-0.5 text-[9px] uppercase tracking-wider animate-in fade-in slide-in-from-top-1 duration-200",
+                      validationErrorField?.severity === 'warning' ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400"
+                    )}>
+                      {validationErrorField?.severity === 'warning' ? <AlertTriangle size={10} className="shrink-0" /> : <AlertCircle size={10} className="shrink-0" />}
+                      <span>{validationErrorField.message}</span>
                     </div>
                   )}
-                  {!activeFieldId && !isDirect && (
-                    isSecReadOnly || ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(field.type) ? (
-                      <Lock size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-zinc-400" />
-                    ) : (
-                      !['datatable'].includes(field.type) && (
-                        <Edit2 size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-indigo-500" />
-                      )
-                    )
+                  {field.helperText && !isErrorField && (
+                    <p className="text-[10px] text-zinc-500 mt-0.5 font-medium px-0.5 italic absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{field.helperText}</p>
                   )}
-                </label>
-                <FieldInput 
-                  field={field}
-                  value={(() => {
-                    const edited = getFieldValue(editData, field.id, field.name);
-                    const rawVal = edited !== undefined
-                      ? edited
-                      : (() => {
-                          const original = getFieldValue(record, field.id, field.name);
-                          return original !== undefined ? original : calculateDefaultValue(field, editData);
-                        })();
-                    return isSecMasked ? formatMaskedFieldValue(rawVal) : rawVal;
-                  })()}
-                  onChange={(val, metadata) => {
-                    const withCalculations = handleFieldChange(field.id, val, metadata);
-                    if (['date', 'time', 'user', 'select', 'choice', 'status_pill', 'boolean', 'toggle', 'rating', 'colorpicker', 'party', 'lookup'].includes(field.type)) {
-                      handleUpdateEntry(withCalculations, field.id, true);
-                    }
-                  }}
-                  onBlur={() => handleUpdateEntry(undefined, field.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleUpdateEntry(undefined, field.id);
-                    if (e.key === 'Escape') setActiveFieldId(null);
-                  }}
-                  readonly={isSecReadOnly || (!isDirect && activeFieldId !== field.id)}
-                  disabled={savingFieldId === field.id}
-                  recordData={editData}
-                  allFields={allFields}
-                />
-                {isErrorField && (
-                  <div className={cn(
-                    "mt-1.5 flex items-center gap-1.5 font-bold px-0.5 text-[9px] uppercase tracking-wider animate-in fade-in slide-in-from-top-1 duration-200",
-                    validationErrorField?.severity === 'warning' ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400"
-                  )}>
-                    {validationErrorField?.severity === 'warning' ? <AlertTriangle size={10} className="shrink-0" /> : <AlertCircle size={10} className="shrink-0" />}
-                    <span>{validationErrorField.message}</span>
-                  </div>
-                )}
-                {field.helperText && !isErrorField && (
-                  <p className="text-[10px] text-zinc-500 mt-0.5 font-medium px-0.5 italic absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{field.helperText}</p>
-                )}
-              </div>
-            )}
+                </div>
+              );
+            })()}
             </div>
           </motion.div>
         )})}
@@ -3819,6 +4520,13 @@ export const RecordDetailView = ({
 
         {/* Right: Actions Cluster */}
         <div className="flex items-center gap-2 flex-wrap md:flex-nowrap shrink-0">
+          {/* Real-time Collaboration & Presence Avatar Stack (MS 365 / Figma style) */}
+          <RecordPresenceStack
+            collaborators={recordCollaborators}
+            otherCollaborators={recordOtherCollaborators}
+            getFieldLabel={(fId) => allFields.find(f => f.id === fId || f.name === fId)?.label || fId}
+          />
+
           {/* Quick Actions & Automations */}
           {quickActionAutomations.map((auto: any) => (
             <button
@@ -4350,6 +5058,8 @@ export const RecordDetailView = ({
             handleStatusTransition(newStatus, targetNodeId);
           }}
           members={members || []}
+          collaborators={recordCollaborators}
+          otherCollaborators={recordOtherCollaborators}
           allFields={allFields}
           isCollapsed={isRailCollapsed}
           onToggleCollapse={toggleRail}

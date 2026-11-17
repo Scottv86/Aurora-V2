@@ -119,24 +119,26 @@ export const AddRelationshipModal = ({
   const fetchRelTypes = async () => {
     try {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
-      const res = await fetch(`${API_BASE_URL}/api/taxonomies?category=RELATIONSHIP_TYPE`, {
+      const res = await fetch(`${API_BASE_URL}/api/people-organisations/config`, {
         headers: {
           Authorization: `Bearer ${token}`,
           'x-tenant-id': tenant?.id || '',
         },
       });
       const data = await res.json();
-      if (res.ok && Array.isArray(data) && data.length > 0) {
-        const customTypes = data.map((t: any) => ({ label: t.name, value: t.slug }));
-        const mergedMap = new Map<string, { label: string; value: string }>();
-        DEFAULT_REL_TYPES.forEach((t) => mergedMap.set(t.value, t));
-        customTypes.forEach((t) => mergedMap.set(t.value, t));
-        setRelTypes(Array.from(mergedMap.values()));
+      if (res.ok && Array.isArray(data?.relationshipTypes) && data.relationshipTypes.length > 0) {
+        setRelTypes(
+          data.relationshipTypes.map((rt: any) => ({
+            label: rt.inverseLabel ? `${rt.label} (Inverse: ${rt.inverseLabel})` : rt.label,
+            value: rt.code,
+          }))
+        );
       } else {
         setRelTypes(DEFAULT_REL_TYPES);
       }
     } catch (err) {
-      console.error('Failed to fetch rel types:', err);
+      console.error('Failed to fetch rel types from directory config:', err);
+      setRelTypes(DEFAULT_REL_TYPES);
     }
   };
 

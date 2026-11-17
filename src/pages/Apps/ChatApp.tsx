@@ -189,11 +189,7 @@ const ChatAppContent: React.FC = () => {
 };
 
 export const ChatApp: React.FC = () => {
-  return (
-    <ChatProvider>
-      <ChatAppContent />
-    </ChatProvider>
-  );
+  return <ChatAppContent />;
 };
 
 export default ChatApp;

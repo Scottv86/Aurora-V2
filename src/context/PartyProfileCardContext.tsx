@@ -172,6 +172,18 @@ function saveCachedDirectoryMap(map: Map<string, PartySummary>) {
   }
 }
 
+/**
+ * Validate that an entity ID looks like a plausible database identifier (e.g. CUID, CUID2, UUID)
+ * and does not contain spaces, newlines, or sentence text.
+ */
+function isValidEntityId(id?: string | null): boolean {
+  if (!id || typeof id !== 'string') return false;
+  const trimmed = id.trim();
+  if (trimmed.length < 10 || trimmed.length > 100) return false;
+  if (/\s/.test(trimmed)) return false;
+  return /^[a-zA-Z0-9_-]+$/.test(trimmed);
+}
+
 export const PartyProfileCardContext = createContext<PartyProfileCardContextType | undefined>(undefined);
 
 export const PartyProfileCardProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -254,6 +266,7 @@ export const PartyProfileCardProvider: React.FC<{ children: React.ReactNode }> =
   useEffect(() => {
     const handler = () => {
       profileCacheRef.current.clear();
+      failedSummaryRef.current.clear();
       refreshDirectoryMap();
     };
     window.addEventListener('aurora:directory-updated', handler);
@@ -261,12 +274,17 @@ export const PartyProfileCardProvider: React.FC<{ children: React.ReactNode }> =
   }, [refreshDirectoryMap]);
 
   const inFlightSummaryRef = useRef<Set<string>>(new Set());
+  const failedSummaryRef = useRef<Set<string>>(new Set());
 
   const getPartySummary = useCallback(
     (partyId?: string | null): PartySummary | null => {
       if (!partyId || typeof partyId !== 'string') return null;
       const hit = directoryMap.get(partyId);
       if (hit) return hit;
+
+      if (!isValidEntityId(partyId) || failedSummaryRef.current.has(partyId)) {
+        return null;
+      }
 
       // On-demand single-entity resolution if not in directoryMap yet
       if (tenant?.id && !inFlightSummaryRef.current.has(partyId)) {
@@ -279,7 +297,15 @@ export const PartyProfileCardProvider: React.FC<{ children: React.ReactNode }> =
               'x-tenant-id': tenant.id,
             },
           })
-            .then((r) => (r.ok ? r.json() : null))
+            .then((r) => {
+              if (r.ok) {
+                return r.json();
+              }
+              if (r.status === 404 || !r.ok) {
+                failedSummaryRef.current.add(partyId);
+              }
+              return null;
+            })
             .then((p) => {
               if (p && p.id) {
                 const displayName =
@@ -294,9 +320,13 @@ export const PartyProfileCardProvider: React.FC<{ children: React.ReactNode }> =
                   saveCachedDirectoryMap(next);
                   return next;
                 });
+              } else {
+                failedSummaryRef.current.add(partyId);
               }
             })
-            .catch(() => {})
+            .catch(() => {
+              failedSummaryRef.current.add(partyId);
+            })
             .finally(() => {
               inFlightSummaryRef.current.delete(partyId);
             });
@@ -309,7 +339,7 @@ export const PartyProfileCardProvider: React.FC<{ children: React.ReactNode }> =
 
   const fetchProfileCardData = useCallback(
     async (partyId: string, fallbackData?: Partial<PartyProfileCardData>, forceRefresh = false) => {
-      if (!tenant?.id || !partyId) return;
+      if (!tenant?.id || !partyId || !isValidEntityId(partyId)) return;
 
       const cached = profileCacheRef.current.get(partyId);
       if (!forceRefresh && cached && Date.now() - cached.timestamp < 30000) {

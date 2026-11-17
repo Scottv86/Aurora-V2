@@ -6,6 +6,37 @@ import { useAuth } from '../../hooks/useAuth';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useDigitalTwin } from '../../context/DigitalTwinContext';
 import { useUserProfileCard } from '../../context/UserProfileCardContext';
+import { useOptionalChat } from '../../context/ChatContext';
+
+export const normalizePresenceStatus = (status?: string | null): TwinPresenceStatus => {
+  if (!status) return 'AVAILABLE';
+  const s = String(status).trim().toUpperCase();
+  switch (s) {
+    case 'AVAILABLE':
+    case 'ONLINE':
+    case 'ACTIVE':
+    case 'CONNECTED':
+    case 'VIEWING':
+    case 'EDITING':
+      return 'AVAILABLE';
+    case 'AWAY':
+    case 'AWAY_TWIN':
+      return 'AWAY_TWIN';
+    case 'BUSY':
+    case 'DND':
+    case 'DND_INTERCEPT':
+      return 'DND_INTERCEPT';
+    case 'NIGHT_SHIFT':
+      return 'NIGHT_SHIFT';
+    case 'OFFLINE':
+    case 'INACTIVE':
+    case 'SUSPENDED':
+    case 'DISABLED':
+      return 'OFFLINE';
+    default:
+      return 'AVAILABLE';
+  }
+};
 
 interface UserPresenceBadgeProps {
   status?: TwinPresenceStatus | string;
@@ -20,7 +51,7 @@ export const UserPresenceBadge: React.FC<UserPresenceBadgeProps> = ({
   className,
   showLabel = false
 }) => {
-  const normStatus = (status || 'AVAILABLE').toUpperCase();
+  const normStatus = normalizePresenceStatus(status);
 
   const sizeClasses = {
     xs: 'w-2 h-2 text-[6px]',
@@ -93,25 +124,71 @@ export const UserAvatarWithPresence: React.FC<UserAvatarWithPresenceProps> = ({
   const platformCtx = usePlatform();
   const platformUser = platformCtx?.user;
   const profileCard = useUserProfileCard();
+  const chatCtx = useOptionalChat();
 
   const { presenceStatus: myPresenceStatus } = useDigitalTwin();
 
-  const isCurrentUser = (
+  const isCurrentUser = Boolean(
+    (userId && (userId === user?.id || userId === platformUser?.id || userId === platformUser?.memberId)) ||
+    (memberId && (memberId === platformUser?.memberId || memberId === platformUser?.id || memberId === user?.id)) ||
     (platformUser?.firstName && name && name.toLowerCase().includes(platformUser.firstName.toLowerCase())) ||
     (user?.email && name && user.email.toLowerCase().includes(name.toLowerCase().split(' ')[0])) ||
     (user?.user_metadata?.full_name && name && user.user_metadata.full_name.toLowerCase().includes(name.toLowerCase()))
   );
 
-  let finalStatus: string = 'OFFLINE';
-  if (isCurrentUser) {
-    finalStatus = myPresenceStatus || 'AVAILABLE';
-  } else if (status) {
-    const s = String(status).toUpperCase();
-    if (['AVAILABLE', 'AWAY_TWIN', 'NIGHT_SHIFT', 'DND_INTERCEPT', 'OFFLINE'].includes(s)) {
-      finalStatus = s;
-    } else {
-      finalStatus = 'OFFLINE';
+  const resolvedMember = React.useMemo(() => {
+    const membersList = platformCtx?.members || [];
+    if (!membersList.length) return null;
+    if (memberId) {
+      const byId = membersList.find((m) => m.id === memberId || m.userId === memberId);
+      if (byId) return byId;
     }
+    if (userId) {
+      const byUser = membersList.find((m) => m.userId === userId || m.id === userId);
+      if (byUser) return byUser;
+    }
+    if (avatarUrl) {
+      const byAvatar = membersList.find((m) => m.avatarUrl && m.avatarUrl === avatarUrl);
+      if (byAvatar) return byAvatar;
+    }
+    if (name && name !== 'User') {
+      const lower = name.toLowerCase();
+      return membersList.find((m) => m.name?.toLowerCase() === lower) || null;
+    }
+    return null;
+  }, [memberId, userId, platformCtx?.members, avatarUrl, name]);
+
+  const targetProfileId = memberId || userId || resolvedMember?.id || (resolvedMember as any)?.userId;
+  const canShowCard = Boolean(enableProfileCard && targetProfileId && profileCard);
+
+  const liveChatPresence = React.useMemo(() => {
+    if (!chatCtx?.userPresence) return null;
+    const key = memberId || userId || targetProfileId;
+    if (key && chatCtx.userPresence[key]) {
+      return chatCtx.userPresence[key].presence;
+    }
+    if (name && name !== 'User') {
+      const lower = name.toLowerCase();
+      const match = Object.values(chatCtx.userPresence).find(
+        (u) => u.name && u.name.toLowerCase() === lower
+      );
+      if (match?.presence) return match.presence;
+    }
+    return null;
+  }, [chatCtx?.userPresence, memberId, userId, targetProfileId, name]);
+
+  let finalStatus: TwinPresenceStatus = 'AVAILABLE';
+  if (isCurrentUser) {
+    finalStatus = (myPresenceStatus as TwinPresenceStatus) || 'AVAILABLE';
+  } else if (liveChatPresence) {
+    finalStatus = normalizePresenceStatus(liveChatPresence);
+  } else if (status) {
+    finalStatus = normalizePresenceStatus(status);
+  } else if (resolvedMember) {
+    const memStatus = (resolvedMember as any).presenceStatus || resolvedMember.status;
+    finalStatus = normalizePresenceStatus(memStatus);
+  } else {
+    finalStatus = 'AVAILABLE';
   }
 
   const containerSizes = {
@@ -134,24 +211,6 @@ export const UserAvatarWithPresence: React.FC<UserAvatarWithPresenceProps> = ({
     md: 'md',
     lg: 'lg'
   };
-
-  const resolvedMember = React.useMemo(() => {
-    if (memberId || userId || !enableProfileCard) return null;
-    const membersList = platformCtx?.members || [];
-    if (!membersList.length) return null;
-    if (avatarUrl) {
-      const byAvatar = membersList.find((m) => m.avatarUrl && m.avatarUrl === avatarUrl);
-      if (byAvatar) return byAvatar;
-    }
-    if (name && name !== 'User') {
-      const lower = name.toLowerCase();
-      return membersList.find((m) => m.name?.toLowerCase() === lower) || null;
-    }
-    return null;
-  }, [memberId, userId, enableProfileCard, platformCtx?.members, avatarUrl, name]);
-
-  const targetProfileId = memberId || userId || resolvedMember?.id || (resolvedMember as any)?.userId;
-  const canShowCard = Boolean(enableProfileCard && targetProfileId && profileCard);
 
   return (
     <div

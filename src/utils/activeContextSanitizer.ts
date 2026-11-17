@@ -110,11 +110,28 @@ export function resolveRecordTitle(
   if (!record) return 'Untitled Record';
 
   const data = record.data || record;
+  const recKey =
+    record._record_key ||
+    data._record_key ||
+    record.recordKey ||
+    data.recordKey ||
+    record.record_key ||
+    data.record_key ||
+    record.key ||
+    data.key;
 
   // 1. Check primary display field from module configuration
-  const displayField = module?.config?.primaryDisplayField || module?.primaryDisplayField;
-  if (displayField && data[displayField]) {
-    return String(data[displayField]);
+  const displayField =
+    module?.config?.primaryDisplayField ||
+    module?.primaryDisplayField ||
+    module?.config?.titleFieldId ||
+    module?.titleFieldId;
+
+  if (displayField && displayField !== '_record_key') {
+    const val = data[displayField] ?? record[displayField];
+    if (val && typeof val === 'string' && val.trim()) {
+      return val.trim();
+    }
   }
 
   // 2. Common title/name fields
@@ -123,6 +140,8 @@ export function resolveRecordTitle(
     'name',
     'full_name',
     'fullName',
+    'premises_name',
+    'premisesName',
     'company_name',
     'companyName',
     'subject',
@@ -134,18 +153,31 @@ export function resolveRecordTitle(
   ];
 
   for (const c of candidates) {
-    if (data[c] && typeof data[c] === 'string' && data[c].trim()) {
-      return data[c].trim();
+    const val = data[c] ?? record[c];
+    if (val && typeof val === 'string' && val.trim()) {
+      return val.trim();
     }
   }
 
   // 3. Fall back to first non-empty text field in fields schema
   if (Array.isArray(fields)) {
     for (const f of fields) {
-      if ((f.type === 'text' || f.type === 'string') && data[f.id]) {
-        return String(data[f.id]);
+      if (
+        (f.type === 'text' || f.type === 'string') &&
+        f.id !== '_record_key' &&
+        f.id !== 'id'
+      ) {
+        const val = data[f.id] ?? record[f.id];
+        if (val && typeof val === 'string' && val.trim()) {
+          return val.trim();
+        }
       }
     }
+  }
+
+  // 4. Return record key if available
+  if (recKey && typeof recKey === 'string' && recKey.trim()) {
+    return recKey.trim();
   }
 
   return record.id ? `Record #${record.id.slice(0, 8)}` : 'Record';

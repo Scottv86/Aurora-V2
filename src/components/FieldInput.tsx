@@ -13,6 +13,7 @@ import { DynamicIcon } from './UI/DynamicIcon';
 import { usePlatformLookup } from '../hooks/usePlatformLookup';
 import { DatePicker } from './UI/DatePicker';
 import { TimePicker } from './UI/TimePicker';
+import { CustomSelect } from './UI/CustomSelect';
 import { UserSelector } from './Common/UserSelector';
 import { sanitizeHtml } from '../lib/sanitizeHtml';
 import { resolveConstraint } from '../services/fieldService';
@@ -304,6 +305,8 @@ const SearchableLookup = ({
       case 'Escape':
         e.preventDefault();
         setIsOpen(false);
+        if (inputRef.current) inputRef.current.blur();
+        onBlur?.();
         break;
     }
 
@@ -314,11 +317,13 @@ const SearchableLookup = ({
     const handleClickOutside = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
+        if (inputRef.current) inputRef.current.blur();
+        onBlur?.();
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [onBlur]);
 
   // If readonly and this is a Directory lookup with a value, render the interactive MS365 hover badge directly
   if (readonly && isDirectoryLookup && value) {
@@ -466,6 +471,8 @@ const SearchableLookup = ({
                 setLocalName('');
                 setSearch('');
                 setIsOpen(false);
+                if (inputRef.current) inputRef.current.blur();
+                onBlur?.();
               }}
               className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md text-zinc-400 hover:text-zinc-600 transition-colors"
             >
@@ -746,7 +753,7 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
 
   // Auto-focus and open dropdown when select becomes active with explicit autoFocus
   React.useEffect(() => {
-    if (autoFocus && !readonly && type === 'select' && inputRef.current) {
+    if (autoFocus && !readonly && (type === 'select' || type === 'dropdown') && inputRef.current) {
       inputRef.current.focus();
       try {
         if (typeof inputRef.current.showPicker === 'function') {
@@ -931,57 +938,51 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
   }
 
   // Data Input Components
-  if (type === 'select') {
-    const hasLocalOption = localValue !== undefined && localValue !== null && localValue !== '' && (
-      effectiveSource === 'connector' 
-        ? lookupResults?.some((opt: any) => String(opt.id) === String(localValue) || String(opt.name) === String(localValue))
-        : resolvedOptions?.some((opt: any) => {
-            const val = typeof opt === 'string' ? opt : opt.value !== undefined ? opt.value : (opt.id || opt.label);
-            return String(val) === String(localValue);
-          })
-    );
+  if (type === 'select' || type === 'dropdown') {
+    const selectOptions = effectiveSource === 'connector' 
+      ? (lookupResults || []).map((opt: any) => ({
+          value: opt.id,
+          label: opt.name,
+          raw: opt
+        }))
+      : (resolvedOptions || []).map((opt: any) => {
+          const val = typeof opt === 'string' ? opt : opt.value !== undefined ? opt.value : (opt.id || opt.label);
+          const optLabel = typeof opt === 'string' ? opt : opt.label || opt.name || opt.value || opt.id;
+          return {
+            value: val,
+            label: optLabel,
+            color: opt.color,
+            badge: opt.badge,
+            icon: opt.icon,
+            description: opt.description,
+            raw: opt
+          };
+        });
 
     return (
-      <div className="relative w-full">
-        <select 
-          ref={inputRef}
-          value={localValue || ''}
-          disabled={readonly || disabled}
-          onChange={(e) => { 
-            const selectedVal = e.target.value;
-            setIsFocused(true); 
-            const matchedItem = lookupResults?.find((item: any) => String(item.id) === selectedVal || String(item.name) === selectedVal);
-            triggerImmediateChange(selectedVal, matchedItem);
-          }}
-          onBlur={handleBlur}
-          onKeyDown={handleKeyDown}
-          autoFocus={autoFocus}
-          className={cn(inputClasses, "appearance-none cursor-pointer")}
-        >
-          <option value="" className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">
-            {placeholder || 'Select...'}
-          </option>
-          {localValue && !hasLocalOption && (
-            <option value={localValue} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">
-              {String(localValue)}
-            </option>
-          )}
-          {effectiveSource === 'connector' ? (
-            lookupResults?.map((opt: any, j: number) => (
-              <option key={j} value={opt.id} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">{opt.name}</option>
-            ))
-          ) : (
-            resolvedOptions?.map((opt: any, j: number) => {
-              const val = typeof opt === 'string' ? opt : opt.value !== undefined ? opt.value : (opt.id || opt.label);
-              const optLabel = typeof opt === 'string' ? opt : opt.label || opt.name || opt.value || opt.id;
-              return (
-                <option key={j} value={val} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">{optLabel}</option>
-              );
-            })
-          )}
-        </select>
-        <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
-      </div>
+      <CustomSelect 
+        ref={inputRef}
+        value={localValue}
+        options={selectOptions}
+        disabled={disabled}
+        readonly={readonly}
+        error={Boolean(error)}
+        allowClear={!field.required}
+        placeholder={placeholder || 'Select...'}
+        autoFocus={autoFocus}
+        className={inputClasses}
+        onChange={(selectedVal, matchedItem) => {
+          setIsFocused(false);
+          const rawItem = effectiveSource === 'connector'
+            ? (lookupResults?.find((item: any) => String(item.id) === String(selectedVal) || String(item.name) === String(selectedVal)) || matchedItem)
+            : matchedItem;
+          triggerImmediateChange(selectedVal, rawItem);
+          onBlur?.();
+        }}
+        onFocus={() => setIsFocused(true)}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+      />
     );
   }
 
@@ -1622,7 +1623,7 @@ const FieldInputInner: React.FC<FieldInputProps> = ({
     return (
       <UserSelector 
         value={localValue}
-        onChange={(id) => { updateLocalValue(id); setIsFocused(true); triggerSave(id); }}
+        onChange={(id, user) => { updateLocalValue(id); setIsFocused(true); triggerSave(id, user); }}
         placeholder={placeholder || "Select User..."}
         readonly={readonly}
         onBlur={handleBlur}

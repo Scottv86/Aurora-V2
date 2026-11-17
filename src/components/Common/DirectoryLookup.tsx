@@ -185,9 +185,10 @@ export const DirectoryLookup: React.FC<DirectoryLookupProps> = ({
       return;
     }
     const existing = parties.find(p => p.id === value);
+    const isEntityId = typeof value === 'string' && value.length >= 10 && !/\s/.test(value);
     if (existing) {
       setSelectedParty(existing);
-    } else if (tenantId && (!selectedParty || selectedParty.id !== value)) {
+    } else if (tenantId && (!selectedParty || selectedParty.id !== value) && isEntityId) {
       // Fetch specific party by id
       const headers: HeadersInit = {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -351,35 +352,35 @@ export const DirectoryLookup: React.FC<DirectoryLookupProps> = ({
           }}
           onKeyDown={handleKeyDown}
           className={cn(
-            'group flex items-center justify-between gap-1.5 px-2 py-1.5 rounded-lg border text-xs transition-all cursor-pointer',
-            'bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800',
-            'hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-100/60 dark:hover:bg-zinc-900/60',
-            isOpen && 'border-indigo-500/80 ring-2 ring-indigo-500/10 shadow-sm',
+            'group flex items-center justify-between gap-2 w-full h-10 px-3.5 rounded-xl border text-xs transition-all cursor-pointer',
+            'bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-white',
+            'hover:border-zinc-300 dark:hover:border-zinc-700',
+            isOpen && 'border-indigo-500 ring-2 ring-indigo-500/20 shadow-sm',
             disabled && 'opacity-50 pointer-events-none'
           )}
         >
-          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             {selectedParty ? (
               <>
                 {selectedParty.avatarUrl ? (
                   <img
                     src={selectedParty.avatarUrl}
                     alt={selectedParty.displayName}
-                    className="w-4 h-4 rounded-md object-cover border border-zinc-200 dark:border-zinc-700 shrink-0"
+                    className="w-5 h-5 rounded-md object-cover border border-zinc-200 dark:border-zinc-700 shrink-0"
                   />
                 ) : (
                   <span
                     className={cn(
-                      'w-4 h-4 rounded-md flex items-center justify-center shrink-0 text-[9px] font-bold',
+                      'w-5 h-5 rounded-md flex items-center justify-center shrink-0 text-[10px] font-bold',
                       selectedParty.partyType === 'ORGANIZATION'
                         ? 'bg-violet-500/15 text-violet-600 dark:text-violet-400 border border-violet-500/20'
                         : 'bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/20'
                     )}
                   >
                     {selectedParty.partyType === 'ORGANIZATION' ? (
-                      <Building2 size={10} />
+                      <Building2 size={12} />
                     ) : (
-                      <UserIcon size={10} />
+                      <UserIcon size={12} />
                     )}
                   </span>
                 )}
@@ -387,14 +388,14 @@ export const DirectoryLookup: React.FC<DirectoryLookupProps> = ({
                   {selectedParty.displayName}
                 </span>
                 {selectedParty.partyCode && (
-                  <span className="text-[9px] px-1 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-mono shrink-0">
+                  <span className="text-[9px] px-1 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 font-mono shrink-0">
                     {selectedParty.partyCode}
                   </span>
                 )}
               </>
             ) : (
               <>
-                <Briefcase size={12} className="text-zinc-400 shrink-0" />
+                <Briefcase size={14} className="text-zinc-400 shrink-0" />
                 <span className="truncate text-zinc-400 dark:text-zinc-500">
                   {placeholder}
                 </span>
@@ -402,19 +403,19 @@ export const DirectoryLookup: React.FC<DirectoryLookupProps> = ({
             )}
           </div>
 
-          <div className="flex items-center gap-1 shrink-0">
-            {allowClear && selectedParty && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            {allowClear && selectedParty && !disabled && (
               <button
                 type="button"
                 onClick={handleClear}
-                className="p-0.5 rounded text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-200/50 dark:hover:bg-zinc-800 transition-colors"
-                title="Clear client (Reset to Internal)"
+                className="p-1 rounded-md text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                title="Clear selection"
               >
-                <X size={11} />
+                <X size={12} />
               </button>
             )}
             <ChevronDown
-              size={12}
+              size={14}
               className={cn(
                 'text-zinc-400 transition-transform duration-200',
                 isOpen && 'rotate-180 text-indigo-500'

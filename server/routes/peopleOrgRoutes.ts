@@ -380,7 +380,242 @@ router.get('/', async (req: TenantRequest, res) => {
 
 // ============================================================================
 // GET & PUT Directory Configuration (Custom Fields, Classifications, Rules)
+// Backed by Workspace Global Lists as the single source of truth
 // ============================================================================
+
+async function ensureAndLoadDirectoryGlobalLists(tenantId: string, customConfig?: any) {
+  const targetNames = [
+    'Directory Classifications',
+    'Directory Industries',
+    'Directory Legal Structures',
+    'Directory Relationship Types',
+  ];
+
+  const existingLists = await globalPrisma.globalList.findMany({
+    where: {
+      tenantId,
+      OR: [
+        { name: { in: targetNames } },
+        ...(customConfig?.classificationsListId ? [{ id: customConfig.classificationsListId }] : []),
+        ...(customConfig?.industriesListId ? [{ id: customConfig.industriesListId }] : []),
+        ...(customConfig?.legalStructuresListId ? [{ id: customConfig.legalStructuresListId }] : []),
+        ...(customConfig?.relationshipTypesListId ? [{ id: customConfig.relationshipTypesListId }] : []),
+      ],
+    },
+    include: {
+      items: {
+        where: { isActive: true },
+        orderBy: { sortOrder: 'asc' },
+      },
+    },
+  }).catch((err) => {
+    console.error('[DirectoryGlobalLists] findMany error:', err);
+    return [];
+  });
+
+  let classificationsList = customConfig?.classificationsListId
+    ? existingLists.find((l: any) => l.id === customConfig.classificationsListId)
+    : existingLists.find((l: any) => l.name === 'Directory Classifications');
+
+  let industriesList = customConfig?.industriesListId
+    ? existingLists.find((l: any) => l.id === customConfig.industriesListId)
+    : existingLists.find((l: any) => l.name === 'Directory Industries');
+
+  let legalStructuresList = customConfig?.legalStructuresListId
+    ? existingLists.find((l: any) => l.id === customConfig.legalStructuresListId)
+    : existingLists.find((l: any) => l.name === 'Directory Legal Structures');
+
+  let relationshipTypesList = customConfig?.relationshipTypesListId
+    ? existingLists.find((l: any) => l.id === customConfig.relationshipTypesListId)
+    : existingLists.find((l: any) => l.name === 'Directory Relationship Types');
+
+  if (!classificationsList) {
+    try {
+      classificationsList = await globalPrisma.globalList.create({
+        data: {
+          tenantId,
+          name: 'Directory Classifications',
+          description: 'Entity classification tags and CRM segmentation badges (e.g. Client, Supplier, Partner, VIP).',
+          isSystem: true,
+          columns: [
+            { id: 'label', name: 'Classification Name', type: 'text', required: true },
+            { id: 'code', name: 'Code', type: 'text', required: true },
+            { id: 'color', name: 'Badge Color', type: 'choice', options: ['emerald', 'amber', 'indigo', 'purple', 'rose', 'sky', 'zinc', 'cyan'] },
+            { id: 'description', name: 'Description', type: 'text' },
+          ],
+          items: {
+            create: [
+              { sortOrder: 0, isActive: true, data: { label: 'Client', code: 'CLIENT', color: 'emerald', description: 'Active paying client' } },
+              { sortOrder: 1, isActive: true, data: { label: 'Supplier', code: 'SUPPLIER', color: 'amber', description: 'Vendor supplying goods or services' } },
+              { sortOrder: 2, isActive: true, data: { label: 'Partner', code: 'PARTNER', color: 'indigo', description: 'Strategic or channel partner' } },
+              { sortOrder: 3, isActive: true, data: { label: 'Prospect', code: 'PROSPECT', color: 'sky', description: 'Sales lead or prospective client' } },
+              { sortOrder: 4, isActive: true, data: { label: 'Investor', code: 'INVESTOR', color: 'purple', description: 'Shareholder or investment partner' } },
+              { sortOrder: 5, isActive: true, data: { label: 'Competitor', code: 'COMPETITOR', color: 'rose', description: 'Market competitor' } },
+              { sortOrder: 6, isActive: true, data: { label: 'Regulator', code: 'REGULATOR', color: 'zinc', description: 'Government or industry regulator' } },
+              { sortOrder: 7, isActive: true, data: { label: 'Contractor', code: 'CONTRACTOR', color: 'amber', description: 'Independent contractor' } },
+              { sortOrder: 8, isActive: true, data: { label: 'Subsidiary', code: 'SUBSIDIARY', color: 'indigo', description: 'Subsidiary or owned entity' } },
+              { sortOrder: 9, isActive: true, data: { label: 'Advisor', code: 'ADVISOR', color: 'cyan', description: 'Legal, tax, or business advisor' } },
+              { sortOrder: 10, isActive: true, data: { label: 'VIP', code: 'VIP', color: 'purple', description: 'High-priority entity' } },
+            ],
+          },
+        },
+        include: {
+          items: {
+            where: { isActive: true },
+            orderBy: { sortOrder: 'asc' },
+          },
+        },
+      });
+    } catch (e) {
+      console.error('[DirectoryGlobalLists] Error creating Classifications list:', e);
+    }
+  }
+
+  if (!industriesList) {
+    try {
+      industriesList = await globalPrisma.globalList.create({
+        data: {
+          tenantId,
+          name: 'Directory Industries',
+          description: 'Standard industry classifications and economic sectors for directory organisations.',
+          isSystem: true,
+          columns: [
+            { id: 'label', name: 'Industry Name', type: 'text', required: true },
+            { id: 'code', name: 'Code', type: 'text', required: true },
+            { id: 'sector', name: 'Sector', type: 'text' },
+          ],
+          items: {
+            create: [
+              { sortOrder: 0, isActive: true, data: { label: 'Technology & Software', code: 'TECH', sector: 'Information Technology' } },
+              { sortOrder: 1, isActive: true, data: { label: 'Financial Services & Banking', code: 'FIN_SERVICES', sector: 'Finance & Insurance' } },
+              { sortOrder: 2, isActive: true, data: { label: 'Healthcare & Life Sciences', code: 'HEALTHCARE', sector: 'Health & Medical' } },
+              { sortOrder: 3, isActive: true, data: { label: 'Manufacturing & Engineering', code: 'MANUFACTURING', sector: 'Industry & Production' } },
+              { sortOrder: 4, isActive: true, data: { label: 'Retail & Consumer Goods', code: 'RETAIL', sector: 'Commerce' } },
+              { sortOrder: 5, isActive: true, data: { label: 'Professional Services & Consulting', code: 'PROF_SERVICES', sector: 'Consulting & Legal' } },
+              { sortOrder: 6, isActive: true, data: { label: 'Construction & Real Estate', code: 'CONSTRUCTION', sector: 'Property & Infrastructure' } },
+              { sortOrder: 7, isActive: true, data: { label: 'Energy, Oil & Gas', code: 'ENERGY', sector: 'Resources & Utilities' } },
+              { sortOrder: 8, isActive: true, data: { label: 'Education & Training', code: 'EDUCATION', sector: 'Education' } },
+              { sortOrder: 9, isActive: true, data: { label: 'Hospitality & Tourism', code: 'HOSPITALITY', sector: 'Services' } },
+              { sortOrder: 10, isActive: true, data: { label: 'Transport & Logistics', code: 'LOGISTICS', sector: 'Supply Chain' } },
+              { sortOrder: 11, isActive: true, data: { label: 'Agriculture & Forestry', code: 'AGRICULTURE', sector: 'Primary Industry' } },
+              { sortOrder: 12, isActive: true, data: { label: 'Government & Public Sector', code: 'GOVERNMENT', sector: 'Public Administration' } },
+              { sortOrder: 13, isActive: true, data: { label: 'Non-Profit & Community', code: 'NON_PROFIT', sector: 'Charity & NGO' } },
+              { sortOrder: 14, isActive: true, data: { label: 'Automotive & Mobility', code: 'AUTOMOTIVE', sector: 'Transportation' } },
+              { sortOrder: 15, isActive: true, data: { label: 'Telecommunications & Media', code: 'TELECOM', sector: 'Communications' } },
+            ],
+          },
+        },
+        include: {
+          items: {
+            where: { isActive: true },
+            orderBy: { sortOrder: 'asc' },
+          },
+        },
+      });
+    } catch (e) {
+      console.error('[DirectoryGlobalLists] Error creating Industries list:', e);
+    }
+  }
+
+  if (!legalStructuresList) {
+    try {
+      legalStructuresList = await globalPrisma.globalList.create({
+        data: {
+          tenantId,
+          name: 'Directory Legal Structures',
+          description: 'Corporate and legal organization structures recognized in the directory.',
+          isSystem: true,
+          columns: [
+            { id: 'label', name: 'Structure Name', type: 'text', required: true },
+            { id: 'code', name: 'Code', type: 'text', required: true },
+            { id: 'description', name: 'Description', type: 'text' },
+          ],
+          items: {
+            create: [
+              { sortOrder: 0, isActive: true, data: { label: 'Company', code: 'COMPANY', description: 'Corporation / General Company' } },
+              { sortOrder: 1, isActive: true, data: { label: 'Private Limited (Pty Ltd)', code: 'PTY_LTD', description: 'Proprietary Limited Company' } },
+              { sortOrder: 2, isActive: true, data: { label: 'Public Listed', code: 'PUBLIC_LISTED', description: 'Publicly Traded Company' } },
+              { sortOrder: 3, isActive: true, data: { label: 'Trust', code: 'TRUST', description: 'Family, Unit, or Discretionary Trust' } },
+              { sortOrder: 4, isActive: true, data: { label: 'Partnership', code: 'PARTNERSHIP', description: 'General or Limited Partnership' } },
+              { sortOrder: 5, isActive: true, data: { label: 'Sole Trader', code: 'SOLE_TRADER', description: 'Sole Proprietor' } },
+              { sortOrder: 6, isActive: true, data: { label: 'Non-Profit / Charity', code: 'NON_PROFIT', description: 'Incorporated Not-for-Profit or Charity' } },
+              { sortOrder: 7, isActive: true, data: { label: 'Government Agency', code: 'GOVERNMENT', description: 'Government Body or Agency' } },
+              { sortOrder: 8, isActive: true, data: { label: 'Incorporated Association', code: 'INCORPORATED_ASSOC', description: 'State/Regional Association' } },
+              { sortOrder: 9, isActive: true, data: { label: 'Limited Liability Company (LLC)', code: 'LLC', description: 'Limited Liability Company' } },
+              { sortOrder: 10, isActive: true, data: { label: 'Co-operative', code: 'COOPERATIVE', description: 'Member-owned Co-operative' } },
+            ],
+          },
+        },
+        include: {
+          items: {
+            where: { isActive: true },
+            orderBy: { sortOrder: 'asc' },
+          },
+        },
+      });
+    } catch (e) {
+      console.error('[DirectoryGlobalLists] Error creating Legal Structures list:', e);
+    }
+  }
+
+  if (!relationshipTypesList) {
+    try {
+      relationshipTypesList = await globalPrisma.globalList.create({
+        data: {
+          tenantId,
+          name: 'Directory Relationship Types',
+          description: 'Core entity relationship rules, graph connection types, and directional constraints.',
+          isSystem: true,
+          columns: [
+            { id: 'label', name: 'Relationship Name', type: 'text', required: true },
+            { id: 'code', name: 'Code', type: 'text', required: true },
+            { id: 'inverse_label', name: 'Inverse Label', type: 'text' },
+            { id: 'source_type', name: 'Source Entity Type', type: 'choice', options: ['All', 'Person', 'Organisation'] },
+            { id: 'target_type', name: 'Target Entity Type', type: 'choice', options: ['All', 'Person', 'Organisation'] },
+            { id: 'category', name: 'Category', type: 'choice', options: ['Governance', 'Employment', 'Commercial', 'Personal', 'Other'] },
+            { id: 'color', name: 'Badge Color', type: 'choice', options: ['indigo', 'emerald', 'amber', 'purple', 'rose', 'sky', 'zinc', 'cyan'] },
+            { id: 'description', name: 'Description', type: 'text' },
+          ],
+          items: {
+            create: [
+              { sortOrder: 0, isActive: true, data: { label: 'Employee', code: 'EMPLOYEE', inverse_label: 'Employer', source_type: 'Person', target_type: 'Organisation', category: 'Employment', color: 'indigo', description: 'Direct employment relationship' } },
+              { sortOrder: 1, isActive: true, data: { label: 'Director / Executive', code: 'DIRECTOR', inverse_label: 'Directorship', source_type: 'Person', target_type: 'Organisation', category: 'Governance', color: 'purple', description: 'Board of directors, officer, or executive governance' } },
+              { sortOrder: 2, isActive: true, data: { label: 'Beneficial Owner / Shareholder', code: 'OWNER', inverse_label: 'Owned Entity', source_type: 'All', target_type: 'Organisation', category: 'Governance', color: 'emerald', description: 'Capital interest, equity holding, or legal ownership' } },
+              { sortOrder: 3, isActive: true, data: { label: 'Subsidiary', code: 'SUBSIDIARY', inverse_label: 'Parent Company', source_type: 'Organisation', target_type: 'Organisation', category: 'Governance', color: 'sky', description: 'Controlled corporate entity or subsidiary' } },
+              { sortOrder: 4, isActive: true, data: { label: 'Parent Company', code: 'PARENT_COMPANY', inverse_label: 'Subsidiary', source_type: 'Organisation', target_type: 'Organisation', category: 'Governance', color: 'sky', description: 'Holding entity or parent corporation' } },
+              { sortOrder: 5, isActive: true, data: { label: 'Primary Contact', code: 'PRIMARY_CONTACT', inverse_label: 'Represented Entity', source_type: 'Person', target_type: 'Organisation', category: 'Commercial', color: 'cyan', description: 'Designated primary business contact or representative' } },
+              { sortOrder: 6, isActive: true, data: { label: 'Billing Contact', code: 'BILLING_CONTACT', inverse_label: 'Client Account', source_type: 'Person', target_type: 'Organisation', category: 'Commercial', color: 'amber', description: 'Designated accounts and invoicing contact' } },
+              { sortOrder: 7, isActive: true, data: { label: 'Partner / Alliance', code: 'PARTNER', inverse_label: 'Partner / Alliance', source_type: 'All', target_type: 'All', category: 'Commercial', color: 'indigo', description: 'Strategic, channel, or collaborative partner' } },
+              { sortOrder: 8, isActive: true, data: { label: 'Contractor / Consultant', code: 'CONTRACTOR', inverse_label: 'Client', source_type: 'All', target_type: 'Organisation', category: 'Employment', color: 'amber', description: 'External service provider or independent contractor' } },
+              { sortOrder: 9, isActive: true, data: { label: 'Advisor / Legal Counsel', code: 'ADVISOR', inverse_label: 'Advised Entity', source_type: 'All', target_type: 'All', category: 'Commercial', color: 'cyan', description: 'Legal, financial, or strategic advisor' } },
+              { sortOrder: 10, isActive: true, data: { label: 'Supplier / Vendor', code: 'SUPPLIER', inverse_label: 'Purchaser', source_type: 'Organisation', target_type: 'Organisation', category: 'Commercial', color: 'amber', description: 'Vendor supplying goods or external services' } },
+              { sortOrder: 11, isActive: true, data: { label: 'Client / Customer', code: 'CLIENT', inverse_label: 'Provider', source_type: 'All', target_type: 'Organisation', category: 'Commercial', color: 'emerald', description: 'Active client, customer, or account' } },
+              { sortOrder: 12, isActive: true, data: { label: 'Spouse / Domestic Partner', code: 'SPOUSE', inverse_label: 'Spouse / Domestic Partner', source_type: 'Person', target_type: 'Person', category: 'Personal', color: 'rose', description: 'Legal spouse, domestic partner, or next of kin' } },
+              { sortOrder: 13, isActive: true, data: { label: 'Parent', code: 'PARENT', inverse_label: 'Child', source_type: 'Person', target_type: 'Person', category: 'Personal', color: 'purple', description: 'Biological or legal parent' } },
+              { sortOrder: 14, isActive: true, data: { label: 'Child', code: 'CHILD', inverse_label: 'Parent', source_type: 'Person', target_type: 'Person', category: 'Personal', color: 'purple', description: 'Biological or legal child' } },
+            ],
+          },
+        },
+        include: {
+          items: {
+            where: { isActive: true },
+            orderBy: { sortOrder: 'asc' },
+          },
+        },
+      });
+    } catch (e) {
+      console.error('[DirectoryGlobalLists] Error creating Relationship Types list:', e);
+    }
+  }
+
+  return {
+    classificationsList,
+    industriesList,
+    legalStructuresList,
+    relationshipTypesList,
+  };
+}
+
 router.get('/config', async (req: TenantRequest, res) => {
   try {
     const tenantId = req.tenantId!;
@@ -390,25 +625,77 @@ router.get('/config', async (req: TenantRequest, res) => {
     });
     const settingsObj =
       tenant?.settings && typeof tenant.settings === 'object' ? (tenant.settings as any) : {};
-    const directoryConfig = settingsObj.directoryConfig || {
-      customFields: [],
-      classifications: [
-        'CLIENT',
-        'SUPPLIER',
-        'PARTNER',
-        'PROSPECT',
-        'INVESTOR',
-        'COMPETITOR',
-        'REGULATOR',
-        'CONTRACTOR',
-        'SUBSIDIARY',
-        'ADVISOR',
-        'VIP',
-      ],
-      requireDeduplicationCheck: true,
-      autoCreatePrimaryOrgRelationship: true,
+    const directoryConfig = settingsObj.directoryConfig || {};
+
+    const { classificationsList, industriesList, legalStructuresList, relationshipTypesList } =
+      await ensureAndLoadDirectoryGlobalLists(tenantId, directoryConfig);
+
+    const mappedClassifications = (classificationsList?.items || []).map((it: any) => ({
+      id: it.id,
+      label: it.data?.label || it.data?.name || it.data?.code,
+      code: it.data?.code || it.data?.label || it.data?.name,
+      color: it.data?.color || 'indigo',
+      description: it.data?.description || '',
+    }));
+
+    const mappedIndustries = (industriesList?.items || []).map((it: any) => ({
+      id: it.id,
+      label: it.data?.label || it.data?.name || it.data?.code,
+      code: it.data?.code || it.data?.label || it.data?.name,
+      sector: it.data?.sector || it.data?.category || '',
+    }));
+
+    const mappedLegalStructures = (legalStructuresList?.items || []).map((it: any) => ({
+      id: it.id,
+      label: it.data?.label || it.data?.name || it.data?.code,
+      code: it.data?.code || it.data?.label || it.data?.name,
+      description: it.data?.description || '',
+    }));
+
+    const mappedRelationshipTypes = (relationshipTypesList?.items || []).map((it: any) => ({
+      id: it.id,
+      label: it.data?.label || it.data?.name || it.data?.code,
+      code: it.data?.code || it.data?.label || it.data?.name,
+      inverseLabel: it.data?.inverse_label || it.data?.inverseLabel || '',
+      sourceType: it.data?.source_type || it.data?.sourceType || 'All',
+      targetType: it.data?.target_type || it.data?.targetType || 'All',
+      category: it.data?.category || 'General',
+      color: it.data?.color || 'indigo',
+      description: it.data?.description || '',
+    }));
+
+    const finalConfig = {
+      customFields: directoryConfig.customFields || [],
+      requireDeduplicationCheck: directoryConfig.requireDeduplicationCheck !== false,
+      autoCreatePrimaryOrgRelationship: directoryConfig.autoCreatePrimaryOrgRelationship !== false,
+      dedupeSchedule: directoryConfig.dedupeSchedule,
+      classificationsListId: classificationsList?.id || null,
+      industriesListId: industriesList?.id || null,
+      legalStructuresListId: legalStructuresList?.id || null,
+      relationshipTypesListId: relationshipTypesList?.id || null,
+      // Backward compatible array of codes
+      classifications: mappedClassifications.length > 0
+        ? mappedClassifications.map((c: any) => c.code)
+        : directoryConfig.classifications || [
+            'CLIENT',
+            'SUPPLIER',
+            'PARTNER',
+            'PROSPECT',
+            'INVESTOR',
+            'COMPETITOR',
+            'REGULATOR',
+            'CONTRACTOR',
+            'SUBSIDIARY',
+            'ADVISOR',
+            'VIP',
+          ],
+      classificationDetails: mappedClassifications,
+      industries: mappedIndustries,
+      legalStructures: mappedLegalStructures,
+      relationshipTypes: mappedRelationshipTypes,
     };
-    res.json(directoryConfig);
+
+    res.json(finalConfig);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -441,7 +728,59 @@ router.put('/config', async (req: TenantRequest, res) => {
       select: { settings: true },
     });
 
-    res.json((updatedTenant.settings as any)?.directoryConfig || updatedDirConfig);
+    const savedConfig = (updatedTenant.settings as any)?.directoryConfig || updatedDirConfig;
+
+    const { classificationsList, industriesList, legalStructuresList, relationshipTypesList } =
+      await ensureAndLoadDirectoryGlobalLists(tenantId, savedConfig);
+
+    const mappedClassifications = (classificationsList?.items || []).map((it: any) => ({
+      id: it.id,
+      label: it.data?.label || it.data?.name || it.data?.code,
+      code: it.data?.code || it.data?.label || it.data?.name,
+      color: it.data?.color || 'indigo',
+      description: it.data?.description || '',
+    }));
+
+    const mappedIndustries = (industriesList?.items || []).map((it: any) => ({
+      id: it.id,
+      label: it.data?.label || it.data?.name || it.data?.code,
+      code: it.data?.code || it.data?.label || it.data?.name,
+      sector: it.data?.sector || it.data?.category || '',
+    }));
+
+    const mappedLegalStructures = (legalStructuresList?.items || []).map((it: any) => ({
+      id: it.id,
+      label: it.data?.label || it.data?.name || it.data?.code,
+      code: it.data?.code || it.data?.label || it.data?.name,
+      description: it.data?.description || '',
+    }));
+
+    const mappedRelationshipTypes = (relationshipTypesList?.items || []).map((it: any) => ({
+      id: it.id,
+      label: it.data?.label || it.data?.name || it.data?.code,
+      code: it.data?.code || it.data?.label || it.data?.name,
+      inverseLabel: it.data?.inverse_label || it.data?.inverseLabel || '',
+      sourceType: it.data?.source_type || it.data?.sourceType || 'All',
+      targetType: it.data?.target_type || it.data?.targetType || 'All',
+      category: it.data?.category || 'General',
+      color: it.data?.color || 'indigo',
+      description: it.data?.description || '',
+    }));
+
+    res.json({
+      ...savedConfig,
+      classificationsListId: classificationsList?.id || null,
+      industriesListId: industriesList?.id || null,
+      legalStructuresListId: legalStructuresList?.id || null,
+      relationshipTypesListId: relationshipTypesList?.id || null,
+      classifications: mappedClassifications.length > 0
+        ? mappedClassifications.map((c: any) => c.code)
+        : savedConfig.classifications,
+      classificationDetails: mappedClassifications,
+      industries: mappedIndustries,
+      legalStructures: mappedLegalStructures,
+      relationshipTypes: mappedRelationshipTypes,
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

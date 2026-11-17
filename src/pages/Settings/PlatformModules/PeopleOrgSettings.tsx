@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { cn } from '../../../lib/utils';
 import {
   Tags,
@@ -15,6 +16,12 @@ import {
   CheckCircle2,
   Clock,
   Play,
+  ExternalLink,
+  Briefcase,
+  Building2,
+  Layers,
+  ArrowRight,
+  Repeat,
 } from 'lucide-react';
 import { usePlatform } from '../../../hooks/usePlatform';
 import { useAuth } from '../../../hooks/useAuth';
@@ -26,6 +33,18 @@ import {
   SettingsSubNavItem,
 } from '../../../components/Settings/SettingsSubNavLayout';
 import { toast } from 'sonner';
+
+const CLASSIFICATION_COLOR_MAP: Record<string, string> = {
+  emerald: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
+  amber: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30',
+  indigo: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30',
+  purple: 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30',
+  rose: 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30',
+  sky: 'bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30',
+  blue: 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30',
+  zinc: 'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400 border-zinc-500/30',
+  cyan: 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border-cyan-500/30',
+};
 
 interface Taxonomy {
   id: string;
@@ -48,7 +67,8 @@ export interface DirectoryCustomFieldDef {
 }
 
 export const PeopleOrgSettings = () => {
-  const [activeTab, setActiveTab] = useState<'taxonomy' | 'relationships' | 'fields'>('taxonomy');
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<'lists' | 'fields' | 'governance'>('lists');
   const [taxonomies, setTaxonomies] = useState<Taxonomy[]>([]);
   const [loading, setLoading] = useState(true);
   const { tenant } = usePlatform();
@@ -63,10 +83,28 @@ export const PeopleOrgSettings = () => {
     description: '',
   });
 
-  // Directory Config state (Custom Fields, Classifications, Governance)
+  // Directory Config state (Custom Fields, Classifications, Governance - backed by Global Lists)
   const [dirConfig, setDirConfig] = useState<{
     customFields: DirectoryCustomFieldDef[];
     classifications: string[];
+    classificationsListId?: string;
+    industriesListId?: string;
+    legalStructuresListId?: string;
+    relationshipTypesListId?: string;
+    classificationDetails?: { id: string; code: string; label: string; color: string; description?: string }[];
+    industries?: { id: string; code: string; label: string; sector?: string }[];
+    legalStructures?: { id: string; code: string; label: string; description?: string }[];
+    relationshipTypes?: {
+      id: string;
+      code: string;
+      label: string;
+      inverseLabel?: string;
+      sourceType?: string;
+      targetType?: string;
+      category?: string;
+      color?: string;
+      description?: string;
+    }[];
     requireDeduplicationCheck: boolean;
     autoCreatePrimaryOrgRelationship: boolean;
     dedupeSchedule?: {
@@ -100,6 +138,10 @@ export const PeopleOrgSettings = () => {
       'ADVISOR',
       'VIP',
     ],
+    classificationDetails: [],
+    industries: [],
+    legalStructures: [],
+    relationshipTypes: [],
     requireDeduplicationCheck: true,
     autoCreatePrimaryOrgRelationship: true,
     dedupeSchedule: {
@@ -122,18 +164,13 @@ export const PeopleOrgSettings = () => {
     placeholder: '',
     optionsText: '',
   });
-  const [newClassification, setNewClassification] = useState('');
   const [savingConfig, setSavingConfig] = useState(false);
 
   useEffect(() => {
     const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
     if (!tenant?.id || !token) return;
-    if (activeTab === 'fields') {
-      fetchDirConfig();
-    } else {
-      fetchTaxonomies();
-      fetchDirConfig();
-    }
+    fetchTaxonomies();
+    fetchDirConfig();
   }, [activeTab, tenant?.id, session?.access_token]);
 
   const getHeaders = () => {
@@ -211,10 +248,8 @@ export const PeopleOrgSettings = () => {
     try {
       setLoading(true);
       const category =
-        activeTab === 'taxonomy'
+        activeTab === 'lists'
           ? 'ORG_TYPE'
-          : activeTab === 'relationships'
-          ? 'RELATIONSHIP_TYPE'
           : null;
       if (!category) {
         setTaxonomies([]);
@@ -259,7 +294,7 @@ export const PeopleOrgSettings = () => {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const category = activeTab === 'taxonomy' ? 'ORG_TYPE' : 'RELATIONSHIP_TYPE';
+      const category = 'ORG_TYPE';
       const method = editingItem ? 'PUT' : 'POST';
       const url = editingItem
         ? `${API_BASE_URL}/api/taxonomies/${editingItem.id}`
@@ -391,47 +426,24 @@ export const PeopleOrgSettings = () => {
     await saveDirConfig(nextConfig, 'Custom field removed');
   };
 
-  const handleAddClassification = async () => {
-    const tag = newClassification.trim().toUpperCase().replace(/\s+/g, '_');
-    if (!tag) return;
-    if (dirConfig.classifications.includes(tag)) {
-      toast.error('Classification already exists');
-      return;
-    }
-    const nextConfig = {
-      ...dirConfig,
-      classifications: [...dirConfig.classifications, tag],
-    };
-    setNewClassification('');
-    await saveDirConfig(nextConfig, `Added classification "${tag}"`);
-  };
-
-  const handleRemoveClassification = async (tag: string) => {
-    const nextConfig = {
-      ...dirConfig,
-      classifications: dirConfig.classifications.filter((c) => c !== tag),
-    };
-    await saveDirConfig(nextConfig, `Removed classification "${tag}"`);
-  };
-
   const subNavItems: SettingsSubNavItem[] = [
     {
-      id: 'taxonomy',
-      label: 'Org Types & Classifications',
-      icon: Tags,
-      description: 'Legal structures & CRM tags',
-    },
-    {
-      id: 'relationships',
-      label: 'Relationship Types',
-      icon: Shapes,
-      description: 'Entity connection rules',
+      id: 'lists',
+      label: 'Lists',
+      icon: Layers,
+      description: 'Directory classifications, industries, legal structures & relationship types',
     },
     {
       id: 'fields',
-      label: 'Custom Metadata & Governance',
+      label: 'Custom Fields',
       icon: Database,
-      description: 'Field extensibility & dedupe',
+      description: 'Custom entity metadata attributes & schemas',
+    },
+    {
+      id: 'governance',
+      label: 'Governance & Deduplication',
+      icon: ShieldCheck,
+      description: 'Conflict guardrails, dedupe scans & schedules',
     },
   ];
 
@@ -443,92 +455,301 @@ export const PeopleOrgSettings = () => {
       items={subNavItems}
       activeId={activeTab}
       onTabChange={(id) => setActiveTab(id as any)}
+      actions={
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => navigate('/workspace/apps/directory')}
+            className="flex items-center gap-1.5 text-xs text-zinc-300 border-zinc-700 hover:bg-zinc-800 cursor-pointer"
+          >
+            <Users size={14} className="text-indigo-400" />
+            <span>Open Directory</span>
+            <ExternalLink size={12} className="opacity-60" />
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => navigate('/workspace/settings/platform-modules/global-lists')}
+            className="flex items-center gap-1.5 text-xs text-zinc-300 border-zinc-700 hover:bg-zinc-800 cursor-pointer"
+          >
+            <Layers size={14} className="text-indigo-400" />
+            <span>Global Lists Studio</span>
+            <ExternalLink size={12} className="opacity-60" />
+          </Button>
+        </div>
+      }
     >
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-6">
-          {activeTab === 'taxonomy' && (
-            <>
-              <TaxonomyList
-                title="Legal Organisation Structures"
-                items={taxonomies}
-                loading={loading}
-                onAdd={() => handleOpenModal()}
-                onEdit={handleOpenModal}
-                onDelete={handleDelete}
-                addLabel="New Legal Structure"
-              />
+      <div className="max-w-5xl space-y-6 pb-20 animate-in fade-in duration-150">
+        {activeTab === 'lists' && (
+          <div className="space-y-6 animate-in fade-in duration-150">
+            {/* Global Lists Master Data Banner */}
+            <div className="bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-800/40 rounded-2xl p-4 flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Layers size={16} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white">
+                    Unified Master Data Engine: Global Lists
+                  </h4>
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5 leading-relaxed">
+                    Directory classifications, industries, legal structures, and relationship types are centrally backed by Aurora's database-backed Global Lists. Manage custom codes, color pills, import/export, directional flow, and effective dates in one place.
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => navigate('/workspace/settings/platform-modules/global-lists')}
+                className="shrink-0 text-xs font-semibold cursor-pointer"
+              >
+                Global Lists Studio <ExternalLink size={12} className="ml-1 text-indigo-500" />
+              </Button>
+            </div>
 
-              {/* Classification Tags Manager */}
-              <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl space-y-4">
-                <div className="flex items-center justify-between">
+            {/* Directory Classifications Card */}
+            <div className="p-6 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-xs space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Tags size={16} className="text-indigo-500" />
                   <div>
                     <h3 className="text-base font-bold text-zinc-900 dark:text-white">
-                      Directory Classification Badges
+                      Directory Classifications
                     </h3>
                     <p className="text-xs text-zinc-500 mt-0.5">
-                      Multi-select relationship tags available across People and Organisations (e.g. CLIENT, SUPPLIER, VIP).
+                      Multi-select relationship badges for directory segmentation, filtering, and access rules.
                     </p>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {dirConfig.classifications.map((tag) => (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    navigate(
+                      `/workspace/settings/platform-modules/global-lists?list=${encodeURIComponent(
+                        dirConfig.classificationsListId || 'Directory Classifications'
+                      )}`
+                    )
+                  }
+                  className="text-xs cursor-pointer"
+                >
+                  Manage in Global Lists <ExternalLink size={11} className="ml-1" />
+                </Button>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">
+                {(dirConfig.classificationDetails && dirConfig.classificationDetails.length > 0
+                  ? dirConfig.classificationDetails
+                  : (dirConfig.classifications && dirConfig.classifications.length > 0
+                      ? dirConfig.classifications.map((c) => ({ code: c, label: c }))
+                      : [
+                          { code: 'CLIENT', label: 'Client' },
+                          { code: 'SUPPLIER', label: 'Supplier' },
+                          { code: 'PARTNER', label: 'Partner' },
+                          { code: 'PROSPECT', label: 'Prospect' },
+                          { code: 'INVESTOR', label: 'Investor' },
+                          { code: 'COMPETITOR', label: 'Competitor' },
+                          { code: 'REGULATOR', label: 'Regulator' },
+                          { code: 'CONTRACTOR', label: 'Contractor' },
+                          { code: 'SUBSIDIARY', label: 'Subsidiary' },
+                          { code: 'ADVISOR', label: 'Advisor' },
+                          { code: 'VIP', label: 'VIP' },
+                        ]
+                    )
+                ).map((tag: any) => (
+                  <span
+                    key={tag.code || tag.label}
+                    className="px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-medium border border-zinc-200 dark:border-zinc-700/60"
+                  >
+                    {tag.label || tag.code}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+              {/* Industry Sectors Card */}
+              <div className="p-6 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-xs space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Briefcase size={16} className="text-indigo-500" />
+                    <div>
+                      <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                        Directory Industries
+                      </h3>
+                      <p className="text-xs text-zinc-500 mt-0.5">
+                        Standardized industry vertical taxonomies populated in organization profiles.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      navigate(
+                        `/workspace/settings/platform-modules/global-lists?list=${encodeURIComponent(
+                          dirConfig.industriesListId || 'Directory Industries'
+                        )}`
+                      )
+                    }
+                    className="text-xs cursor-pointer"
+                  >
+                    Manage in Global Lists <ExternalLink size={11} className="ml-1" />
+                  </Button>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">
+                  {(dirConfig.industries && dirConfig.industries.length > 0
+                    ? dirConfig.industries
+                    : [
+                        { code: 'TECH', label: 'Technology & Software' },
+                        { code: 'FIN_SERVICES', label: 'Financial Services & Banking' },
+                        { code: 'HEALTHCARE', label: 'Healthcare & Life Sciences' },
+                        { code: 'MANUFACTURING', label: 'Manufacturing & Engineering' },
+                        { code: 'RETAIL', label: 'Retail & Consumer Goods' },
+                        { code: 'PROF_SERVICES', label: 'Professional Services & Consulting' },
+                        { code: 'CONSTRUCTION', label: 'Construction & Real Estate' },
+                        { code: 'ENERGY', label: 'Energy, Oil & Gas' },
+                      ]
+                  ).map((ind: any) => (
                     <span
-                      key={tag}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-xs font-bold"
+                      key={ind.code || ind.label}
+                      className="px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-medium border border-zinc-200 dark:border-zinc-700/60"
                     >
-                      {tag}
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveClassification(tag)}
-                        className="text-indigo-400 hover:text-rose-500 transition-colors ml-1"
-                        title="Remove classification"
-                      >
-                        ×
-                      </button>
+                      {ind.label || ind.code}
                     </span>
                   ))}
                 </div>
-                <div className="flex items-center gap-2 pt-2">
-                  <input
-                    type="text"
-                    placeholder="Add classification (e.g. CHANNEL_PARTNER, BOARD_MEMBER)..."
-                    value={newClassification}
-                    onChange={(e) => setNewClassification(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleAddClassification();
-                      }
-                    }}
-                    className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
-                  />
+              </div>
+
+              {/* Legal Organisation Structures Card */}
+              <div className="p-6 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-xs space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Building2 size={16} className="text-indigo-500" />
+                    <div>
+                      <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                        Legal Organisation Structures
+                      </h3>
+                      <p className="text-xs text-zinc-500 mt-0.5">
+                        Recognized company structures, trusts, partnerships, and legal registration entities.
+                      </p>
+                    </div>
+                  </div>
                   <Button
                     type="button"
+                    variant="outline"
                     size="sm"
-                    onClick={handleAddClassification}
-                    disabled={savingConfig}
+                    onClick={() =>
+                      navigate(
+                        `/workspace/settings/platform-modules/global-lists?list=${encodeURIComponent(
+                          dirConfig.legalStructuresListId || 'Directory Legal Structures'
+                        )}`
+                      )
+                    }
+                    className="text-xs cursor-pointer"
                   >
-                    <Plus size={14} className="mr-1" /> Add Badge
+                    Manage in Global Lists <ExternalLink size={11} className="ml-1" />
                   </Button>
                 </div>
-              </div>
-            </>
-          )}
 
-          {activeTab === 'relationships' && (
-            <TaxonomyList
-              title="Core Relationship Rules"
-              items={taxonomies}
-              loading={loading}
-              onAdd={() => handleOpenModal()}
-              onEdit={handleOpenModal}
-              onDelete={handleDelete}
-              addLabel="New Relation Type"
-            />
+                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">
+                  {(dirConfig.legalStructures && dirConfig.legalStructures.length > 0
+                    ? dirConfig.legalStructures
+                    : [
+                        { code: 'COMPANY', label: 'Company' },
+                        { code: 'PTY_LTD', label: 'Private Limited (Pty Ltd)' },
+                        { code: 'PUBLIC_LISTED', label: 'Public Listed' },
+                        { code: 'TRUST', label: 'Trust' },
+                        { code: 'PARTNERSHIP', label: 'Partnership' },
+                        { code: 'SOLE_TRADER', label: 'Sole Trader' },
+                        { code: 'NON_PROFIT', label: 'Non-Profit / Charity' },
+                        { code: 'GOVERNMENT', label: 'Government Agency' },
+                        { code: 'LLC', label: 'Limited Liability Company (LLC)' },
+                      ]
+                  ).map((ls: any) => (
+                    <span
+                      key={ls.code || ls.label}
+                      className="px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-medium border border-zinc-200 dark:border-zinc-700/60"
+                    >
+                      {ls.label || ls.code}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Directory Relationship Types Card */}
+              <div className="p-6 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-xs space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Shapes size={16} className="text-indigo-500" />
+                    <div>
+                      <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                        Directory Relationship Types
+                      </h3>
+                      <p className="text-xs text-zinc-500 mt-0.5">
+                        Standardized relationship rules and graph connection types between people and organisations.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      navigate(
+                        `/workspace/settings/platform-modules/global-lists?list=${encodeURIComponent(
+                          dirConfig.relationshipTypesListId || 'Directory Relationship Types'
+                        )}`
+                      )
+                    }
+                    className="text-xs cursor-pointer"
+                  >
+                    Manage in Global Lists <ExternalLink size={11} className="ml-1" />
+                  </Button>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">
+                  {(dirConfig.relationshipTypes && dirConfig.relationshipTypes.length > 0
+                    ? dirConfig.relationshipTypes
+                    : [
+                        { code: 'EMPLOYEE', label: 'Employee', inverseLabel: 'Employer' },
+                        { code: 'DIRECTOR', label: 'Director / Executive', inverseLabel: 'Directorship' },
+                        { code: 'OWNER', label: 'Beneficial Owner / Shareholder', inverseLabel: 'Owned Entity' },
+                        { code: 'SUBSIDIARY', label: 'Subsidiary', inverseLabel: 'Parent Company' },
+                        { code: 'PARENT_COMPANY', label: 'Parent Company', inverseLabel: 'Subsidiary' },
+                        { code: 'PRIMARY_CONTACT', label: 'Primary Contact', inverseLabel: 'Represented Entity' },
+                        { code: 'BILLING_CONTACT', label: 'Billing Contact', inverseLabel: 'Client Account' },
+                        { code: 'PARTNER', label: 'Partner / Alliance', inverseLabel: 'Partner / Alliance' },
+                        { code: 'CONTRACTOR', label: 'Contractor / Consultant', inverseLabel: 'Client' },
+                        { code: 'ADVISOR', label: 'Advisor / Legal Counsel', inverseLabel: 'Advised Entity' },
+                        { code: 'SUPPLIER', label: 'Supplier / Vendor', inverseLabel: 'Purchaser' },
+                        { code: 'CLIENT', label: 'Client / Customer', inverseLabel: 'Provider' },
+                        { code: 'SPOUSE', label: 'Spouse / Domestic Partner', inverseLabel: 'Spouse' },
+                        { code: 'PARENT', label: 'Parent', inverseLabel: 'Child' },
+                        { code: 'CHILD', label: 'Child', inverseLabel: 'Parent' },
+                      ]
+                  ).map((rel: any) => (
+                    <span
+                      key={rel.code || rel.label}
+                      className="px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-medium border border-zinc-200 dark:border-zinc-700/60 inline-flex items-center gap-1.5"
+                    >
+                      <span>{rel.label || rel.code}</span>
+                      {rel.inverseLabel && rel.inverseLabel !== (rel.label || rel.code) && (
+                        <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-normal">
+                          ↔ {rel.inverseLabel}
+                        </span>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
           )}
 
           {activeTab === 'fields' && (
-            <div className="space-y-6">
+            <div className="space-y-6 animate-in fade-in duration-150">
               {/* Custom Metadata Fields Builder */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -543,14 +764,14 @@ export const PeopleOrgSettings = () => {
                   <button
                     type="button"
                     onClick={() => handleOpenFieldModal()}
-                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs hover:bg-indigo-500 transition-all shadow-md shadow-indigo-500/10"
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs hover:bg-indigo-500 transition-all shadow-md shadow-indigo-500/10 cursor-pointer"
                   >
                     <Plus size={15} />
                     <span>Define Custom Field</span>
                   </button>
                 </div>
 
-                <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl overflow-hidden shadow-xl">
+                <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-xs overflow-hidden">
                   {dirConfig.customFields.length === 0 ? (
                     <div className="p-12 text-center space-y-3">
                       <div className="w-14 h-14 bg-indigo-500/10 rounded-2xl flex items-center justify-center mx-auto text-indigo-500 border border-indigo-500/20">
@@ -613,14 +834,14 @@ export const PeopleOrgSettings = () => {
                             <button
                               type="button"
                               onClick={() => handleOpenFieldModal(field)}
-                              className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
+                              className="p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
                             >
                               <Edit3 size={15} />
                             </button>
                             <button
                               type="button"
                               onClick={() => handleDeleteCustomField(field.id)}
-                              className="p-2 text-zinc-400 hover:text-rose-500 transition-colors"
+                              className="p-2 text-zinc-400 hover:text-rose-500 transition-colors cursor-pointer"
                             >
                               <Trash2 size={15} />
                             </button>
@@ -631,9 +852,13 @@ export const PeopleOrgSettings = () => {
                   )}
                 </div>
               </div>
+            </div>
+          )}
 
+          {activeTab === 'governance' && (
+            <div className="space-y-6 animate-in fade-in duration-150">
               {/* Governance & Deduplication Switches */}
-              <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl space-y-4">
+              <div className="p-6 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-xs space-y-4">
                 <h3 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
                   <ShieldCheck size={18} className="text-emerald-500" />
                   Automated Governance & Deduplication
@@ -862,37 +1087,6 @@ export const PeopleOrgSettings = () => {
               </div>
             </div>
           )}
-        </div>
-
-        <div className="space-y-6">
-          <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl p-6 shadow-xl">
-            <h3 className="text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-              <Info size={18} className="text-indigo-500" />
-              Platform Integration Guide
-            </h3>
-            <div className="mt-4 space-y-4">
-              <p className="text-xs text-zinc-500 leading-relaxed">
-                The Aurora Directory acts as the single source of truth for People and Corporate Entities across all Dynamic Modules, Financials (AR/AP), Service Desk, Inbox, and Document Generator.
-              </p>
-              <div className="p-4 bg-indigo-500/5 border border-indigo-500/15 rounded-2xl space-y-1.5">
-                <p className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <CheckCircle2 size={13} /> MS365-Style Hover Cards Active
-                </p>
-                <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
-                  Any module field configured as a Directory Lookup automatically renders live hover profile cards and indexes into the entity's "Anything Linked" view.
-                </p>
-              </div>
-              <div className="p-4 bg-amber-500/5 border border-amber-500/10 rounded-2xl">
-                <p className="text-[11px] font-bold text-amber-700 dark:text-amber-500 uppercase tracking-wider mb-1">
-                  Governance Notice
-                </p>
-                <p className="text-xs text-amber-600 dark:text-amber-400 leading-relaxed">
-                  Deleting a Relationship Type or Custom Field key will not delete historical party data, but may hide those attributes in form layouts.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Taxonomy Modal */}
@@ -1081,7 +1275,7 @@ const TaxonomyList = ({
         <span>{addLabel}</span>
       </button>
     </div>
-    <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 rounded-3xl overflow-hidden shadow-xl min-h-[200px]">
+    <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-xs overflow-hidden min-h-[200px]">
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 text-zinc-400">
           <Loader2 className="animate-spin mb-2" size={32} />

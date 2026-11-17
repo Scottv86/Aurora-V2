@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import { Button } from '../../../components/UI/Primitives';
 import { 
@@ -235,6 +236,8 @@ export const evaluateListFormula = (
 
 export const GlobalListsSettings = () => {
   const { tenant, members = [], setIsBuilderFullscreen } = usePlatform();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const listParam = searchParams.get('list') || searchParams.get('listId') || searchParams.get('name');
 
   const { lists, loading: listsLoading, createListWithItems, saveFullList, deleteList, refetch: refetchLists } = useGlobalLists();
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
@@ -657,7 +660,26 @@ export const GlobalListsSettings = () => {
     });
     setLocalColumns(list.columns || []);
     setIsDirty(false);
+    // Keep URL parameter in sync with opened list
+    setSearchParams({ list: list.name }, { replace: true });
   };
+
+  // Auto-open list if requested in URL search params (e.g. ?list=Directory+Industries)
+  useEffect(() => {
+    if (!listParam || listsLoading || lists.length === 0) return;
+
+    const query = listParam.toLowerCase().trim();
+    const target = lists.find(
+      (l) =>
+        l.id.toLowerCase() === query ||
+        l.name.toLowerCase() === query ||
+        l.name.toLowerCase().includes(query)
+    );
+
+    if (target && selectedListId !== target.id) {
+      handleOpenList(target);
+    }
+  }, [listParam, lists, listsLoading, selectedListId]);
 
   const handleSaveList = async () => {
     if (!draftList?.name.trim()) {
@@ -722,6 +744,7 @@ export const GlobalListsSettings = () => {
       setActiveEditingCell(null);
       setIsEditingMetadata(false);
       setIsBuilderFullscreen(false);
+      setSearchParams({}, { replace: true });
     }
   };
 
@@ -1240,6 +1263,7 @@ export const GlobalListsSettings = () => {
                 setSelectedListId(null);
                 setDraftList(null);
                 setIsDirty(false);
+                setSearchParams({}, { replace: true });
               }}
               onDiscardAndExit={() => {
                 setShowUnsavedConfirm(false);
@@ -1248,6 +1272,7 @@ export const GlobalListsSettings = () => {
                 setLocalItems([]);
                 setLocalColumns([]);
                 setIsDirty(false);
+                setSearchParams({}, { replace: true });
               }}
               onCancel={() => setShowUnsavedConfirm(false)}
             />
@@ -1297,7 +1322,7 @@ export const GlobalListsSettings = () => {
         actions={
           <div className="flex items-center gap-2">
             <Button
-              onClick={() => refetchLists()}
+              onClick={() => refetchLists(true)}
               variant="secondary"
               className="flex items-center gap-2 font-semibold text-xs px-3 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 transition-all cursor-pointer bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
               title="Refresh lists"

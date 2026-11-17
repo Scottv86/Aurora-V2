@@ -1,5 +1,6 @@
 import React from 'react';
 import { ArrowUpRight, Check, X, Hash, Lock, Users } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 export interface ChatToastPayload {
@@ -18,7 +19,7 @@ export interface ChatToastPayload {
 interface ChatNotificationToastProps {
   toastId: string | number;
   payload: ChatToastPayload;
-  onOpenChannel: (channelId: string) => void;
+  onOpenChannel?: (channelId: string) => void;
   onMarkRead?: (channelId: string) => void;
 }
 
@@ -28,14 +29,27 @@ export const ChatNotificationToast: React.FC<ChatNotificationToastProps> = ({
   onOpenChannel,
   onMarkRead
 }) => {
+  const navigate = useNavigate();
   const isDirect = payload.channelType === 'direct';
   const isGroup = payload.channelType === 'group';
   const isPrivate = payload.channelType === 'private';
 
   const initial = (payload.senderName || 'U').charAt(0).toUpperCase();
 
+  const handleOpenChat = () => {
+    toast.dismiss(toastId);
+    if (onOpenChannel) {
+      onOpenChannel(payload.channelId);
+    }
+    try {
+      navigate(`/workspace/apps/chat/${payload.channelId}`);
+    } catch {
+      window.location.href = `/workspace/apps/chat/${payload.channelId}`;
+    }
+  };
+
   return (
-    <div className="w-[360px] max-w-[95vw] bg-white dark:bg-zinc-900 border border-zinc-200/90 dark:border-zinc-800 rounded-2xl shadow-2xl p-3.5 flex flex-col gap-2.5 font-sans animate-in slide-in-from-top-4 duration-300">
+    <div className="w-[360px] max-w-[95vw] bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border border-zinc-200/90 dark:border-zinc-800 rounded-2xl shadow-xl shadow-zinc-900/10 dark:shadow-black/40 p-3.5 flex flex-col gap-2.5 font-sans animate-in slide-in-from-bottom-2 duration-200">
       {/* Top Header */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2.5 min-w-0">
@@ -97,10 +111,7 @@ export const ChatNotificationToast: React.FC<ChatNotificationToastProps> = ({
 
       {/* Body: Message Snippet */}
       <div 
-        onClick={() => {
-          onOpenChannel(payload.channelId);
-          toast.dismiss(toastId);
-        }}
+        onClick={handleOpenChat}
         className="group cursor-pointer rounded-xl p-2.5 bg-zinc-50 dark:bg-zinc-800/40 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 border border-zinc-200/60 dark:border-zinc-700/60 transition-all space-y-1"
       >
         <p className="text-xs text-zinc-700 dark:text-zinc-200 line-clamp-2 leading-relaxed break-words font-normal">
@@ -111,10 +122,7 @@ export const ChatNotificationToast: React.FC<ChatNotificationToastProps> = ({
       {/* Quick Action Footer */}
       <div className="flex items-center justify-between gap-2 pt-0.5">
         <button
-          onClick={() => {
-            onOpenChannel(payload.channelId);
-            toast.dismiss(toastId);
-          }}
+          onClick={handleOpenChat}
           className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer"
         >
           <span>Open Chat</span>

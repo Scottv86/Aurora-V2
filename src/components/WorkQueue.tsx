@@ -578,9 +578,11 @@ export const WorkQueue: React.FC<WorkQueueProps> = ({
                   {caseAssignee ? (
                     <div className="flex items-center justify-end gap-1.5">
                       <UserAvatarWithPresence
+                        memberId={caseAssignee.id}
+                        userId={caseAssignee.userId}
                         avatarUrl={caseAssignee.avatarUrl}
                         name={caseAssignee.name}
-                        status={(caseAssignee as any).status || 'AVAILABLE'}
+                        status={(caseAssignee as any).presenceStatus || (caseAssignee as any).status || 'AVAILABLE'}
                         size="xs"
                       />
                       <span className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300 truncate max-w-[70px]">
@@ -831,9 +833,11 @@ export const WorkQueue: React.FC<WorkQueueProps> = ({
                   {caseAssignee ? (
                     <span className="text-zinc-900 dark:text-white font-medium flex items-center gap-1.5">
                       <UserAvatarWithPresence
+                        memberId={caseAssignee.id}
+                        userId={caseAssignee.userId}
                         avatarUrl={caseAssignee.avatarUrl}
                         name={caseAssignee.name}
-                        status={(caseAssignee as any).status || 'AVAILABLE'}
+                        status={(caseAssignee as any).presenceStatus || (caseAssignee as any).status || 'AVAILABLE'}
                         size="xs"
                       />
                       {isAssignedToMe ? 'You (Me)' : caseAssignee.name}

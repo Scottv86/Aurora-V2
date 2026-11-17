@@ -146,6 +146,10 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
     },
   ]);
 
+  const [availableClassifications, setAvailableClassifications] = useState<string[]>(DEFAULT_CLASSIFICATIONS);
+  const [availableLegalStructures, setAvailableLegalStructures] = useState<any[]>([]);
+  const [availableIndustries, setAvailableIndustries] = useState<any[]>([]);
+
   // Custom Metadata Fields from Tenant Directory Settings
   const customFieldDefs = useMemo(() => {
     const defs = (tenant as any)?.settings?.directoryConfig?.customFields || [];
@@ -183,6 +187,25 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
           .then((r) => (r.ok ? r.json() : null))
           .then((data) => {
             if (data) setExistingParties(Array.isArray(data) ? data : data.parties || []);
+          })
+          .catch(() => {});
+
+        fetch(`${API_BASE_URL}/api/people-organisations/config`, {
+          headers: { Authorization: `Bearer ${token}`, 'x-tenant-id': tenant.id },
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((cfg) => {
+            if (cfg) {
+              if (Array.isArray(cfg.classifications) && cfg.classifications.length > 0) {
+                setAvailableClassifications(cfg.classifications);
+              }
+              if (Array.isArray(cfg.legalStructures) && cfg.legalStructures.length > 0) {
+                setAvailableLegalStructures(cfg.legalStructures);
+              }
+              if (Array.isArray(cfg.industries) && cfg.industries.length > 0) {
+                setAvailableIndustries(cfg.industries);
+              }
+            }
           })
           .catch(() => {});
       }
@@ -789,23 +812,44 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
                       Corporate Structure
                     </label>
                     <select className={selectClassName} value={orgType} onChange={(e) => setOrgType(e.target.value)}>
-                      <option value="Corporate">Corporate (Pty Ltd / Inc / LLC)</option>
-                      <option value="Trust">Trust / Super Fund</option>
-                      <option value="Partnership">Partnership</option>
-                      <option value="Government">Government / Public</option>
-                      <option value="Non-Profit">Non-Profit / Charity</option>
-                      <option value="Sole Trader">Sole Trader</option>
+                      {availableLegalStructures.length > 0 ? (
+                        availableLegalStructures.map((ls: any) => (
+                          <option key={ls.code || ls.label} value={ls.code || ls.label}>
+                            {ls.label || ls.code}
+                          </option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="COMPANY">Company (Pty Ltd / Inc / LLC)</option>
+                          <option value="TRUST">Trust / Super Fund</option>
+                          <option value="PARTNERSHIP">Partnership</option>
+                          <option value="GOVERNMENT">Government / Public</option>
+                          <option value="NON_PROFIT">Non-Profit / Charity</option>
+                          <option value="SOLE_TRADER">Sole Trader</option>
+                        </>
+                      )}
                     </select>
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
                       Industry Sector
                     </label>
-                    <Input
-                      value={industry}
-                      onChange={(e) => setIndustry(e.target.value)}
-                      placeholder="e.g. Financial Services"
-                    />
+                    {availableIndustries.length > 0 ? (
+                      <select className={selectClassName} value={industry} onChange={(e) => setIndustry(e.target.value)}>
+                        <option value="">Select Industry...</option>
+                        {availableIndustries.map((ind: any) => (
+                          <option key={ind.code || ind.label} value={ind.label || ind.code}>
+                            {ind.label || ind.code}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Input
+                        value={industry}
+                        onChange={(e) => setIndustry(e.target.value)}
+                        placeholder="e.g. Financial Services"
+                      />
+                    )}
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1.5">
@@ -967,7 +1011,7 @@ export const CreatePartyModal: React.FC<CreatePartyModalProps> = ({
                 Directory Classifications <span className="text-[11px] font-normal text-zinc-400">(Select all that apply)</span>
               </label>
               <div className="flex flex-wrap gap-1.5 pt-1">
-                {DEFAULT_CLASSIFICATIONS.map((cls) => {
+                {availableClassifications.map((cls) => {
                   const active = classifications.includes(cls);
                   return (
                     <button

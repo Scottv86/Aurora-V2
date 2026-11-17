@@ -43,7 +43,9 @@ interface ChatContextType {
   refreshChannels: () => Promise<void>;
 }
 
-const ChatContext = createContext<ChatContextType | undefined>(undefined);
+export const ChatContext = createContext<ChatContextType | undefined>(undefined);
+
+export const useOptionalChat = () => useContext(ChatContext);
 
 export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const existing = useContext(ChatContext);
@@ -54,7 +56,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 };
 
 const ChatProviderInner: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, session } = useAuth();
+  const { user, session, loading: authLoading } = useAuth();
   const token = session?.access_token || (import.meta as any).env.VITE_DEV_TOKEN;
   const { tenant, user: platformUser } = usePlatform();
   const { presenceStatus } = useDigitalTwin();
@@ -97,8 +99,8 @@ const ChatProviderInner: React.FC<{ children: React.ReactNode }> = ({ children }
 
   // 1. Initial load for channels and user directory
   const loadChannelsAndUsers = useCallback(async () => {
-    if (!tenant?.id && !user) {
-      setIsLoading(false);
+    if (authLoading || !token || !tenant?.id) {
+      if (!authLoading) setIsLoading(false);
       return;
     }
     setIsLoading(true);
@@ -113,6 +115,8 @@ const ChatProviderInner: React.FC<{ children: React.ReactNode }> = ({ children }
       const pMap: Record<string, ChatUser> = {};
       fetchedUsers.forEach(u => {
         pMap[u.id] = u;
+        if ((u as any).userId) pMap[(u as any).userId] = u;
+        if ((u as any).memberId) pMap[(u as any).memberId] = u;
       });
       setUserPresence(pMap);
 
@@ -126,7 +130,7 @@ const ChatProviderInner: React.FC<{ children: React.ReactNode }> = ({ children }
     } finally {
       setIsLoading(false);
     }
-  }, [token, tenant?.id]);
+  }, [token, tenant?.id, authLoading]);
 
   useEffect(() => {
     loadChannelsAndUsers();
@@ -153,6 +157,7 @@ const ChatProviderInner: React.FC<{ children: React.ReactNode }> = ({ children }
 
   // 2. Load messages when active channel changes
   const loadChannelMessages = useCallback(async (channelId: string) => {
+    if (!token || !tenant?.id) return;
     setIsMessagesLoading(true);
     try {
       const msgs = await ChatService.getMessages(channelId, undefined, token || undefined, tenant?.id);
@@ -178,7 +183,7 @@ const ChatProviderInner: React.FC<{ children: React.ReactNode }> = ({ children }
 
   // 3. Load thread replies when thread opens
   useEffect(() => {
-    if (activeChannel?.id && threadParentMessage?.id) {
+    if (activeChannel?.id && threadParentMessage?.id && token && tenant?.id) {
       ChatService.getMessages(activeChannel.id, threadParentMessage.id, token || undefined, tenant?.id)
         .then(replies => setThreadReplies(replies))
         .catch(console.error);
@@ -189,7 +194,7 @@ const ChatProviderInner: React.FC<{ children: React.ReactNode }> = ({ children }
 
   // 4. WebSocket setup
   useEffect(() => {
-    if (!tenant?.id && !user) return;
+    if (authLoading || !token || !tenant?.id) return;
     const socket = io(API_BASE_URL, {
       auth: { token },
       transports: ['websocket', 'polling']
@@ -218,8 +223,15 @@ const ChatProviderInner: React.FC<{ children: React.ReactNode }> = ({ children }
         if (!isCurrentActive) {
           const targetChannel = channelsRef.current.find(c => c.id === newMsg.channelId);
           const channelName = targetChannel?.name || 'Chat';
-          const channelType = targetChannel?.type || 'public';
+          const channelType = targetChannel?.type || 'direct';
           const senderAvatar = newMsg.senderAvatar || usersRef.current.find(u => u.id === newMsg.senderId)?.avatarUrl;
+
+          // Proactively refresh channels cache if this is a newly created conversation
+          if (!targetChannel && token && tenant?.id) {
+            ChatService.getChannels(token || undefined, tenant?.id)
+              .then(fresh => setChannels(fresh))
+              .catch(() => {});
+          }
 
           toast.custom((t) => (
             <ChatNotificationToast
@@ -237,8 +249,7 @@ const ChatProviderInner: React.FC<{ children: React.ReactNode }> = ({ children }
                 hasAttachments: newMsg.attachments && newMsg.attachments.length > 0
               }}
               onOpenChannel={(cId) => {
-                const found = channelsRef.current.find(c => c.id === cId);
-                if (found) setActiveChannel(found);
+                setActiveChannelById(cId);
               }}
               onMarkRead={(cId) => {
                 setChannels(prev => prev.map(c => c.id === cId ? { ...c, unreadCount: 0 } : c));
@@ -329,28 +340,37 @@ const ChatProviderInner: React.FC<{ children: React.ReactNode }> = ({ children }
     // Presence update
     socket.on('chat:presence_updated', (data: { userId: string; status: any; statusEmoji?: string; statusText?: string }) => {
       setUserPresence(prev => {
-        const existing = prev[data.userId];
-        if (!existing) return prev;
-        return {
-          ...prev,
-          [data.userId]: {
-            ...existing,
-            presence: data.status,
-            status: {
-              emoji: data.statusEmoji,
-              text: data.statusText
-            }
+        const existing = prev[data.userId] || Object.values(prev).find(u => (u as any).userId === data.userId || u.id === data.userId || (u as any).memberId === data.userId);
+        const updated: ChatUser = {
+          ...(existing || { id: data.userId, name: 'User', presence: data.status }),
+          presence: data.status,
+          status: {
+            emoji: data.statusEmoji,
+            text: data.statusText
           }
         };
+        const next = { ...prev, [data.userId]: updated };
+        if ((updated as any).userId) next[(updated as any).userId] = updated;
+        if ((updated as any).memberId) next[(updated as any).memberId] = updated;
+        return next;
       });
     });
 
     return () => {
       socket.removeAllListeners();
-      socket.disconnect();
+      if (socket.connected) {
+        socket.disconnect();
+      } else {
+        socket.once('connect', () => {
+          socket.disconnect();
+        });
+        socket.once('connect_error', () => {
+          socket.disconnect();
+        });
+      }
       socketRef.current = null;
     };
-  }, [token, tenant?.id, user?.id]);
+  }, [token, tenant?.id, user?.id, authLoading]);
 
   // Join active channel room over existing WebSocket connection
   useEffect(() => {
@@ -360,12 +380,26 @@ const ChatProviderInner: React.FC<{ children: React.ReactNode }> = ({ children }
   }, [activeChannel?.id]);
 
   // Set active channel by id
-  const setActiveChannelById = useCallback((channelId: string) => {
-    const found = channels.find(c => c.id === channelId);
+  const setActiveChannelById = useCallback(async (channelId: string) => {
+    const found = channelsRef.current.find(c => c.id === channelId);
     if (found) {
       setActiveChannel(found);
+      return;
     }
-  }, [channels]);
+    // Channel might be brand new and not yet in memory
+    if (token && tenant?.id) {
+      try {
+        const freshChannels = await ChatService.getChannels(token || undefined, tenant?.id);
+        setChannels(freshChannels);
+        const match = freshChannels.find(c => c.id === channelId);
+        if (match) {
+          setActiveChannel(match);
+        }
+      } catch (err) {
+        console.error('[ChatContext] Error fetching fresh channels for id:', err);
+      }
+    }
+  }, [token, tenant?.id]);
 
   // Open thread
   const openThread = useCallback((msg: ChatMessage | null) => {

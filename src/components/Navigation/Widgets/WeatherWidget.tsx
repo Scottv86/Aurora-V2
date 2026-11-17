@@ -38,6 +38,65 @@ const CACHE_KEY = 'aurora_weather_cache_v2';
 const UNIT_KEY = 'aurora_weather_unit';
 const CACHE_TTL_MS = 20 * 60 * 1000;
 
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 4500): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    return res;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function mapWwoCodeToWmo(wwoCode: number): number {
+  switch (wwoCode) {
+    case 113: return 0; // Clear / Sunny
+    case 116: return 2; // Partly Cloudy
+    case 119:
+    case 122: return 3; // Cloudy / Overcast
+    case 143:
+    case 248:
+    case 260: return 45; // Fog
+    case 176:
+    case 263:
+    case 266:
+    case 293:
+    case 296:
+    case 299:
+    case 302:
+    case 305:
+    case 308:
+    case 353:
+    case 356:
+    case 359: return 61; // Rain / Showers
+    case 179:
+    case 182:
+    case 227:
+    case 230:
+    case 317:
+    case 320:
+    case 323:
+    case 326:
+    case 329:
+    case 332:
+    case 335:
+    case 338:
+    case 350:
+    case 368:
+    case 371: return 71; // Snow
+    case 200:
+    case 386:
+    case 389:
+    case 392:
+    case 395: return 95; // Thunderstorm
+    case 281:
+    case 284:
+    case 311: return 51; // Drizzle
+    default: return 1;
+  }
+}
+
 export function getWeatherDetails(code: number, isDay: boolean = true) {
   switch (code) {
     case 0:
@@ -101,9 +160,11 @@ export const WeatherWidget: React.FC<WidgetCommonProps> = ({ onOpenCustomize, is
       const cached = localStorage.getItem(CACHE_KEY);
       if (cached) {
         const parsed: WeatherData = JSON.parse(cached);
+        // Stale-while-revalidate: display cached data immediately
+        setWeather(parsed);
+        setLoading(false);
+        // Only skip network fetch if data is still fresh
         if (Date.now() - parsed.updatedAt < CACHE_TTL_MS) {
-          setWeather(parsed);
-          setLoading(false);
           return;
         }
       }
@@ -164,7 +225,7 @@ export const WeatherWidget: React.FC<WidgetCommonProps> = ({ onOpenCustomize, is
 
       if (!isGps) {
         try {
-          const geoRes = await fetch('https://get.geojs.io/v1/ip/geo.json');
+          const geoRes = await fetchWithTimeout('https://get.geojs.io/v1/ip/geo.json', {}, 4000);
           if (geoRes.ok) {
             const geoData = await geoRes.json();
             if (geoData.latitude && geoData.longitude) {
@@ -178,32 +239,76 @@ export const WeatherWidget: React.FC<WidgetCommonProps> = ({ onOpenCustomize, is
         }
       }
 
-      const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min&timezone=auto`;
-      const wRes = await fetch(weatherUrl);
-      if (!wRes.ok) throw new Error('Weather API error');
+      let newWeatherData: WeatherData | null = null;
 
-      const data = await wRes.json();
-      const current = data.current;
-      const daily = data.daily;
+      // 1. Try primary provider (Open-Meteo) with a 4.5s timeout
+      try {
+        const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min&timezone=auto`;
+        const wRes = await fetchWithTimeout(weatherUrl, {}, 4500);
+        if (wRes.ok) {
+          const data = await wRes.json();
+          const current = data.current;
+          const daily = data.daily;
 
-      const newWeatherData: WeatherData = {
-        city,
-        tempC: current.temperature_2m,
-        apparentTempC: current.apparent_temperature,
-        humidity: current.relative_humidity_2m,
-        windSpeedKmH: current.wind_speed_10m,
-        weatherCode: current.weather_code,
-        isDay: current.is_day === 1,
-        tempMaxC: daily?.temperature_2m_max?.[0],
-        tempMinC: daily?.temperature_2m_min?.[0],
-        updatedAt: Date.now(),
-        isGps
-      };
+          if (current) {
+            newWeatherData = {
+              city,
+              tempC: current.temperature_2m,
+              apparentTempC: current.apparent_temperature,
+              humidity: current.relative_humidity_2m,
+              windSpeedKmH: current.wind_speed_10m,
+              weatherCode: current.weather_code,
+              isDay: current.is_day === 1,
+              tempMaxC: daily?.temperature_2m_max?.[0],
+              tempMinC: daily?.temperature_2m_min?.[0],
+              updatedAt: Date.now(),
+              isGps
+            };
+          }
+        }
+      } catch (openMeteoErr) {
+        console.warn('Open-Meteo API unreachable or timed out, switching to fallback weather provider:', openMeteoErr);
+      }
 
-      setWeather(newWeatherData);
-      localStorage.setItem(CACHE_KEY, JSON.stringify(newWeatherData));
+      // 2. Fallback to wttr.in if primary service failed or timed out
+      if (!newWeatherData) {
+        try {
+          const wttrRes = await fetchWithTimeout(`https://wttr.in/${lat},${lon}?format=j1`, {}, 4500);
+          if (wttrRes.ok) {
+            const data = await wttrRes.json();
+            const cur = data.current_condition?.[0];
+            const daily = data.weather?.[0];
+            const hour = new Date().getHours();
+            const isDay = hour >= 6 && hour < 20;
+
+            if (cur) {
+              const rawCode = parseInt(cur.weatherCode, 10);
+              newWeatherData = {
+                city: (city === 'Adelaide' && data.nearest_area?.[0]?.areaName?.[0]?.value) || city,
+                tempC: parseFloat(cur.temp_C),
+                apparentTempC: parseFloat(cur.FeelsLikeC || cur.temp_C),
+                humidity: parseFloat(cur.humidity || '0'),
+                windSpeedKmH: parseFloat(cur.windspeedKmph || '0'),
+                weatherCode: mapWwoCodeToWmo(rawCode),
+                isDay,
+                tempMaxC: daily?.maxtempC ? parseFloat(daily.maxtempC) : undefined,
+                tempMinC: daily?.mintempC ? parseFloat(daily.mintempC) : undefined,
+                updatedAt: Date.now(),
+                isGps
+              };
+            }
+          }
+        } catch (fallbackErr) {
+          console.warn('Fallback weather provider also failed:', fallbackErr);
+        }
+      }
+
+      if (newWeatherData) {
+        setWeather(newWeatherData);
+        localStorage.setItem(CACHE_KEY, JSON.stringify(newWeatherData));
+      }
     } catch (err) {
-      console.error('Failed to fetch weather:', err);
+      console.warn('Failed to fetch weather data:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -222,7 +327,19 @@ export const WeatherWidget: React.FC<WidgetCommonProps> = ({ onOpenCustomize, is
     );
   }
 
-  if (!weather) return null;
+  if (!weather) {
+    return (
+      <button
+        type="button"
+        onClick={() => fetchWeather()}
+        className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800/70 transition-all text-xs"
+        title="Weather unavailable. Click to retry."
+      >
+        <Cloud size={14} className="opacity-50" />
+        <span className="text-[11px] font-medium opacity-70">Weather</span>
+      </button>
+    );
+  }
 
   const details = getWeatherDetails(weather.weatherCode, weather.isDay);
 

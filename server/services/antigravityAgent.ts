@@ -2,8 +2,57 @@ import { Type } from "@google/genai";
 import { globalPrisma } from '../lib/prisma';
 import { resolveCapabilities } from '../lib/permissions';
 import { resolveTenantAIClient, logAIUsageMetric, executeAICompletion } from './aiProviderService';
-import { io } from '../socket';
+import { io, emitTenantUpdate, setAIAgentPresence } from '../socket';
+import { AutomationEngine } from './automationEngine';
 import { safeFetch } from '../lib/ssrfGuard';
+import { getActiveWorkflowForModule } from './builderSyncService';
+
+function processAutonumbersInternal(dataObject: any, fields: any[], updatedConfig: any): boolean {
+  if (!dataObject || typeof dataObject !== 'object' || !fields || !Array.isArray(fields)) return false;
+  let changed = false;
+
+  const getNextAutonumber = (field: any) => {
+    const fieldKey = `_autonumber_${field.id}`;
+    const currentNum = updatedConfig[fieldKey] !== undefined ? updatedConfig[fieldKey] : (field.autonumberStart || 1);
+    const prefix = field.autonumberPrefix || '';
+    const suffix = field.autonumberSuffix || '';
+    const digits = field.autonumberDigits || 0;
+    const formattedNum = currentNum.toString().padStart(digits, '0');
+
+    updatedConfig[fieldKey] = currentNum + 1;
+    return `${prefix}${formattedNum}${suffix}`;
+  };
+
+  fields.forEach((field: any) => {
+    if (field.type === 'autonumber') {
+      if (!dataObject[field.id]) {
+        dataObject[field.id] = getNextAutonumber(field);
+        changed = true;
+      }
+    } else if (field.type === 'repeatableGroup') {
+      const arrayVal = dataObject[field.id];
+      if (Array.isArray(arrayVal)) {
+        arrayVal.forEach((item: any) => {
+          if (item && typeof item === 'object') {
+            const itemChanged = processAutonumbersInternal(item, field.fields || [], updatedConfig);
+            if (itemChanged) changed = true;
+          }
+        });
+      }
+    } else if (field.fields && Array.isArray(field.fields)) {
+      const nestedObj = dataObject[field.id];
+      if (nestedObj && typeof nestedObj === 'object' && !Array.isArray(nestedObj)) {
+        const nestedChanged = processAutonumbersInternal(nestedObj, field.fields, updatedConfig);
+        if (nestedChanged) changed = true;
+      } else {
+        const flatChanged = processAutonumbersInternal(dataObject, field.fields, updatedConfig);
+        if (flatChanged) changed = true;
+      }
+    }
+  });
+
+  return changed;
+}
 
 // DuckDuckGo Scraper for web search
 async function scrapeDuckDuckGo(query: string): Promise<any[]> {
@@ -857,7 +906,7 @@ export const runAgentLoop = async (
 USER'S ACTIVE RECORD IN FOCUS (GROUNDED INSTANT CONTEXT):
   - Entity Domain: "${ae.domain}"
   - Entity / Record ID: "${ae.id}"
-  - Display Title: "${ae.title}"
+${ae.recordKey ? `  - Record Key / Code: "${ae.recordKey}"\n` : ''}  - Display Title: "${ae.title}"
   - Status / Lifecycle: "${ae.status || 'Active'}"
 ${ae.subtitle ? `  - Subtitle / Summary: "${ae.subtitle}"\n` : ''}${ae.module?.name ? `  - Associated Module: "${ae.module.name}" (ID: "${ae.module.id}")\n` : ''}${ae.activeTab ? `  - Currently Active View Tab: "${ae.activeTab}"\n` : ''}${ae.slaStatus ? `  - SLA Status: "${ae.slaStatus}"\n` : ''}${relLines}  - Key Field Values & Attributes:
 ${attrLines || '    * (No additional scalar fields)'}
@@ -865,7 +914,9 @@ ${attrLines || '    * (No additional scalar fields)'}
 GROUNDING DIRECTIVE FOR ACTIVE RECORD:
 1. The user is ACTIVELY VIEWING and WORKING WITH the record above in real-time.
 2. When the user asks ambiguous or relative questions like "summarize this", "who is the contact?", "draft an email", "advance to next stage", or "what is the balance?", ALWAYS interpret these in direct reference to this active record.
-3. If the user asks to modify or perform an action on this record (e.g. updating a field, adding an activity note, generating a document), use Entity ID "${ae.id}"${ae.module?.id ? ` and Module ID "${ae.module.id}"` : ''} directly without asking the user to specify or confirm the record ID.
+3. If the user asks to modify or update field values on this record (e.g. changing description, type, priority, date required, status, or any custom field), call the "upsert_record" tool with moduleId: "${ae.module?.id}", recordId: "${ae.id}", and data: { [fieldIdOrName]: newValue }. This will update the record and highlight the changed fields in real-time on the user's screen.
+4. If the user asks to perform any other action on this record (e.g. adding an activity note, generating a document), use Entity ID "${ae.id}"${ae.module?.id ? ` and Module ID "${ae.module.id}"` : ''} directly without asking the user to specify or confirm the record ID.
+5. If the user explicitly asks to CREATE A NEW record (e.g. "Create a new record in [Module]", "Add a new ticket", "New entry"), do NOT pass recordId. Call "upsert_record" with moduleId: "${ae.module?.id || '<moduleId>'}" and omit recordId entirely so a new record is created with its own unique record key. Never update the currently active record when the user's intent is creating a new one.
 ================================================================================\n`;
   } else if (context && context.path) {
     contextBlock += `\nUse this route information to ground your understanding. For example, if they ask to add a field, create an automation, or query data, they likely refer to the active module/page they are currently viewing listed above.\n`;
@@ -1038,6 +1089,9 @@ CORE GUIDELINES:
   let activeMetadata = (session.metadata as any) || {};
   if (context?.activeEntity) {
     activeMetadata.activeEntity = context.activeEntity;
+  }
+  if (socketId) {
+    activeMetadata.socketId = socketId;
   }
 
   while (loopCount < maxLoops) {
@@ -1422,24 +1476,371 @@ export const executeAgentTool = async (
             result = { connector: conn, activation: tenantConn };
           } 
           else if (name === 'upsert_record') {
-            if (args.recordId) {
-              const existing = await db.record.findFirst({ where: { id: args.recordId, tenantId } });
+            let targetRecId = args.recordId;
+            // Only fall back to activeEntity.id if args.recordId is not specified AND args.moduleId is not explicitly provided (i.e. modifying currently active record)
+            if (!targetRecId && !args.moduleId && activeMetadata?.activeEntity?.id) {
+              targetRecId = activeMetadata.activeEntity.id;
+            }
+
+            let targetModId = args.moduleId || activeMetadata?.activeEntity?.module?.id;
+            const incomingFields = (args.data && typeof args.data === 'object')
+              ? (args.data.data && typeof args.data.data === 'object' ? args.data.data : args.data)
+              : {};
+
+            let existing: any = null;
+            if (targetRecId) {
+              existing = await db.record.findFirst({
+                where: { id: targetRecId, tenantId },
+                include: { module: true }
+              });
               if (!existing) {
-                result = { error: `Record '${args.recordId}' not found in your tenant workspace.` };
-              } else {
-                result = await db.record.update({
-                  where: { id: args.recordId },
-                  data: { data: args.data }
+                existing = await db.record.findFirst({
+                  where: {
+                    tenantId,
+                    data: {
+                      path: ['_record_key'],
+                      equals: targetRecId
+                    }
+                  },
+                  include: { module: true }
                 });
               }
-            } else {
-              result = await db.record.create({
-                data: {
-                  tenantId,
-                  moduleId: args.moduleId,
-                  data: args.data
+            }
+
+            if (targetRecId) {
+              if (!existing) {
+                result = { error: `Record '${targetRecId}' not found in your tenant workspace.` };
+              } else {
+                targetRecId = existing.id;
+                targetModId = existing.moduleId || targetModId;
+
+                const targetModule = existing.module || (targetModId ? await db.module.findFirst({ where: { id: targetModId, tenantId } }) : null);
+                const layout = (targetModule?.config as any)?.layout || [];
+                const allModuleFields: any[] = [];
+                const fieldToGroupMap: Record<string, { id: string; name?: string }> = {};
+
+                const extractFields = (items: any[], currentGroup?: { id: string; name?: string }) => {
+                  if (!Array.isArray(items)) return;
+                  for (const item of items) {
+                    if (!item) continue;
+                    if (['fieldGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(item.type) || item.fields) {
+                      const grp = { id: item.id, name: item.name };
+                      if (Array.isArray(item.fields)) {
+                        extractFields(item.fields, grp);
+                      }
+                    } else {
+                      allModuleFields.push(item);
+                      if (currentGroup) {
+                        fieldToGroupMap[item.id] = currentGroup;
+                      }
+                    }
+                  }
+                };
+                extractFields(layout);
+
+                const existingData = (existing.data && typeof existing.data === 'object') ? (existing.data as any) : {};
+                const resolvedFieldKeys = new Set<string>();
+                const normalizedUpdates: Record<string, any> = {};
+
+                for (const [rawKey, rawVal] of Object.entries(incomingFields)) {
+                  resolvedFieldKeys.add(rawKey);
+                  const lowerKey = rawKey.toLowerCase();
+                  const matchedField = allModuleFields.find(f => 
+                    (f.id && f.id.toLowerCase() === lowerKey) ||
+                    (f.name && f.name.toLowerCase() === lowerKey) ||
+                    (f.label && f.label.toLowerCase() === lowerKey)
+                  );
+
+                  if (matchedField) {
+                    if (matchedField.id) resolvedFieldKeys.add(matchedField.id);
+                    if (matchedField.name) resolvedFieldKeys.add(matchedField.name);
+                    if (matchedField.label) resolvedFieldKeys.add(matchedField.label);
+
+                    normalizedUpdates[matchedField.id] = rawVal;
+                    if (matchedField.name) {
+                      normalizedUpdates[matchedField.name] = rawVal;
+                    }
+
+                    const grp = fieldToGroupMap[matchedField.id];
+                    if (grp) {
+                      const grpKeys = [grp.id, grp.name].filter(Boolean) as string[];
+                      for (const gKey of grpKeys) {
+                        const existingGroupVal = (existingData[gKey] && typeof existingData[gKey] === 'object')
+                          ? existingData[gKey]
+                          : (normalizedUpdates[gKey] && typeof normalizedUpdates[gKey] === 'object')
+                            ? normalizedUpdates[gKey]
+                            : {};
+                        normalizedUpdates[gKey] = {
+                          ...existingGroupVal,
+                          [matchedField.id]: rawVal,
+                          ...(matchedField.name ? { [matchedField.name]: rawVal } : {})
+                        };
+                      }
+                    }
+                  } else {
+                    normalizedUpdates[rawKey] = rawVal;
+                  }
                 }
-              });
+
+                const fieldKeys = Array.from(resolvedFieldKeys);
+                const primaryFieldId = fieldKeys.find(k => k.startsWith('field-')) || fieldKeys[0];
+
+                // 1. Immediately emit modifying event to highlight fields with animated indicator
+                setAIAgentPresence(targetRecId, 'editing', primaryFieldId || undefined);
+                emitTenantUpdate(tenantId, 'ai_record_field_modifying', {
+                  recordId: targetRecId,
+                  fields: fieldKeys,
+                  data: normalizedUpdates
+                });
+                if (activeMetadata?.socketId) {
+                  emitStep(activeMetadata.socketId, {
+                    type: 'ai_field_modifying',
+                    recordId: targetRecId,
+                    fields: fieldKeys,
+                    data: normalizedUpdates
+                  });
+                }
+
+                // Add brief natural pause so the user sees the real-time highlight before value transition
+                await new Promise((r) => setTimeout(r, 650));
+
+                const mergedData = { ...existingData, ...normalizedUpdates };
+
+                const updatePayload: any = {
+                  data: mergedData,
+                  updatedAt: new Date()
+                };
+                if (incomingFields.status && typeof incomingFields.status === 'string') {
+                  updatePayload.status = incomingFields.status;
+                }
+
+                const updated = await db.record.update({
+                  where: { id: targetRecId },
+                  data: updatePayload,
+                  include: { createdByMember: true }
+                });
+
+                const formatted = {
+                  id: updated.id,
+                  moduleId: updated.moduleId,
+                  associations: updated.associations,
+                  path: updated.path,
+                  createdAt: updated.createdAt,
+                  updatedAt: updated.updatedAt,
+                  status: updated.status,
+                  workflowState: updated.workflowState,
+                  data: mergedData,
+                  _record_key: mergedData._record_key || existingData._record_key,
+                  ...mergedData
+                };
+
+                // 2. Broadcast the completed update so the field values update in real-time
+                emitTenantUpdate(tenantId, 'record_updated', formatted);
+                emitTenantUpdate(tenantId, 'ai_record_field_updated', {
+                  recordId: targetRecId,
+                  fields: fieldKeys,
+                  data: mergedData,
+                  record: formatted
+                });
+
+                if (activeMetadata?.socketId) {
+                  emitStep(activeMetadata.socketId, {
+                    type: 'ai_field_updated',
+                    recordId: targetRecId,
+                    fields: fieldKeys,
+                    data: mergedData,
+                    record: formatted
+                  });
+                }
+
+                setAIAgentPresence(targetRecId, 'viewing', undefined);
+                setTimeout(() => setAIAgentPresence(targetRecId, 'viewing', undefined, true), 5000);
+
+                AutomationEngine.handleEvent({
+                  type: 'RECORD_UPDATED',
+                  tenantId,
+                  moduleId: updated.moduleId,
+                  record: { id: updated.id, ...mergedData }
+                }, db).catch(err => console.error('[Automation Error on AI upsert_record]:', err));
+
+                result = {
+                  success: true,
+                  recordId: updated.id,
+                  recordKey: formatted._record_key,
+                  updatedFields: fieldKeys,
+                  record: formatted
+                };
+              }
+            } else {
+              // ==========================================
+              // CREATE NEW RECORD
+              // ==========================================
+              let targetModule: any = null;
+              if (targetModId) {
+                targetModule = await db.module.findFirst({
+                  where: {
+                    tenantId,
+                    OR: [
+                      { id: targetModId },
+                      { name: { equals: targetModId, mode: 'insensitive' } }
+                    ]
+                  }
+                });
+                if (targetModule) {
+                  targetModId = targetModule.id;
+                }
+              }
+
+              if (!targetModule) {
+                result = { error: `Target module '${args.moduleId || 'unspecified'}' not found in workspace.` };
+              } else {
+                const layout = (targetModule.config as any)?.layout || [];
+                const allModuleFields: any[] = [];
+                const fieldToGroupMap: Record<string, { id: string; name?: string }> = {};
+
+                const extractFields = (items: any[], currentGroup?: { id: string; name?: string }) => {
+                  if (!Array.isArray(items)) return;
+                  for (const item of items) {
+                    if (!item) continue;
+                    if (['fieldGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(item.type) || item.fields) {
+                      const grp = { id: item.id, name: item.name };
+                      if (Array.isArray(item.fields)) {
+                        extractFields(item.fields, grp);
+                      }
+                    } else {
+                      allModuleFields.push(item);
+                      if (currentGroup) {
+                        fieldToGroupMap[item.id] = currentGroup;
+                      }
+                    }
+                  }
+                };
+                extractFields(layout);
+
+                const normalizedCreateData: Record<string, any> = {};
+                for (const [rawKey, rawVal] of Object.entries(incomingFields)) {
+                  const lowerKey = rawKey.toLowerCase();
+                  const matchedField = allModuleFields.find(f =>
+                    (f.id && f.id.toLowerCase() === lowerKey) ||
+                    (f.name && f.name.toLowerCase() === lowerKey) ||
+                    (f.label && f.label.toLowerCase() === lowerKey)
+                  );
+
+                  if (matchedField) {
+                    normalizedCreateData[matchedField.id] = rawVal;
+                    if (matchedField.name) {
+                      normalizedCreateData[matchedField.name] = rawVal;
+                    }
+                    const grp = fieldToGroupMap[matchedField.id];
+                    if (grp) {
+                      const grpKeys = [grp.id, grp.name].filter(Boolean) as string[];
+                      for (const gKey of grpKeys) {
+                        const existingGroupVal = (normalizedCreateData[gKey] && typeof normalizedCreateData[gKey] === 'object')
+                          ? normalizedCreateData[gKey]
+                          : {};
+                        normalizedCreateData[gKey] = {
+                          ...existingGroupVal,
+                          [matchedField.id]: rawVal,
+                          ...(matchedField.name ? { [matchedField.name]: rawVal } : {})
+                        };
+                      }
+                    }
+                  } else {
+                    normalizedCreateData[rawKey] = rawVal;
+                  }
+                }
+
+                // 1. Generate record key (_record_key) and process autonumbers
+                const config = (targetModule.config || {}) as any;
+                let configChanged = false;
+                let updatedConfig = { ...config };
+
+                if (config.recordKeyPrefix) {
+                  const nextNum = config.nextKeyNumber || 1;
+                  const prefix = config.recordKeyPrefix || '';
+                  const suffix = config.recordKeySuffix || '';
+                  const recordKey = `${prefix}-${nextNum}${suffix}`;
+
+                  normalizedCreateData._record_key = recordKey;
+                  updatedConfig.nextKeyNumber = nextNum + 1;
+                  configChanged = true;
+                }
+
+                const autonumbersChanged = processAutonumbersInternal(normalizedCreateData, config.layout || [], updatedConfig);
+                if (autonumbersChanged) {
+                  configChanged = true;
+                }
+
+                if (configChanged) {
+                  await db.module.update({
+                    where: { id: targetModId },
+                    data: { config: updatedConfig }
+                  });
+                }
+
+                // 2. Initialize workflow state if module has a workflow
+                let workflowState = null;
+                const fallbackWorkflow = config?.workflow || (config?.workflows && config.workflows[0]);
+                const workflow = await getActiveWorkflowForModule(db, tenantId, targetModId, fallbackWorkflow);
+
+                if (workflow && workflow.nodes && workflow.nodes.length > 0) {
+                  const startNode = workflow.nodes.find((n: any) => n.type === 'START') || workflow.nodes[0];
+                  workflowState = {
+                    currentNodeId: startNode.id,
+                    activeNodeIds: [startNode.id],
+                    history: [{
+                      nodeId: startNode.id,
+                      timestamp: new Date().toISOString(),
+                      action: 'Initialized',
+                      triggeredBy: 'Aurora AI Assistant'
+                    }]
+                  };
+                }
+
+                const initialStatus = incomingFields.status ||
+                  (workflow && workflowState && Array.isArray(workflow.nodes)
+                    ? (workflow.nodes.find((n: any) => n.id === workflowState.currentNodeId)?.name || 'active')
+                    : 'active');
+
+                const created = await db.record.create({
+                  data: {
+                    tenantId,
+                    moduleId: targetModId,
+                    data: normalizedCreateData,
+                    status: initialStatus,
+                    workflowState: workflowState as any,
+                    createdByMemberId: activeMetadata?.user?.memberId || activeMetadata?.userId || null,
+                  }
+                });
+
+                const formatted = {
+                  id: created.id,
+                  moduleId: created.moduleId,
+                  createdAt: created.createdAt,
+                  updatedAt: created.updatedAt,
+                  status: created.status,
+                  workflowState: created.workflowState,
+                  data: normalizedCreateData,
+                  _record_key: normalizedCreateData._record_key,
+                  ...normalizedCreateData
+                };
+
+                emitTenantUpdate(tenantId, 'record_added', formatted);
+
+                AutomationEngine.handleEvent({
+                  type: 'RECORD_CREATED',
+                  tenantId,
+                  moduleId: created.moduleId,
+                  record: { id: created.id, ...normalizedCreateData }
+                }, db).catch(err => console.error('[Automation Error on AI upsert_record create]:', err));
+
+                result = {
+                  success: true,
+                  recordId: created.id,
+                  recordKey: normalizedCreateData._record_key,
+                  record: formatted
+                };
+              }
             }
           } 
           else if (name === 'search_web') {

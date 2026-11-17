@@ -24,6 +24,7 @@ import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { useActiveEntityContext } from '../../context/ActiveEntityContext';
 import { DriveService } from '../../services/driveService';
+import { AgentExecutionTrace } from '../AI/AgentExecutionTrace';
 
 export interface CompactAIAssistantViewProps {
   compactLevel?: 'side' | 'bottom';
@@ -87,6 +88,8 @@ const CompactUserAvatar: React.FC<{
 
 interface AgentToolTrace {
   name: string;
+  arguments?: any;
+  result?: any;
   status: 'running' | 'done';
 }
 
@@ -144,7 +147,9 @@ const CompactMarkdown: React.FC<{ text: string }> = ({ text }) => {
   );
 };
 
-export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () => {
+export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = ({
+  compactLevel = 'side',
+}) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { tenant, modules, user: platformUser, members: platformMembers } = usePlatform();
@@ -282,16 +287,67 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
       if (step.type === 'thought') {
         setAgentThought(step.content);
       } else if (step.type === 'tool_call') {
-        setAgentTrace((prev) => [...prev, { name: step.name, status: 'running' }]);
+        setAgentTrace((prev) => [...prev, { name: step.name, arguments: step.arguments, status: 'running' }]);
+        if (step.name === 'upsert_record' && step.arguments) {
+          // If recordId is provided, an existing record is being modified.
+          // If recordId is omitted, a NEW record is being created; do NOT flag the current active record.
+          const targetRecId = step.arguments.recordId;
+          const rawData = step.arguments.data || {};
+          const fieldKeys = Object.keys(rawData.data && typeof rawData.data === 'object' ? rawData.data : rawData);
+          if (targetRecId && fieldKeys.length > 0) {
+            window.dispatchEvent(
+              new CustomEvent('aurora:ai-field-modifying', {
+                detail: {
+                  recordId: targetRecId,
+                  fields: fieldKeys,
+                  data: rawData,
+                  source: 'ai',
+                },
+              })
+            );
+          }
+        }
       } else if (step.type === 'tool_result') {
         setAgentTrace((prev) =>
-          prev.map((t) => (t.name === step.name ? { ...t, status: 'done' } : t))
+          prev.map((t) => (t.name === step.name ? { ...t, result: step.result, status: 'done' } : t))
+        );
+        if (step.name === 'upsert_record') {
+          const rec = step.result?.record || step.result;
+          const targetRecId = step.result?.recordId || rec?.id;
+          const updatedFields = step.result?.updatedFields || (rec ? Object.keys(rec.data || rec) : []);
+          if (targetRecId) {
+            window.dispatchEvent(
+              new CustomEvent('aurora:ai-field-updated', {
+                detail: {
+                  recordId: targetRecId,
+                  fields: updatedFields,
+                  record: rec,
+                  data: rec?.data || rec,
+                  source: 'ai',
+                },
+              })
+            );
+          }
+        }
+      } else if (step.type === 'ai_field_modifying') {
+        window.dispatchEvent(
+          new CustomEvent('aurora:ai-field-modifying', {
+            detail: step,
+          })
+        );
+      } else if (step.type === 'ai_field_updated') {
+        window.dispatchEvent(
+          new CustomEvent('aurora:ai-field-updated', {
+            detail: step,
+          })
         );
       } else if (step.type === 'stream_start') {
         setStreamingText('');
         setAgentThought(null);
       } else if (step.type === 'chunk') {
         setStreamingText((prev) => prev + (step.content || ''));
+      } else if (step.type === 'stream_end' || step.type === 'done') {
+        window.dispatchEvent(new CustomEvent('aurora:ai-modifying-ended'));
       } else if (step.type === 'approval_required') {
         setSending(false);
         setAgentThought(null);
@@ -509,6 +565,24 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
               DriveService.syncDriveItem(st.result.driveItem);
             } catch {}
           }
+          if (st?.name === 'upsert_record' && st?.result) {
+            const rec = st.result.record || st.result;
+            const targetRecId = st.result.recordId || rec?.id;
+            const updatedFields = st.result.updatedFields || (rec ? Object.keys(rec.data || rec) : []);
+            if (targetRecId) {
+              window.dispatchEvent(
+                new CustomEvent('aurora:ai-field-updated', {
+                  detail: {
+                    recordId: targetRecId,
+                    fields: updatedFields,
+                    record: rec,
+                    data: rec?.data || rec,
+                    source: 'ai',
+                  },
+                })
+              );
+            }
+          }
         });
       }
 
@@ -531,7 +605,9 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
       setSending(false);
       setStreamingText('');
       setAgentThought(null);
+      setAgentTrace([]);
       abortControllerRef.current = null;
+      window.dispatchEvent(new CustomEvent('aurora:ai-modifying-ended'));
     }
   };
 
@@ -563,6 +639,7 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
     } finally {
       setSending(false);
       setAgentThought(null);
+      setAgentTrace([]);
     }
   };
 
@@ -585,10 +662,11 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
         "Summarize tenant system load",
       ];
     }
+    const targetName = activeContext.recordKey || activeContext.title;
     switch (activeContext.domain) {
       case 'module_record':
         return [
-          `Summarize ${activeContext.title}`,
+          `Summarize ${targetName}`,
           "What are the missing fields or validation gaps?",
           "Draft a follow-up email for this record",
           "Suggest next workflow stage action",
@@ -746,7 +824,9 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
               </div>
               <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-200">Aurora AI Co-Pilot</p>
               <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 max-w-[260px]">
-                {activeContext ? `Active context: ${activeContext.title}` : 'Connected to live workspace tools, records, and modules on your current route.'}
+                {activeContext
+                  ? `Active context: ${activeContext.recordKey ? `${activeContext.recordKey}${activeContext.title && activeContext.title !== activeContext.recordKey ? ` (${activeContext.title})` : ''}` : activeContext.title}`
+                  : 'Connected to live workspace tools, records, and modules on your current route.'}
               </p>
               <div className="mt-4 w-full max-w-[280px] space-y-1.5 text-left">
                 <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider text-center mb-1">
@@ -786,7 +866,14 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
                   {m.role === 'user' ? (
                     m.content
                   ) : (
-                    <CompactMarkdown text={getDisplayContent(m)} />
+                    <div className="space-y-1.5">
+                      {Array.isArray(m.steps) && m.steps.filter((s: any) => s.name && !s._meta).length > 0 && (
+                        <div className="mb-2 pb-1.5 border-b border-zinc-200/60 dark:border-zinc-800/60">
+                          <AgentExecutionTrace steps={m.steps} compact={true} />
+                        </div>
+                      )}
+                      <CompactMarkdown text={getDisplayContent(m)} />
+                    </div>
                   )}
                 </div>
                 {m.role === 'user' && (() => {
@@ -803,37 +890,25 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
           )}
 
           {/* Live tool trace & streaming output */}
-          {(sending || streamingText || agentTrace.length > 0) && (
+          {(sending || streamingText) && (
             <div className="flex gap-2 justify-start">
               <div className="w-6 h-6 rounded-full bg-indigo-50 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 mt-0.5 border border-indigo-100 dark:border-transparent">
                 <Bot className="w-3.5 h-3.5" />
               </div>
               <div className="max-w-[85%] rounded-xl rounded-bl-none px-3 py-2 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-800 dark:text-zinc-200 space-y-1.5 shadow-sm">
-                {agentTrace.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {agentTrace.map((t, idx) => (
-                      <span
-                        key={idx}
-                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-[10px] text-zinc-700 dark:text-zinc-300"
-                      >
-                        {t.status === 'running' ? (
-                          <Wrench className="w-2.5 h-2.5 animate-pulse text-amber-500 dark:text-amber-400" />
-                        ) : (
-                          <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400" />
-                        )}
-                        {t.name}
-                      </span>
-                    ))}
+                {(agentTrace.length > 0 || (sending && !streamingText)) && (
+                  <div className={cn(streamingText ? 'pb-1.5 border-b border-zinc-200/60 dark:border-zinc-800/60' : '')}>
+                    <AgentExecutionTrace
+                      liveTrace={agentTrace}
+                      thought={agentThought || 'Assistant is thinking...'}
+                      isLive={true}
+                      compact={true}
+                    />
                   </div>
                 )}
 
-                {streamingText ? (
+                {streamingText && (
                   <CompactMarkdown text={streamingText} />
-                ) : (
-                  <div className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-                    <Loader2 className="w-3 h-3 animate-spin text-indigo-600 dark:text-indigo-400" />
-                    <span>{agentThought || 'Processing...'}</span>
-                  </div>
                 )}
               </div>
             </div>
@@ -868,17 +943,40 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
 
       {/* Active Context Pill & Controls */}
       {activeContext ? (
-        <div className="px-2.5 py-1.5 bg-indigo-50 dark:bg-indigo-950/40 border-t border-indigo-100 dark:border-indigo-900/60 flex items-center justify-between gap-1.5 shrink-0 text-xs">
-          <div className="flex items-center gap-1.5 min-w-0">
+        <div
+          className="px-2.5 py-1.5 bg-indigo-50 dark:bg-indigo-950/40 border-t border-indigo-100 dark:border-indigo-900/60 flex items-center justify-between gap-1.5 shrink-0 text-xs"
+          title={[
+            activeContext.recordKey,
+            activeContext.title && activeContext.title !== activeContext.recordKey ? activeContext.title : null,
+            activeContext.subtitle ? `(${activeContext.subtitle})` : null,
+            activeContext.status ? `[${activeContext.status}]` : null,
+          ].filter(Boolean).join(' • ')}
+        >
+          <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 dark:bg-indigo-400 animate-pulse shrink-0" />
             <span className="text-[10px] uppercase font-bold text-indigo-600 dark:text-indigo-400 tracking-wider shrink-0">
               In Context:
             </span>
-            <span className="font-semibold text-zinc-800 dark:text-zinc-100 truncate" title={activeContext.title}>
-              {activeContext.title}
-            </span>
-            {activeContext.subtitle && (
-              <span className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate hidden sm:inline">
+            {activeContext.recordKey && (
+              <span className="font-mono text-[11px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 shrink-0 select-all shadow-2xs">
+                {activeContext.recordKey}
+              </span>
+            )}
+            {(() => {
+              const key = activeContext.recordKey;
+              let t = activeContext.title || '';
+              if (key && t.startsWith(key)) {
+                t = t.slice(key.length).replace(/^[\s•:-]+/, '').trim();
+              }
+              if (!t || t === key) return null;
+              return (
+                <span className="font-semibold text-zinc-800 dark:text-zinc-100 truncate">
+                  {t}
+                </span>
+              );
+            })()}
+            {compactLevel === 'bottom' && activeContext.subtitle && (
+              <span className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate">
                 ({activeContext.subtitle})
               </span>
             )}
@@ -913,7 +1011,7 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = () 
             onClick={() => setIsDetached(false)}
             className="text-indigo-600 dark:text-indigo-400 hover:underline font-semibold text-[11px] cursor-pointer"
           >
-            Re-attach {rawActiveContext.title.slice(0, 18)}...
+            Re-attach {(rawActiveContext.recordKey || rawActiveContext.title).slice(0, 18)}...
           </button>
         </div>
       ) : null}

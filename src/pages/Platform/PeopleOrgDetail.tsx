@@ -182,6 +182,51 @@ const DEFAULT_CLASSIFICATIONS = [
   'VIP',
 ];
 
+const DEFAULT_LEGAL_STRUCTURES = [
+  { label: 'Company', value: 'COMPANY' },
+  { label: 'Private Limited (Pty Ltd)', value: 'PTY_LTD' },
+  { label: 'Public Listed', value: 'PUBLIC_LISTED' },
+  { label: 'Trust', value: 'TRUST' },
+  { label: 'Partnership', value: 'PARTNERSHIP' },
+  { label: 'Sole Trader', value: 'SOLE_TRADER' },
+  { label: 'Non-Profit / Charity', value: 'NON_PROFIT' },
+  { label: 'Government Agency', value: 'GOVERNMENT' },
+  { label: 'Incorporated Association', value: 'INCORPORATED_ASSOC' },
+  { label: 'Limited Liability Company (LLC)', value: 'LLC' },
+  { label: 'Co-operative', value: 'COOPERATIVE' },
+];
+
+const DEFAULT_INDUSTRIES = [
+  { label: 'Technology & Software', value: 'Technology & Software' },
+  { label: 'Financial Services & Banking', value: 'Financial Services & Banking' },
+  { label: 'Healthcare & Life Sciences', value: 'Healthcare & Life Sciences' },
+  { label: 'Manufacturing & Engineering', value: 'Manufacturing & Engineering' },
+  { label: 'Retail & Consumer Goods', value: 'Retail & Consumer Goods' },
+  { label: 'Professional Services & Consulting', value: 'Professional Services & Consulting' },
+  { label: 'Construction & Real Estate', value: 'Construction & Real Estate' },
+  { label: 'Energy, Oil & Gas', value: 'Energy, Oil & Gas' },
+  { label: 'Education & Training', value: 'Education & Training' },
+  { label: 'Hospitality & Tourism', value: 'Hospitality & Tourism' },
+  { label: 'Transport & Logistics', value: 'Transport & Logistics' },
+  { label: 'Agriculture & Forestry', value: 'Agriculture & Forestry' },
+  { label: 'Government & Public Sector', value: 'Government & Public Sector' },
+  { label: 'Non-Profit & Community', value: 'Non-Profit & Community' },
+  { label: 'Automotive & Mobility', value: 'Automotive & Mobility' },
+  { label: 'Telecommunications & Media', value: 'Telecommunications & Media' },
+];
+
+const CLASSIFICATION_COLOR_MAP: Record<string, string> = {
+  emerald: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 shadow-xs font-bold',
+  amber: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 shadow-xs font-bold',
+  indigo: 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30 shadow-xs font-bold',
+  purple: 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30 shadow-xs font-bold',
+  rose: 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30 shadow-xs font-bold',
+  sky: 'bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30 shadow-xs font-bold',
+  blue: 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30 shadow-xs font-bold',
+  zinc: 'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400 border-zinc-500/30 shadow-xs font-bold',
+  cyan: 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border-cyan-500/30 shadow-xs font-bold',
+};
+
 export const PeopleOrgDetail = () => {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
@@ -239,10 +284,14 @@ export const PeopleOrgDetail = () => {
 
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
-  // Directory config & reference lists
+  // Directory config & reference lists (backed by Global Lists)
   const [customFields, setCustomFields] = useState<any[]>([]);
   const [availableClassifications, setAvailableClassifications] =
     useState<string[]>(DEFAULT_CLASSIFICATIONS);
+  const [availableClassificationDetails, setAvailableClassificationDetails] =
+    useState<any[]>([]);
+  const [availableIndustries, setAvailableIndustries] = useState<any[]>([]);
+  const [availableLegalStructures, setAvailableLegalStructures] = useState<any[]>([]);
   const [tenantMembers, setTenantMembers] = useState<any[]>([]);
   const [allParties, setAllParties] = useState<any[]>([]);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -335,6 +384,52 @@ export const PeopleOrgDetail = () => {
       rawUrl: window.location.pathname + window.location.search,
     };
   }, [party, activeTab, relationships?.length, notes?.length, linkedData?.records?.length]);
+
+  const legalStructureOptions = useMemo(() => {
+    const list =
+      availableLegalStructures.length > 0
+        ? availableLegalStructures.map((ls: any) => ({
+            label: ls.label || ls.code,
+            value: ls.code || ls.label,
+          }))
+        : [...DEFAULT_LEGAL_STRUCTURES];
+
+    const currentVal = formData.organization?.orgStructureType;
+    if (
+      currentVal &&
+      !list.some((o: any) => o.value.toUpperCase() === String(currentVal).toUpperCase())
+    ) {
+      list.unshift({
+        label: currentVal,
+        value: currentVal,
+      });
+    }
+
+    return list;
+  }, [availableLegalStructures, formData.organization?.orgStructureType]);
+
+  const industryOptions = useMemo(() => {
+    const list =
+      availableIndustries.length > 0
+        ? availableIndustries.map((ind: any) => ({
+            label: ind.sector ? `${ind.label} (${ind.sector})` : ind.label,
+            value: ind.label || ind.code,
+          }))
+        : [...DEFAULT_INDUSTRIES];
+
+    const currentVal = formData.organization?.industry;
+    if (
+      currentVal &&
+      !list.some((o: any) => o.value.toLowerCase() === String(currentVal).toLowerCase())
+    ) {
+      list.unshift({
+        label: `${currentVal} (Custom)`,
+        value: currentVal,
+      });
+    }
+
+    return [{ label: 'Select Industry Sector...', value: '' }, ...list];
+  }, [availableIndustries, formData.organization?.industry]);
 
   useRegisterActiveEntity(activeEntityContext, {
     priority: 10,
@@ -498,6 +593,15 @@ export const PeopleOrgDetail = () => {
         if (Array.isArray(cfg.customFields)) setCustomFields(cfg.customFields);
         if (Array.isArray(cfg.classifications) && cfg.classifications.length > 0) {
           setAvailableClassifications(cfg.classifications);
+        }
+        if (Array.isArray(cfg.classificationDetails) && cfg.classificationDetails.length > 0) {
+          setAvailableClassificationDetails(cfg.classificationDetails);
+        }
+        if (Array.isArray(cfg.industries) && cfg.industries.length > 0) {
+          setAvailableIndustries(cfg.industries);
+        }
+        if (Array.isArray(cfg.legalStructures) && cfg.legalStructures.length > 0) {
+          setAvailableLegalStructures(cfg.legalStructures);
         }
       }
       if (dirRes.ok) {
@@ -1902,6 +2006,12 @@ export const PeopleOrgDetail = () => {
                       <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                         {availableClassifications.map((tag) => {
                           const active = formData.classifications.includes(tag);
+                          const detail = availableClassificationDetails.find(
+                            (d: any) => d.code === tag || d.label === tag
+                          );
+                          const color = detail?.color || 'indigo';
+                          const label = detail?.label || tag;
+
                           return (
                             <button
                               key={tag}
@@ -1910,11 +2020,12 @@ export const PeopleOrgDetail = () => {
                               className={cn(
                                 'px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer',
                                 active
-                                  ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30 font-bold'
+                                  ? (CLASSIFICATION_COLOR_MAP[color] || 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30 font-bold')
                                   : 'bg-zinc-50 dark:bg-zinc-950 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:text-zinc-700 dark:hover:text-zinc-200'
                               )}
+                              title={detail?.description || `Toggle ${label}`}
                             >
-                              {active ? `✓ ${tag}` : `+ ${tag}`}
+                              {active ? `✓ ${label}` : `+ ${label}`}
                             </button>
                           );
                         })}
@@ -1970,16 +2081,7 @@ export const PeopleOrgDetail = () => {
                               },
                             })
                           }
-                          options={[
-                            { label: 'Company', value: 'COMPANY' },
-                            { label: 'Private Limited (Pty Ltd)', value: 'PTY_LTD' },
-                            { label: 'Public Listed', value: 'PUBLIC_LISTED' },
-                            { label: 'Trust', value: 'TRUST' },
-                            { label: 'Partnership', value: 'PARTNERSHIP' },
-                            { label: 'Sole Trader', value: 'SOLE_TRADER' },
-                            { label: 'Non-Profit / Charity', value: 'NON_PROFIT' },
-                            { label: 'Government Agency', value: 'GOVERNMENT' },
-                          ]}
+                          options={legalStructureOptions}
                         />
                       </FormField>
                       <FormField label="Tax ID / ABN">
@@ -2031,8 +2133,7 @@ export const PeopleOrgDetail = () => {
                     </div>
 
                     <FormField label="Industry">
-                      <FormInput
-                        placeholder="e.g. Financial Services, Technology"
+                      <FormSelect
                         value={formData.organization.industry}
                         onChange={(e) =>
                           setFormData({
@@ -2043,6 +2144,7 @@ export const PeopleOrgDetail = () => {
                             },
                           })
                         }
+                        options={industryOptions}
                       />
                     </FormField>
                   </FormSection>
@@ -2066,6 +2168,28 @@ export const PeopleOrgDetail = () => {
                           includeInternalOption={false}
                           placeholder="Select primary contact..."
                         />
+                        <div className="flex items-center justify-between pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab('contacts')}
+                            className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
+                          >
+                            <Users size={12} />
+                            <span>
+                              {orgContacts.length > 0
+                                ? `${orgContacts.length} Contact${orgContacts.length > 1 ? 's' : ''} connected • View all →`
+                                : 'View Contacts directory →'}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsAddContactModalOpen(true)}
+                            className="text-[11px] font-semibold text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-0.5 cursor-pointer"
+                          >
+                            <Plus size={11} />
+                            <span>Add</span>
+                          </button>
+                        </div>
                       </FormField>
                       <FormField label="Account Owner">
                         <UserSelector
@@ -2138,6 +2262,12 @@ export const PeopleOrgDetail = () => {
                       <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                         {availableClassifications.map((tag) => {
                           const active = formData.classifications.includes(tag);
+                          const detail = availableClassificationDetails.find(
+                            (d: any) => d.code === tag || d.label === tag
+                          );
+                          const color = detail?.color || 'indigo';
+                          const label = detail?.label || tag;
+
                           return (
                             <button
                               key={tag}
@@ -2146,11 +2276,12 @@ export const PeopleOrgDetail = () => {
                               className={cn(
                                 'px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer',
                                 active
-                                  ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30 font-bold'
+                                  ? (CLASSIFICATION_COLOR_MAP[color] || 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30 font-bold')
                                   : 'bg-zinc-50 dark:bg-zinc-950 text-zinc-500 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 hover:text-zinc-700 dark:hover:text-zinc-200'
                               )}
+                              title={detail?.description || `Toggle ${label}`}
                             >
-                              {active ? `✓ ${tag}` : `+ ${tag}`}
+                              {active ? `✓ ${label}` : `+ ${label}`}
                             </button>
                           );
                         })}
@@ -2158,162 +2289,6 @@ export const PeopleOrgDetail = () => {
                     </FormField>
                   </FormSection>
                 </div>
-              )}
-
-              {/* SECTION: CONTACTS & KEY PERSONNEL (ORGANISATIONS ONLY) */}
-              {!isPerson && (
-                <FormSection
-                  title={`Contacts & Key Personnel (${orgContacts.length})`}
-                  actions={
-                    <button
-                      type="button"
-                      onClick={() => setIsAddContactModalOpen(true)}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-xs font-bold transition-colors cursor-pointer"
-                    >
-                      <Plus size={13} />
-                      <span>Add Contact</span>
-                    </button>
-                  }
-                >
-                  {orgContacts.length === 0 ? (
-                    <div className="p-8 text-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl bg-zinc-50/50 dark:bg-zinc-950/30">
-                      <Users className="w-8 h-8 mx-auto text-zinc-300 dark:text-zinc-600 mb-2" />
-                      <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                        No contacts connected to {displayName || 'this organisation'} yet
-                      </p>
-                      <p className="text-[11px] text-zinc-500 mt-1 max-w-md mx-auto">
-                        Link existing people in your directory or register new staff members with this company as their primary organisation.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setIsAddContactModalOpen(true)}
-                        className="mt-3.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-500 transition-colors cursor-pointer"
-                      >
-                        <Plus size={13} />
-                        <span>Add Contact</span>
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {orgContacts.map((contact) => {
-                        const isPrimary =
-                          contact.isPrimaryContact ||
-                          contact.id === formData.organization.primaryContactPartyId;
-                        const contactFullName =
-                          contact.displayName ||
-                          `${contact.person?.firstName || ''} ${contact.person?.lastName || ''}`.trim() ||
-                          'Contact';
-
-                        return (
-                          <div
-                            key={contact.id}
-                            className={cn(
-                              "relative p-3.5 rounded-2xl border transition-all flex flex-col justify-between gap-3 group/contact",
-                              isPrimary
-                                ? "bg-amber-50/40 dark:bg-amber-500/5 border-amber-500/40 ring-1 ring-amber-500/20 shadow-xs"
-                                : "bg-white dark:bg-zinc-950/60 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
-                            )}
-                          >
-                            <div className="space-y-2">
-                              {/* Header row: Avatar, Name & Primary Badge */}
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                  <div className="w-8 h-8 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden border border-indigo-500/20">
-                                    {contact.avatarUrl ? (
-                                      <img
-                                        src={contact.avatarUrl}
-                                        alt={contactFullName}
-                                        className="w-full h-full object-cover"
-                                      />
-                                    ) : (
-                                      contactFullName
-                                        .split(' ')
-                                        .slice(0, 2)
-                                        .map((p: string) => p[0])
-                                        .join('')
-                                        .toUpperCase()
-                                    )}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <button
-                                      type="button"
-                                      onClick={() => navigate(`/workspace/apps/directory/${contact.id}`)}
-                                      className="text-xs font-bold text-zinc-900 dark:text-white truncate hover:text-indigo-600 dark:hover:text-indigo-400 hover:underline block text-left cursor-pointer"
-                                    >
-                                      {contactFullName}
-                                    </button>
-                                    <p className="text-[11px] text-zinc-500 truncate">
-                                      {contact.person?.jobTitle || 'No Title'}
-                                      {contact.person?.department ? ` • ${contact.person.department}` : ''}
-                                    </p>
-                                  </div>
-                                </div>
-
-                                {isPrimary ? (
-                                  <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-[10px] font-bold">
-                                    <Star size={10} className="fill-amber-500 text-amber-500" />
-                                    <span>Primary</span>
-                                  </span>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleSetPrimaryContact(contact.id)}
-                                    title="Set as Primary Contact for this organisation"
-                                    className="opacity-0 group-hover/contact:opacity-100 text-[10px] font-bold text-zinc-400 hover:text-amber-600 dark:hover:text-amber-400 px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-800 hover:border-amber-500/30 transition-all shrink-0 cursor-pointer"
-                                  >
-                                    Make Primary
-                                  </button>
-                                )}
-                              </div>
-
-                              {/* Communication Details */}
-                              <div className="space-y-1 text-[11px] text-zinc-500 pt-1 border-t border-zinc-100 dark:border-zinc-800/60">
-                                {contact.email && (
-                                  <a
-                                    href={`mailto:${contact.email}`}
-                                    className="flex items-center gap-1.5 hover:text-indigo-600 dark:hover:text-indigo-400 truncate"
-                                  >
-                                    <Mail size={12} className="shrink-0 text-zinc-400" />
-                                    <span className="truncate">{contact.email}</span>
-                                  </a>
-                                )}
-                                {(contact.phone || contact.mobile) && (
-                                  <a
-                                    href={`tel:${contact.phone || contact.mobile}`}
-                                    className="flex items-center gap-1.5 hover:text-indigo-600 dark:hover:text-indigo-400 truncate"
-                                  >
-                                    <Phone size={12} className="shrink-0 text-zinc-400" />
-                                    <span className="truncate">{contact.phone || contact.mobile}</span>
-                                  </a>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Card Footer Actions */}
-                            <div className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800/60 text-[11px]">
-                              <button
-                                type="button"
-                                onClick={() => navigate(`/workspace/apps/directory/${contact.id}`)}
-                                className="inline-flex items-center gap-1 font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-                              >
-                                <span>Open Dossier</span>
-                                <ExternalLink size={10} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleUnlinkContact(contact.id, contactFullName)}
-                                title="Unlink contact from this organisation"
-                                className="text-zinc-400 hover:text-rose-500 transition-colors p-1 cursor-pointer"
-                              >
-                                <Trash2 size={12} />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </FormSection>
               )}
 
               {/* SECTION: ADDRESSES */}

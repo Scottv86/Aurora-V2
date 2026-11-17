@@ -39,10 +39,16 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
   const loading = usersLoading || teamsLoading;
 
   // Find selected user
-  const selectedUser = useMemo(() => 
-    members.find(m => m.id === value), 
-    [members, value]
-  );
+  const selectedUser = useMemo(() => {
+    if (!value) return null;
+    const val = typeof value === 'object' ? (value.id || value.userId) : value;
+    return members.find(m => 
+      m.id === val || 
+      (m as any).userId === val || 
+      m.name === val || 
+      m.email === val
+    );
+  }, [members, value]);
 
   // Close when becoming readonly
   useEffect(() => {
@@ -158,20 +164,19 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
   };
 
   return (
-    <div className={cn("relative w-full", className)} ref={containerRef}>
+    <div className={cn("relative w-full", isOpen && "z-50", className)} ref={containerRef}>
       {/* Trigger */}
       <div 
         onClick={() => !readonly && setIsOpen(!isOpen)}
         className={cn(
-          "group flex items-center gap-3 px-4 py-2.5 rounded-xl border transition-all cursor-pointer select-none",
-          isOpen 
-            ? "border-indigo-500 bg-white dark:bg-zinc-950 ring-4 ring-indigo-500/10 shadow-lg shadow-indigo-500/5" 
-            : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/50 hover:bg-white dark:hover:bg-zinc-950",
+          "group w-full h-10 px-3.5 rounded-xl border text-xs flex items-center justify-between gap-2.5 transition-all cursor-pointer select-none",
+          "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white hover:border-zinc-300 dark:hover:border-zinc-700",
+          isOpen && "border-indigo-500 ring-2 ring-indigo-500/20 shadow-sm",
           error && "border-rose-500 bg-rose-500/5 ring-rose-500/5",
           readonly && "cursor-default opacity-70"
         )}
       >
-        <div className="flex-1 flex items-center gap-3 overflow-hidden">
+        <div className="flex-1 flex items-center gap-2.5 min-w-0 overflow-hidden">
           {selectedUser ? (
             <>
               <UserAvatar user={selectedUser} size="sm" />
@@ -195,10 +200,10 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
             </>
           ) : (
             <>
-              <div className="w-6 h-6 rounded-full bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center">
-                <Search size={12} className="text-zinc-400" />
+              <div className="w-5 h-5 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center shrink-0">
+                <Search size={11} className="text-zinc-400" />
               </div>
-              <span className="text-xs font-medium text-zinc-400 truncate">{placeholder}</span>
+              <span className="text-xs font-medium text-zinc-400 dark:text-zinc-500 truncate">{placeholder}</span>
             </>
           )}
         </div>
@@ -210,7 +215,7 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
                 e.stopPropagation();
                 onChange('', null as any);
               }}
-              className="p-1 rounded-md text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-200/50 dark:hover:bg-zinc-800 transition-colors"
+              className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
               title="Clear selection"
             >
               <X size={12} />
@@ -283,7 +288,12 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
                       return (
                         <button
                           key={user.id}
-                          onClick={() => {
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
                             onChange(user.id, user);
                             setIsOpen(false);
                             setSearch('');
@@ -302,7 +312,7 @@ export const UserSelector: React.FC<UserSelectorProps> = ({
                                 : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                           )}
                         >
-                          <UserAvatar user={user} size="md" />
+                          <UserAvatar user={user} size="md" enableProfileCard={false} />
                           <div className="flex flex-col items-start min-w-0 flex-1">
                             <span className={cn(
                               "text-xs font-bold truncate",

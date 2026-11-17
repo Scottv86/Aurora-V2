@@ -1675,17 +1675,33 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
       }, db).catch(err => console.error('[Automation: RELATION_LINKED error]:', err));
     }
 
+    const updaterUser = (req as any).user;
+    const updaterName = updaterUser ? (`${updaterUser.firstName || ''} ${updaterUser.lastName || ''}`.trim() || updaterUser.name || updaterUser.email?.split('@')[0]) : 'Collaborator';
+
     const formatted = {
       id: record.id,
+      recordId: record.id,
+      _record_key: (record.data as any)?._record_key,
       moduleId: record.moduleId,
       associations: record.associations,
       path: record.path,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       createdBy: recordWithMember?.createdByMember ? `${recordWithMember.createdByMember.firstName || ''} ${recordWithMember.createdByMember.familyName || ''}`.trim() : 'System',
+      updatedBy: updaterName,
+      updatedByUser: {
+        id: updaterUser?.id || updaterUser?.uid || updaterUser?.memberId,
+        uid: updaterUser?.uid || updaterUser?.id,
+        email: updaterUser?.email,
+        name: updaterName,
+        avatarUrl: updaterUser?.avatarUrl
+      },
       ...applyFieldSecurityRead((record.data as any) || {}, module?.config, (req as any).user),
+      data: applyFieldSecurityRead((record.data as any) || {}, module?.config, (req as any).user),
       status: record.status,
-      workflowState: record.workflowState
+      workflowState: record.workflowState,
+      updatedFields: Object.keys(data || {}),
+      source: 'collaborator'
     };
     emitTenantUpdate(tenantId, 'record_updated', formatted);
 
@@ -2250,17 +2266,33 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
       }, db).catch(err => console.error('[Automation: RELATION_LINKED error]:', err));
     }
 
+    const updaterUser = (req as any).user;
+    const updaterName = updaterUser ? (`${updaterUser.firstName || ''} ${updaterUser.lastName || ''}`.trim() || updaterUser.name || updaterUser.email?.split('@')[0]) : 'Collaborator';
+
     const formatted = {
       id: record.id,
+      recordId: record.id,
+      _record_key: (record.data as any)?._record_key,
       moduleId: record.moduleId,
       associations: record.associations,
       path: record.path,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       createdBy: recordWithMember?.createdByMember ? `${recordWithMember.createdByMember.firstName || ''} ${recordWithMember.createdByMember.familyName || ''}`.trim() : 'System',
+      updatedBy: updaterName,
+      updatedByUser: {
+        id: updaterUser?.id || updaterUser?.uid || updaterUser?.memberId,
+        uid: updaterUser?.uid || updaterUser?.id,
+        email: updaterUser?.email,
+        name: updaterName,
+        avatarUrl: updaterUser?.avatarUrl
+      },
       ...applyFieldSecurityRead((record.data as any) || {}, module?.config, (req as any).user),
+      data: applyFieldSecurityRead((record.data as any) || {}, module?.config, (req as any).user),
       status: record.status,
-      workflowState: record.workflowState
+      workflowState: record.workflowState,
+      updatedFields: Object.keys(data || {}),
+      source: 'collaborator'
     };
     emitTenantUpdate(tenantId, 'record_updated', formatted);
 

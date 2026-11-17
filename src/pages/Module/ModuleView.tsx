@@ -61,6 +61,9 @@ import { RecordActivityDrawer } from '../../components/Platform/RecordActivityDr
 import { TransitionRequirementsModal } from '../../components/Platform/TransitionRequirementsModal';
 import { resolveRecordNextStep, checkMissingRequiredFields, resolveRecordSlaStatus, buildPipelineSteps } from '../../lib/workflowProcessUtils';
 import { isFieldHiddenBySecurity, isFieldMaskedBySecurity, formatMaskedFieldValue } from '../../utils/fieldSecurity';
+import { useRecordListPresence } from '../../hooks/useRecordListPresence';
+import { RecordListPresence } from '../../components/Record/RecordListPresence';
+import { getSharedSocket } from '../../lib/socketClient';
 
 const InlineAssigneeCell = ({
   record,
@@ -962,6 +965,13 @@ export const ModuleView = () => {
   }, [activeTenantMember, platformUser, session]);
 
   useModalStack();
+
+  const resolvedTenantId = tenant?.id || platformUser?.tenantId || (user as any)?.tenantId;
+  const { getRecordCollaborators } = useRecordListPresence({
+    tenantId: resolvedTenantId,
+    currentUserId: resolvedCurrentUserId,
+    enabled: Boolean(resolvedTenantId),
+  });
   const matchedModuleInitial = useMemo(() => {
     if (!moduleId || !modules) return null;
     return modules.find(
@@ -1297,6 +1307,112 @@ export const ModuleView = () => {
     window.addEventListener('aurora:record-updated', handleRecordUpdatedEvent as EventListener);
     return () => window.removeEventListener('aurora:record-updated', handleRecordUpdatedEvent as EventListener);
   }, [recordsCacheKey]);
+
+  // Real-time synchronization via WebSockets (instant updates for AI Assistant, other users, background sync)
+  useEffect(() => {
+    if (!resolvedTenantId) return;
+    const socket = getSharedSocket(undefined, resolvedTenantId);
+
+    const isCurrentModule = (rec: any) => {
+      if (!rec) return false;
+      const recModId = rec.moduleId || rec.module?.id;
+      const curModId = moduleData?.id || (typeof moduleId === 'string' ? moduleId : '');
+      if (!recModId || !curModId) return true;
+      return (
+        recModId === curModId ||
+        recModId.toLowerCase() === curModId.toLowerCase() ||
+        slugify(recModId) === slugify(curModId) ||
+        (moduleData?.name && slugify(moduleData.name) === slugify(recModId))
+      );
+    };
+
+    const handleRecordAdded = (newRecord: any) => {
+      if (!newRecord?.id || !isCurrentModule(newRecord)) return;
+
+      const formattedRecord = {
+        ...newRecord,
+        data: newRecord.data || newRecord,
+        _record_key: newRecord._record_key || newRecord.data?._record_key || `#${String(newRecord.id).slice(-6)}`,
+        status: newRecord.status || newRecord.data?.status || 'New',
+        createdAt: newRecord.createdAt || new Date().toISOString(),
+        updatedAt: newRecord.updatedAt || new Date().toISOString(),
+      };
+
+      setRecords((prev) => {
+        if (prev.some((r) => r.id === formattedRecord.id)) return prev;
+        const next = [formattedRecord, ...prev];
+        builderCache.set(recordsCacheKey, next);
+        return next;
+      });
+      setTotalRecords((t) => t + 1);
+
+      // Invalidate queries so background pagination & server sync stays pristine
+      queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+    };
+
+    const handleRecordUpdated = (updatedRecord: any) => {
+      if (!updatedRecord?.id || !isCurrentModule(updatedRecord)) return;
+
+      const nowIso = new Date().toISOString();
+      const normalizedUpdate = {
+        ...updatedRecord,
+        updatedAt: updatedRecord.updatedAt || nowIso,
+      };
+
+      setRecords((prev) => {
+        const next = prev.map((r) =>
+          r.id === updatedRecord.id
+            ? {
+                ...r,
+                ...normalizedUpdate,
+                status: normalizedUpdate.status || r.status,
+                workflowState: normalizedUpdate.workflowState || r.workflowState,
+                data: {
+                  ...(r.data || {}),
+                  ...(normalizedUpdate.data || {}),
+                  status: normalizedUpdate.status || r.status,
+                },
+              }
+            : r
+        );
+        builderCache.set(recordsCacheKey, next);
+        return next;
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+    };
+
+    const handleRecordDeleted = (delPayload: any) => {
+      const delId = typeof delPayload === 'string' ? delPayload : delPayload?.id;
+      if (!delId) return;
+
+      setRecords((prev) => {
+        const next = prev.filter((r) => r.id !== delId);
+        builderCache.set(recordsCacheKey, next);
+        return next;
+      });
+      setTotalRecords((t) => Math.max(0, t - 1));
+
+      queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+    };
+
+    const handleCustomRecordAdded = (e: any) => {
+      const rec = e.detail?.record || e.detail;
+      if (rec) handleRecordAdded(rec);
+    };
+
+    socket.on('record_added', handleRecordAdded);
+    socket.on('record_updated', handleRecordUpdated);
+    socket.on('record_deleted', handleRecordDeleted);
+    window.addEventListener('aurora:record-added', handleCustomRecordAdded as EventListener);
+
+    return () => {
+      socket.off('record_added', handleRecordAdded);
+      socket.off('record_updated', handleRecordUpdated);
+      socket.off('record_deleted', handleRecordDeleted);
+      window.removeEventListener('aurora:record-added', handleCustomRecordAdded as EventListener);
+    };
+  }, [resolvedTenantId, moduleId, moduleData?.id, moduleData?.name, recordsCacheKey, queryClient, tenant?.id]);
 
   const createMutation = useMutation({
     mutationFn: async (payload: any) => {
@@ -3164,6 +3280,10 @@ export const ModuleView = () => {
                             )}>
                               {recKey}
                             </span>
+                            <RecordListPresence
+                              collaborators={getRecordCollaborators(rec.id, rec._record_key)}
+                              compact
+                            />
                             {rowFmt.hasMatch && rowFmt.badgeLabel && (
                               <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded bg-black/10 dark:bg-white/10 shrink-0">
                                 {rowFmt.badgeLabel}
@@ -3433,6 +3553,10 @@ export const ModuleView = () => {
                           <span className="text-[10px] font-mono font-semibold text-zinc-400 dark:text-zinc-500">
                             {record._record_key || `#${String(record.id || '').slice(-6)}`}
                           </span>
+                          <RecordListPresence
+                            collaborators={getRecordCollaborators(record.id, record._record_key)}
+                            compact
+                          />
                         </div>
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
@@ -3722,26 +3846,32 @@ export const ModuleView = () => {
                         )}
                       >
                         <div className="flex items-center justify-between">
-                          <div
-                            className={cn(
-                              "transition-opacity cursor-pointer p-0.5 shrink-0 -ml-1",
-                              isSelected
-                                ? "opacity-100"
-                                : selection.selectedCount > 0
-                                  ? "opacity-60 hover:opacity-100"
-                                  : "opacity-0 group-hover:opacity-100"
-                            )}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              selection.toggleRecord(record.id);
-                            }}
-                            title={isSelected ? "Deselect" : "Select"}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => {}}
-                              className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 pointer-events-none"
+                          <div className="flex items-center gap-1.5">
+                            <div
+                              className={cn(
+                                "transition-opacity cursor-pointer p-0.5 shrink-0 -ml-1",
+                                isSelected
+                                  ? "opacity-100"
+                                  : selection.selectedCount > 0
+                                    ? "opacity-60 hover:opacity-100"
+                                    : "opacity-0 group-hover:opacity-100"
+                              )}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                selection.toggleRecord(record.id);
+                              }}
+                              title={isSelected ? "Deselect" : "Select"}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {}}
+                                className="w-3.5 h-3.5 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 pointer-events-none"
+                              />
+                            </div>
+                            <RecordListPresence
+                              collaborators={getRecordCollaborators(record.id, record._record_key)}
+                              compact
                             />
                           </div>
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -4800,9 +4930,15 @@ export const ModuleView = () => {
                         className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer accent-indigo-600 pointer-events-none"
                       />
                     </div>
-                    <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold uppercase tracking-wider">
-                      {status}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <RecordListPresence
+                        collaborators={getRecordCollaborators(record.id, record._record_key)}
+                        compact
+                      />
+                      <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold uppercase tracking-wider">
+                        {status}
+                      </span>
+                    </div>
                   </div>
 
                   <h4 className="text-sm font-bold text-zinc-900 dark:text-white mt-4 line-clamp-2 leading-snug group-hover:text-indigo-500 transition-colors">
@@ -6011,11 +6147,13 @@ export const ModuleView = () => {
           const rules = interfaceSettings?.master?.formattingRules || moduleData?.interfaceSettings?.master?.formattingRules || moduleData?.formattingRules || (moduleData?.config as any)?.formattingRules;
           const rowFmt = evaluateFormattingRules(rules, record, visibilityContext, { targetType: 'row' });
           const RowIcon = rowFmt.hasMatch && rowFmt.iconName ? (LucideIcons as any)[rowFmt.iconName] : null;
+          const collabs = getRecordCollaborators(record.id, record._record_key);
 
           return (
             <span className="inline-flex items-center gap-1.5 text-xs font-normal text-zinc-600 dark:text-zinc-400 font-mono">
               {RowIcon && <RowIcon size={13} className={cn("shrink-0", rowFmt.iconColor || "text-rose-500")} />}
               <span>{record._record_key || '-'}</span>
+              <RecordListPresence collaborators={collabs} compact />
               {rowFmt.hasMatch && rowFmt.badgeLabel && (
                 <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded bg-black/10 dark:bg-white/10 ml-0.5">
                   {rowFmt.badgeLabel}

@@ -167,9 +167,5 @@ const ChatDrawerInner: React.FC = () => {
 };
 
 export const ChatDrawer: React.FC = () => {
-  return (
-    <ChatProvider>
-      <ChatDrawerInner />
-    </ChatProvider>
-  );
+  return <ChatDrawerInner />;
 };

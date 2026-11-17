@@ -460,6 +460,8 @@ const App = () => {
                 <Route path="apps" element={<Navigate to="/workspace/settings" replace />} />
 
                 <Route path="lists" element={<Navigate to="/workspace/settings/platform-modules/global-lists" replace />} />
+                <Route path="global-lists" element={<Navigate to="/workspace/settings/platform-modules/global-lists" replace />} />
+                <Route path="platform/global-lists" element={<Navigate to="/workspace/settings/platform-modules/global-lists" replace />} />
                 <Route path="brand-builder" element={<BrandBuilderPage />} />
                 <Route path="branding" element={<BrandBuilderPage />} />
                 <Route path="notifications" element={<NotificationSettingsPage />} />

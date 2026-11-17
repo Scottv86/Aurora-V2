@@ -153,12 +153,18 @@ export const DatePicker: React.FC<DatePickerProps> = ({
     onChange(format(date, 'yyyy-MM-dd'));
     setIsOpen(false);
     onBlur?.();
+    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
   };
 
   const clearDate = (e: React.MouseEvent) => {
     e.stopPropagation();
     onChange('');
     onBlur?.();
+    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
   };
 
   const weekDays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
@@ -189,8 +195,8 @@ export const DatePicker: React.FC<DatePickerProps> = ({
           }
         }}
         className={cn(
-          "w-full bg-zinc-50 dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white flex items-center justify-between cursor-pointer transition-all group",
-          isOpen && "border-indigo-500 ring-4 ring-indigo-500/5 bg-white dark:bg-zinc-950",
+          "w-full h-10 px-3.5 rounded-xl text-xs border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white flex items-center justify-between cursor-pointer transition-all hover:border-zinc-300 dark:hover:border-zinc-700 group",
+          isOpen && "border-indigo-500 ring-2 ring-indigo-500/20",
           readonly && "cursor-default opacity-70 pointer-events-none"
         )}
       >

@@ -45,13 +45,15 @@ import {
   FolderInput,
   FileText,
   UserPlus,
-  DollarSign
+  DollarSign,
+  Pencil
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, formatLocalizedDate } from '../../lib/utils';
 import { API_BASE_URL } from '../../config';
 import { useAuth } from '../../hooks/useAuth';
 import { RecordTimeBillingTab } from './RecordTimeBillingTab';
+import { WorkflowStatusHoverCard } from './WorkflowStatusHoverCard';
 import { usePlatform } from '../../hooks/usePlatform';
 import { getSharedSocket } from '../../lib/socketClient';
 import { ActivityEventCard, ActivityEvent } from '../Platform/ActivityEventCard';
@@ -95,6 +97,8 @@ interface RecordContextRailProps {
   onUpdateAssignee?: (assigneeId: string | null) => void;
   onUpdateStatus?: (newStatus: string, targetNodeId?: string) => void;
   members?: any[];
+  collaborators?: any[];
+  otherCollaborators?: any[];
   allFields?: any[];
   isCollapsed: boolean;
   onToggleCollapse: () => void;
@@ -161,6 +165,8 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
   onUpdateAssignee,
   onUpdateStatus,
   members = [],
+  collaborators = [],
+  otherCollaborators: propOtherCollaborators,
   allFields: propAllFields = [],
   isCollapsed,
   onToggleCollapse,
@@ -197,6 +203,7 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
   const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';
   const tenantId = tenant?.id || '';
   const dateFormat = tenant?.localization?.dateFormat || 'DD/MM/YYYY';
+  const effectiveCurrentUserId = _currentUserId || platformUser?.id || session?.user?.id;
 
   const recordId = record?.id || '';
   const recordKey = record?._record_key || recordId.slice(0, 8);
@@ -441,12 +448,10 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
   const [copiedLink, setCopiedLink] = useState(false);
   const [isAssigneeMenuOpen, setIsAssigneeMenuOpen] = useState(false);
   const [assigneeSearch, setAssigneeSearch] = useState('');
-  const [isStatusMenuOpen, setIsStatusMenuOpen] = useState(false);
   const [isParticipantMenuOpen, setIsParticipantMenuOpen] = useState(false);
   const [participantSearch, setParticipantSearch] = useState('');
 
   const assigneeDropdownRef = useRef<HTMLDivElement>(null);
-  const statusDropdownRef = useRef<HTMLDivElement>(null);
   const participantDropdownRef = useRef<HTMLDivElement>(null);
 
   const handleCopyRecordLink = () => {
@@ -467,9 +472,6 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
       const target = e.target as Node;
       if (assigneeDropdownRef.current && !assigneeDropdownRef.current.contains(target)) {
         setIsAssigneeMenuOpen(false);
-      }
-      if (statusDropdownRef.current && !statusDropdownRef.current.contains(target)) {
-        setIsStatusMenuOpen(false);
       }
       if (participantDropdownRef.current && !participantDropdownRef.current.contains(target)) {
         setIsParticipantMenuOpen(false);
@@ -502,6 +504,44 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
   const currentParticipants = useMemo(() => {
     return members.filter(m => currentParticipantIds.includes(m.id));
   }, [currentParticipantIds, members]);
+
+  const isMemberCollaborating = useCallback((memName?: string, memId?: string, memUserId?: string) => {
+    if (!collaborators || !collaborators.length) return false;
+    return collaborators.some((c: any) =>
+      (memName && c.name?.toLowerCase() === memName.toLowerCase()) ||
+      (memUserId && (c.userId === memUserId || c.id === memUserId)) ||
+      (memId && (c.userId === memId || c.memberId === memId || c.id === memId))
+    );
+  }, [collaborators]);
+
+  const getFieldLabel = useCallback((fieldId?: string) => {
+    if (!fieldId) return '';
+    const found = propAllFields.find((f: any) => f.id === fieldId || f.name === fieldId || f.key === fieldId);
+    return found?.label || found?.name || fieldId;
+  }, [propAllFields]);
+
+  const otherCollaboratorsList = useMemo(() => {
+    if (propOtherCollaborators && propOtherCollaborators.length > 0) return propOtherCollaborators;
+    if (!collaborators || !collaborators.length) return [];
+    return collaborators.filter((c: any) => c.userId !== effectiveCurrentUserId && c.userId !== session?.user?.id);
+  }, [propOtherCollaborators, collaborators, effectiveCurrentUserId, session?.user?.id]);
+
+  const getMemberEditingStatus = useCallback((memName?: string, memId?: string, memUserId?: string) => {
+    if (!otherCollaboratorsList || !otherCollaboratorsList.length) return null;
+    const match = otherCollaboratorsList.find((c: any) =>
+      (memUserId && (c.userId === memUserId || c.id === memUserId)) ||
+      (memId && (c.userId === memId || c.memberId === memId || c.id === memId)) ||
+      (memName && c.name?.toLowerCase() === memName.toLowerCase())
+    );
+    if (!match) return null;
+    const isEditing = match.status === 'editing' || Boolean(match.activeFieldId);
+    return {
+      collaborator: match,
+      isEditing,
+      activeFieldId: match.activeFieldId,
+      activeFieldLabel: match.activeFieldId ? getFieldLabel(match.activeFieldId) : undefined,
+    };
+  }, [otherCollaboratorsList, getFieldLabel]);
 
   const creator = useMemo(() => {
     const creatorId = record?.createdBy || record?.created_by || record?.creatorId || record?.createdByMemberId || record?.createdByUserId;
@@ -582,6 +622,16 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
     platformUser,
     session?.user
   ]);
+
+  const assigneeEditingStatus = useMemo(() => {
+    if (!currentAssignee) return null;
+    return getMemberEditingStatus(currentAssignee.name, currentAssignee.id, currentAssignee.userId);
+  }, [currentAssignee, getMemberEditingStatus]);
+
+  const creatorEditingStatus = useMemo(() => {
+    if (!creator) return null;
+    return getMemberEditingStatus(creator.name, creator.id, creator.userId);
+  }, [creator, getMemberEditingStatus]);
 
   const createdDate = record?.createdAt || record?.created_at;
   const updatedDate = record?.updatedAt || record?.updated_at;
@@ -1387,86 +1437,28 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
               </div>
 
               {/* 2. Status & Workflow Section */}
-              <div className="p-3.5 bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl shadow-2xs space-y-2 relative" ref={statusDropdownRef}>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
-                    Workflow Status
-                  </span>
-                  <div className="flex items-center gap-2">
-                    {workflow && (
-                      <button
-                        type="button"
-                        onClick={() => switchTab('workflow')}
-                        className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold hover:underline flex items-center gap-1 cursor-pointer"
-                        title="View interactive workflow console"
-                      >
-                        <Workflow size={10} />
-                        <span>Console</span>
-                      </button>
-                    )}
-                    {onUpdateStatus && (
-                      <button
-                        type="button"
-                        onClick={() => setIsStatusMenuOpen(prev => !prev)}
-                        className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold hover:underline flex items-center gap-0.5 cursor-pointer"
-                      >
-                        <span>Change</span>
-                        <ChevronDown size={11} className={cn("transition-transform", isStatusMenuOpen && "rotate-180")} />
-                      </button>
-                    )}
-                  </div>
-                </div>
+              <div className="p-3.5 bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl shadow-2xs space-y-2 relative">
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                  Workflow Status
+                </span>
 
-                <div className="flex items-center justify-between">
-                  <span className={cn(
-                    "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold border",
-                    getStatusBadgeStyle(currentStatus)
-                  )}>
-                    <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                    {currentStatus}
-                  </span>
-
-                  {workflow?.name && (
-                    <span className="text-[10px] text-zinc-400 truncate max-w-[140px]" title={workflow.name}>
-                      {workflow.name}
-                    </span>
-                  )}
-                </div>
-
-                {/* Status Picker Popover */}
-                {isStatusMenuOpen && onUpdateStatus && (
-                  <div className="absolute left-3 right-3 top-full mt-1.5 z-30 p-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl space-y-1">
-                    <div className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 px-2 py-1">
-                      Transition Stage
-                    </div>
-                    <div className="max-h-48 overflow-y-auto space-y-0.5 custom-scrollbar">
-                      {statusOptions.map((opt: any, idx: number) => {
-                        const optVal = typeof opt === 'string' ? opt : opt.name || opt.label || opt.value || opt.id;
-                        const optId = typeof opt === 'string' ? opt : opt.id || optVal;
-                        const isCurrent = currentStatus.toLowerCase() === optVal.toLowerCase();
-                        return (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={() => {
-                              onUpdateStatus(optVal, optId);
-                              setIsStatusMenuOpen(false);
-                            }}
-                            className={cn(
-                              "w-full text-left px-2 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-between cursor-pointer",
-                              isCurrent
-                                ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold"
-                                : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                            )}
-                          >
-                            <span className="truncate">{optVal}</span>
-                            {isCurrent && <Check size={12} className="text-indigo-600 dark:text-indigo-400" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+                <WorkflowStatusHoverCard
+                  currentStatus={currentStatus}
+                  getStatusBadgeStyle={getStatusBadgeStyle}
+                  workflow={workflow}
+                  resolution={resolution}
+                  slaStatus={slaStatus}
+                  currentStageSubstepsSummary={currentStageSubstepsSummary}
+                  statusOptions={statusOptions}
+                  isTransitioning={isTransitioning}
+                  transitioningTarget={transitioningTarget}
+                  record={effectiveRecord}
+                  dateFormat={dateFormat}
+                  onTransition={handleStageOrBranchClick}
+                  onUpdateStatus={onUpdateStatus}
+                  onOpenConsole={() => switchTab('workflow')}
+                  onStartWorkflow={onStartWorkflow}
+                />
               </div>
 
               {/* 3. People Section */}
@@ -1490,12 +1482,30 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
                     >
                       {currentAssignee ? (
                         <>
-                          <UserAvatarWithPresence
-                            avatarUrl={currentAssignee.avatarUrl}
-                            name={currentAssignee.name}
-                            status={(currentAssignee as any).status || (currentAssignee as any).presenceStatus || 'AVAILABLE'}
-                            size="xs"
-                          />
+                          <div className="relative shrink-0">
+                            <UserAvatarWithPresence
+                              memberId={currentAssignee.id}
+                              userId={currentAssignee.userId}
+                              avatarUrl={currentAssignee.avatarUrl}
+                              name={currentAssignee.name}
+                              status={
+                                assigneeEditingStatus?.isEditing
+                                  ? 'BUSY'
+                                  : isMemberCollaborating(currentAssignee.name, currentAssignee.id, currentAssignee.userId)
+                                    ? 'AVAILABLE'
+                                    : (currentAssignee as any).presenceStatus || (currentAssignee as any).status || 'AVAILABLE'
+                              }
+                              size="xs"
+                            />
+                            {assigneeEditingStatus?.isEditing && (
+                              <span
+                                className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-amber-500 border-1.5 border-white dark:border-zinc-900 flex items-center justify-center text-white shadow-2xs pointer-events-none"
+                                title={`Editing ${assigneeEditingStatus.activeFieldLabel || 'field'}`}
+                              >
+                                <Pencil size={6} />
+                              </span>
+                            )}
+                          </div>
                           <span className="font-semibold text-zinc-900 dark:text-zinc-100 truncate">
                             {currentAssignee.name}
                           </span>
@@ -1557,33 +1567,59 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
 
                       {/* Member List */}
                       <div className="max-h-44 overflow-y-auto space-y-0.5 custom-scrollbar">
-                        {filteredMembers.map(member => (
-                          <button
-                            key={member.id}
-                            type="button"
-                            onClick={() => {
-                              onUpdateAssignee(member.id);
-                              setIsAssigneeMenuOpen(false);
-                            }}
-                            className={cn(
-                              "w-full text-left px-2 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-between cursor-pointer",
-                              currentAssignee?.id === member.id
-                                ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold"
-                                : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                            )}
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <UserAvatarWithPresence
-                                avatarUrl={member.avatarUrl}
-                                name={member.name}
-                                status={(member as any).status || (member as any).presenceStatus || 'AVAILABLE'}
-                                size="xs"
-                              />
-                              <span className="truncate">{member.name}</span>
-                            </div>
-                            {currentAssignee?.id === member.id && <Check size={12} className="text-indigo-600 dark:text-indigo-400 shrink-0" />}
-                          </button>
-                        ))}
+                        {filteredMembers.map(member => {
+                          const mEditStatus = getMemberEditingStatus(member.name, member.id, member.userId);
+                          return (
+                            <button
+                              key={member.id}
+                              type="button"
+                              onClick={() => {
+                                onUpdateAssignee(member.id);
+                                setIsAssigneeMenuOpen(false);
+                              }}
+                              className={cn(
+                                "w-full text-left px-2 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-between cursor-pointer",
+                                currentAssignee?.id === member.id
+                                  ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold"
+                                  : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                              )}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="relative shrink-0">
+                                  <UserAvatarWithPresence
+                                    memberId={member.id}
+                                    userId={member.userId}
+                                    avatarUrl={member.avatarUrl}
+                                    name={member.name}
+                                    status={
+                                      mEditStatus?.isEditing
+                                        ? 'BUSY'
+                                        : isMemberCollaborating(member.name, member.id, member.userId)
+                                          ? 'AVAILABLE'
+                                          : (member as any).presenceStatus || (member as any).status || 'AVAILABLE'
+                                    }
+                                    size="xs"
+                                  />
+                                  {mEditStatus?.isEditing && (
+                                    <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-amber-500 border border-white dark:border-zinc-900 flex items-center justify-center text-white animate-pulse">
+                                      <Pencil size={5} />
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="truncate">{member.name}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {mEditStatus?.isEditing && (
+                                  <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1 py-0.2 rounded-full">
+                                    <Pencil size={6} />
+                                    <span className="truncate max-w-[80px]">Editing {mEditStatus.activeFieldLabel || 'field'}</span>
+                                  </span>
+                                )}
+                                {currentAssignee?.id === member.id && <Check size={12} className="text-indigo-600 dark:text-indigo-400 shrink-0" />}
+                              </div>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -1595,12 +1631,30 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
                   <div className="flex items-center gap-1.5 max-w-[190px]">
                     {creator ? (
                       <>
-                        <UserAvatarWithPresence
-                          avatarUrl={creator.avatarUrl}
-                          name={creator.name || 'User'}
-                          status={(creator as any).status || (creator as any).presenceStatus || 'AVAILABLE'}
-                          size="xs"
-                        />
+                        <div className="relative shrink-0">
+                          <UserAvatarWithPresence
+                            memberId={creator.id}
+                            userId={creator.userId}
+                            avatarUrl={creator.avatarUrl}
+                            name={creator.name || 'User'}
+                            status={
+                              creatorEditingStatus?.isEditing
+                                ? 'BUSY'
+                                : isMemberCollaborating(creator.name, creator.id, creator.userId)
+                                  ? 'AVAILABLE'
+                                  : (creator as any).presenceStatus || (creator as any).status || 'AVAILABLE'
+                            }
+                            size="xs"
+                          />
+                          {creatorEditingStatus?.isEditing && (
+                            <span
+                              className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-amber-500 border-1.5 border-white dark:border-zinc-900 flex items-center justify-center text-white shadow-2xs pointer-events-none"
+                              title={`Editing ${creatorEditingStatus.activeFieldLabel || 'field'}`}
+                            >
+                              <Pencil size={6} />
+                            </span>
+                          )}
+                        </div>
                         <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 truncate">
                           {creator.name}
                         </span>
@@ -1632,16 +1686,38 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
                           className="flex -space-x-1.5 overflow-hidden hover:opacity-85 transition-opacity cursor-pointer p-0.5 rounded-full"
                           title="Manage participants"
                         >
-                          {currentParticipants.slice(0, 3).map((p, idx) => (
-                            <div key={idx} title={p.name} className="ring-2 ring-white dark:ring-zinc-900 rounded-full">
-                              <UserAvatarWithPresence
-                                avatarUrl={p.avatarUrl}
-                                name={p.name}
-                                status={(p as any).status || (p as any).presenceStatus || 'AVAILABLE'}
-                                size="xs"
-                              />
-                            </div>
-                          ))}
+                          {currentParticipants.slice(0, 3).map((p, idx) => {
+                            const pEditStatus = getMemberEditingStatus(p.name, p.id, p.userId);
+                            return (
+                              <div
+                                key={idx}
+                                title={pEditStatus?.isEditing ? `${p.name} (Editing ${pEditStatus.activeFieldLabel || 'field'})` : p.name}
+                                className="relative ring-2 ring-white dark:ring-zinc-900 rounded-full"
+                              >
+                                <UserAvatarWithPresence
+                                  memberId={p.id}
+                                  userId={p.userId}
+                                  avatarUrl={p.avatarUrl}
+                                  name={p.name}
+                                  status={
+                                    pEditStatus?.isEditing
+                                      ? 'BUSY'
+                                      : isMemberCollaborating(p.name, p.id, p.userId)
+                                        ? 'AVAILABLE'
+                                        : (p as any).presenceStatus || (p as any).status || 'AVAILABLE'
+                                  }
+                                  size="xs"
+                                />
+                                {pEditStatus?.isEditing && (
+                                  <span
+                                    className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-amber-500 border-1.5 border-white dark:border-zinc-900 flex items-center justify-center text-white shadow-2xs animate-pulse pointer-events-none"
+                                  >
+                                    <Pencil size={6} />
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
                           {currentParticipants.length > 3 && (
                             <span className="w-5 h-5 rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-[9px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-zinc-900">
                               +{currentParticipants.length - 3}
@@ -1722,6 +1798,7 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
                           .filter(m => !m.isSynthetic && m.name.toLowerCase().includes(participantSearch.toLowerCase()))
                           .map(member => {
                             const isSelected = currentParticipantIds.includes(member.id);
+                            const mEditStatus = getMemberEditingStatus(member.name, member.id, member.userId);
                             return (
                               <button
                                 key={member.id}
@@ -1735,12 +1812,27 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
                                 )}
                               >
                                 <div className="flex items-center gap-2 min-w-0">
-                                  <UserAvatarWithPresence
-                                    avatarUrl={member.avatarUrl}
-                                    name={member.name}
-                                    status={(member as any).status || (member as any).presenceStatus || 'AVAILABLE'}
-                                    size="xs"
-                                  />
+                                  <div className="relative shrink-0">
+                                    <UserAvatarWithPresence
+                                      memberId={member.id}
+                                      userId={member.userId}
+                                      avatarUrl={member.avatarUrl}
+                                      name={member.name}
+                                      status={
+                                        mEditStatus?.isEditing
+                                          ? 'BUSY'
+                                          : isMemberCollaborating(member.name, member.id, member.userId)
+                                            ? 'AVAILABLE'
+                                            : (member as any).presenceStatus || (member as any).status || 'AVAILABLE'
+                                      }
+                                      size="xs"
+                                    />
+                                    {mEditStatus?.isEditing && (
+                                      <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-amber-500 border border-white dark:border-zinc-900 flex items-center justify-center text-white animate-pulse">
+                                        <Pencil size={5} />
+                                      </span>
+                                    )}
+                                  </div>
                                   <div className="min-w-0">
                                     <span className="truncate leading-none block">{member.name}</span>
                                     <span className="text-[9px] text-zinc-400 block truncate">{member.email}</span>

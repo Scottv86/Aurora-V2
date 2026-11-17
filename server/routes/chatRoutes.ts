@@ -904,11 +904,13 @@ router.get('/users', async (req: any, res) => {
 
       return {
         id: m.userId || m.id,
+        memberId: m.id,
+        userId: m.userId || undefined,
         name: displayName,
         email: m.workEmail || m.personalEmail || undefined,
         avatarUrl: m.avatarUrl || undefined,
         role: m.position?.title || (m.roleId === 'Admin' ? 'Administrator' : 'Team Member'),
-        presence: pres?.presence || 'online',
+        presence: pres?.presence || (m.status === 'Active' ? 'online' : 'offline'),
         status: pres?.statusText ? {
           emoji: pres.statusEmoji || '⚡',
           text: pres.statusText
