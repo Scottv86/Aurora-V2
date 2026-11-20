@@ -24,8 +24,15 @@ async function resolveAuthHeaders(): Promise<Record<string, string>> {
     const { data } = await supabase.auth.getSession();
     const token = data?.session?.access_token || (import.meta as any).env?.VITE_DEV_TOKEN || localStorage.getItem('aurora_token') || '';
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    const tenantId = localStorage.getItem('aurora_active_tenant_id') || 'tenant_default';
-    headers['x-tenant-id'] = tenantId;
+    let tenantId = localStorage.getItem('aurora_active_tenant_id') || '';
+    if (!tenantId) {
+      const cacheRaw = localStorage.getItem('aurora_platform_cache');
+      if (cacheRaw) {
+        const parsed = JSON.parse(cacheRaw);
+        tenantId = parsed?.tenant?.id || '';
+      }
+    }
+    if (tenantId) headers['x-tenant-id'] = tenantId;
   } catch (_) {}
   return headers;
 }
@@ -35,6 +42,7 @@ async function hydrateDeploymentsFromBackend(): Promise<void> {
   hasHydratedDeployments = true;
   try {
     const headers = await resolveAuthHeaders();
+    if (!headers['x-tenant-id'] || !headers['Authorization']) return;
     const res = await fetch(`${API_BASE_URL}/api/data/scheduled-deployments`, { headers });
     if (res.ok) {
       const serverDeployments: ScheduledDeployment[] = await res.json();
@@ -58,6 +66,7 @@ async function syncDeploymentsToBackend(list: ScheduledDeployment[]): Promise<vo
   if (typeof window === 'undefined') return;
   try {
     const headers = await resolveAuthHeaders();
+    if (!headers['x-tenant-id'] || !headers['Authorization']) return;
     await fetch(`${API_BASE_URL}/api/data/scheduled-deployments`, {
       method: 'PUT',
       headers,

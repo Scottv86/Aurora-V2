@@ -12,15 +12,18 @@ import {
   HelpCircle
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, isFieldVisible } from '../lib/utils';
 import { getUnifiedFieldDefinition } from '../lib/formFieldUtils';
 import { API_BASE_URL } from '../config';
 import { FieldInput } from './FieldInput';
+import { FormRenderer } from './Builders/FormBuilder/FormRenderer';
 import { calculateDefaultValue } from '../services/fieldService';
 import { toast } from 'sonner';
 
 export const ExternalPortal = () => {
+  const { formId: routeFormId } = useParams<{ formId?: string }>();
   const [view, setView] = useState<'SUBMIT' | 'TRACK'>('SUBMIT');
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submittedId, setSubmittedId] = useState('');
@@ -29,6 +32,7 @@ export const ExternalPortal = () => {
   // URL Query Parameter parsing
   const params = new URLSearchParams(window.location.search);
   const urlModuleId = params.get('moduleId');
+  const urlFormId = routeFormId || params.get('formId');
 
   // Dynamic public form state
   const [moduleData, setModuleData] = useState<any | null>(null);
@@ -47,43 +51,59 @@ export const ExternalPortal = () => {
     description: ''
   });
 
-  // Fetch Public Form settings
+  // Fetch Public Form settings (supports both /public/forms/:formId and /portal?moduleId=...&formId=...)
   useEffect(() => {
-    if (!urlModuleId) return;
+    if (!urlModuleId && !urlFormId) return;
 
     const loadPublicForm = async () => {
       setLoadingForm(true);
       setFormError(null);
       try {
-        const res = await fetch(`${API_BASE_URL}/api/public/modules/${urlModuleId}`);
-        if (!res.ok) {
-          throw new Error('Failed to load public form configuration.');
-        }
-        const data = await res.json();
-        setModuleData(data);
-        const formIdParam = new URLSearchParams(window.location.search).get('formId');
-        const form = formIdParam
-          ? data.forms?.find((f: any) => f.id === formIdParam)
-          : data.forms?.find((f: any) => f.usage === 'public_link');
-        if (!form) {
-          // Gracefully fall back to standard intake form layout
-          setPublicForm(null);
-          return;
-        }
-        setPublicForm(form);
-        
-        // Initialize form data defaults
-        const defaults: Record<string, any> = {};
-        (data.layout || []).forEach((field: any) => {
-          const defVal = calculateDefaultValue(field, defaults);
-          if (defVal !== undefined && defVal !== null && defVal !== '') {
-            defaults[field.id] = defVal;
+        // 1. Direct form resolution if urlFormId is provided
+        if (urlFormId) {
+          const directRes = await fetch(`${API_BASE_URL}/api/public/forms/${encodeURIComponent(urlFormId)}`);
+          if (directRes.ok) {
+            const payload = await directRes.json();
+            if (payload.form) {
+              setPublicForm(payload.form);
+              setModuleData(payload.module || null);
+              if (payload.form.isMultistep && payload.form.steps?.length > 0) {
+                setActiveStepId(payload.form.steps[0].id);
+              }
+              return;
+            }
           }
-        });
-        setDynamicFormData(defaults);
+        }
 
-        if (form.isMultistep && form.steps?.length > 0) {
-          setActiveStepId(form.steps[0].id);
+        // 2. Fallback to module public forms endpoint if urlModuleId is present
+        if (urlModuleId) {
+          const res = await fetch(`${API_BASE_URL}/api/public/modules/${urlModuleId}`);
+          if (!res.ok) {
+            throw new Error('Failed to load public form configuration.');
+          }
+          const data = await res.json();
+          setModuleData(data);
+          const form = urlFormId
+            ? data.forms?.find((f: any) => f.id === urlFormId)
+            : data.forms?.find((f: any) => f.usage === 'public_link' || f.usage === 'portal_site');
+          if (!form) {
+            setPublicForm(null);
+            return;
+          }
+          setPublicForm(form);
+
+          const defaults: Record<string, any> = {};
+          (data.layout || []).forEach((field: any) => {
+            const defVal = calculateDefaultValue(field, defaults);
+            if (defVal !== undefined && defVal !== null && defVal !== '') {
+              defaults[field.id] = defVal;
+            }
+          });
+          setDynamicFormData(defaults);
+
+          if (form.isMultistep && form.steps?.length > 0) {
+            setActiveStepId(form.steps[0].id);
+          }
         }
       } catch (err: any) {
         setFormError(err.message || 'An error occurred loading the form.');
@@ -93,7 +113,7 @@ export const ExternalPortal = () => {
     };
 
     loadPublicForm();
-  }, [urlModuleId]);
+  }, [urlModuleId, urlFormId]);
 
   // Static submission handler (Fallback mode)
   const handleStaticSubmit = async () => {
@@ -270,181 +290,19 @@ export const ExternalPortal = () => {
                     </div>
                   </div>
                 ) : publicForm ? (
-                  // --- Dynamic Public Form ---
-                  <div className="space-y-10">
-                    <div className="space-y-4">
-                      <h1 className="text-4xl font-bold tracking-tight text-zinc-900 dark:text-white">
-                        {publicForm.name}
-                      </h1>
-                      <p className="text-zinc-500 dark:text-zinc-400 text-lg">
-                        {publicForm.settings?.description || 'Please fill in the form details below.'}
-                      </p>
-                    </div>
-
-                    {publicForm.isMultistep && publicForm.steps && (
-                      <div className="flex items-center gap-4 px-2 mb-8 overflow-x-auto no-scrollbar py-2">
-                        {publicForm.steps
-                          .filter((s: any) => isFieldVisible(s, dynamicFormData))
-                          .map((step: any, idx: number, list: any[]) => {
-                            const isActive = activeStepId === step.id;
-                            const activeIdx = list.findIndex(s => s.id === activeStepId);
-                            const isCompleted = activeIdx > idx;
-
-                            return (
-                              <div key={step.id} className="flex items-center gap-3 shrink-0">
-                                <div className={cn(
-                                  "w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black transition-all duration-300",
-                                  isActive ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/30" : 
-                                  isCompleted ? "bg-emerald-500 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"
-                                )}>
-                                  {isCompleted ? <Check size={12} /> : idx + 1}
-                                </div>
-                                <span className={cn(
-                                  "text-[9px] font-black uppercase tracking-widest transition-colors",
-                                  isActive ? "text-zinc-900 dark:text-white" : "text-zinc-400"
-                                )}>{step.title}</span>
-                                {idx < list.length - 1 && (
-                                  <div className="w-8 h-px bg-zinc-200 dark:bg-zinc-800 ml-2" />
-                                )}
-                              </div>
-                            );
-                        })}
-                      </div>
-                    )}
-
-                    <div className="space-y-8 p-8 bg-white dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-3xl shadow-sm">
-                      <div className="grid grid-cols-12 gap-6">
-                        {(() => {
-                          const currentStep = publicForm.isMultistep 
-                            ? publicForm.steps.find((s: any) => s.id === activeStepId)
-                            : null;
-                          const fields = currentStep ? currentStep.fields : publicForm.fields;
-
-                          return fields.map((fObj: any) => {
-                            const isVisual = fObj.id.startsWith('visual-');
-                            const field = isVisual ? null : getUnifiedFieldDefinition(fObj.id, moduleData.layout || [], moduleData.workflow);
-                            if (!isVisual && !field) return null;
-
-                            // Evaluate Visibility
-                            if (!isFieldVisible(fObj, dynamicFormData)) return null;
-
-                            const labelOverride = fObj.labelOverride || field?.label;
-                            const isRequired = fObj.required || field?.required;
-                            const isReadOnly = fObj.readOnly || field?.readOnly;
-
-                            const colSpanClass = 
-                              fObj.width === 'half' || fObj.width === '6' ? "col-span-12 sm:col-span-6" :
-                              fObj.width === 'one-third' || fObj.width === '4' ? "col-span-12 sm:col-span-4" :
-                              fObj.width === 'two-thirds' || fObj.width === '8' ? "col-span-12 sm:col-span-8" :
-                              fObj.width === 'one-quarter' || fObj.width === '3' ? "col-span-12 sm:col-span-3" :
-                              "col-span-12";
-
-                            return (
-                              <div key={fObj.id} className={cn(
-                                "space-y-2",
-                                colSpanClass
-                              )}>
-                                {isVisual ? (
-                                  <div className="py-2">
-                                    {fObj.type === 'heading' && (
-                                      <h3 className="text-xl font-bold text-zinc-900 dark:text-white">{fObj.labelOverride || 'Section Heading'}</h3>
-                                    )}
-                                    {fObj.type === 'divider' && (
-                                      <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-4" />
-                                    )}
-                                    {fObj.type === 'spacer' && (
-                                      <div style={{ height: fObj.height === 'sm' ? 16 : fObj.height === 'lg' ? 64 : fObj.height === 'xl' ? 128 : 32 }} />
-                                    )}
-                                    {fObj.type === 'html-text' && (
-                                      <div className="text-sm text-zinc-500 leading-relaxed prose dark:prose-invert max-w-none">
-                                        {fObj.labelOverride || 'Text content goes here...'}
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <>
-                                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
-                                      {labelOverride}
-                                      {isRequired && <span className="text-rose-500">*</span>}
-                                      {field?.tooltip && (
-                                        <div className="relative cursor-help">
-                                          <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-                                          <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
-                                            {field.tooltip}
-                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-zinc-900" />
-                                          </div>
-                                        </div>
-                                      )}
-                                    </label>
-                                    <FieldInput 
-                                      field={field!}
-                                      value={dynamicFormData[field!.id]}
-                                      onChange={(val) => {
-                                        setDynamicFormData(prev => ({ ...prev, [field!.id]: val }));
-                                        if (formErrors[field!.id]) {
-                                          setFormErrors(prev => {
-                                            const next = { ...prev };
-                                            delete next[field!.id];
-                                            return next;
-                                          });
-                                        }
-                                      }}
-                                      error={!!formErrors[field!.id]}
-                                      readonly={isReadOnly}
-                                    />
-                                    {formErrors[field!.id] && (
-                                      <p className="text-[10px] font-bold text-rose-500 mt-1 px-1 animate-in fade-in slide-in-from-top-1 duration-200">
-                                        {formErrors[field!.id]}
-                                      </p>
-                                    )}
-                                    {field?.helperText && !formErrors[field.id] && (
-                                      <p className="text-[10px] text-zinc-500 mt-0.5 font-medium px-1 italic absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{field.helperText}</p>
-                                    )}
-                                  </>
-                                )}
-                              </div>
-                            );
-                          });
-                        })()}
-                      </div>
-
-                      <div className="flex gap-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
-                        {publicForm.isMultistep && activeStepId !== publicForm.steps[0].id && (
-                          <button
-                            onClick={() => {
-                              const visibleSteps = publicForm.steps.filter((s: any) => isFieldVisible(s, dynamicFormData));
-                              const currentIdx = visibleSteps.findIndex((s: any) => s.id === activeStepId);
-                              if (currentIdx > 0) {
-                                setActiveStepId(visibleSteps[currentIdx - 1].id);
-                              }
-                            }}
-                            className="flex-1 py-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl font-bold text-zinc-600 dark:text-white hover:bg-zinc-50 transition-all flex items-center justify-center gap-2"
-                          >
-                            <ChevronLeft size={16} />
-                            <span>Back</span>
-                          </button>
-                        )}
-                        <button 
-                          onClick={handleDynamicSubmit}
-                          disabled={isSubmitting}
-                          className="flex-1 py-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {isSubmitting ? (
-                            <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                          ) : (
-                            <>
-                              <span>
-                                {publicForm.isMultistep && activeStepId !== publicForm.steps[publicForm.steps.length - 1].id
-                                  ? 'Continue'
-                                  : (publicForm.settings?.submitLabel || 'Submit Request')
-                                }
-                              </span>
-                              <ArrowRight size={18} />
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
+                  // --- Dynamic Public Form (Unified FormRenderer) ---
+                  <div className="space-y-6">
+                    <FormRenderer
+                      form={publicForm}
+                      moduleLayout={moduleData?.layout || []}
+                      workflow={moduleData?.workflow}
+                      onSubmit={(_values, resp) => {
+                        if (resp?.customerRef || resp?.id) {
+                          setSubmittedId(resp.customerRef || resp.id);
+                          setIsSubmitted(true);
+                        }
+                      }}
+                    />
                   </div>
                 ) : (
                   // --- Default Fallback Form (Acme Grants Intake Mock) ---

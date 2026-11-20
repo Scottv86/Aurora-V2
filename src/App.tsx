@@ -554,6 +554,8 @@ const App = () => {
               
               {/* External / Public */}
               <Route path="/portal" element={<ExternalPortal />} />
+              <Route path="/public/forms/:formId" element={<ExternalPortal />} />
+              <Route path="/public/form/:formId" element={<ExternalPortal />} />
               <Route path="/onboarding" element={<Onboarding />} />
 
               {/* Redundant / Legacy Workforce Path support */}

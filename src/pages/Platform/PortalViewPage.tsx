@@ -49,6 +49,7 @@ import { CustomerSiteChatWidget } from '../../components/ServiceDesk/CustomerSit
 import { Site, SiteService, SitePage, ENTERPRISE_FONTS } from '../../services/siteService';
 import { toast } from 'sonner';
 import { SearchRenderer } from '../../components/Search/SearchRenderer';
+import { FormRenderer } from '../../components/Builders/FormBuilder/FormRenderer';
 import { API_BASE_URL } from '../../config';
 import { useBrandKits } from '../../hooks/useBrandKits';
 
@@ -1171,65 +1172,91 @@ export const PortalViewPage = () => {
                 </div>
               )}
 
-              {/* TICKET FORM / FORM EMBED WIDGET */}
-              {(w.type === 'ticket_form' || w.type === 'form_embed') && (
+              {/* TICKET FORM / FORM EMBED / CUSTOM FORM WIDGET */}
+              {(w.type === 'ticket_form' || w.type === 'form_embed' || (w as any).type === 'custom_form') && (
                 <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <FormInput size={18} className="text-indigo-400" />
                       <h4 className="text-sm font-bold text-white">{w.title}</h4>
                     </div>
-                    {w.targetModuleId && (
+                    {(w.targetModuleId || (w as any).formId) && (
                       <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
-                        Bound Module
+                        {(w as any).formId ? 'Attached Form' : 'Bound Module'}
                       </span>
                     )}
                   </div>
 
-                  {submittedReceipt ? (
-                    <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center space-y-2">
-                      <CheckCircle2 size={28} className="text-emerald-400 mx-auto" />
-                      <h4 className="text-sm font-bold text-white">Submission Confirmed</h4>
-                      <p className="text-xs text-zinc-300">Reference Number: <span className="font-mono font-bold text-emerald-400">{submittedReceipt}</span></p>
-                      <button
-                        onClick={() => setSubmittedReceipt(null)}
-                        className="mt-2 px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-xs font-bold transition-all cursor-pointer"
-                      >
-                        Submit Another Inquiry
-                      </button>
-                    </div>
-                  ) : (
-                    <form onSubmit={handleTicketSubmit} className="space-y-3 max-w-xl">
-                      {(w.formFields || [
-                        { id: 'f-1', label: 'Contact Email', fieldType: 'email', required: true, placeholder: 'name@company.com' },
-                        { id: 'f-2', label: 'Subject / Title', fieldType: 'text', required: true, placeholder: 'Summary of inquiry...' },
-                        { id: 'f-3', label: 'Detailed Description', fieldType: 'textarea', required: true, placeholder: 'Provide full details...' }
-                      ]).map(field => (
-                        <div key={field.id}>
-                          <label className="block text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">
-                            {field.label} {field.required && <span className="text-red-400">*</span>}
-                          </label>
-                          {field.fieldType === 'textarea' ? (
-                            <textarea rows={2} placeholder={field.placeholder} className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white resize-none" required={field.required} />
-                          ) : field.fieldType === 'checkbox' ? (
-                            <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
-                              <input type="checkbox" className="rounded bg-zinc-950 border-zinc-800 text-indigo-600 focus:ring-0" required={field.required} />
-                              <span>{field.label}</span>
-                            </label>
-                          ) : (
-                            <input type={field.fieldType} placeholder={field.placeholder} className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white" required={field.required} />
-                          )}
-                        </div>
-                      ))}
-                      <button 
-                        type="submit"
-                        disabled={submittingTicket}
-                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md cursor-pointer disabled:opacity-50"
-                      >
-                        <Send size={12} /> {submittingTicket ? 'Submitting...' : 'Submit Form Record'}
-                      </button>
-                    </form>
-                  )}
+                  <FormRenderer
+                    formId={(w as any).formId}
+                    title={w.title}
+                    subtitle={w.subtitle}
+                    fields={
+                      w.formFields?.map((f) => ({
+                        id: f.id,
+                        label: f.label,
+                        type: (f.fieldType || 'text') as any,
+                        required: Boolean(f.required),
+                        placeholder: f.placeholder,
+                        colSpan: 12,
+                      })) || [
+                        { id: 'email', label: 'Contact Email', type: 'email', required: true, placeholder: 'name@company.com', colSpan: 6 },
+                        { id: 'fullName', label: 'Full Name', type: 'text', required: true, placeholder: 'Your name...', colSpan: 6 },
+                        { id: 'subject', label: 'Subject / Title', type: 'text', required: true, placeholder: 'Summary of inquiry...', colSpan: 12 },
+                        { id: 'description', label: 'Detailed Description', type: 'longText', required: true, placeholder: 'Provide full details...', colSpan: 12 },
+                      ]
+                    }
+                    context={{
+                      user: authLoggedInUser
+                        ? {
+                            name: authLoggedInUser.name,
+                            email: authLoggedInUser.email,
+                            role: authLoggedInUser.role,
+                          }
+                        : null,
+                      siteId,
+                      source: `Portal Site (${site.name})`,
+                    }}
+                    onSubmit={async (values, serverResp) => {
+                      if (!serverResp && !(w as any).formId) {
+                        // Fallback submission to /api/public/submissions when widget has inline fields only
+                        const targetModId = w.targetModuleId || site.targetModuleId;
+                        const endpoint = targetModId
+                          ? `${API_BASE_URL}/api/public/modules/${encodeURIComponent(targetModId)}/submissions`
+                          : `${API_BASE_URL}/api/public/submissions`;
+                        const res = await fetch(endpoint, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify(
+                            targetModId
+                              ? {
+                                  data: {
+                                    ...values,
+                                    ...(authLoggedInUser
+                                      ? {
+                                          _submittedByEmail: authLoggedInUser.email,
+                                          _submittedByName: authLoggedInUser.name,
+                                        }
+                                      : {}),
+                                  },
+                                }
+                              : {
+                                  tenantSlug: 'aurora',
+                                  type: w.title || 'Portal Submission',
+                                  fullName: values.fullName || authLoggedInUser?.name || 'Portal User',
+                                  email: values.email || authLoggedInUser?.email || '',
+                                  description: values.description || JSON.stringify(values),
+                                }
+                          ),
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          toast.success(`Submission ${data.customerRef || data.id} received!`);
+                        }
+                      }
+                    }}
+                    submitButtonText={w.buttonLabel || 'Submit Form Record'}
+                  />
                 </div>
               )}
 

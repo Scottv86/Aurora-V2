@@ -166,17 +166,22 @@ export const SchemaDiffModal: React.FC<SchemaDiffModalProps> = ({
     const list: SchemaChange[] = [];
     const persistedMap = new Map(persistedFlattened.map(f => [f.id, f]));
     const currentMap = new Map(currentFlattened.map(f => [f.id, f]));
+    const safeModuleName = String(moduleName || 'module');
+    const tbl = `${safeModuleName.toLowerCase().replace(/\s+/g, '_')}_tbl`;
 
     // Check for added & modified
     currentFlattened.forEach(curr => {
       const prev = persistedMap.get(curr.id);
+      const currName = String(curr.name || curr.label || curr.id || 'column');
+      const col = currName.toLowerCase().replace(/\s+/g, '_');
+
       if (!prev) {
-        const sql = `ALTER TABLE ${moduleName.toLowerCase().replace(/\s+/g, '_')}_tbl ADD COLUMN ${curr.name.toLowerCase().replace(/\s+/g, '_')} ${mapFieldTypeToSql(curr.type)};`;
+        const sql = `ALTER TABLE ${tbl} ADD COLUMN ${col} ${mapFieldTypeToSql(curr.type)};`;
         list.push({
           id: `add_${curr.id}`,
           fieldId: curr.id,
-          fieldName: curr.name,
-          fieldLabel: curr.label,
+          fieldName: currName,
+          fieldLabel: curr.label || currName,
           type: 'added',
           newField: curr,
           riskLevel: 'safe',
@@ -184,16 +189,16 @@ export const SchemaDiffModal: React.FC<SchemaDiffModalProps> = ({
           suggestedSql: sql
         });
       } else {
+        const prevName = String(prev.name || prev.label || prev.id || 'column');
+        const prevCol = prevName.toLowerCase().replace(/\s+/g, '_');
         const typeChanged = prev.type !== curr.type;
-        const nameChanged = prev.name !== curr.name;
+        const nameChanged = prevName !== currName;
         const requiredChanged = prev.required !== curr.required;
 
         if (typeChanged || nameChanged || requiredChanged) {
           let risk: 'safe' | 'warning' | 'critical' = 'safe';
           let message = 'Safe metadata modification';
           let sql = '';
-          const tbl = `${moduleName.toLowerCase().replace(/\s+/g, '_')}_tbl`;
-          const col = curr.name.toLowerCase().replace(/\s+/g, '_');
 
           if (typeChanged) {
             risk = 'critical';
@@ -201,8 +206,8 @@ export const SchemaDiffModal: React.FC<SchemaDiffModalProps> = ({
             sql = `ALTER TABLE ${tbl} ALTER COLUMN ${col} TYPE ${mapFieldTypeToSql(curr.type)} USING ${col}::${mapFieldTypeToSql(curr.type).split(' ')[0]};`;
           } else if (nameChanged) {
             risk = 'warning';
-            message = `Physical column renamed from '${prev.name}' to '${curr.name}'. Dependent integrations may fail.`;
-            sql = `ALTER TABLE ${tbl} RENAME COLUMN ${prev.name.toLowerCase().replace(/\s+/g, '_')} TO ${col};`;
+            message = `Physical column renamed from '${prevName}' to '${currName}'. Dependent integrations may fail.`;
+            sql = `ALTER TABLE ${tbl} RENAME COLUMN ${prevCol} TO ${col};`;
           } else if (requiredChanged && curr.required) {
             risk = 'warning';
             message = 'Column made mandatory (NOT NULL). May fail if null values already exist in table.';
@@ -212,8 +217,8 @@ export const SchemaDiffModal: React.FC<SchemaDiffModalProps> = ({
           list.push({
             id: `mod_${curr.id}`,
             fieldId: curr.id,
-            fieldName: curr.name,
-            fieldLabel: curr.label,
+            fieldName: currName,
+            fieldLabel: curr.label || currName,
             type: nameChanged ? 'renamed' : 'modified',
             oldField: prev,
             newField: curr,
@@ -228,8 +233,8 @@ export const SchemaDiffModal: React.FC<SchemaDiffModalProps> = ({
     // Check for removed
     persistedFlattened.forEach(prev => {
       if (!currentMap.has(prev.id)) {
-        const tbl = `${moduleName.toLowerCase().replace(/\s+/g, '_')}_tbl`;
-        const col = prev.name.toLowerCase().replace(/\s+/g, '_');
+        const prevName = String(prev.name || prev.label || prev.id || 'column');
+        const col = prevName.toLowerCase().replace(/\s+/g, '_');
         const sql = softDeleteDropped 
           ? `ALTER TABLE ${tbl} RENAME COLUMN ${col} TO _deprecated_${col}_${Date.now().toString(36)};`
           : `ALTER TABLE ${tbl} DROP COLUMN ${col} CASCADE;`;
@@ -237,8 +242,8 @@ export const SchemaDiffModal: React.FC<SchemaDiffModalProps> = ({
         list.push({
           id: `del_${prev.id}`,
           fieldId: prev.id,
-          fieldName: prev.name,
-          fieldLabel: prev.label,
+          fieldName: prevName,
+          fieldLabel: prev.label || prevName,
           type: 'removed',
           oldField: prev,
           riskLevel: softDeleteDropped ? 'warning' : 'critical',
@@ -396,7 +401,7 @@ export const SchemaDiffModal: React.FC<SchemaDiffModalProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `migration_${moduleName.toLowerCase().replace(/\s+/g, '_')}_v${nextVersion}.sql`;
+    link.download = `migration_${String(moduleName || 'module').toLowerCase().replace(/\s+/g, '_')}_v${nextVersion}.sql`;
     link.click();
     URL.revokeObjectURL(url);
     toast.success('Migration SQL file downloaded');

@@ -46,7 +46,9 @@ export const PublicFormPublishModal: React.FC<PublicFormPublishModalProps> = ({
   if (!isOpen) return null;
 
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://app.aurora.io';
-  const publicUrl = origin + '/public/portal/' + moduleId + (formId ? '?formId=' + formId : '');
+  const publicUrl = moduleId
+    ? `${origin}/portal?moduleId=${encodeURIComponent(moduleId)}${formId ? `&formId=${encodeURIComponent(formId)}` : ''}`
+    : `${origin}/public/forms/${encodeURIComponent(formId || 'default')}`;
   const iframeSnippet = '<iframe\n  src="' + publicUrl + (hideHeader ? (publicUrl.includes('?') ? '&' : '?') + 'minimal=true' : '') + '"\n  width="100%"\n  height="720px"\n  frameBorder="0"\n  allow="camera; microphone; geolocation"\n  style={{ borderRadius: "16px", border: "1px solid rgba(0,0,0,0.1)" }}\n/>';
   const reactSnippet = 'import { AuroraPublicForm } from "@aurora/forms-react";\n\nexport default function ContactPage() {\n  return (\n    <AuroraPublicForm\n      moduleId="' + moduleId + '"' + (formId ? '\n      formId="' + formId + '"' : '') + '\n      theme="' + themeMode + '"' + (hideHeader ? '\n      minimal={true}' : '') + '\n      onSuccess={(submissionId) => console.log("Success:", submissionId)}\n    />\n  );\n}';
 

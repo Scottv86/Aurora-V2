@@ -23,6 +23,9 @@ import { cn, slugify } from '../../lib/utils';
 import { ReportWidgetEmbed, getWidgetDefaultDimensions } from './WorkspacePageView';
 import { QueueRenderer } from '../../components/Builders/QueueBuilder/QueueRenderer';
 import { SearchRenderer } from '../../components/Search/SearchRenderer';
+import { FormBuilder } from '../../components/Builders/FormBuilder/FormBuilder';
+import { FormRenderer } from '../../components/Builders/FormBuilder/FormRenderer';
+import { InContextBuilderModal } from '../../components/Builders/Common/InContextBuilderModal';
 import { fetchSavedSearches } from '../../services/searchService';
 import { SavedSearchEntity } from '../../types/searchBuilder';
 import { builderCache } from '../../utils/builderCache';
@@ -508,6 +511,21 @@ const BuilderRichTextPreview: React.FC<{ widget: any }> = ({ widget }) => {
 };
 
 const BuilderStandaloneFormPreview: React.FC<{ widget: any }> = ({ widget }) => {
+  if (widget.properties?.formId || widget.properties?.form) {
+    return (
+      <div className="h-full flex flex-col bg-zinc-50/70 dark:bg-zinc-950/50 rounded-xl p-3 border border-zinc-200 dark:border-zinc-800 overflow-y-auto pointer-events-none custom-scrollbar">
+        <FormRenderer
+          formId={widget.properties?.formId}
+          form={widget.properties?.form}
+          title={widget.title}
+          subtitle={widget.properties?.subtitle}
+          readOnly
+          isPreviewMode
+        />
+      </div>
+    );
+  }
+
   const fields = widget.properties?.fields || [
     { id: 'name', label: 'Full Name', type: 'text', required: true, colSpan: 6 },
     { id: 'email', label: 'Email Address', type: 'email', required: true, colSpan: 6 },
@@ -1927,23 +1945,31 @@ export const PageBuilder = () => {
 
                 {/* Standalone Form properties */}
                 {selectedWidget.type === 'standalone-form' && (
-                  <div className="space-y-1.5">
-                    <label className="font-bold text-zinc-500 uppercase tracking-wider block">Subtitle / Description</label>
-                    <input
-                      type="text"
-                      placeholder="Please fill out the information below..."
-                      value={selectedWidget.properties?.subtitle || ''}
-                      onChange={(e) => {
-                        const txt = e.target.value;
-                        setWidgets((prev: any[]) => prev.map(w => {
-                          if (w.id === selectedWidget.id) {
-                            return { ...w, properties: { ...w.properties, subtitle: txt } };
-                          }
-                          return w;
-                        }));
-                      }}
-                      className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2.5 py-1.5 outline-none text-zinc-850 dark:text-white focus:border-indigo-500/50"
+                  <div className="space-y-3">
+                    <FormSelectorAndInContextBuilder
+                      selectedWidget={selectedWidget}
+                      setWidgets={setWidgets}
+                      tenant={tenant}
+                      session={session}
                     />
+                    <div className="space-y-1.5">
+                      <label className="font-bold text-zinc-500 uppercase tracking-wider block">Subtitle / Description</label>
+                      <input
+                        type="text"
+                        placeholder="Please fill out the information below..."
+                        value={selectedWidget.properties?.subtitle || ''}
+                        onChange={(e) => {
+                          const txt = e.target.value;
+                          setWidgets((prev: any[]) => prev.map(w => {
+                            if (w.id === selectedWidget.id) {
+                              return { ...w, properties: { ...w.properties, subtitle: txt } };
+                            }
+                            return w;
+                          }));
+                        }}
+                        className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-2.5 py-1.5 outline-none text-zinc-850 dark:text-white focus:border-indigo-500/50"
+                      />
+                    </div>
                   </div>
                 )}
 
@@ -2419,6 +2445,137 @@ const QueueDropdown = ({ selectedWidget, setWidgets, tenant, modules, menuConfig
         ))
       )}
     </select>
+  );
+};
+
+const FormSelectorAndInContextBuilder: React.FC<{
+  selectedWidget: any;
+  setWidgets: any;
+  tenant: any;
+  session: any;
+}> = ({ selectedWidget, setWidgets, tenant, session }) => {
+  const [forms, setForms] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [isBuilderOpen, setIsBuilderOpen] = useState(false);
+
+  const loadForms = React.useCallback(async () => {
+    if (!tenant?.id) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/forms`, {
+        headers: {
+          'x-tenant-id': tenant.id,
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) setForms(data);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  }, [tenant?.id, session?.access_token]);
+
+  useEffect(() => {
+    loadForms();
+  }, [loadForms]);
+
+  const currentFormId = selectedWidget.properties?.formId || '';
+  const selectedFormObj = forms.find((f) => f.id === currentFormId);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <label className="font-bold text-zinc-500 uppercase tracking-wider block">
+          Bound Library Form
+        </label>
+        <button
+          type="button"
+          onClick={() => setIsBuilderOpen(true)}
+          className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+        >
+          {selectedFormObj ? 'Edit in Form Studio' : '+ Build Form In-Context'}
+        </button>
+      </div>
+
+      <select
+        value={currentFormId}
+        onChange={(e) => {
+          const fId = e.target.value;
+          const found = forms.find((f) => f.id === fId);
+          setWidgets((prev: any[]) =>
+            prev.map((w) => {
+              if (w.id !== selectedWidget.id) return w;
+              return {
+                ...w,
+                title: found ? found.name : w.title,
+                properties: {
+                  ...w.properties,
+                  formId: fId || undefined,
+                  form: found || undefined,
+                  subtitle: found?.description || w.properties?.subtitle,
+                },
+              };
+            })
+          );
+        }}
+        disabled={loading}
+        className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs text-zinc-700 dark:text-zinc-300 outline-none focus:ring-2 focus:ring-indigo-500/20"
+      >
+        <option value="">(Select a Form from Central Library)</option>
+        {forms.map((f) => (
+          <option key={f.id} value={f.id}>
+            {f.name} ({f.isGlobal ? 'Global' : f.moduleName || 'Module-Bound'})
+          </option>
+        ))}
+      </select>
+
+      <InContextBuilderModal
+        isOpen={isBuilderOpen}
+        onClose={() => setIsBuilderOpen(false)}
+        title={selectedFormObj ? `Edit ${selectedFormObj.name}` : 'Build Form In-Context'}
+        subtitle="Workspace Page Embedded Form Studio"
+        builderContext={{
+          mode: 'in_context',
+          hostType: 'workspace',
+        }}
+      >
+        <FormBuilder
+          initialForm={
+            selectedFormObj || {
+              name: selectedWidget.title || 'Workspace Intake Form',
+              usage: 'portal_site',
+            }
+          }
+          builderContext={{
+            mode: 'in_context',
+            hostType: 'workspace',
+            onSaveSuccess: (savedId, savedForm) => {
+              loadForms();
+              setWidgets((prev: any[]) =>
+                prev.map((w) => {
+                  if (w.id !== selectedWidget.id) return w;
+                  return {
+                    ...w,
+                    title: savedForm.name || w.title,
+                    properties: {
+                      ...w.properties,
+                      formId: savedId,
+                      form: savedForm,
+                      subtitle: savedForm.description || w.properties?.subtitle,
+                    },
+                  };
+                })
+              );
+              setIsBuilderOpen(false);
+            },
+          }}
+        />
+      </InContextBuilderModal>
+    </div>
   );
 };
 

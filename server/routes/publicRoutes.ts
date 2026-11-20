@@ -203,7 +203,7 @@ router.get('/modules/:moduleId', async (req, res) => {
     }
     const config = (moduleData.config || {}) as any;
     const forms = Array.isArray(config.forms) ? config.forms : [];
-    const publicForms = forms.filter((f: any) => f.usage === 'public_link' || f.isPublic);
+    const publicForms = forms.filter((f: any) => f.usage === 'public_link' || f.usage === 'portal_site' || f.isPublic);
     const isPublicAllowed = Boolean(
       config.isPublicIntake ||
       config.isPublicPortal ||
@@ -220,6 +220,7 @@ router.get('/modules/:moduleId', async (req, res) => {
       name: moduleData.name,
       description: config.description || '',
       layout: config.layout || [],
+      workflow: config.workflow || (Array.isArray(config.workflows) ? config.workflows[0] : undefined),
       tabs: config.tabs || [],
       forms: publicForms
     });
@@ -242,7 +243,7 @@ router.post('/modules/:moduleId/submissions', async (req, res) => {
 
     const config = (moduleData.config || {}) as any;
     const forms = Array.isArray(config.forms) ? config.forms : [];
-    const publicForms = forms.filter((f: any) => f.usage === 'public_link' || f.isPublic);
+    const publicForms = forms.filter((f: any) => f.usage === 'public_link' || f.usage === 'portal_site' || f.isPublic);
     const isPublicAllowed = Boolean(
       config.isPublicIntake ||
       config.isPublicPortal ||
@@ -280,19 +281,24 @@ router.post('/modules/:moduleId/submissions', async (req, res) => {
 
     const cleanData = screeningResult.sanitizedData;
 
-    // Ensure the Intake Triage module exists and use it
-    const triageModule = await ensureTriageModule(moduleData.tenantId);
+    // Ensure the Intake Triage module exists and use it unless form is set to route directly to module
+    const origConfig = (moduleData.config || {}) as any;
+    const origForms = origConfig.forms || [];
+    const submittedFormId = data?._formId || moduleData.id;
+    const matchedForm = origForms.find((f: any) => f.id === submittedFormId);
+    const routeDirect = matchedForm?.settings?.routingTarget === 'direct_module';
+    const triageModule = routeDirect ? null : await ensureTriageModule(moduleData.tenantId);
 
     let targetModuleId = moduleData.id;
     let originalTargetModuleId = moduleData.id;
     let customerRef = undefined;
 
-    if (triageModule) {
-      targetModuleId = triageModule.id;
-      const origConfig = (moduleData.config || {}) as any;
-      const forms = origConfig.forms || [];
-      const submittedFormId = data?._formId || moduleData.id;
-      const form = forms.find((f: any) => f.id === submittedFormId);
+    if (triageModule || matchedForm) {
+      if (triageModule && !routeDirect) {
+        targetModuleId = triageModule.id;
+      }
+      const forms = origForms;
+      const form = matchedForm;
 
       let prefix = undefined;
       let suffix = '';
@@ -376,7 +382,6 @@ router.post('/modules/:moduleId/submissions', async (req, res) => {
     });
 
     const { AutomationEngine } = await import('../services/automationEngine');
-    const submittedFormId = data?._formId || moduleData.id;
     AutomationEngine.handleEvent({
       type: 'FORM_SUBMITTED',
       tenantId: moduleData.tenantId,
@@ -427,12 +432,366 @@ router.post('/modules/:moduleId/submissions', async (req, res) => {
       success: true, 
       id: record.id,
       customerRef: customerRef || record.id,
-      message: 'Submission received successfully'
+      redirectUrl: matchedForm?.settings?.redirectUrl || undefined,
+      message: matchedForm?.settings?.successMessage || 'Submission received successfully'
     });
 
   } catch (error) {
     console.error('[PublicAPI] Public submission error:', error);
     res.status(500).json({ error: 'Failed to submit form' });
+  }
+});
+
+/**
+ * Helper to resolve a form by ID from either db.form or embedded module config.forms
+ */
+async function resolvePublicFormById(formId: string) {
+  const { formatFormRowForModule } = await import('../services/builderSyncService');
+
+  const formRow = await globalPrisma.form.findUnique({
+    where: { id: formId }
+  });
+
+  if (formRow) {
+    const formatted = formatFormRowForModule(formRow);
+    let moduleData: any = null;
+    if (formRow.moduleId) {
+      moduleData = await globalPrisma.module.findUnique({
+        where: { id: formRow.moduleId }
+      });
+    }
+    return { formRow, formatted, moduleData, tenantId: formRow.tenantId };
+  }
+
+  // Fallback search across modules if formId is an embedded form ID (e.g. default-create or form-123)
+  const allModules = await globalPrisma.module.findMany();
+  for (const mod of allModules) {
+    const cfg = (mod.config || {}) as any;
+    const modForms = Array.isArray(cfg.forms) ? cfg.forms : [];
+    const found = modForms.find((f: any) => f.id === formId);
+    if (found) {
+      const formatted = formatFormRowForModule({
+        id: found.id,
+        tenantId: mod.tenantId,
+        moduleId: mod.id,
+        isGlobal: false,
+        name: found.name || found.title || mod.name,
+        description: found.description || found.settings?.description || '',
+        status: found.status || 'PUBLISHED',
+        version: found.version || 1,
+        schema: found
+      });
+      return { formRow: null, formatted, moduleData: mod, tenantId: mod.tenantId };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * GET /api/public/forms/:formId
+ * Loads a standalone or module-bound form for public/portal rendering.
+ */
+router.get('/forms/:formId', async (req, res) => {
+  try {
+    const { formId } = req.params;
+    const resolved = await resolvePublicFormById(formId);
+    if (!resolved) {
+      return res.status(404).json({ error: 'Form not found' });
+    }
+
+    const { formatted, moduleData } = resolved;
+    const modConfig = (moduleData?.config || {}) as any;
+
+    res.json({
+      form: formatted,
+      module: moduleData
+        ? {
+            id: moduleData.id,
+            name: moduleData.name,
+            description: modConfig.description || '',
+            layout: modConfig.layout || [],
+            workflow: modConfig.workflow || (Array.isArray(modConfig.workflows) ? modConfig.workflows[0] : undefined),
+            tabs: modConfig.tabs || []
+          }
+        : null
+    });
+  } catch (err: any) {
+    console.error('[PublicAPI] GET /forms/:formId error:', err);
+    res.status(500).json({ error: 'Failed to load form' });
+  }
+});
+
+/**
+ * POST /api/public/forms/:formId/submit
+ * Submits a standalone or module-bound form with optional user & parent object context.
+ */
+router.post('/forms/:formId/submit', async (req, res) => {
+  try {
+    const { formId } = req.params;
+    const { data = {}, context = {} } = req.body || {};
+
+    const resolved = await resolvePublicFormById(formId);
+    if (!resolved) {
+      return res.status(404).json({ error: 'Form not found' });
+    }
+
+    const { formRow, formatted, moduleData, tenantId } = resolved;
+
+    const screeningResult = SecurityScreeningService.screenPayload(data || {});
+    if (!screeningResult.isClean) {
+      await globalPrisma.quarantineRecord.create({
+        data: {
+          tenantId,
+          sourceChannel: 'Public Form',
+          sourceName: formatted.name,
+          payload: data || {},
+          reasons: screeningResult.reasons,
+          status: 'QUARANTINED'
+        }
+      });
+
+      return res.status(201).json({
+        success: true,
+        id: 'quarantined-' + Math.random().toString(36).substr(2, 9),
+        customerRef: 'Q-' + Math.random().toString(36).substr(2, 9),
+        message: formatted.settings?.successMessage || 'Submission received successfully'
+      });
+    }
+
+    const cleanData = screeningResult.sanitizedData || {};
+
+    // Server-side Validation Ruleset Enforcement (if configured in postSubmit)
+    const rulesetId = formatted.settings?.postSubmit?.validationRulesetId;
+    if (rulesetId) {
+      try {
+        const ruleset = await globalPrisma.validationRuleset.findFirst({
+          where: { id: String(rulesetId), tenantId }
+        });
+        if (ruleset && Array.isArray(ruleset.rules)) {
+          for (const rule of ruleset.rules as any[]) {
+            if (!rule || rule.enabled === false) continue;
+            const targetField = rule.fieldId || rule.targetField;
+            if (!targetField) continue;
+            const val = cleanData[targetField];
+            if (rule.type === 'REQUIRED' && (val === undefined || val === null || val === '')) {
+              return res.status(400).json({ error: rule.errorMessage || `${targetField} is required by validation ruleset` });
+            }
+            if (rule.pattern && val) {
+              const rx = new RegExp(rule.pattern);
+              if (!rx.test(String(val))) {
+                return res.status(400).json({ error: rule.errorMessage || `Validation failed for ${targetField}` });
+              }
+            }
+          }
+        }
+      } catch (valErr) {
+        console.warn('[PublicAPI] Validation ruleset check warning:', valErr);
+      }
+    }
+
+    const routeDirect = formatted.settings?.routingTarget === 'direct_module' && Boolean(moduleData);
+    const triageModule = routeDirect ? null : await ensureTriageModule(tenantId);
+
+    const targetModuleId = routeDirect && moduleData
+      ? moduleData.id
+      : (triageModule?.id || moduleData?.id);
+
+    if (!targetModuleId) {
+      return res.status(400).json({ error: 'No target module available to store submission' });
+    }
+
+    // Generate Customer Reference Number
+    const prefix = formatted.settings?.customerRefPrefix || 'SUB';
+    const suffix = formatted.settings?.customerRefSuffix || '';
+    const nextNum = formatted.settings?.customerRefNextNumber !== undefined
+      ? Number(formatted.settings.customerRefNextNumber)
+      : Math.floor(10000 + Math.random() * 90000);
+    const customerRef = `${prefix}-${nextNum}${suffix}`;
+
+    // Increment sequence if persisted in formRow
+    if (formRow && formatted.settings?.customerRefNextNumber !== undefined) {
+      const currentSchema = (formRow.schema && typeof formRow.schema === 'object') ? (formRow.schema as any) : {};
+      await globalPrisma.form.update({
+        where: { id: formRow.id },
+        data: {
+          schema: {
+            ...currentSchema,
+            settings: {
+              ...(currentSchema.settings || {}),
+              customerRefNextNumber: nextNum + 1
+            }
+          }
+        }
+      }).catch(() => {});
+    }
+
+    const initialStatus =
+      cleanData.status ||
+      formatted.settings?.autoTransitionStatus ||
+      'New';
+
+    const submissionData: Record<string, any> = {
+      ...cleanData,
+      _formId: formatted.id,
+      _formName: formatted.name,
+      _formUsage: formatted.usage,
+      _originalModuleId: moduleData?.id || undefined,
+      _submissionSource: context?.source || (formatted.usage === 'portal_site' ? 'Portal Site Form' : 'Public Form'),
+      _customerRef: customerRef,
+      ...(context?.user ? {
+        _submittedByUserId: context.user.id || context.user.userId,
+        _submittedByEmail: context.user.email,
+        _submittedByName: context.user.name || context.user.displayName,
+        _submittedByPartyId: context.user.partyId
+      } : {}),
+      ...(context?.parentRecordId ? { _parentRecordId: context.parentRecordId } : {}),
+      ...(context?.siteId ? { _siteId: context.siteId } : {}),
+    };
+
+    const record = await globalPrisma.record.create({
+      data: {
+        tenantId,
+        moduleId: targetModuleId,
+        status: String(initialStatus),
+        assigneeId: cleanData.assigneeId ? String(cleanData.assigneeId) : null,
+        dueDate: cleanData.dueDate ? new Date(cleanData.dueDate) : null,
+        data: submissionData
+      }
+    });
+
+    const { AutomationEngine } = await import('../services/automationEngine');
+    AutomationEngine.handleEvent({
+      type: 'FORM_SUBMITTED',
+      tenantId,
+      moduleId: targetModuleId,
+      record: { id: record.id, ...submissionData },
+      metadata: {
+        formId: formatted.id,
+        formName: formatted.name,
+        targetModuleId: moduleData?.id || targetModuleId,
+        customerRef,
+        pdfTemplateId: formatted.settings?.postSubmit?.pdfTemplateId,
+        notifyEmails: formatted.settings?.postSubmit?.notifyEmails
+      }
+    }, globalPrisma).catch(err => {
+      console.error('[PublicAPI] Error triggering FORM_SUBMITTED event:', err);
+    });
+
+    // Outbound Post-Submit Webhook Dispatch (if configured)
+    const webhookUrl = formatted.settings?.postSubmit?.webhookUrl;
+    if (webhookUrl && typeof webhookUrl === 'string' && webhookUrl.startsWith('http')) {
+      fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Aurora-Event': 'FORM_SUBMITTED',
+          'X-Aurora-Form-Id': String(formatted.id),
+        },
+        body: JSON.stringify({
+          event: 'FORM_SUBMITTED',
+          formId: formatted.id,
+          formName: formatted.name,
+          customerRef,
+          recordId: record.id,
+          moduleId: targetModuleId,
+          submittedAt: new Date().toISOString(),
+          data: submissionData,
+        }),
+      }).catch((whErr) => {
+        console.warn('[PublicAPI] Outbound form webhook warning:', whErr.message);
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      id: record.id,
+      customerRef,
+      pdfTemplateId: formatted.settings?.postSubmit?.pdfTemplateId || undefined,
+      redirectUrl: formatted.settings?.redirectUrl || undefined,
+      message: formatted.settings?.successMessage || 'Submission received successfully!'
+    });
+  } catch (err: any) {
+    console.error('[PublicAPI] POST /forms/:formId/submit error:', err);
+    res.status(500).json({ error: err.message || 'Failed to submit form' });
+  }
+});
+
+/**
+ * POST /api/public/forms/:formId/drafts
+ * Saves an in-progress form draft ("Save & Resume Later") and returns a resume token.
+ */
+router.post('/forms/:formId/drafts', async (req, res) => {
+  try {
+    const { formId } = req.params;
+    const { data = {}, stepId = null, token: existingToken, email } = req.body || {};
+
+    const resolved = await resolvePublicFormById(formId);
+    if (!resolved) {
+      return res.status(404).json({ error: 'Form not found' });
+    }
+
+    const token = existingToken || ('DRF-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase());
+    const savedAt = new Date().toISOString();
+
+    if (resolved.formRow) {
+      const currentSchema = (resolved.formRow.schema && typeof resolved.formRow.schema === 'object')
+        ? (resolved.formRow.schema as any)
+        : {};
+      const existingDrafts = (currentSchema._drafts && typeof currentSchema._drafts === 'object')
+        ? currentSchema._drafts
+        : {};
+
+      await globalPrisma.form.update({
+        where: { id: resolved.formRow.id },
+        data: {
+          schema: {
+            ...currentSchema,
+            _drafts: {
+              ...existingDrafts,
+              [token]: { token, data, stepId, email: email || null, savedAt }
+            }
+          }
+        }
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      token,
+      savedAt,
+      message: 'Draft saved successfully'
+    });
+  } catch (err: any) {
+    console.error('[PublicAPI] POST /forms/:formId/drafts error:', err);
+    res.status(500).json({ error: 'Failed to save draft' });
+  }
+});
+
+/**
+ * GET /api/public/forms/:formId/drafts/:token
+ * Retrieves a saved form draft by token.
+ */
+router.get('/forms/:formId/drafts/:token', async (req, res) => {
+  try {
+    const { formId, token } = req.params;
+    const resolved = await resolvePublicFormById(formId);
+    if (!resolved || !resolved.formRow) {
+      return res.status(404).json({ error: 'Draft not found' });
+    }
+
+    const currentSchema = (resolved.formRow.schema && typeof resolved.formRow.schema === 'object')
+      ? (resolved.formRow.schema as any)
+      : {};
+    const draft = currentSchema._drafts?.[token];
+    if (!draft) {
+      return res.status(404).json({ error: 'Draft token not found or expired' });
+    }
+
+    res.json(draft);
+  } catch (err: any) {
+    console.error('[PublicAPI] GET /forms/:formId/drafts/:token error:', err);
+    res.status(500).json({ error: 'Failed to load draft' });
   }
 });
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+﻿import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ReactGridLayout from 'react-grid-layout';
 import { sanitizeHtml } from '../lib/sanitizeHtml';
 
@@ -189,6 +189,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { CommandPalette } from './CommandPalette';
 import { extractPaletteFields, getSystemMetaFields, getUnifiedFieldDefinition, GroupedModuleFields } from '../lib/formFieldUtils';
+import { FormBuilder } from './Builders/FormBuilder/FormBuilder';
 import { cn, calculateHeight, flattenFields, isFieldVisible, isContainerField } from '../lib/utils';
 import { compactLayout } from '../lib/layoutEngine';
 import { usePlatform } from '../hooks/usePlatform';
@@ -5216,7 +5217,7 @@ export const ModuleEditor = () => {
                   <div key={field.id} className="p-3 bg-white dark:bg-zinc-800/50 border border-zinc-200/80 dark:border-zinc-800/80 rounded-xl space-y-1">
                     <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{field.name}</label>
                     <div className="text-xs font-medium text-zinc-800 dark:text-zinc-200">
-                      {field.defaultValue || '—'}
+                      {field.defaultValue || 'â€”'}
                     </div>
                   </div>
                 ))}
@@ -6661,11 +6662,11 @@ export const ModuleEditor = () => {
                           <span className="font-semibold text-zinc-700 dark:text-zinc-300">
                             {moduleSettings.name || 'Module'}
                           </span>
-                          <span className="text-zinc-300 dark:text-zinc-600">•</span>
+                          <span className="text-zinc-300 dark:text-zinc-600">â€¢</span>
                           <span className="font-mono font-medium text-zinc-600 dark:text-zinc-400">
                             {moduleSettings.recordKeyPrefix || 'KEY'}-1001
                           </span>
-                          <span className="text-zinc-300 dark:text-zinc-600">•</span>
+                          <span className="text-zinc-300 dark:text-zinc-600">â€¢</span>
                           <span className="text-zinc-400 dark:text-zinc-500">Created Today</span>
                         </div>
                       </div>
@@ -7226,7 +7227,7 @@ export const ModuleEditor = () => {
                           {accordionTabs.map((tab) => {
                             const isCollapsed = collapsedGroups[tab.id] ?? false;
                             const parentTab = tab.parentId ? tabs.find(t => t.id === tab.parentId) : null;
-                            const displayLabel = parentTab ? `${parentTab.label} › ${tab.label}` : tab.label;
+                            const displayLabel = parentTab ? `${parentTab.label} â€º ${tab.label}` : tab.label;
                             return (
                               <div 
                                 key={tab.id} 
@@ -7640,7 +7641,7 @@ export const ModuleEditor = () => {
                           return displayTabs.map((tab) => {
                             const tabFields = displayLayout.filter(f => !f.parentId && (f.tabId === tab.id || (!f.tabId && tab.id === tabs[0]?.id)));
                             const parentTab = tab.parentId ? tabs.find(t => t.id === tab.parentId) : null;
-                            const displayLabel = parentTab ? `${parentTab.label} › ${tab.label}` : tab.label;
+                            const displayLabel = parentTab ? `${parentTab.label} â€º ${tab.label}` : tab.label;
 
                             return (
                               <div 
@@ -8260,7 +8261,7 @@ export const ModuleEditor = () => {
                                         </div>
                                         <div className="space-y-3">
                                           <div className="h-10 bg-zinc-800 rounded-xl flex items-center px-4 justify-between">
-                                            <span className="text-[10px] text-zinc-500 font-mono">•••• •••• •••• 4242</span>
+                                            <span className="text-[10px] text-zinc-500 font-mono">â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ 4242</span>
                                             <div className="w-8 h-5 bg-zinc-700 rounded" />
                                           </div>
                                           <div className="h-11 bg-indigo-600 rounded-xl flex items-center justify-center text-[10px] font-black text-white uppercase tracking-widest shadow-lg shadow-indigo-500/20">
@@ -9146,7 +9147,7 @@ export const ModuleEditor = () => {
                                 </div>
                                 {isMasked ? (
                                   <div className="w-full px-4 py-2.5 rounded-xl border border-dashed border-amber-500/30 bg-amber-50/20 dark:bg-amber-950/10 text-xs font-mono tracking-widest text-amber-600 dark:text-amber-400 select-none">
-                                    ••••••••••••••••
+                                    â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢
                                   </div>
                                 ) : (
                                   <div className={cn(isReadOnly && "pointer-events-none opacity-80")}>
@@ -9286,7 +9287,7 @@ export const ModuleEditor = () => {
                                           interfaceSettings.master.density === 'spacious' ? 'text-sm' : 'text-xs',
                                           isMasked && "font-mono text-amber-600 dark:text-amber-400"
                                         )}>
-                                          {isMasked ? '••••••••' : (f.type === 'boolean' ? (record[f.id] ? 'Yes' : 'No') : String(record[f.id] ?? '-'))}
+                                          {isMasked ? 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢' : (f.type === 'boolean' ? (record[f.id] ? 'Yes' : 'No') : String(record[f.id] ?? '-'))}
                                         </span>
                                       </td>
                                     );
@@ -10182,10 +10183,10 @@ export const ModuleEditor = () => {
                   <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-6">Target Languages</h3>
                   <div className="space-y-2">
                     {[
-                      { id: 'en', label: 'English (US)', flag: '🇺🇸', status: 'Source' },
-                      { id: 'es', label: 'Spanish', flag: '🇪🇸', status: '85%' },
-                      { id: 'fr', label: 'French', flag: '🇫🇷', status: '12%' },
-                      { id: 'de', label: 'German', flag: '🇩🇪', status: 'Empty' }
+                      { id: 'en', label: 'English (US)', flag: 'ðŸ‡ºðŸ‡¸', status: 'Source' },
+                      { id: 'es', label: 'Spanish', flag: 'ðŸ‡ªðŸ‡¸', status: '85%' },
+                      { id: 'fr', label: 'French', flag: 'ðŸ‡«ðŸ‡·', status: '12%' },
+                      { id: 'de', label: 'German', flag: 'ðŸ‡©ðŸ‡ª', status: 'Empty' }
                     ].map((lang) => (
                       <button 
                         key={lang.id}
@@ -10527,7 +10528,7 @@ export const ModuleEditor = () => {
                               <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{item.msg}</span>
                               <div className="flex items-center gap-2">
                                 <span className="text-[10px] text-zinc-400 font-bold">{item.user}</span>
-                                <span className="text-[10px] text-zinc-300 dark:text-zinc-600">•</span>
+                                <span className="text-[10px] text-zinc-300 dark:text-zinc-600">â€¢</span>
                                 <span className="text-[10px] text-zinc-400">{item.date}</span>
                               </div>
                             </div>
@@ -10820,1251 +10821,27 @@ export const ModuleEditor = () => {
               </div>
             </div>
           ) : activeTab === 'forms' ? (
-            <div className="flex h-full w-full bg-transparent overflow-hidden">
-               {/* Form Management Sidebar (Left) */}
-               <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 space-y-2 flex flex-col">
-                <div className="mb-6 px-2 flex items-center justify-between">
-                  <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Module Forms</h3>
-                  <div className="flex items-center gap-1.5 px-2 py-1 bg-indigo-500/10 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest">
-                    <Zap size={10} />
-                    AI Build
-                  </div>
-                </div>
-                <div className="space-y-2 flex-1 overflow-y-auto custom-scrollbar -mx-2 px-2">
-                  {forms.map((form) => (
-                    <button 
-                      key={form.id}
-                      onClick={() => {
-                        setSelectedFormId(form.id);
-                        setSelectedFieldInFormId(null);
-                      }}
-                      className={cn(
-                        "w-full flex flex-col gap-1 px-4 py-2.5 rounded-xl text-left transition-all group",
-                        selectedFormId === form.id 
-                          ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" 
-                          : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900"
-                      )}
-                    >
-                      <div className="flex items-center justify-between w-full">
-                         <span className="text-xs font-bold truncate pr-2">{form.name}</span>
-                         <div className="flex items-center gap-2 flex-shrink-0">
-                           <span className={cn(
-                             "px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-tighter",
-                             form.id === selectedFormId ? "bg-indigo-500/20 text-indigo-600" : "bg-zinc-200 dark:bg-zinc-800 text-zinc-500"
-                           )}>
-                             {form.usage?.split('_')[1] || 'custom'}
-                           </span>
-                           {form.id !== 'default-create' && (
-                             <div 
-                               onClick={(e) => {
-                                 e.stopPropagation();
-                                 setForms(prev => prev.filter(f => f.id !== form.id));
-                                 if (selectedFormId === form.id) setSelectedFormId('default-create');
-                               }}
-                               className="p-1 text-zinc-400 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"
-                             >
-                               <Trash2 size={12} />
-                             </div>
-                           )}
-                         </div>
-                      </div>
-                      <p className={cn("text-[9px]", selectedFormId === form.id ? "text-indigo-500/70" : "text-zinc-400")}>
-                        {form.fields?.length || 0} {(form.fields?.length || 0) === 1 ? 'field' : 'fields'}
-                      </p>
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-auto pt-4 border-t border-zinc-100 dark:border-zinc-900">
-                  <button 
-                    onClick={() => {
-                      const hasCreateForm = forms.some(f => f.usage === 'workspace_create');
-                      const newForm = {
-                        id: `form-${Date.now()}`,
-                        name: 'New Custom Form',
-                        type: 'custom',
-                        usage: hasCreateForm ? 'public_link' : 'workspace_create',
-                        isMultistep: false,
-                        fields: [] as any[],
-                        settings: { 
-                          requireLogin: true, 
-                          submitLabel: 'Submit',
-                          workspaceButtonLabel: hasCreateForm ? undefined : 'Create'
-                        }
-                      };
-                      setForms([...forms, newForm]);
-                      setSelectedFormId(newForm.id);
-                    }}
-                    className="w-full py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2"
-                  >
-                    <Plus size={12} />
-                    New Form
-                  </button>
-                </div>
-              </aside>
-
-               {/* Main Builder Area */}
-               {selectedFormId ? (() => {
-                 const selectedForm = forms.find(f => f.id === selectedFormId);
-                 if (!selectedForm) return null;
-
-                 const { ungroupedFields, groups } = extractPaletteFields(layout);
-                 const systemMetaFields = getSystemMetaFields(workflow);
-
-                 const isFieldInCurrentForm = (fieldId: string) => {
-                   return selectedForm.isMultistep 
-                     ? (selectedForm.steps || []).some((s: any) => (s.fields || []).some((f: any) => f.id === fieldId)) 
-                     : (selectedForm.fields || []).some((f: any) => f.id === fieldId);
-                 };
-
-                 const handleToggleSingleField = (fieldId: string, fieldLabel: string, fieldRequired: boolean = false) => {
-                   const isAdded = isFieldInCurrentForm(fieldId);
-                   if (isAdded) {
-                     setForms(prev => prev.map(f => {
-                       if (f.id !== selectedFormId) return f;
-                       if (f.isMultistep) {
-                         return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.filter((fo: any) => fo.id !== fieldId) })) };
-                       }
-                       return { ...f, fields: f.fields.filter((fo: any) => fo.id !== fieldId) };
-                     }));
-                     if (selectedFieldInFormId === fieldId) setSelectedFieldInFormId(null);
-                   } else {
-                     const newFieldObj = { id: fieldId, labelOverride: fieldLabel, width: 'full', required: fieldRequired };
-                     setForms(prev => prev.map(f => {
-                       if (f.id !== selectedFormId) return f;
-                       if (f.isMultistep) {
-                         return { ...f, steps: f.steps.map((s: any) => s.id === currentStepId ? { ...s, fields: [...s.fields, newFieldObj] } : s) };
-                       }
-                       return { ...f, fields: [...f.fields, newFieldObj] };
-                     }));
-                     setSelectedFieldInFormId(fieldId);
-                   }
-                 };
-
-                 const handleToggleGroup = (group: GroupedModuleFields) => {
-                   const childIds = group.fields.map(f => f.id);
-                   const allAdded = childIds.length > 0 && childIds.every(id => isFieldInCurrentForm(id));
-
-                   if (allAdded) {
-                     setForms(prev => prev.map(f => {
-                       if (f.id !== selectedFormId) return f;
-                       if (f.isMultistep) {
-                         return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.filter((fo: any) => !childIds.includes(fo.id)) })) };
-                       }
-                       return { ...f, fields: f.fields.filter((fo: any) => !childIds.includes(fo.id)) };
-                     }));
-                     if (selectedFieldInFormId && childIds.includes(selectedFieldInFormId)) {
-                       setSelectedFieldInFormId(null);
-                     }
-                   } else {
-                     setForms(prev => prev.map(f => {
-                       if (f.id !== selectedFormId) return f;
-                       const currentFormFields = f.isMultistep
-                         ? (f.steps.find((s: any) => s.id === currentStepId)?.fields || [])
-                         : f.fields;
-                       const existingIds = new Set(currentFormFields.map((fo: any) => fo.id));
-                       const toAdd = group.fields
-                         .filter(cf => !existingIds.has(cf.id))
-                         .map(cf => ({
-                           id: cf.id,
-                           labelOverride: cf.label,
-                           width: 'full',
-                           required: cf.required || false
-                         }));
-
-                       if (f.isMultistep) {
-                         return {
-                           ...f,
-                           steps: f.steps.map((s: any) => s.id === currentStepId ? { ...s, fields: [...s.fields, ...toAdd] } : s)
-                         };
-                       }
-                       return {
-                         ...f,
-                         fields: [...f.fields, ...toAdd]
-                       };
-                     }));
-                   }
-                 };
-                 
-                 return (
-                   <>
-                      <aside className="w-72 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 flex flex-col gap-6 overflow-y-auto custom-scrollbar">
-                        {/* Module Fields Section */}
-                        <div className="space-y-3">
-                           <div className="flex items-center justify-between px-1">
-                             <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Module Fields</h3>
-                             <span className="text-[9px] font-mono font-bold text-zinc-400">
-                               {groups.reduce((acc, g) => acc + g.fields.length, 0) + ungroupedFields.length}
-                             </span>
-                           </div>
-
-                           {/* Grouped Fields with Add All */}
-                           <div className="space-y-3">
-                             {groups.map((group) => {
-                               const childIds = group.fields.map(f => f.id);
-                               const allAdded = childIds.length > 0 && childIds.every(id => isFieldInCurrentForm(id));
-                               const someAdded = childIds.some(id => isFieldInCurrentForm(id));
-
-                               return (
-                                 <div key={group.id} className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/40 overflow-hidden shadow-xs">
-                                   {/* Group Header with Add All */}
-                                   <div className="flex items-center justify-between p-2.5 bg-zinc-100/70 dark:bg-zinc-800/60 border-b border-zinc-200/70 dark:border-zinc-800">
-                                     <div className="flex items-center gap-2 min-w-0 pr-1">
-                                       <Folder size={13} className="text-indigo-500 shrink-0" />
-                                       <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">{group.label}</span>
-                                       <span className="text-[8px] font-mono px-1.5 py-0.5 rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-400 shrink-0">
-                                         {group.fields.length}
-                                       </span>
-                                     </div>
-                                     <button
-                                       type="button"
-                                       onClick={() => handleToggleGroup(group)}
-                                       className={cn(
-                                         "text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-lg transition-all shrink-0 cursor-pointer",
-                                         allAdded
-                                           ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20"
-                                           : someAdded
-                                             ? "bg-indigo-600 text-white shadow-xs hover:bg-indigo-500"
-                                             : "bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 border border-zinc-200 dark:border-zinc-700 hover:border-indigo-400"
-                                       )}
-                                       title={allAdded ? "Remove all fields in this group from form" : "Add all fields in this group to active form step"}
-                                     >
-                                       {allAdded ? "Remove All" : "Add All"}
-                                     </button>
-                                   </div>
-
-                                   {/* Individual Child Fields */}
-                                   <div className="p-1.5 space-y-1">
-                                     {group.fields.map((field: any) => {
-                                       const isAdded = isFieldInCurrentForm(field.id);
-                                       const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === field.type);
-                                       const Icon = fieldDef?.icon || Table;
-
-                                       return (
-                                         <button
-                                           key={field.id}
-                                           type="button"
-                                           onClick={() => handleToggleSingleField(field.id, field.label, field.required)}
-                                           className={cn(
-                                             "w-full flex items-center justify-between p-2 rounded-xl border transition-all group text-left cursor-pointer",
-                                             isAdded 
-                                               ? "bg-indigo-50/70 dark:bg-indigo-500/10 border-indigo-500/25 shadow-xs" 
-                                               : "bg-white dark:bg-zinc-900 border-transparent hover:border-zinc-200 dark:hover:border-zinc-800"
-                                           )}
-                                         >
-                                           <div className="flex items-center gap-2 min-w-0">
-                                             <div className={cn(
-                                               "w-6 h-6 rounded-md flex items-center justify-center shrink-0 transition-all",
-                                               isAdded ? "bg-indigo-600 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 group-hover:text-indigo-600"
-                                             )}>
-                                               <Icon size={11} />
-                                             </div>
-                                             <div className="min-w-0">
-                                               <p className={cn("text-xs font-bold truncate leading-tight", isAdded ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-700 dark:text-zinc-300")}>
-                                                 {field.label}
-                                               </p>
-                                               <p className="text-[8px] text-zinc-400 uppercase font-bold tracking-tighter">{field.type}</p>
-                                             </div>
-                                           </div>
-                                           {isAdded ? (
-                                             <Minus size={12} className="text-indigo-500 shrink-0 ml-1" />
-                                           ) : (
-                                             <Plus size={12} className="text-zinc-300 group-hover:text-indigo-500 transition-colors shrink-0 ml-1" />
-                                           )}
-                                         </button>
-                                       );
-                                     })}
-                                   </div>
-                                 </div>
-                               );
-                             })}
-
-                             {/* Ungrouped Fields */}
-                             {ungroupedFields.length > 0 && (
-                               <div className="space-y-1">
-                                 {groups.length > 0 && (
-                                   <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest px-1 block pt-1">
-                                     Other Fields
-                                   </span>
-                                 )}
-                                 {ungroupedFields.map((field: any) => {
-                                   const isAdded = isFieldInCurrentForm(field.id);
-                                   const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === field.type);
-                                   const Icon = fieldDef?.icon || Table;
-
-                                   return (
-                                     <button
-                                       key={field.id}
-                                       type="button"
-                                       onClick={() => handleToggleSingleField(field.id, field.label, field.required)}
-                                       className={cn(
-                                         "w-full flex items-center justify-between p-2.5 rounded-xl border transition-all group text-left cursor-pointer",
-                                         isAdded 
-                                           ? "bg-indigo-50/70 dark:bg-indigo-500/10 border-indigo-500/25 shadow-xs" 
-                                           : "bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800/80 hover:border-zinc-200 dark:hover:border-zinc-700"
-                                       )}
-                                     >
-                                       <div className="flex items-center gap-2.5 min-w-0">
-                                         <div className={cn(
-                                           "w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all",
-                                           isAdded ? "bg-indigo-600 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 group-hover:text-zinc-600"
-                                         )}>
-                                           <Icon size={12} />
-                                         </div>
-                                         <div className="min-w-0">
-                                           <p className={cn("text-xs font-bold truncate", isAdded ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-700 dark:text-zinc-300")}>
-                                             {field.label}
-                                           </p>
-                                           <p className="text-[8px] text-zinc-400 uppercase font-bold tracking-tighter">{field.type}</p>
-                                         </div>
-                                       </div>
-                                       {isAdded ? (
-                                         <Minus size={13} className="text-indigo-500 shrink-0 ml-1" />
-                                       ) : (
-                                         <Plus size={13} className="text-zinc-300 group-hover:text-indigo-500 transition-colors shrink-0 ml-1" />
-                                       )}
-                                     </button>
-                                   );
-                                 })}
-                               </div>
-                             )}
-
-                             {groups.length === 0 && ungroupedFields.length === 0 && (
-                               <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-dashed border-zinc-200 dark:border-zinc-800 text-center">
-                                 <p className="text-xs text-zinc-400">No fields configured on module layout yet.</p>
-                               </div>
-                             )}
-                           </div>
-                        </div>
-
-                        {/* System & Record Meta Fields Section */}
-                        <div className="space-y-3 pt-2 border-t border-zinc-100 dark:border-zinc-800/80">
-                           <div className="flex items-center justify-between px-1">
-                             <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Record Meta Fields</h3>
-                             <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 font-mono">
-                               {systemMetaFields.length}
-                             </span>
-                           </div>
-                           <div className="space-y-1.5">
-                             {systemMetaFields.map((meta) => {
-                               const isAdded = isFieldInCurrentForm(meta.id);
-                               const Icon = meta.icon;
-
-                               return (
-                                 <button
-                                   key={meta.id}
-                                   type="button"
-                                   onClick={() => handleToggleSingleField(meta.id, meta.label, false)}
-                                   className={cn(
-                                     "w-full flex items-center justify-between p-2.5 rounded-xl border transition-all group text-left cursor-pointer",
-                                     isAdded
-                                       ? "bg-purple-50/70 dark:bg-purple-950/20 border-purple-500/30 shadow-xs"
-                                       : "bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800/80 hover:border-zinc-200 dark:hover:border-zinc-700"
-                                   )}
-                                 >
-                                   <div className="flex items-center gap-2.5 min-w-0">
-                                     <div className={cn(
-                                       "w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all",
-                                       isAdded ? "bg-purple-600 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 group-hover:text-purple-600"
-                                     )}>
-                                       <Icon size={13} />
-                                     </div>
-                                     <div className="min-w-0">
-                                       <p className={cn("text-xs font-bold truncate", isAdded ? "text-purple-600 dark:text-purple-400" : "text-zinc-700 dark:text-zinc-300")}>
-                                         {meta.label}
-                                       </p>
-                                       <p className="text-[8px] text-zinc-400 truncate">{meta.description || meta.type}</p>
-                                     </div>
-                                   </div>
-                                   {isAdded ? (
-                                     <Minus size={13} className="text-purple-500 shrink-0 ml-1" />
-                                   ) : (
-                                     <Plus size={13} className="text-zinc-300 group-hover:text-purple-500 transition-colors shrink-0 ml-1" />
-                                   )}
-                                 </button>
-                               );
-                             })}
-                           </div>
-                        </div>
-
-                        <div className="space-y-4">
-                           <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-2">Visual Elements</h3>
-                           <div className="grid grid-cols-2 gap-3">
-                              {[
-                                { label: 'Heading', icon: Type },
-                                { label: 'Divider', icon: Minus },
-                                { label: 'Spacer', icon: Maximize2 },
-                                { label: 'HTML/Text', icon: Code }
-                              ].map((el, i) => (
-                                <button 
-                                  key={i} 
-                                  onClick={() => {
-                                    const visualId = `visual-${el.label.toLowerCase().replace('/', '-')}-${generateId()}`;
-                                    const newVisualObj = { 
-                                      id: visualId, 
-                                      type: el.label.toLowerCase().replace('/', '-'), 
-                                      labelOverride: el.label === 'Heading' ? 'Section Heading' : el.label === 'HTML/Text' ? 'Text Content' : '',
-                                      width: 'full'
-                                    };
-                                    setForms(prev => prev.map(f => { if (f.id !== selectedFormId) return f; if (f.isMultistep) { return { ...f, steps: f.steps.map((s: any) => s.id === currentStepId ? { ...s, fields: [...s.fields, newVisualObj] } : s) }; } return { ...f, fields: [...f.fields, newVisualObj] }; }));
-                                    setSelectedFieldInFormId(visualId);
-                                  }}
-                                  className="flex flex-col items-center gap-2 p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-2xl text-zinc-400 hover:text-indigo-600 hover:border-indigo-500/30 transition-all"
-                                >
-                                   <el.icon size={16} />
-                                   <span className="text-[9px] font-black uppercase tracking-tighter">{el.label}</span>
-                                </button>
-                              ))}
-                           </div>
-                        </div>
-                     </aside>
-
-                     {/* Builder Canvas (Center) */}
-                     <div className="flex-1 bg-transparent overflow-y-auto custom-scrollbar p-12">
-                        <div className="max-w-3xl mx-auto space-y-12">
-                           {/* Form Preview Header */}
-                           <div className="space-y-4">
-                              <div className="bg-white dark:bg-zinc-900 p-10 rounded-[3rem] border border-zinc-200 dark:border-zinc-800 shadow-2xl shadow-indigo-500/5 space-y-8">
-                                 {selectedForm.isMultistep && (
-                                   <div className="space-y-6">
-                                     <div className="flex items-center justify-between">
-                                       <div className="flex items-center gap-3">
-                                         <div className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
-                                           <ListOrdered size={16} />
-                                         </div>
-                                         <div>
-                                           <h3 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest">Step Navigator</h3>
-                                           <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-tighter">Managing {selectedForm.steps?.length || 0} stages</p>
-                                         </div>
-                                       </div>
-                                       <button 
-                                         onClick={() => {
-                                           const newStepId = `step-${Date.now()}`;
-                                           setForms(prev => prev.map(f => f.id === selectedFormId ? { 
-                                             ...f, 
-                                             steps: [...(f.steps || []), { id: newStepId, title: `Step ${f.steps.length + 1}`, fields: [] }] 
-                                           } : f));
-                                           setCurrentStepId(newStepId);
-                                         }}
-                                         className="flex items-center gap-2 px-4 py-2 bg-indigo-500/10 text-indigo-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 hover:text-white transition-all"
-                                       >
-                                         <Plus size={12} />
-                                         Add Step
-                                       </button>
-                                     </div>
-
-                                     <div className="flex gap-2 p-1 bg-zinc-50 dark:bg-zinc-950/50 rounded-2xl border border-zinc-100 dark:border-zinc-800 overflow-x-auto no-scrollbar">
-                                       {(selectedForm.steps || []).map((step: any, i: number) => (
-                                         <div 
-                                           key={step.id}
-                                           onClick={() => {
-                                             setCurrentStepId(step.id);
-                                             setSelectedFieldInFormId(step.id);
-                                           }}
-                                           className={cn(
-                                             "flex-shrink-0 flex items-center gap-3 px-5 py-3 rounded-xl transition-all cursor-pointer border-2 group/step",
-                                             currentStepId === step.id 
-                                               ? "bg-white dark:bg-zinc-900 border-indigo-500 shadow-md text-indigo-600" 
-                                               : (selectedFieldInFormId === step.id ? "bg-white/50 dark:bg-zinc-900/50 border-indigo-500/30 text-indigo-400" : "bg-transparent border-transparent text-zinc-400 hover:text-zinc-600")
-                                           )}
-                                         >
-                                           <span className={cn(
-                                             "w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black",
-                                             currentStepId === step.id ? "bg-indigo-600 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"
-                                           )}>{i + 1}</span>
-                                           <input 
-                                             type="text"
-                                             value={step.title}
-                                             onChange={(e) => {
-                                               setForms(prev => prev.map(f => f.id === selectedFormId ? {
-                                                 ...f,
-                                                 steps: f.steps.map((s: any) => s.id === step.id ? { ...s, title: e.target.value } : s)
-                                               } : f));
-                                             }}
-                                             onClick={(e) => e.stopPropagation()}
-                                             className="bg-transparent border-none p-0 text-[10px] font-black uppercase tracking-widest focus:outline-none w-24"
-                                           />
-                                           {currentStepId === step.id && (
-                                             <Settings2 
-                                               size={12} 
-                                               className="opacity-40 hover:opacity-100 transition-opacity ml-1"
-                                               onClick={(e) => {
-                                                 e.stopPropagation();
-                                                 setSelectedFieldInFormId(step.id);
-                                               }}
-                                             />
-                                           )}
-                                           {step.visibilityRule && (
-                                             <Zap size={10} className="text-amber-500 fill-amber-500/20" />
-                                           )}
-                                           {selectedForm.steps.length > 1 && (
-                                             <button 
-                                               onClick={(e) => {
-                                                 e.stopPropagation();
-                                                 setForms(prev => {
-                                                   const newForms = prev.map(f => {
-                                                     if (f.id !== selectedFormId) return f;
-                                                     const newSteps = f.steps.filter((s: any) => s.id !== step.id);
-                                                     return { ...f, steps: newSteps };
-                                                   });
-                                                   if (currentStepId === step.id) {
-                                                      const form = newForms.find(f => f.id === selectedFormId);
-                                                      if (form) setCurrentStepId(form.steps[0]?.id);
-                                                   }
-                                                   return newForms;
-                                                 });
-                                               }}
-                                               className="p-1 hover:text-rose-500 opacity-0 group-hover/step:opacity-100 transition-opacity"
-                                             >
-                                               <X size={10} />
-                                             </button>
-                                           )}
-                                         </div>
-                                       ))}
-                                     </div>
-                                   </div>
-                                 )}
-
-                                 <div className="flex items-start gap-4">
-                                    <div className="p-3 rounded-2xl shadow-lg bg-indigo-600 shadow-indigo-500/20 text-white shrink-0">
-                                       <DynamicIcon name={moduleSettings.iconName || 'Box'} size={24} />
-                                    </div>
-                                    <div className="space-y-1 text-left">
-                                       <h2 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
-                                          {selectedForm.name}
-                                       </h2>
-                                       <p className="text-zinc-500 dark:text-zinc-400 max-w-3xl text-sm font-medium leading-relaxed mt-1">
-                                          {selectedForm.settings?.description || 'Form description text goes here...'}
-                                       </p>
-                                    </div>
-                                 </div>
-
-                                 <DndContext
-                                   sensors={sensors}
-                                   collisionDetection={closestCenter}
-                                   onDragEnd={handleFormCanvasDragEnd}
-                                 >
-                                   {(() => {
-                                     const currentStep = selectedForm.isMultistep 
-                                       ? (selectedForm.steps.find((s: any) => s.id === currentStepId) || selectedForm.steps[0])
-                                       : { fields: selectedForm.fields };
-                                     const currentFields = currentStep?.fields || [];
-
-                                     return (
-                                       <SortableContext 
-                                         items={currentFields.map((f: any) => f.id)}
-                                         strategy={rectSortingStrategy}
-                                       >
-                                         <div className="grid grid-cols-12 gap-6">
-                                           {currentFields.length > 0 ? (
-                                             currentFields.map((fObj: any) => (
-                                               <FormCanvasItem 
-                                                 key={fObj.id} 
-                                                 fObj={fObj} 
-                                                 isSelected={selectedFieldInFormId === fObj.id}
-                                                 layout={layout}
-                                                 workflow={workflow}
-                                                 onSelect={setSelectedFieldInFormId}
-                                                 isRestricted={isRestricted}
-                                                 onDelete={(id: string) => {
-                                                   setForms(prev => prev.map(f => {
-                                                     if (f.id !== selectedFormId) return f;
-                                                     if (f.isMultistep) {
-                                                       return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.filter((fo: any) => fo.id !== id) })) };
-                                                     }
-                                                     return { ...f, fields: f.fields.filter((fo: any) => fo.id !== id) };
-                                                   }));
-                                                   if (selectedFieldInFormId === id) setSelectedFieldInFormId(null);
-                                                 }}
-                                               />
-                                             ))
-                                           ) : (
-                                             <div className="col-span-12 py-20 text-center space-y-4">
-                                                <div className="w-16 h-16 bg-zinc-50 dark:bg-zinc-900 rounded-full flex items-center justify-center mx-auto text-zinc-200">
-                                                   <MousePointer2 size={32} />
-                                                </div>
-                                                <div className="space-y-1">
-                                                   <p className="text-sm font-bold text-zinc-900 dark:text-white">Canvas is empty</p>
-                                                   <p className="text-xs text-zinc-500">Select fields from the left palette to add them to your form.</p>
-                                                </div>
-                                             </div>
-                                           )}
-                                         </div>
-                                       </SortableContext>
-                                     );
-                                   })()}
-                                 </DndContext>
-
-                                 <button className="w-full py-4 bg-indigo-600 text-white rounded-[2rem] text-xs font-bold uppercase tracking-widest shadow-2xl shadow-indigo-500/20">
-                                    {selectedForm.settings?.submitLabel || 'Submit'}
-                                 </button>
-                              </div>
-                           </div>
-                        </div>
-                     </div>
-
-                     {/* Inspector Sidebar (Right) */}
-                     <aside className="w-80 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 overflow-y-auto custom-scrollbar">
-                        {selectedFieldInFormId ? (() => {
-                            // Check if it's a Step selection
-                            const selectedStep = selectedForm.isMultistep ? selectedForm.steps.find((s: any) => s.id === selectedFieldInFormId) : null;
-                            if (selectedStep) {
-                               return (
-                                 <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
-                                   <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-1 h-4 bg-indigo-500 rounded-full" />
-                                        <h3 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest">Step Settings</h3>
-                                      </div>
-                                      <button 
-                                        onClick={() => setSelectedFieldInFormId(null)}
-                                        className="p-2 text-zinc-400 hover:text-zinc-900 transition-colors"
-                                      >
-                                        <X size={16} />
-                                      </button>
-                                   </div>
-
-                                   <div className="space-y-6">
-                                      <div className="space-y-2">
-                                         <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1">Step Title</label>
-                                         <input 
-                                           type="text" 
-                                           value={selectedStep.title}
-                                           onChange={(e) => setForms(prev => prev.map(f => f.id === selectedFormId ? {
-                                             ...f,
-                                             steps: f.steps.map((s: any) => s.id === selectedStep.id ? { ...s, title: e.target.value } : s)
-                                           } : f))}
-                                           className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
-                                         />
-                                      </div>
-
-                                      <div className="space-y-4 pt-6 border-t border-zinc-100 dark:border-zinc-800">
-                                         <div className="flex items-center justify-between px-1">
-                                           <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Step Visibility Rule</label>
-                                           <div className="px-2 py-0.5 bg-indigo-500/10 text-indigo-500 rounded text-[8px] font-black uppercase tracking-widest">Conditional</div>
-                                         </div>
-                                         
-                                         <div 
-                                           onClick={() => setEditingCondition({
-                                             targetId: selectedStep.id,
-                                             targetType: 'step' as any,
-                                             rule: selectedStep.visibilityRule
-                                           })}
-                                           className="p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-pointer hover:border-indigo-500/50 transition-all group"
-                                         >
-                                           {selectedStep.visibilityRule ? (
-                                             <div className="flex items-center justify-between">
-                                               <div className="flex items-center gap-2">
-                                                 <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                                                 <span className="text-[10px] font-bold text-zinc-600 dark:text-zinc-400 uppercase">Rule Configured</span>
-                                               </div>
-                                               <Settings size={12} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
-                                             </div>
-                                           ) : (
-                                             <div className="flex items-center justify-between">
-                                               <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest">Always Visible</span>
-                                               <Plus size={12} className="text-zinc-300 group-hover:text-indigo-500 transition-colors" />
-                                             </div>
-                                           )}
-                                         </div>
-                                         {selectedStep.visibilityRule && (
-                                           <button 
-                                             onClick={(e) => {
-                                               e.stopPropagation();
-                                               setForms(prev => prev.map(f => f.id === selectedFormId ? {
-                                                 ...f,
-                                                 steps: f.steps.map((s: any) => s.id === selectedStep.id ? { ...s, visibilityRule: undefined } : s)
-                                               } : f));
-                                             }}
-                                             className="text-[9px] font-bold text-rose-500 uppercase tracking-widest hover:underline ml-1"
-                                           >
-                                             Remove Rule
-                                           </button>
-                                         )}
-                                      </div>
-                                   </div>
-                                 </div>
-                               );
-                            }
-
-                           const currentStep = selectedForm.isMultistep ? selectedForm.steps.find((s: any) => s.id === currentStepId) : null;
-                           const fields = selectedForm.isMultistep ? (currentStep?.fields || []) : selectedForm.fields;
-                           const fObjIdx = fields.findIndex((f: any) => f.id === selectedFieldInFormId);
-                           const fObj = fields[fObjIdx];
-                           const isVisual = selectedFieldInFormId.startsWith('visual-');
-                           const field = isVisual ? null : getUnifiedFieldDefinition(selectedFieldInFormId, layout, workflow);
-                           if (!fObj || (!isVisual && !field)) return null;
-
-                           return (
-                             <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
-                                <div className="flex items-center justify-between">
-                                   <h3 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest">Field Settings</h3>
-                                   <button 
-                                     onClick={() => setSelectedFieldInFormId(null)}
-                                     className="p-2 text-zinc-400 hover:text-zinc-900 transition-colors"
-                                   >
-                                     <X size={16} />
-                                   </button>
-                                </div>
-
-                                <div className="space-y-6">
-                                   <div className="space-y-2">
-                                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1">
-                                        {isVisual ? (fObj.type === 'heading' ? 'Heading Text' : fObj.type === 'html-text' ? 'Content' : 'Label Override') : 'Label Override'}
-                                      </label>
-                                      <input 
-                                        type="text" 
-                                        value={fObj.labelOverride || ''}
-                                        onChange={(e) => {
-                                          const updates = { labelOverride: e.target.value };
-                                          setForms(prev => prev.map(f => {
-                                            if (f.id !== selectedFormId) return f;
-                                            if (f.isMultistep) {
-                                              return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) })) };
-                                            }
-                                            return { ...f, fields: f.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) };
-                                          }));
-                                        }}
-                                        placeholder={isVisual ? 'Enter text...' : field?.label}
-                                        className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
-                                      />
-                                   </div>
-
-                                   <div className="space-y-2">
-                                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1">Placeholder Override</label>
-                                      <input 
-                                        type="text" 
-                                        value={fObj.placeholderOverride || ''}
-                                        onChange={(e) => {
-                                          const updates = { placeholderOverride: e.target.value };
-                                          setForms(prev => prev.map(f => {
-                                            if (f.id !== selectedFormId) return f;
-                                            if (f.isMultistep) {
-                                              return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) })) };
-                                            }
-                                            return { ...f, fields: f.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) };
-                                          }));
-                                        }}
-                                        className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
-                                      />
-                                   </div>
-
-                                    <div className="space-y-2">
-                                       <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1">Field Width (12-Col Grid)</label>
-                                       <div className="grid grid-cols-5 gap-1.5">
-                                          {[
-                                            { id: 'full', label: 'Full', span: '12 cols' },
-                                            { id: 'half', label: '1/2', span: '6 cols' },
-                                            { id: 'two-thirds', label: '2/3', span: '8 cols' },
-                                            { id: 'one-third', label: '1/3', span: '4 cols' },
-                                            { id: 'one-quarter', label: '1/4', span: '3 cols' }
-                                          ].map((opt) => (
-                                            <button 
-                                              key={opt.id}
-                                              type="button"
-                                              onClick={() => {
-                                                const updates = { width: opt.id };
-                                                setForms(prev => prev.map(f => {
-                                                  if (f.id !== selectedFormId) return f;
-                                                  if (f.isMultistep) {
-                                                    return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) })) };
-                                                  }
-                                                  return { ...f, fields: f.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) };
-                                                }));
-                                              }}
-                                              className={cn(
-                                                "py-2 rounded-xl text-[10px] font-bold border transition-all text-center flex flex-col items-center justify-center cursor-pointer",
-                                                fObj.width === opt.id || (!fObj.width && opt.id === 'full')
-                                                  ? "bg-indigo-600 border-indigo-600 text-white shadow-xs"
-                                                  : "bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700/60 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300"
-                                              )}
-                                              title={opt.span}
-                                            >
-                                              <span>{opt.label}</span>
-                                              <span className="text-[7px] opacity-75">{opt.span}</span>
-                                            </button>
-                                          ))}
-                                       </div>
-                                    </div>
-
-                                    {selectedForm.isMultistep && (selectedForm.steps?.length || 0) > 1 && (
-                                      <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1">Move to Step</label>
-                                        <select
-                                          value={currentStepId || ''}
-                                          onChange={(e) => {
-                                            const targetStepId = e.target.value;
-                                            if (targetStepId === currentStepId) return;
-                                            setForms(prev => prev.map(f => {
-                                              if (f.id !== selectedFormId) return f;
-                                              const currentStepFields = (f.steps || []).find((s: any) => s.id === currentStepId)?.fields || [];
-                                              const fieldToMove = currentStepFields.find((fo: any) => fo.id === selectedFieldInFormId);
-                                              if (!fieldToMove) return f;
-                                              return {
-                                                ...f,
-                                                steps: f.steps.map((s: any) => {
-                                                  if (s.id === currentStepId) {
-                                                    return { ...s, fields: s.fields.filter((fo: any) => fo.id !== selectedFieldInFormId) };
-                                                  }
-                                                  if (s.id === targetStepId) {
-                                                    return { ...s, fields: [...(s.fields || []), fieldToMove] };
-                                                  }
-                                                  return s;
-                                                })
-                                              };
-                                            }));
-                                            setCurrentStepId(targetStepId);
-                                          }}
-                                          className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
-                                        >
-                                          {(selectedForm.steps || []).map((step: any, idx: number) => (
-                                            <option key={step.id} value={step.id}>Step {idx + 1}: {step.title}</option>
-                                          ))}
-                                        </select>
-                                      </div>
-                                    )}
-
-                                    {!isVisual && (
-                                      <div className="grid grid-cols-2 gap-4 py-6 border-y border-zinc-100 dark:border-zinc-800">
-                                        <div className="flex items-center justify-between">
-                                          <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
-                                            Required
-                                            {field?.required && <Lock size={10} className="text-indigo-500" />}
-                                          </span>
-                                          <div 
-                                            onClick={() => {
-                                              if (field?.required) return;
-                                              const updates = { required: !fObj.required };
-                                              setForms(prev => prev.map(f => {
-                                                if (f.id !== selectedFormId) return f;
-                                                if (f.isMultistep) {
-                                                  return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) })) };
-                                                }
-                                                return { ...f, fields: f.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) };
-                                              }));
-                                            }}
-                                            className={cn(
-                                              "h-5 w-9 rounded-full relative transition-all",
-                                              field?.required ? "bg-indigo-600/50 cursor-not-allowed" : "cursor-pointer",
-                                              (fObj.required || field?.required) ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
-                                            )}
-                                          >
-                                            <div className={cn("absolute top-1 h-3 w-3 rounded-full bg-white shadow-sm transition-all", (fObj.required || field?.required) ? "right-1" : "left-1")} />
-                                          </div>
-                                        </div>
-                                        <div className="flex items-center justify-between">
-                                          <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Read Only</span>
-                                          <div 
-                                            onClick={() => {
-                                              const updates = { readOnly: !fObj.readOnly };
-                                              setForms(prev => prev.map(f => {
-                                                if (f.id !== selectedFormId) return f;
-                                                if (f.isMultistep) {
-                                                  return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) })) };
-                                                }
-                                                return { ...f, fields: f.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) };
-                                              }));
-                                            }}
-                                            className={cn(
-                                              "h-5 w-9 rounded-full relative cursor-pointer transition-colors",
-                                              fObj.readOnly ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
-                                            )}
-                                          >
-                                            <div className={cn("absolute top-1 h-3 w-3 rounded-full bg-white shadow-sm transition-all", fObj.readOnly ? "right-1" : "left-1")} />
-                                          </div>
-                                        </div>
-                                      </div>
-                                    )}
-
-                                   {!isVisual && (
-                                     <div className={cn(
-                                       "p-5 rounded-3xl border space-y-2.5",
-                                       field?.isSystemMeta
-                                         ? "bg-purple-50/60 dark:bg-purple-950/20 border-purple-500/20"
-                                         : "bg-indigo-50/50 dark:bg-indigo-500/5 border-indigo-500/10"
-                                     )}>
-                                        <div className={cn(
-                                          "flex items-center gap-2",
-                                          field?.isSystemMeta ? "text-purple-600 dark:text-purple-400" : "text-indigo-600 dark:text-indigo-400"
-                                        )}>
-                                           <Info size={14} />
-                                           <span className="text-[10px] font-black uppercase tracking-widest">
-                                             {field?.isSystemMeta ? 'System Meta Field' : 'Base Data Point'}
-                                           </span>
-                                        </div>
-                                        <p className="text-[10px] text-zinc-500 leading-relaxed font-medium">
-                                          {field?.isSystemMeta 
-                                            ? <span>This is a built-in record property: <strong>{field?.label}</strong>. {field?.description || ''}</span>
-                                            : <span>This field maps to <strong>{field?.id}</strong> in your module schema. Data type is <strong>{field?.type}</strong>.</span>
-                                          }
-                                        </p>
-                                     </div>
-                                   )}
-                                    {isVisual && fObj.type === 'spacer' && (
-                                       <div className="space-y-2">
-                                          <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1">Spacer Height</label>
-                                          <select 
-                                            value={fObj.height || 'md'}
-                                            onChange={(e) => {
-                                              const updates = { height: e.target.value };
-                                              setForms(prev => prev.map(f => {
-                                                if (f.id !== selectedFormId) return f;
-                                                if (f.isMultistep) {
-                                                  return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) })) };
-                                                }
-                                                return { ...f, fields: f.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) };
-                                              }));
-                                            }}
-                                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none"
-                                          >
-                                            <option value="sm">Small (16px)</option>
-                                            <option value="md">Medium (32px)</option>
-                                            <option value="lg">Large (64px)</option>
-                                            <option value="xl">Extra Large (128px)</option>
-                                          </select>
-                                       </div>
-                                    )}
-
-                                    {/* Visibility Logic Section */}
-                                    <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800">
-                                      <VisibilityRuleEditor 
-                                        rule={fObj.visibilityRule}
-                                        onEdit={() => setEditingCondition({
-                                          targetId: selectedFieldInFormId,
-                                          targetType: 'formField',
-                                          rule: migrateVisibilityRule(fObj.visibilityRule)
-                                        })}
-                                        onRemove={() => {
-                                          setForms(prev => prev.map(f => {
-                                            if (f.id !== selectedFormId) return f;
-                                            if (f.isMultistep) {
-                                              return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, visibilityRule: undefined } : fo) })) };
-                                            }
-                                            return { ...f, fields: f.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, visibilityRule: undefined } : fo) };
-                                          }));
-                                        }}
-                                        label="Conditional Visibility"
-                                      />
-                                    </div>
-
-                                    {!isVisual && (
-                                      <div className="space-y-4 pt-6 border-t border-zinc-100 dark:border-zinc-800">
-                                        <div className="flex items-center justify-between px-1">
-                                          <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Validation Rules</label>
-                                          <div className="px-2 py-0.5 bg-rose-500/10 text-rose-500 rounded text-[8px] font-black uppercase tracking-widest">Constraints</div>
-                                        </div>
-                                        
-                                        <div className="space-y-3">
-                                          <div className="space-y-1.5">
-                                            <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-tight ml-1">Pattern (Regex)</label>
-                                            <input 
-                                              type="text"
-                                              value={fObj.validation?.pattern || ''}
-                                              onChange={(e) => {
-                                                const updates = { validation: { ...fObj.validation, pattern: e.target.value } };
-                                                setForms(prev => prev.map(f => {
-                                                  if (f.id !== selectedFormId) return f;
-                                                  if (f.isMultistep) {
-                                                    return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) })) };
-                                                  }
-                                                  return { ...f, fields: f.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) };
-                                                }));
-                                              }}
-                                              placeholder="e.g. ^[0-9]{5}$"
-                                              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-[11px] text-zinc-900 dark:text-white font-mono focus:outline-none"
-                                            />
-                                          </div>
-                                          <div className="space-y-1.5">
-                                            <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-tight ml-1">Error Message</label>
-                                            <input 
-                                              type="text"
-                                              value={fObj.validation?.errorMessage || ''}
-                                              onChange={(e) => {
-                                                const updates = { validation: { ...fObj.validation, errorMessage: e.target.value } };
-                                                setForms(prev => prev.map(f => {
-                                                  if (f.id !== selectedFormId) return f;
-                                                  if (f.isMultistep) {
-                                                    return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) })) };
-                                                  }
-                                                  return { ...f, fields: f.fields.map((fo: any) => fo.id === selectedFieldInFormId ? { ...fo, ...updates } : fo) };
-                                                }));
-                                              }}
-                                              placeholder="Invalid input..."
-                                              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-[11px] text-zinc-900 dark:text-white focus:outline-none"
-                                            />
-                                          </div>
-                                        </div>
-                                      </div>
-                                    )}
-                                   <button 
-                                     onClick={() => {
-                                       setForms(prev => prev.map(f => {
-                                         if (f.id !== selectedFormId) return f;
-                                         if (f.isMultistep) {
-                                           return { ...f, steps: f.steps.map((s: any) => ({ ...s, fields: s.fields.filter((fo: any) => fo.id !== selectedFieldInFormId) })) };
-                                         }
-                                         return { ...f, fields: f.fields.filter((fo: any) => fo.id !== selectedFieldInFormId) };
-                                       }));
-                                       setSelectedFieldInFormId(null);
-                                     }}
-                                     className="w-full py-3 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
-                                   >
-                                     Remove from Form
-                                   </button>
-                                </div>
-                             </div>
-                           );
-                        })() : (
-                          <div className="space-y-8 animate-in fade-in duration-300">
-                             <div className="space-y-1">
-                                <h3 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest">Form Settings</h3>
-                                <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Global Configuration</p>
-                             </div>
-
-                             <div className="space-y-6">
-                                <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
-                                   <div className="space-y-0.5">
-                                      <p className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest">Multistep Form</p>
-                                      <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Enable Wizard Flow</p>
-                                   </div>
-                                   <button 
-                                      onClick={() => {
-                                        setForms(prev => prev.map(f => {
-                                          if (f.id !== selectedFormId) return f;
-                                          const isMultistep = !f.isMultistep;
-                                          let steps = f.steps || [];
-                                          let fields = f.fields || [];
-                                          if (isMultistep) {
-                                            if (steps.length === 0) {
-                                              steps = [{ id: "step-1", title: "Step 1", fields: fields }];
-                                            }
-                                          } else {
-                                            fields = steps.flatMap((s: any) => s.fields || []);
-                                          }
-                                          return { ...f, isMultistep, steps, fields };
-                                        }));
-                                      }}
-                                      className={cn(
-                                        "w-10 h-6 rounded-full relative transition-all",
-                                        selectedForm.isMultistep ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
-                                      )}
-                                    >
-                                      <div className={cn(
-                                        "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
-                                        selectedForm.isMultistep ? "right-1" : "left-1"
-                                      )} />
-                                   </button>
-                                </div>
-                                <div className="space-y-2">
-                                   <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1">Form Name</label>
-                                   <input 
-                                     type="text" 
-                                     value={selectedForm.name}
-                                     onChange={(e) => setForms(prev => prev.map(f => f.id === selectedFormId ? { ...f, name: e.target.value } : f))}
-                                     className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
-                                   />
-                                </div>
-
-                                <div className="space-y-2">
-                                   <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1">Description</label>
-                                   <textarea 
-                                     value={selectedForm.settings?.description || ''}
-                                     onChange={(e) => setForms(prev => prev.map(f => f.id === selectedFormId ? { ...f, settings: { ...f.settings, description: e.target.value } } : f))}
-                                     rows={3}
-                                     className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 resize-none"
-                                   />
-                                </div>
-
-                                <div className="space-y-2">
-                                  <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Form Usage</label>
-                                  <select 
-                                    value={selectedForm.usage || 'public_link'}
-                                    onChange={(e) => {
-                                      const newVal = e.target.value;
-                                      setForms(prev => prev.map(f => {
-                                        if (f.id === selectedFormId) return { ...f, usage: newVal };
-                                        if ((newVal === 'workspace_create' || newVal === 'workspace_edit') && f.usage === newVal) {
-                                          return { ...f, usage: 'public_link' };
-                                        }
-                                        return f;
-                                      }));
-                                    }}
-                                    className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 appearance-none"
-                                  >
-                                    <option value="workspace_create">Platform: "Create Record" Button</option>
-                                    <option value="workspace_edit">Platform: "Edit Record" Action</option>
-                                    <option value="public_link">External: Public Data Entry Link</option>
-                                    <option value="action_trigger">Action: Triggered by Quick Action</option>
-                                  </select>
-                                </div>
-
-                                {selectedForm.usage === 'workspace_create' && (
-                                  <div className="space-y-2">
-                                    <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Workspace Button Label</label>
-                                    <input 
-                                      type="text" 
-                                      placeholder="Create"
-                                      value={selectedForm.settings?.workspaceButtonLabel || ''}
-                                      onChange={(e) => setForms(prev => prev.map(f => f.id === selectedFormId ? { 
-                                        ...f, 
-                                        settings: { 
-                                          ...(f.settings || {}), 
-                                          workspaceButtonLabel: e.target.value 
-                                        } 
-                                      } : f))}
-                                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
-                                    />
-                                  </div>
-                                )}
-
-                                {selectedForm.usage === 'public_link' && (
-                                  <>
-                                    <div className="space-y-2">
-                                      <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest px-1">Public Form URL</label>
-                                      {id === 'new' ? (
-                                        <div className="text-xs text-zinc-500 italic px-1">
-                                          Save the module first to generate a public link.
-                                        </div>
-                                      ) : (
-                                        <div className="flex gap-2">
-                                          <input 
-                                            type="text" 
-                                            readOnly 
-                                            value={`${window.location.origin}/portal?moduleId=${id}&formId=${selectedForm.id}`}
-                                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none"
-                                          />
-                                          <button 
-                                            onClick={() => {
-                                              navigator.clipboard.writeText(`${window.location.origin}/portal?moduleId=${id}&formId=${selectedForm.id}`);
-                                              toast.success('Public form URL copied to clipboard');
-                                            }}
-                                            className="px-3 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                                            title="Copy Link"
-                                          >
-                                            <Copy size={12} />
-                                            <span>Copy</span>
-                                          </button>
-                                        </div>
-                                      )}
-                                    </div>
-
-                                    {/* Customer Reference Number Configuration */}
-                                    <div className="space-y-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
-                                      <div className="space-y-0.5">
-                                        <p className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest px-1">Customer Reference Number</p>
-                                        <p className="text-[8px] text-zinc-500 font-bold uppercase tracking-widest px-1 font-sans">Sequence Format for public submissions</p>
-                                      </div>
-                                      
-                                      <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-1">
-                                          <label className="text-[8px] font-bold text-zinc-450 uppercase tracking-wider px-1">Prefix</label>
-                                          <input 
-                                            type="text"
-                                            value={selectedForm.settings?.customerRefPrefix !== undefined ? selectedForm.settings.customerRefPrefix : ''}
-                                            onChange={(e) => setForms(prev => prev.map(f => f.id === selectedFormId ? {
-                                              ...f,
-                                              settings: {
-                                                ...(f.settings || {}),
-                                                customerRefPrefix: e.target.value.toUpperCase()
-                                              }
-                                            } : f))}
-                                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
-                                            placeholder="e.g. APP"
-                                          />
-                                        </div>
-                                        <div className="space-y-1">
-                                          <label className="text-[8px] font-bold text-zinc-450 uppercase tracking-wider px-1">Suffix</label>
-                                          <input 
-                                            type="text"
-                                            value={selectedForm.settings?.customerRefSuffix !== undefined ? selectedForm.settings.customerRefSuffix : ''}
-                                            onChange={(e) => setForms(prev => prev.map(f => f.id === selectedFormId ? {
-                                              ...f,
-                                              settings: {
-                                                ...(f.settings || {}),
-                                                customerRefSuffix: e.target.value.toUpperCase()
-                                              }
-                                            } : f))}
-                                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
-                                            placeholder="e.g. -T"
-                                          />
-                                        </div>
-                                      </div>
-
-                                      <div className="space-y-1">
-                                        <label className="text-[8px] font-bold text-zinc-450 uppercase tracking-wider px-1">Next Number</label>
-                                        <input 
-                                          type="number"
-                                          value={selectedForm.settings?.customerRefNextNumber !== undefined ? selectedForm.settings.customerRefNextNumber : 10001}
-                                          onChange={(e) => setForms(prev => prev.map(f => f.id === selectedFormId ? {
-                                            ...f,
-                                            settings: {
-                                              ...(f.settings || {}),
-                                              customerRefNextNumber: Number(e.target.value)
-                                            }
-                                          } : f))}
-                                          className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
-                                        />
-                                      </div>
-                                    </div>
-                                  </>
-                                )}
-
-                                <div className="space-y-2">
-                                  <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Submit Label</label>
-                                  <input 
-                                    type="text" 
-                                    value={selectedForm.settings?.submitLabel || 'Submit'}
-                                    onChange={(e) => setForms(prev => prev.map(f => f.id === selectedFormId ? { ...f, settings: { ...f.settings, submitLabel: e.target.value } } : f))}
-                                    className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
-                                  />
-                                </div>
-
-                                <div className="space-y-2">
-                                  <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Success Message</label>
-                                  <input 
-                                    type="text" 
-                                    value={selectedForm.settings?.successMessage || 'Success!'}
-                                    onChange={(e) => setForms(prev => prev.map(f => f.id === selectedFormId ? { ...f, settings: { ...f.settings, successMessage: e.target.value } } : f))}
-                                    className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
-                                  />
-                                </div>
-
-                                <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
-                                   <div className="space-y-0.5">
-                                      <p className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest">Require Auth</p>
-                                      <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest">Private Link Only</p>
-                                   </div>
-                                   <button 
-                                      onClick={() => setForms(prev => prev.map(f => f.id === selectedFormId ? { ...f, settings: { ...f.settings, requireLogin: !f.settings.requireLogin } } : f))}
-                                      className={cn(
-                                        "w-10 h-6 rounded-full relative transition-all",
-                                        selectedForm.settings?.requireLogin ? "bg-indigo-600" : "bg-zinc-200 dark:bg-zinc-800"
-                                      )}
-                                    >
-                                      <div className={cn(
-                                        "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
-                                        selectedForm.settings?.requireLogin ? "right-1" : "left-1"
-                                      )} />
-                                    </button>
-                                </div>
-                             </div>
-                          </div>
-                        )}
-                     </aside>
-                   </>
-                 );
-               })() : (
-                 <div className="h-full flex-1 flex flex-col items-center justify-center text-center p-12 space-y-4">
-                    <div className="w-20 h-20 bg-zinc-50 dark:bg-zinc-900 rounded-[2.5rem] flex items-center justify-center text-zinc-200 dark:text-zinc-800">
-                       <FileCode size={40} />
-                    </div>
-                    <div className="space-y-1">
-                       <h3 className="text-xl font-bold text-zinc-900 dark:text-white">Select a form to configure</h3>
-                       <p className="text-sm text-zinc-500">Every module starts with a default create record form.</p>
-                    </div>
-                 </div>
-               )}
-            </div>
-            ) : null}
+            <FormBuilder
+              mode="module_embedded"
+              forms={forms}
+              onFormsChange={setForms}
+              selectedFormId={selectedFormId}
+              onSelectFormId={(nextId) => {
+                setSelectedFormId(nextId);
+                setSelectedFieldInFormId(null);
+              }}
+              moduleId={id !== 'new' ? id : undefined}
+              moduleName={moduleSettings.name}
+              moduleLayout={layout}
+              workflow={workflow}
+              isRestricted={isRestricted}
+              onPromoteFieldToModule={(newField) =>
+                setLayout((prev: any[]) =>
+                  prev.some((f: any) => f.id === newField.id) ? prev : [...prev, newField]
+                )
+              }
+            />
+          ) : null}
           </div>
         </main>
         {/* Right Sidebar - Dual Mode */}
@@ -14123,7 +12900,7 @@ export const ModuleEditor = () => {
 
                             {selectedField.defaultType && selectedField.defaultType !== 'static' && (
                               <div className="space-y-2 animate-in slide-in-from-top-2">
-                                <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Offset (±)</label>
+                                <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Offset (Â±)</label>
                                 <div className="grid grid-cols-2 gap-2">
                                   <input 
                                     type="number"
@@ -14378,7 +13155,7 @@ export const ModuleEditor = () => {
 
                             {selectedField.defaultType && selectedField.defaultType !== 'static' && (
                               <div className="space-y-2 animate-in slide-in-from-top-2">
-                                <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Offset (±)</label>
+                                <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest px-1">Offset (Â±)</label>
                                 <div className="grid grid-cols-2 gap-2">
                                   <input 
                                     type="number"
@@ -14558,9 +13335,9 @@ export const ModuleEditor = () => {
                             className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
                           >
                             <option value="$">USD ($)</option>
-                            <option value="£">GBP (£)</option>
-                            <option value="€">EUR (€)</option>
-                            <option value="¥">JPY (¥)</option>
+                            <option value="Â£">GBP (Â£)</option>
+                            <option value="â‚¬">EUR (â‚¬)</option>
+                            <option value="Â¥">JPY (Â¥)</option>
                           </select>
                         </div>
                       )}
@@ -14908,9 +13685,9 @@ export const ModuleEditor = () => {
                             className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
                           >
                             <option value="$">USD ($)</option>
-                            <option value="£">GBP (£)</option>
-                            <option value="€">EUR (€)</option>
-                            <option value="¥">JPY (¥)</option>
+                            <option value="Â£">GBP (Â£)</option>
+                            <option value="â‚¬">EUR (â‚¬)</option>
+                            <option value="Â¥">JPY (Â¥)</option>
                           </select>
                         </div>
                       )}
@@ -15260,9 +14037,9 @@ export const ModuleEditor = () => {
                                   className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all appearance-none"
                                 >
                                   <option value="$">USD ($)</option>
-                                  <option value="£">GBP (£)</option>
-                                  <option value="€">EUR (€)</option>
-                                  <option value="¥">JPY (¥)</option>
+                                  <option value="Â£">GBP (Â£)</option>
+                                  <option value="â‚¬">EUR (â‚¬)</option>
+                                  <option value="Â¥">JPY (Â¥)</option>
                                 </select>
                               </div>
                             )}
@@ -17815,7 +16592,7 @@ export const ModuleEditor = () => {
                           style={{ paddingLeft: tab.depth === 1 ? '1.5rem' : '0.75rem' }}
                         >
                           <span className="flex items-center gap-1">
-                            {tab.depth === 1 && <span className="opacity-40">↳</span>}
+                            {tab.depth === 1 && <span className="opacity-40">â†³</span>}
                             <span>{tab.label || tab.id}</span>
                           </span>
                           <span className="text-[9px] opacity-60 font-mono">ID: {tab.id}</span>

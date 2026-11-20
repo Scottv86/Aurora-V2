@@ -48,6 +48,7 @@ import { generateAISummary, evaluateCalculations } from '../../services/aiServic
 import { cn, isFieldVisible, flattenFields, calculateHeight, getFieldValue, checkCondition, evaluateExpression, evaluateFormula, slugify } from '../../lib/utils';
 import { supabase } from '../../lib/supabase';
 import { validateRecordRules, ValidationError } from '../../lib/validationEngine';
+import { getSystemMetaFields, resolveFormInitialValues } from '../../lib/formFieldUtils';
 
 import { compactLayout } from '../../lib/layoutEngine';
 import { Module, ModuleField } from '../../types/platform';
@@ -919,20 +920,34 @@ export const RecordDetailView = ({
         if (isRequired && (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0))) {
           hasErrors = true;
           errors[fObj.id] = 'This field is required';
+        } else if (value !== undefined && value !== null && value !== '' && fObj.validation?.pattern) {
+          try {
+            const rx = new RegExp(fObj.validation.pattern);
+            if (!rx.test(String(value))) {
+              hasErrors = true;
+              errors[fObj.id] = fObj.validation.errorMessage || 'Invalid format';
+            }
+          } catch {}
         }
       });
 
       if (hasErrors) {
         setActionFormErrors(errors);
-        toast.error('Please fill in all required fields.');
+        toast.error('Please check the highlighted fields.');
         setIsActionSubmitting(false);
         return;
       }
 
+      const nextStatus =
+        actionFormData.status ||
+        actionForm.settings?.autoTransitionStatus ||
+        editData.status;
+
       // Merge action form data into editData
       const mergedData = {
         ...editData,
-        ...actionFormData
+        ...actionFormData,
+        ...(nextStatus ? { status: nextStatus } : {}),
       };
 
       setEditData(mergedData);
@@ -1042,8 +1057,21 @@ export const RecordDetailView = ({
   }, [visibleTabs, activeTabId]);
 
   const allFields = useMemo(() => {
+    const topContainers = (moduleData?.layout || []).filter((item: any) =>
+      ['repeatableGroup', 'fieldGroup', 'group', 'card', 'accordion'].includes(item?.type)
+    );
     const raw = flattenFields(moduleData?.layout || []) as ModuleField[];
-    return raw.filter((f: ModuleField) => !isFieldHiddenBySecurity(f.id, moduleData, platformUser || supabaseUser));
+    const meta = getSystemMetaFields(moduleData?.workflow || (moduleData?.workflows && moduleData?.workflows[0]));
+    const formCustomFields: ModuleField[] = ((moduleData as any)?.forms || []).flatMap(
+      (f: any) => (Array.isArray(f.customFields) ? f.customFields : Array.isArray(f.schema?.customFields) ? f.schema.customFields : [])
+    );
+    const map = new Map<string, any>();
+    [...topContainers, ...raw, ...meta, ...formCustomFields].forEach((f: any) => {
+      if (f && f.id && !map.has(f.id)) {
+        map.set(f.id, f);
+      }
+    });
+    return Array.from(map.values()).filter((f: ModuleField) => !isFieldHiddenBySecurity(f.id, moduleData, platformUser || supabaseUser));
   }, [moduleData, platformUser, supabaseUser]);
 
   // Real-time AI Assistant active entity registration
@@ -4887,6 +4915,61 @@ export const RecordDetailView = ({
                     </div>
                   )}
                 </div>
+
+                {/* Module Action Trigger & Structured Edit Form Buttons */}
+                <div className="flex items-center gap-1.5 shrink-0 ml-3">
+                  {((moduleData as any)?.forms || [])
+                    .filter((f: any) => f.usage === 'action_trigger' || f.usage === 'workspace_edit')
+                    .map((form: any) => {
+                      const isEdit = form.usage === 'workspace_edit';
+                      const btnLabel = isEdit
+                        ? form.settings?.workspaceButtonLabel || form.name || 'Edit Form'
+                        : form.settings?.actionButtonLabel ||
+                          form.settings?.workspaceButtonLabel ||
+                          form.name;
+                      return (
+                        <button
+                          key={`rec-form-act-${form.id}`}
+                          type="button"
+                          onClick={() => {
+                            setActiveQuickAction({ id: form.id, label: btnLabel });
+                            setActionForm(form);
+                            const defaults = resolveFormInitialValues(
+                              form,
+                              moduleData?.layout || [],
+                              moduleData?.workflow,
+                              {
+                                user: platformUser || supabaseUser,
+                                parentRecord: editData,
+                                initialData: { ...editData },
+                              }
+                            );
+                            if (form.settings?.autoTransitionStatus && !isEdit) {
+                              defaults.status = form.settings.autoTransitionStatus;
+                            }
+                            if (form.isMultistep && form.steps?.length > 0) {
+                              const visibleSteps = form.steps.filter((s: any) =>
+                                isFieldVisible(s, defaults, visibilityContext)
+                              );
+                              setActionStepId(visibleSteps[0]?.id || form.steps[0].id);
+                            }
+                            setActionFormData(defaults);
+                            setActionFormErrors({});
+                            setShowQuickActionModal(true);
+                          }}
+                          className={cn(
+                            'flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer select-none border',
+                            isEdit
+                              ? 'bg-indigo-500/10 hover:bg-indigo-500/20 border-indigo-500/30 text-indigo-600 dark:text-indigo-400'
+                              : 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 text-amber-700 dark:text-amber-300'
+                          )}
+                        >
+                          {isEdit ? <Edit2 size={11} /> : <Zap size={11} className="text-amber-500" />}
+                          <span>{btnLabel}</span>
+                        </button>
+                      );
+                    })}
+                </div>
               </div>
 
               {/* Overflow Dropdown Portal */}
@@ -5552,6 +5635,110 @@ export const RecordDetailView = ({
                                     </div>
                                   )}
                                 </div>
+                              ) : field?.type === 'repeatableGroup' ? (
+                                (() => {
+                                  const rawSubs = Array.isArray(field.fields) ? field.fields : [];
+                                  const activeSubs = Array.isArray(fObj.includedSubFieldIds)
+                                    ? fObj.includedSubFieldIds
+                                        .map(
+                                          (subId: string) =>
+                                            rawSubs.find((sf: any) => sf && sf.id === subId) ||
+                                            allFields.find((af: any) => af && af.id === subId)
+                                        )
+                                        .filter(Boolean)
+                                    : rawSubs;
+                                  const repField = {
+                                    ...field,
+                                    label: labelOverride || field.label,
+                                    collapsible: fObj.collapsible ?? true,
+                                    defaultCollapsed: fObj.defaultCollapsed ?? false,
+                                    fields: activeSubs,
+                                  };
+                                  return (
+                                    <CollapsibleFieldGroup
+                                      field={repField}
+                                      count={(actionFormData[field.id] || []).length}
+                                    >
+                                      <RepeatableGroupBlock
+                                        field={repField}
+                                        value={actionFormData[field.id] || []}
+                                        onChange={(val) =>
+                                          setActionFormData((prev) => ({
+                                            ...prev,
+                                            [field.id]: val,
+                                          }))
+                                        }
+                                        readOnly={isReadOnly}
+                                        hideHeader
+                                      />
+                                    </CollapsibleFieldGroup>
+                                  );
+                                })()
+                              ) : ['fieldGroup', 'group', 'card', 'accordion'].includes(
+                                  field?.type || ''
+                                ) ? (
+                                (() => {
+                                  const rawChildren = Array.isArray(field?.fields)
+                                    ? field!.fields!
+                                    : [];
+                                  const activeChildren = Array.isArray(fObj.includedSubFieldIds)
+                                    ? fObj.includedSubFieldIds
+                                        .map(
+                                          (subId: string) =>
+                                            rawChildren.find((cf: any) => cf && cf.id === subId) ||
+                                            allFields.find((af: any) => af && af.id === subId)
+                                        )
+                                        .filter(Boolean)
+                                    : rawChildren;
+                                  const grpField = {
+                                    ...field!,
+                                    label: labelOverride || field!.label,
+                                    collapsible: fObj.collapsible ?? true,
+                                    defaultCollapsed: fObj.defaultCollapsed ?? false,
+                                    fields: activeChildren,
+                                  };
+                                  return (
+                                    <CollapsibleFieldGroup field={grpField}>
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                                        {activeChildren.map((nestedField: any) => {
+                                          if (
+                                            !isFieldVisible(
+                                              nestedField,
+                                              actionFormData,
+                                              visibilityContext
+                                            )
+                                          )
+                                            return null;
+                                          return (
+                                            <div key={nestedField.id} className="flex flex-col">
+                                              <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider flex items-center justify-between gap-1.5 mb-1.5">
+                                                <span>
+                                                  {nestedField.label}
+                                                  {nestedField.required && (
+                                                    <span className="text-rose-500 ml-1">*</span>
+                                                  )}
+                                                </span>
+                                              </label>
+                                              <FieldInput
+                                                field={nestedField}
+                                                value={actionFormData[nestedField.id]}
+                                                onChange={(val) =>
+                                                  setActionFormData((prev) => ({
+                                                    ...prev,
+                                                    [nestedField.id]: val,
+                                                  }))
+                                                }
+                                                recordData={actionFormData}
+                                                readonly={Boolean(isReadOnly || nestedField.readonly)}
+                                                allFields={allFields}
+                                              />
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </CollapsibleFieldGroup>
+                                  );
+                                })()
                               ) : (
                                 <>
                                   <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider flex items-center justify-between gap-1.5 mb-1.5 relative group/label">

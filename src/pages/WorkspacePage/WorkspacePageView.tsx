@@ -446,6 +446,8 @@ const WidgetRenderer = React.memo(({ widget, tenant, session }: { widget: any, t
       return (
         <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xs p-6 overflow-hidden">
           <FormRenderer
+            formId={widget.properties?.formId || widget.formId}
+            form={widget.properties?.form}
             title={widget.title}
             subtitle={widget.properties?.subtitle}
             fields={widget.properties?.fields || [
@@ -453,7 +455,17 @@ const WidgetRenderer = React.memo(({ widget, tenant, session }: { widget: any, t
               { id: 'email', label: 'Email Address', type: 'email', required: true, colSpan: 6 },
               { id: 'comments', label: 'Comments / Notes', type: 'textarea', required: false, colSpan: 12 }
             ]}
-            onSubmit={() => { toast.success('Form response submitted!'); }}
+            context={{
+              user: platformUser,
+              source: `Workspace Page (${activePage?.name || 'Dashboard'})`,
+            }}
+            onSubmit={(_vals, resp) => {
+              toast.success(
+                resp?.customerRef
+                  ? `Form submitted! Reference: ${resp.customerRef}`
+                  : 'Form response submitted!'
+              );
+            }}
           />
         </div>
       );

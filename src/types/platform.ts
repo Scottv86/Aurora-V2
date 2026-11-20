@@ -629,7 +629,14 @@ export interface IndustryBlueprint {
   updatedAt: string;
 }
 
-export type BuilderMode = 'global' | 'in_context';
+export type BuilderMode = 'global' | 'in_context' | 'module_embedded';
+
+export type FormUsageType =
+  | 'workspace_create'
+  | 'workspace_edit'
+  | 'action_trigger'
+  | 'public_link'
+  | 'portal_site';
 
 export interface StandaloneBuilderContext {
   mode: BuilderMode;
@@ -648,7 +655,22 @@ export interface FormEntity {
   name: string;
   description?: string;
   isGlobal: boolean;
+  usage?: FormUsageType;
+  isMultistep?: boolean;
+  fields?: any[];
+  steps?: any[];
+  customFields?: ModuleField[];
+  settings?: Record<string, any>;
   schema: {
+    id?: string;
+    name?: string;
+    title?: string;
+    description?: string;
+    usage?: FormUsageType;
+    isMultistep?: boolean;
+    fields?: any[];
+    steps?: any[];
+    customFields?: ModuleField[];
     layout?: ModuleField[];
     tabs?: Tab[];
     settings?: Record<string, any>;

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Check, Code, Globe, Terminal } from 'lucide-react';
+import { Copy, Check, Code, Globe, Terminal, ExternalLink } from 'lucide-react';
 import { Modal } from '../../UI/TabsAndModal';
 import { toast } from 'sonner';
 
@@ -9,6 +9,7 @@ export interface ShareEmbedModalProps {
   entityName: string;
   entityId: string;
   entityType: 'Form' | 'Report' | 'Workflow';
+  moduleId?: string;
 }
 
 export const ShareEmbedModal: React.FC<ShareEmbedModalProps> = ({
@@ -16,14 +17,24 @@ export const ShareEmbedModal: React.FC<ShareEmbedModalProps> = ({
   onClose,
   entityName,
   entityId,
-  entityType
+  entityType,
+  moduleId,
 }) => {
   const [activeTab, setActiveTab] = useState<'link' | 'iframe' | 'react'>('link');
   const [copied, setCopied] = useState(false);
 
-  const publicUrl = `https://app.aurora.io/public/${entityType.toLowerCase()}/${entityId}`;
-  const iframeSnippet = `<iframe src="${publicUrl}" width="100%" height="600px" frameborder="0"></iframe>`;
-  const reactSnippet = `import { AuroraForm } from '@aurora/react';\n\nexport const MyPage = () => (\n  <AuroraForm formId="${entityId}" theme="auto" />\n);`;
+  const origin =
+    typeof window !== 'undefined' ? window.location.origin : 'https://app.aurora.io';
+
+  const publicUrl =
+    entityType === 'Form'
+      ? moduleId
+        ? `${origin}/portal?moduleId=${encodeURIComponent(moduleId)}&formId=${encodeURIComponent(entityId)}`
+        : `${origin}/public/forms/${encodeURIComponent(entityId)}`
+      : `${origin}/public/${entityType.toLowerCase()}/${encodeURIComponent(entityId)}`;
+
+  const iframeSnippet = `<iframe\n  src="${publicUrl}"\n  width="100%"\n  height="680px"\n  frameborder="0"\n  style="border-radius: 16px; border: 1px solid rgba(0,0,0,0.08);"\n></iframe>`;
+  const reactSnippet = `import { FormRenderer } from '@aurora/forms-react';\n\nexport const EmbeddedForm = () => (\n  <FormRenderer\n    formId="${entityId}"${moduleId ? `\n    moduleId="${moduleId}"` : ''}\n  />\n);`;
 
   const getActiveSnippet = () => {
     if (activeTab === 'link') return publicUrl;
@@ -34,7 +45,7 @@ export const ShareEmbedModal: React.FC<ShareEmbedModalProps> = ({
   const handleCopy = () => {
     navigator.clipboard.writeText(getActiveSnippet());
     setCopied(true);
-    toast.success('Copied snippet to clipboard!');
+    toast.success('Copied to clipboard!');
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -46,19 +57,35 @@ export const ShareEmbedModal: React.FC<ShareEmbedModalProps> = ({
       size="md"
     >
       <div className="space-y-4 py-2">
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">Export share links and code snippets for {entityType}</p>
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            Export live share links and embed snippets for {entityName}
+          </p>
+          {entityType === 'Form' && (
+            <a
+              href={publicUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+            >
+              <span>Open Live Form</span>
+              <ExternalLink size={12} />
+            </a>
+          )}
+        </div>
 
         {/* Export Tabs */}
         <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl">
           {[
             { id: 'link', label: 'Public Link', icon: Globe },
             { id: 'iframe', label: 'HTML iFrame', icon: Code },
-            { id: 'react', label: 'React Component', icon: Terminal }
+            { id: 'react', label: 'React Component', icon: Terminal },
           ].map((tab) => (
             <button
               key={tab.id}
+              type="button"
               onClick={() => setActiveTab(tab.id as any)}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-all ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                 activeTab === tab.id
                   ? 'bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
                   : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
@@ -74,24 +101,28 @@ export const ShareEmbedModal: React.FC<ShareEmbedModalProps> = ({
         <div className="relative">
           <textarea
             readOnly
-            rows={4}
+            rows={5}
             value={getActiveSnippet()}
             className="w-full font-mono text-xs p-4 bg-zinc-950 text-zinc-200 border border-zinc-800 rounded-2xl focus:outline-none resize-none leading-relaxed"
           />
 
           <button
+            type="button"
             onClick={handleCopy}
-            className="absolute right-3 top-3 flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg shadow-sm transition-all"
+            className="absolute right-3 top-3 flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs px-3 py-1.5 rounded-lg shadow-sm transition-all cursor-pointer"
           >
             {copied ? <Check size={14} /> : <Copy size={14} />}
-            <span>{copied ? 'Copied' : 'Copy Code'}</span>
+            <span>{copied ? 'Copied' : 'Copy'}</span>
           </button>
         </div>
 
         <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-          {activeTab === 'link' && 'Direct shareable URL accessible by external users or clients.'}
-          {activeTab === 'iframe' && 'Standard HTML embed code for Webflow, WordPress, or external sites.'}
-          {activeTab === 'react' && 'Native React component export for custom frontend web apps.'}
+          {activeTab === 'link' &&
+            'Direct shareable URL accessible by external users, applicants, or clients.'}
+          {activeTab === 'iframe' &&
+            'Standard HTML embed code for Webflow, WordPress, intranets, or external sites.'}
+          {activeTab === 'react' &&
+            'React component snippet for embedding inside custom portals or applications.'}
         </p>
       </div>
     </Modal>

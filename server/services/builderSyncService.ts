@@ -11,10 +11,39 @@ export function resolveModuleName(moduleId: string | null | undefined, modulesMa
 
 export function formatFormRowForModule(row: any) {
   const schema = (row.schema && typeof row.schema === 'object') ? (row.schema as Record<string, any>) : {};
-  const fields = Array.isArray(schema.fields) ? schema.fields : [];
+  let fields = Array.isArray(schema.fields) ? schema.fields : [];
+  let customFields = Array.isArray(schema.customFields) ? schema.customFields : [];
+
+  // Fallback for legacy forms that stored fields in schema.layout
+  if (fields.length === 0 && Array.isArray(schema.layout) && schema.layout.length > 0) {
+    fields = schema.layout.map((item: any) => ({
+      id: item.id,
+      type: item.type,
+      labelOverride: item.labelOverride ?? item.label ?? item.name,
+      placeholderOverride: item.placeholderOverride ?? item.placeholder,
+      width: item.width || (item.colSpan === 6 ? 'half' : item.colSpan === 8 ? 'two-thirds' : item.colSpan === 4 ? 'one-third' : item.colSpan === 3 ? 'one-quarter' : 'full'),
+      required: Boolean(item.required),
+      readOnly: Boolean(item.readOnly),
+      hidden: Boolean(item.hidden),
+      visibilityRule: item.visibilityRule,
+      calculationLogic: item.calculationLogic,
+      calculationTriggers: item.calculationTriggers,
+      validation: item.validation,
+      validationRuleId: item.validationRuleId,
+      pdfTemplateId: item.pdfTemplateId,
+      prefill: item.prefill,
+    }));
+    if (customFields.length === 0) {
+      customFields = schema.layout.filter((item: any) => item && item.id && item.type);
+    }
+  }
+
   const steps = Array.isArray(schema.steps) && schema.steps.length > 0
     ? schema.steps
     : [{ id: 'step-1', title: 'Step 1', fields }];
+
+  const description = row.description ?? schema.description ?? schema.settings?.description ?? '';
+  const usage = schema.usage || (row.isGlobal ? 'public_link' : 'workspace_create');
 
   return {
     ...schema,
@@ -23,11 +52,16 @@ export function formatFormRowForModule(row: any) {
     isGlobal: row.isGlobal,
     name: row.name || schema.name || schema.title || 'Untitled Form',
     title: row.name || schema.title || schema.name || 'Untitled Form',
-    description: row.description ?? schema.description ?? schema.settings?.description ?? '',
-    usage: schema.usage || (row.isGlobal ? 'public_link' : 'workspace_create'),
+    description,
+    usage,
     isMultistep: Boolean(schema.isMultistep),
     fields,
     steps,
+    customFields,
+    settings: {
+      ...(schema.settings || {}),
+      description,
+    },
     status: row.status || 'PUBLISHED',
     version: row.version || 1,
     updatedAt: row.updatedAt,

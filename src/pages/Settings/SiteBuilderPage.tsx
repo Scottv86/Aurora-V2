@@ -129,6 +129,27 @@ export const SiteBuilderPage: React.FC = () => {
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [isFormPickerOpen, setIsFormPickerOpen] = useState(false);
   const [isInContextFormBuilderOpen, setIsInContextFormBuilderOpen] = useState(false);
+  const [targetFormWidgetId, setTargetFormWidgetId] = useState<string | null>(null);
+  const [availableForms, setAvailableForms] = useState<any[]>([]);
+
+  const fetchSiteAvailableForms = React.useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/forms`, {
+        headers: {
+          'x-tenant-id': tenant?.id || '',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) setAvailableForms(data);
+      }
+    } catch {}
+  }, [tenant?.id, session?.access_token]);
+
+  useEffect(() => {
+    fetchSiteAvailableForms();
+  }, [fetchSiteAvailableForms]);
 
 
 
@@ -3707,17 +3728,19 @@ export const SiteBuilderPage: React.FC = () => {
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => {
+                                  setTargetFormWidgetId(w.id);
                                   setIsFormPickerOpen(true);
                                 }}
-                                className="text-xs bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 px-2.5 py-1 rounded-lg font-medium border border-indigo-500/30 transition-all flex items-center gap-1"
+                                className="text-xs bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 px-2.5 py-1 rounded-lg font-medium border border-indigo-500/30 transition-all flex items-center gap-1 cursor-pointer"
                               >
-                                <span>Attach Form</span>
+                                <span>{(w as any).formId ? 'Change Form' : 'Attach Form'}</span>
                               </button>
                               <button
                                 onClick={() => {
+                                  setTargetFormWidgetId(w.id);
                                   setIsInContextFormBuilderOpen(true);
                                 }}
-                                className="text-xs bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 px-2.5 py-1 rounded-lg font-medium border border-emerald-500/30 transition-all flex items-center gap-1"
+                                className="text-xs bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 px-2.5 py-1 rounded-lg font-medium border border-emerald-500/30 transition-all flex items-center gap-1 cursor-pointer"
                               >
                                 <Plus size={12} />
                                 <span>Build In-Context</span>
@@ -3726,6 +3749,8 @@ export const SiteBuilderPage: React.FC = () => {
                           </div>
 
                           <FormRenderer
+                            formId={(w as any).formId}
+                            form={availableForms.find((f) => f.id === (w as any).formId)}
                             title={w.title}
                             subtitle={w.subtitle}
                             fields={w.formFields?.map(f => ({
@@ -3740,7 +3765,7 @@ export const SiteBuilderPage: React.FC = () => {
                               { id: 'email', label: 'Email Address', type: 'email', required: true, colSpan: 6 },
                               { id: 'category', label: 'Category Selection', type: 'select', options: ['General Inquiry', 'Priority Request', 'Regulatory Lodgement'], required: false, colSpan: 12 }
                             ]}
-                            onSubmit={() => { toast.success('Form response submitted successfully!'); }}
+                            context={{ siteId, source: 'Site Builder Preview' }}
                             submitButtonText={w.buttonLabel || 'Submit Form Entry'}
                           />
 
@@ -5808,13 +5833,40 @@ export const SiteBuilderPage: React.FC = () => {
         onClose={() => setIsFormPickerOpen(false)}
         title="Attach Form from Central Library"
         componentType="form"
-        items={[
-          { id: 'f_contact', name: 'Contact & Inquiry Form', description: 'Standard public lead intake form.', isGlobal: true, version: 1 },
-          { id: 'f_support', name: 'Customer Support Intake', description: 'Priority support ticket form.', isGlobal: true, version: 2 },
-          { id: 'f_feedback', name: 'Feedback & Rating Survey', description: 'End-of-service satisfaction survey.', isGlobal: true, version: 1 }
-        ]}
+        items={availableForms.map((f) => ({
+          id: f.id,
+          name: f.name,
+          description: f.description || f.moduleName || 'Enterprise Intake Form',
+          isGlobal: Boolean(f.isGlobal),
+          moduleName: f.moduleName,
+          version: f.version || 1,
+        }))}
         onSelect={(item) => {
-          toast.success(`Attached "${item.name}" to form widget!`);
+          if (activePage) {
+            setPages((prev) =>
+              prev.map((p) => {
+                if (p.id !== activePage.id) return p;
+                return {
+                  ...p,
+                  widgets: p.widgets.map((w) => {
+                    if (
+                      (targetFormWidgetId && w.id === targetFormWidgetId) ||
+                      (!targetFormWidgetId && w.type === 'custom_form')
+                    ) {
+                      return {
+                        ...w,
+                        formId: item.id,
+                        title: item.name,
+                        subtitle: item.description,
+                      } as any;
+                    }
+                    return w;
+                  }),
+                };
+              })
+            );
+          }
+          toast.success(`Attached "${item.name}" to site widget!`);
         }}
         onCreateNew={() => {
           setIsInContextFormBuilderOpen(true);
@@ -5834,15 +5886,45 @@ export const SiteBuilderPage: React.FC = () => {
         }}
       >
         <FormBuilder
+          initialForm={{
+            name: `${site?.name || 'Portal'} Intake Form`,
+            usage: 'portal_site',
+            moduleId: site?.targetModuleId || undefined,
+          }}
           builderContext={{
             mode: 'in_context',
             hostType: 'site',
             hostId: siteId,
-            onSaveSuccess: (_id, form) => {
-              toast.success(`Form "${form.name}" created & attached to site widget!`);
+            parentModuleId: site?.targetModuleId || undefined,
+            onSaveSuccess: (savedId, savedForm) => {
+              fetchSiteAvailableForms();
+              if (activePage) {
+                setPages((prev) =>
+                  prev.map((p) => {
+                    if (p.id !== activePage.id) return p;
+                    return {
+                      ...p,
+                      widgets: p.widgets.map((w) => {
+                        if (
+                          (targetFormWidgetId && w.id === targetFormWidgetId) ||
+                          (!targetFormWidgetId && w.type === 'custom_form')
+                        ) {
+                          return {
+                            ...w,
+                            formId: savedId,
+                            title: savedForm.name,
+                            subtitle: savedForm.description,
+                          } as any;
+                        }
+                        return w;
+                      }),
+                    };
+                  })
+                );
+              }
+              toast.success(`Form "${savedForm.name}" created & attached to site widget!`);
               setIsInContextFormBuilderOpen(false);
             }
-
           }}
         />
       </InContextBuilderModal>

@@ -617,6 +617,18 @@ export const PeopleOrgDetail = () => {
     }
   }, [id, tenant?.id, getHeaders]);
 
+  // Reset or sync activeTab when switching entity records or if URL search param specifies a tab
+  useEffect(() => {
+    setActiveTab(searchParams.get('tab') || 'overview');
+  }, [id, searchParams]);
+
+  // Ensure 'contacts' tab is never active on a Person entity
+  useEffect(() => {
+    if (party?.partyType === 'PERSON' && activeTab === 'contacts') {
+      setActiveTab('overview');
+    }
+  }, [party?.partyType, activeTab]);
+
   useEffect(() => {
     fetchParty();
     fetchExtras();
@@ -2592,7 +2604,7 @@ export const PeopleOrgDetail = () => {
                                 onClick={() => navigate(`/workspace/apps/directory/${contact.id}`)}
                                 className="inline-flex items-center gap-1 font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                               >
-                                <span>Open Full Dossier</span>
+                                <span>Open Profile</span>
                                 <ExternalLink size={11} />
                               </button>
                               <button
