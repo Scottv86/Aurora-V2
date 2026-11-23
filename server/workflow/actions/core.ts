@@ -262,6 +262,62 @@ export function parseRelativeDate(expr: string | undefined | null, baseDate = ne
 }
 
 export const ActionRegistry: Record<string, WorkflowAction> = {
+  'CREATE_RECORD': {
+    type: 'CREATE_RECORD',
+    async execute(record, config) {
+      const { tenantId, moduleId, recordData } = await resolveRecordContext(record);
+      let targetModuleId = moduleId;
+
+      if (config.targetModule) {
+        const ref = String(config.targetModule).trim();
+        const mod = await globalPrisma.module.findFirst({
+          where: {
+            tenantId,
+            OR: [
+              { id: ref },
+              { slug: { equals: ref, mode: 'insensitive' } },
+              { name: { equals: ref, mode: 'insensitive' } }
+            ]
+          },
+          select: { id: true }
+        });
+        if (!mod) throw new Error(`CREATE_RECORD: Target module "${ref}" not found`);
+        targetModuleId = mod.id;
+      }
+
+      if (!targetModuleId) {
+        throw new Error('CREATE_RECORD: Target moduleId could not be resolved');
+      }
+
+      let rawPayload: Record<string, any> = {};
+      if (config.payloadJson && typeof config.payloadJson === 'string') {
+        try {
+          rawPayload = JSON.parse(config.payloadJson);
+        } catch (err) {
+          throw new Error('CREATE_RECORD: Invalid payloadJson');
+        }
+      } else if (config.fields && typeof config.fields === 'object') {
+        rawPayload = config.fields;
+      }
+
+      const targetData: Record<string, any> = {};
+      for (const [k, v] of Object.entries(rawPayload)) {
+        targetData[k] = typeof v === 'string' ? interpolateTemplate(v, recordData) : v;
+      }
+
+      const createdRecord = await globalPrisma.record.create({
+        data: {
+          tenantId,
+          moduleId: targetModuleId,
+          status: targetData.status ? String(targetData.status) : 'New',
+          data: targetData
+        }
+      });
+
+      emitTenantUpdate(tenantId, 'record_created', createdRecord);
+      return { success: true, recordId: createdRecord.id, moduleId: targetModuleId };
+    }
+  },
   'UPDATE_RECORD': {
     type: 'UPDATE_RECORD',
     async execute(record, config) {

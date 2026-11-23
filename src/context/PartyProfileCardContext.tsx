@@ -187,7 +187,7 @@ function isValidEntityId(id?: string | null): boolean {
 export const PartyProfileCardContext = createContext<PartyProfileCardContextType | undefined>(undefined);
 
 export const PartyProfileCardProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { session } = useAuth();
+  const { session, loading: authLoading } = useAuth();
   const { tenant } = usePlatform();
 
   const [activePartyId, setActivePartyId] = useState<string | null>(null);
@@ -221,7 +221,7 @@ export const PartyProfileCardProvider: React.FC<{ children: React.ReactNode }> =
   }, [session?.access_token]);
 
   const refreshDirectoryMap = useCallback(async () => {
-    if (!tenant?.id) return;
+    if (authLoading || !tenant?.id) return;
     const token = getToken();
     if (!token) return;
 
@@ -256,7 +256,7 @@ export const PartyProfileCardProvider: React.FC<{ children: React.ReactNode }> =
     } finally {
       setIsDirectoryLoading(false);
     }
-  }, [tenant?.id, getToken]);
+  }, [tenant?.id, getToken, authLoading]);
 
   useEffect(() => {
     refreshDirectoryMap();

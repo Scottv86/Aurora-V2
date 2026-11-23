@@ -21,6 +21,10 @@ import {
   Lock,
   UserCheck,
   CreditCard,
+  FileText,
+  Printer,
+  Edit3,
+  Clock,
 } from 'lucide-react';
 import { cn, isFieldVisible, flattenFields } from '../../../lib/utils';
 import { evaluateCalculations } from '../../../services/aiService';
@@ -73,6 +77,7 @@ export interface FormRendererProps {
   context?: FormRendererContext;
   isPreviewMode?: boolean;
   disableAutoBackendSubmit?: boolean;
+  viewport?: 'desktop' | 'tablet' | 'mobile';
 }
 
 export const FormRenderer: React.FC<FormRendererProps> = ({
@@ -92,6 +97,7 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
   context,
   isPreviewMode = false,
   disableAutoBackendSubmit = false,
+  viewport = 'desktop',
 }) => {
   const [remoteForm, setRemoteForm] = useState<any | null>(null);
   const [remoteModule, setRemoteModule] = useState<any | null>(null);
@@ -182,7 +188,10 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submittedRef, setSubmittedRef] = useState<string | null>(null);
+  const [submittedInvoiceNumber, setSubmittedInvoiceNumber] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isReviewStep, setIsReviewStep] = useState(false);
+  const [reviewDeclarationAccepted, setReviewDeclarationAccepted] = useState(false);
 
   // Draft Save & Resume State
   const [savingDraft, setSavingDraft] = useState(false);
@@ -438,14 +447,34 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
     e.preventDefault();
     if (readOnly) return;
 
-    // Validate current step (or all fields)
-    if (!validatePlacements(activePlacements)) {
-      return;
-    }
+    // If not currently in the Review Step, validate active placements first
+    if (!isReviewStep) {
+      if (!validatePlacements(activePlacements)) {
+        return;
+      }
 
-    // If multi-step and not on final step, advance to next visible step
-    if (canonicalForm.isMultistep && currentStepIndex < visibleSteps.length - 1) {
-      setActiveStepId(visibleSteps[currentStepIndex + 1].id);
+      // If multi-step and not on final step, advance to next visible step
+      if (canonicalForm.isMultistep && currentStepIndex < visibleSteps.length - 1) {
+        setActiveStepId(visibleSteps[currentStepIndex + 1].id);
+        return;
+      }
+
+      // If Review & Confirm Step is enabled, enter the Review Step before final submission
+      if (canonicalForm.settings?.enableReviewStep) {
+        const allPlacements = canonicalForm.isMultistep
+          ? visibleSteps.flatMap((s) => s.fields || [])
+          : canonicalForm.fields || [];
+        if (!validatePlacements(allPlacements)) {
+          return;
+        }
+        setIsReviewStep(true);
+        return;
+      }
+    } else if (
+      canonicalForm.settings?.reviewDeclarationText &&
+      !reviewDeclarationAccepted
+    ) {
+      toast.error('Please accept the declaration checkbox before submitting.');
       return;
     }
 
@@ -502,6 +531,14 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
         if (res.ok) {
           serverResponse = await res.json();
           setSubmittedRef(serverResponse.customerRef || serverResponse.id || null);
+          if (serverResponse.invoiceNumber) {
+            setSubmittedInvoiceNumber(serverResponse.invoiceNumber);
+          }
+        } else {
+          const errJson = await res.json().catch(() => ({}));
+          if (errJson.error) {
+            throw new Error(errJson.error);
+          }
         }
       }
 
@@ -522,6 +559,9 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
         const prefix = canonicalForm.settings?.customerRefPrefix || 'REF';
         setSubmittedRef(`${prefix}-${Math.floor(10000 + Math.random() * 90000)}`);
       }
+      if (isPayableForm && payableAmount > 0 && !serverResponse?.invoiceNumber) {
+        setSubmittedInvoiceNumber(`INV-${Math.floor(10000 + Math.random() * 90000)}`);
+      }
       setSubmitted(true);
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to submit form.');
@@ -530,11 +570,115 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
     }
   };
 
+  const handleDownloadReceipt = () => {
+    if (typeof window === 'undefined') return;
+    const allPlacements = canonicalForm.isMultistep
+      ? visibleSteps.flatMap((s) => s.fields || [])
+      : canonicalForm.fields || [];
+    const rowsHtml = allPlacements
+      .filter((p) => !String(p.id || '').startsWith('visual-') && !p.hidden && isFieldVisible(p, formValues))
+      .map((p) => {
+        const def = getUnifiedFieldDefinition(p.id, resolvedLayout, resolvedWorkflow, canonicalForm.customFields);
+        const label = p.labelOverride || def?.label || p.id;
+        const val = formValues[p.id];
+        const displayVal =
+          val === undefined || val === null || val === ''
+            ? '—'
+            : Array.isArray(val)
+            ? `${val.length} item(s)`
+            : typeof val === 'object'
+            ? JSON.stringify(val)
+            : String(val);
+        return `<tr><td style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-weight:600;color:#3f3f46;width:40%;">${label}</td><td style="padding:10px 12px;border-bottom:1px solid #e4e4e7;color:#18181b;">${displayVal}</td></tr>`;
+      })
+      .join('');
+
+    const win = window.open('', '_blank', 'width=820,height=900');
+    if (!win) {
+      toast.info('Allow popups to print/save your PDF lodgement receipt.');
+      return;
+    }
+    win.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Lodgement Receipt — ${submittedRef || canonicalForm.name}</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 40px; color: #18181b; }
+            .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #4f46e5; padding-bottom: 20px; margin-bottom: 24px; }
+            .badge { display: inline-block; background: #eef2ff; color: #4f46e5; padding: 6px 12px; border-radius: 8px; font-family: monospace; font-weight: 700; font-size: 13px; }
+            table { width: 100%; border-collapse: collapse; font-size: 13px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1 style="margin:0 0 6px 0;font-size:22px;">${canonicalForm.name || title || 'Form Lodgement Receipt'}</h1>
+              <p style="margin:0;color:#71717a;font-size:12px;">Official Lodgement Summary • Submitted ${new Date().toLocaleString()}</p>
+            </div>
+            <div style="text-align:right;">
+              <div class="badge">Ref: ${submittedRef || 'N/A'}</div>
+              ${submittedInvoiceNumber ? `<div style="margin-top:6px;font-size:12px;font-weight:700;color:#059669;">Invoice: ${submittedInvoiceNumber} (${paymentCurrency} $${payableAmount.toFixed(2)})</div>` : ''}
+            </div>
+          </div>
+          <table>${rowsHtml}</table>
+          <script>window.onload = () => { window.print(); };</script>
+        </body>
+      </html>
+    `);
+    win.document.close();
+  };
+
+  // Governance Open / Close Window Enforcement (when not in preview mode)
+  const governanceBlock = useMemo(() => {
+    if (isPreviewMode) return null;
+    const gov = canonicalForm.settings?.governance;
+    if (!gov) return null;
+    const now = Date.now();
+    if (gov.openAt) {
+      const openTs = new Date(gov.openAt).getTime();
+      if (!isNaN(openTs) && now < openTs) {
+        return {
+          title: 'Form Not Yet Open',
+          message:
+            gov.closedMessage ||
+            `This form will open for submissions on ${new Date(gov.openAt).toLocaleString()}.`,
+        };
+      }
+    }
+    if (gov.closeAt) {
+      const closeTs = new Date(gov.closeAt).getTime();
+      if (!isNaN(closeTs) && now > closeTs) {
+        return {
+          title: 'Submissions Closed',
+          message:
+            gov.closedMessage ||
+            `Submissions for this form closed on ${new Date(gov.closeAt).toLocaleString()}.`,
+        };
+      }
+    }
+    return null;
+  }, [canonicalForm.settings?.governance, isPreviewMode]);
+
   if (loadingForm) {
     return (
       <div className="p-12 text-center bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl">
         <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
         <p className="text-xs font-semibold text-zinc-500">Loading form configuration...</p>
+      </div>
+    );
+  }
+
+  if (governanceBlock) {
+    return (
+      <div className="p-8 text-center bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-3xl space-y-3">
+        <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto text-amber-500">
+          <Clock size={24} />
+        </div>
+        <h3 className="text-base font-bold text-zinc-900 dark:text-white">{governanceBlock.title}</h3>
+        <p className="text-xs text-zinc-600 dark:text-zinc-400 max-w-md mx-auto">
+          {governanceBlock.message}
+        </p>
       </div>
     );
   }
@@ -554,19 +698,42 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
           </p>
         </div>
 
-        {submittedRef && (
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-zinc-900 border border-emerald-500/30 text-xs">
-            <span className="text-zinc-500 font-medium">Reference Number:</span>
-            <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{submittedRef}</span>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {submittedRef && (
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-zinc-900 border border-emerald-500/30 text-xs">
+              <span className="text-zinc-500 font-medium">Reference Number:</span>
+              <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{submittedRef}</span>
+            </div>
+          )}
+          {submittedInvoiceNumber && (
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-zinc-900 border border-indigo-500/30 text-xs">
+              <span className="text-zinc-500 font-medium">Invoice:</span>
+              <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                {submittedInvoiceNumber} ({paymentCurrency} ${payableAmount.toFixed(2)})
+              </span>
+            </div>
+          )}
+        </div>
 
-        <div className="pt-2">
+        <div className="pt-2 flex flex-wrap items-center justify-center gap-2.5">
           <Button
+            type="button"
+            variant="secondary"
+            onClick={handleDownloadReceipt}
+            className="text-xs flex items-center gap-1.5 border-indigo-500/30 text-indigo-600 dark:text-indigo-400"
+          >
+            <Printer size={13} />
+            <span>Download Official Lodgement Receipt (PDF)</span>
+          </Button>
+          <Button
+            type="button"
             variant="secondary"
             onClick={() => {
               setSubmitted(false);
               setSubmittedRef(null);
+              setSubmittedInvoiceNumber(null);
+              setIsReviewStep(false);
+              setReviewDeclarationAccepted(false);
               setFormValues(computedInitialValues);
               if (canonicalForm.isMultistep && canonicalForm.steps.length > 0) {
                 setActiveStepId(canonicalForm.steps[0].id);
@@ -754,8 +921,115 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
         </div>
       )}
 
-      {/* 12-Column Responsive Grid */}
-      <div className="grid grid-cols-12 gap-x-5 gap-y-4">
+      {/* Review & Confirm Summary Step */}
+      {isReviewStep ? (
+        <div className="space-y-5">
+          <div className="p-4 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-500/20 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <FileText size={16} className="text-indigo-600 dark:text-indigo-400 shrink-0" />
+              <div>
+                <h4 className="text-xs font-bold text-zinc-900 dark:text-white">
+                  Review & Confirm Your Details
+                </h4>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                  Please verify your responses below before final submission. Click "Edit" on any section to make changes.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {(canonicalForm.isMultistep
+              ? visibleSteps
+              : [{ id: 'step-1', title: canonicalForm.name || 'Summary', fields: canonicalForm.fields }]
+            ).map((step, sIdx) => {
+              const stepFields = (step.fields || []).filter(
+                (p) =>
+                  !String(p.id || '').startsWith('visual-') &&
+                  !p.hidden &&
+                  isFieldVisible(p, formValues)
+              );
+              if (stepFields.length === 0) return null;
+
+              return (
+                <div
+                  key={step.id}
+                  className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 overflow-hidden"
+                >
+                  <div className="px-4 py-2.5 bg-zinc-100/80 dark:bg-zinc-800/70 border-b border-zinc-200/80 dark:border-zinc-800 flex items-center justify-between">
+                    <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                      {canonicalForm.isMultistep ? `Step ${sIdx + 1}: ${step.title}` : 'Form Responses'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveStepId(step.id);
+                        setIsReviewStep(false);
+                      }}
+                      className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Edit3 size={11} />
+                      <span>Edit</span>
+                    </button>
+                  </div>
+
+                  <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    {stepFields.map((p) => {
+                      const def = getUnifiedFieldDefinition(
+                        p.id,
+                        resolvedLayout,
+                        resolvedWorkflow,
+                        canonicalForm.customFields
+                      );
+                      const label = p.labelOverride || def?.label || p.id;
+                      const val = formValues[p.id];
+                      const formattedVal =
+                        val === undefined || val === null || val === ''
+                          ? '—'
+                          : typeof val === 'boolean'
+                          ? val
+                            ? 'Yes'
+                            : 'No'
+                          : Array.isArray(val)
+                          ? `${val.length} row(s) / item(s)`
+                          : typeof val === 'object'
+                          ? JSON.stringify(val)
+                          : String(val);
+
+                      return (
+                        <div key={p.id} className="space-y-0.5">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 block">
+                            {label}
+                          </span>
+                          <span className="text-xs font-semibold text-zinc-900 dark:text-white break-words block">
+                            {formattedVal}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {canonicalForm.settings?.reviewDeclarationText && (
+            <label className="p-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-500/25 flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={reviewDeclarationAccepted}
+                onChange={(e) => setReviewDeclarationAccepted(e.target.checked)}
+                className="mt-0.5 rounded border-amber-400 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span className="text-xs font-medium text-zinc-800 dark:text-zinc-200 leading-relaxed">
+                {canonicalForm.settings.reviewDeclarationText}
+              </span>
+            </label>
+          )}
+        </div>
+      ) : (
+        /* 12-Column Responsive Grid */
+        <div className="grid grid-cols-12 gap-x-5 gap-y-4">
         {activePlacements.map((fObj) => {
           const isVisual =
             String(fObj.id || '').startsWith('visual-') ||
@@ -797,7 +1071,19 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
                 calculationLogic: fObj.calculationLogic,
               };
 
-          const colClass = widthToGridClass(fObj.width);
+          const colClass =
+            viewport === 'mobile'
+              ? 'col-span-12'
+              : viewport === 'tablet'
+              ? fObj.width === 'one-quarter' ||
+                fObj.width === '3' ||
+                fObj.width === 3 ||
+                fObj.width === 'one-third' ||
+                fObj.width === '4' ||
+                fObj.width === 4
+                ? 'col-span-12 sm:col-span-6'
+                : widthToGridClass(fObj.width)
+              : widthToGridClass(fObj.width);
 
           if (isVisual) {
             return (
@@ -1027,10 +1313,11 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
           );
         })}
       </div>
+      )}
 
       {/* Payable Form Checkout Summary (on final step or single-page form) */}
       {isPayableForm &&
-        (!canonicalForm.isMultistep || currentStepIndex === visibleSteps.length - 1) && (
+        (isReviewStep || !canonicalForm.isMultistep || currentStepIndex === visibleSteps.length - 1) && (
           <div className="p-4 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/25 border border-emerald-500/25 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -1077,16 +1364,29 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
       {!readOnly && (
         <div className="pt-5 border-t border-zinc-100 dark:border-zinc-800/80 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            {canonicalForm.isMultistep && currentStepIndex > 0 && (
+            {isReviewStep ? (
               <Button
                 type="button"
                 variant="secondary"
-                onClick={() => setActiveStepId(visibleSteps[currentStepIndex - 1].id)}
+                onClick={() => setIsReviewStep(false)}
                 className="flex items-center gap-1.5 text-xs px-4 py-2 rounded-xl"
               >
                 <ChevronLeft size={14} />
-                <span>Previous</span>
+                <span>Back to Edit</span>
               </Button>
+            ) : (
+              canonicalForm.isMultistep &&
+              currentStepIndex > 0 && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setActiveStepId(visibleSteps[currentStepIndex - 1].id)}
+                  className="flex items-center gap-1.5 text-xs px-4 py-2 rounded-xl"
+                >
+                  <ChevronLeft size={14} />
+                  <span>Previous</span>
+                </Button>
+              )
             )}
 
             {canonicalForm.settings?.allowSaveDraft && (
@@ -1108,10 +1408,15 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
             loading={submitting}
             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs px-6 py-2.5 rounded-xl shadow-md transition-all cursor-pointer ml-auto"
           >
-            {canonicalForm.isMultistep && currentStepIndex < visibleSteps.length - 1 ? (
+            {!isReviewStep && canonicalForm.isMultistep && currentStepIndex < visibleSteps.length - 1 ? (
               <>
                 <span>Continue</span>
                 <ChevronRight size={14} />
+              </>
+            ) : !isReviewStep && canonicalForm.settings?.enableReviewStep ? (
+              <>
+                <FileText size={14} />
+                <span>Review & Confirm</span>
               </>
             ) : (
               <>

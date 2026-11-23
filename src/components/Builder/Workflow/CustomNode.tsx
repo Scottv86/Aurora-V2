@@ -1,5 +1,5 @@
 import { Handle, Position } from '@xyflow/react';
-import { Trash2, GitFork, Zap, Activity, Clock, Play, CircleDot, Mail, MessageSquare, RefreshCw, FileText, Globe, Sparkles as SparklesIcon, Bot, Layers } from 'lucide-react';
+import { Trash2, GitFork, Zap, Activity, Clock, Play, CircleDot, Mail, MessageSquare, RefreshCw, FileText, Globe, Sparkles as SparklesIcon, Bot, Layers, FilePlus2, Bell, CheckCircle2, Wand2, CreditCard, Table, Pin } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { WorkflowNodeType } from '../../../types/platform';
 
@@ -14,13 +14,24 @@ const iconMap: Record<WorkflowNodeType, any> = {
 };
 
 const actionIconMap: Record<string, any> = {
-  EMAIL: Mail,
-  SLACK: MessageSquare,
+  CREATE_RECORD: FilePlus2,
   UPDATE: RefreshCw,
+  ROUTE_TO_MODULE: GitFork,
+  EMAIL: Mail,
+  NOTIFY: Bell,
+  SLACK: MessageSquare,
+  CREATE_NOTE: FileText,
+  PIN_RECORD_NOTE: Pin,
+  CREATE_REMINDER: Clock,
+  COMPLETE_REMINDER: CheckCircle2,
   PDF: FileText,
-  WEBHOOK: Globe,
+  STRIPE_PAYMENT_LINK: CreditCard,
   AI_SUMMARIZE: SparklesIcon,
+  GEMINI_PROMPT: Wand2,
   AI_AGENT: Bot,
+  WEBHOOK: Globe,
+  GOOGLE_SHEETS_SYNC: Table,
+  RUN_AUTOMATION: Play,
 };
 
 export const CustomWorkflowNode = ({ data, id, selected }: any) => {
@@ -59,14 +70,16 @@ export const CustomWorkflowNode = ({ data, id, selected }: any) => {
         </div>
       )}
 
-      {/* Glass Container */}
+      {/* Node Container */}
       <div 
         className={cn(
-          "absolute inset-1 rounded-[1.5rem] transition-all duration-500",
-          "bg-zinc-950/40 dark:bg-zinc-950/60 backdrop-blur-2xl border border-white/10 dark:border-zinc-800/50",
-          "shadow-[0_8px_32px_rgba(0,0,0,0.3)]",
-          selected ? "ring-2 ring-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.2)]" : "hover:border-white/20",
-          data.isActive && "ring-2 ring-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.2)] border-emerald-500/50"
+          "absolute inset-1 rounded-2xl transition-all duration-300",
+          "bg-white/95 dark:bg-zinc-900/90 backdrop-blur-xl border border-zinc-200 dark:border-zinc-800",
+          "shadow-sm dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]",
+          selected ? "ring-2 ring-indigo-500 border-indigo-500/40 shadow-md" : "hover:border-zinc-300 dark:hover:border-zinc-700",
+          data.isActive && "ring-2 ring-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.2)] border-emerald-500/50",
+          data.testStatus === 'passed' && "ring-2 ring-emerald-500 border-emerald-500/60",
+          data.testStatus === 'failed' && "ring-2 ring-rose-500 border-rose-500/60"
         )}
       >
         {/* Accent Glow */}
@@ -86,25 +99,35 @@ export const CustomWorkflowNode = ({ data, id, selected }: any) => {
             Current Position
           </div>
         )}
+        {!data.isActive && data.testStatus === 'passed' && (
+          <div className="absolute -top-2.5 right-4 px-2 py-0.5 bg-emerald-500 text-white text-[8px] font-semibold rounded-full shadow-sm z-50">
+            Passed
+          </div>
+        )}
+        {!data.isActive && data.testStatus === 'failed' && (
+          <div className="absolute -top-2.5 right-4 px-2 py-0.5 bg-rose-500 text-white text-[8px] font-semibold rounded-full shadow-sm z-50">
+            Failed
+          </div>
+        )}
       </div>
 
       {/* Handles */}
       <Handle 
         type="target" 
         position={Position.Top} 
-        className="!w-3 !h-3 !bg-zinc-900 !border-2 !border-zinc-700 !z-50 shadow-lg" 
+        className="!w-3 !h-3 !bg-white dark:!bg-zinc-900 !border-2 !border-zinc-300 dark:!border-zinc-700 !z-50 shadow-sm" 
       />
       <Handle 
         type="source" 
         position={Position.Bottom} 
-        className="!w-3 !h-3 !bg-zinc-900 !border-2 !border-zinc-700 !z-50 shadow-lg" 
+        className="!w-3 !h-3 !bg-white dark:!bg-zinc-900 !border-2 !border-zinc-300 dark:!border-zinc-700 !z-50 shadow-sm" 
       />
       
       <Handle 
         type="target" 
         position={Position.Left} 
         id="left-target"
-        className="!w-3 !h-3 !bg-zinc-900 !border-2 !border-zinc-700 !z-50 shadow-lg" 
+        className="!w-3 !h-3 !bg-white dark:!bg-zinc-900 !border-2 !border-zinc-300 dark:!border-zinc-700 !z-50 shadow-sm" 
         style={{ left: '-2px' }}
       />
 
@@ -112,14 +135,14 @@ export const CustomWorkflowNode = ({ data, id, selected }: any) => {
         type="source" 
         position={Position.Right} 
         id="right-source"
-        className="!w-3 !h-3 !bg-zinc-900 !border-2 !border-zinc-700 !z-50 shadow-lg" 
+        className="!w-3 !h-3 !bg-white dark:!bg-zinc-900 !border-2 !border-zinc-300 dark:!border-zinc-700 !z-50 shadow-sm" 
         style={{ right: '-2px' }}
       />
 
       {/* Node Content */}
       <div className={cn(
-        "relative z-10 flex items-center gap-4 w-full px-6 py-5",
-        "text-white"
+        "relative z-10 flex items-center gap-3.5 w-full px-5 py-4",
+        "text-zinc-900 dark:text-white"
       )}>
         {/* Floating Actions */}
         {!data.readOnly && (
@@ -132,7 +155,7 @@ export const CustomWorkflowNode = ({ data, id, selected }: any) => {
                 e.stopPropagation();
                 data.onDelete(id);
               }}
-              className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-500 hover:text-rose-500 shadow-xl"
+              className="p-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-zinc-400 hover:text-rose-500 shadow-md"
             >
               <Trash2 size={12} />
             </button>
@@ -140,8 +163,8 @@ export const CustomWorkflowNode = ({ data, id, selected }: any) => {
         )}
 
         <div className={cn(
-          "w-10 h-10 rounded-xl shrink-0 flex items-center justify-center transition-transform duration-500 group-hover:scale-110",
-          "bg-white/5 border border-white/10 text-white shadow-inner"
+          "w-9 h-9 rounded-xl shrink-0 flex items-center justify-center transition-transform duration-300 group-hover:scale-105",
+          "bg-zinc-100/90 dark:bg-white/5 border border-zinc-200/80 dark:border-white/10"
         )} style={{ color: accentHex }}>
           <Icon size={20} />
         </div>

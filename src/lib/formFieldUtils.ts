@@ -124,6 +124,14 @@ export interface FormPaymentConfig {
   allowVoucher?: boolean;
 }
 
+export interface FormGovernanceConfig {
+  openAt?: string;
+  closeAt?: string;
+  maxSubmissions?: number;
+  oneSubmissionPerUser?: boolean;
+  closedMessage?: string;
+}
+
 export interface FormSettingsConfig {
   description?: string;
   submitLabel?: string;
@@ -131,6 +139,11 @@ export interface FormSettingsConfig {
   redirectUrl?: string;
   requireLogin?: boolean;
   allowSaveDraft?: boolean;
+  // Review & Confirm Step (iApply / Enterprise Grant & Intake Flow)
+  enableReviewStep?: boolean;
+  reviewDeclarationText?: string;
+  // Directory Upsert
+  upsertDirectoryParty?: boolean;
   // Workspace Create / Edit
   workspaceButtonLabel?: string;
   // Workspace Action Trigger
@@ -146,10 +159,11 @@ export interface FormSettingsConfig {
   rateLimitPerHour?: number;
   enableCaptcha?: boolean;
   routingTarget?: 'direct_module' | 'triage_inbox';
-  // Context & Post-Submit & Payments
+  // Context & Post-Submit & Payments & Governance
   contextBindings?: FormContextBindings;
   postSubmit?: FormPostSubmitConfig;
   payment?: FormPaymentConfig;
+  governance?: FormGovernanceConfig;
   theme?: FormThemeConfig;
 }
 

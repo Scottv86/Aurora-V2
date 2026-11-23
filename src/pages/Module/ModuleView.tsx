@@ -42,7 +42,7 @@ import { builderCache } from '../../utils/builderCache';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
 import { fetchModule, fetchRecords } from '../../services/dataService';
 import { cn, isFieldVisible, flattenFields, getFieldValue, checkCondition, evaluateExpression, evaluateFormula, slugify, evaluateFormattingRules } from '../../lib/utils';
-import { validateRecordRules } from '../../lib/validationEngine';
+import { validateRecordRules, fetchExternalValidationRulesets, mergeValidationRulesForModule, evaluateVisualCondition, resolveDotPathValue } from '../../lib/validationEngine';
 import { getSystemMetaFields, resolveFormInitialValues } from '../../lib/formFieldUtils';
 import { Module, ModuleField } from '../../types/platform';
 import { calculateDefaultValue } from '../../services/fieldService';
@@ -904,6 +904,12 @@ export const ModuleView = () => {
   const [splitSortBy, setSplitSortBy] = useState<'created' | 'updated' | 'title' | 'key'>('created');
   const { session, user } = useAuth();
   const { tenant, isLoading: platformLoading, modules, members, user: platformUser, menuConfig, isDeveloper } = usePlatform();
+  const [externalRulesets, setExternalRulesets] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!tenant?.id) return;
+    fetchExternalValidationRulesets(API_BASE_URL, tenant.id, session?.access_token).then(setExternalRulesets);
+  }, [tenant?.id, session?.access_token]);
 
   const isTenantAdmin = isDeveloper || 
     platformUser?.role === 'TENANT_ADMIN' || 
@@ -1548,7 +1554,7 @@ export const ModuleView = () => {
 
       const targetRecordId =
         actionForm.settings?.actionTargetMode === 'update_record'
-          ? effectiveSelectedSplitRecordId || Array.from(selectedRecordIds)[0]
+          ? effectiveSelectedSplitRecordId || records[0]?.id
           : null;
 
       if (targetRecordId) {
@@ -1617,14 +1623,15 @@ export const ModuleView = () => {
       }
       
       // Validate business validation rules before saving
-      const rules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
-      const validationErrors = validateRecordRules(finalData, rules, allFields);
+      const moduleRules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
+      const rules = mergeValidationRulesForModule(moduleData?.id || moduleId, moduleRules, externalRulesets);
+      const validationErrors = validateRecordRules(finalData, rules, allFields, {}, undefined, {
+        isNewRecord: true,
+        userRole: platformUser?.role
+      });
       if (validationErrors.length > 0) {
-        const hardErrors = validationErrors.filter(e => e.severity === 'error');
-        const bypassableWarnings = validationErrors.filter(e => {
-          const rule = rules.find((r: any) => r.id === e.ruleId);
-          return e.severity === 'warning' && rule?.bypassMode === 'confirm';
-        });
+        const hardErrors = validationErrors.filter(e => e.enforcement === 'block');
+        const bypassableWarnings = validationErrors.filter(e => e.enforcement === 'confirm');
 
         if (hardErrors.length > 0) {
           const toastErrors = hardErrors.filter(e => {
@@ -1802,7 +1809,7 @@ export const ModuleView = () => {
       let conditionMatches = false;
       if ((rule.triggerMode || 'visual') === 'visual') {
         if (rule.condition) {
-          conditionMatches = checkCondition(rule.condition, currentData, visibilityContext);
+          conditionMatches = evaluateVisualCondition(rule.condition, currentData, allFields);
         } else if (rule.triggerFieldId) {
           const triggerVal = getFieldValue(currentData, rule.triggerFieldId);
           conditionMatches = triggerVal !== null && triggerVal !== undefined && triggerVal !== '';
@@ -1864,7 +1871,8 @@ export const ModuleView = () => {
 
             (rule.outputMappings || []).forEach((m: any) => {
               if (m.targetFieldId && m.sourceFieldId) {
-                const val = rawData[m.sourceFieldId];
+                const rawVal = resolveDotPathValue(rawData, m.sourceFieldId);
+                const val = (rawVal !== undefined && rawVal !== null && rawVal !== '') ? rawVal : (m.fallbackValue !== undefined && m.fallbackValue !== '' ? m.fallbackValue : undefined);
                 if (val !== undefined) {
                   const targetField = allFields.find(f => f.id === m.targetFieldId);
                   let finalVal = val;
@@ -1903,6 +1911,11 @@ export const ModuleView = () => {
         }
       } catch (err) {
         console.error("Failed to run data population rule:", err);
+        if (rule.onFailure === 'block') {
+          toast.error(`Integration "${rule.name || rule.connectorId}" failed.`);
+        } else if (rule.onFailure === 'warn') {
+          toast.warning(`Integration "${rule.name || rule.connectorId}" failed to populate fields.`);
+        }
       }
     }
   };
@@ -2483,14 +2496,15 @@ export const ModuleView = () => {
       // Validate business validation rules before saving
       const originalRecord = records.find(r => r.id === recordId) || {};
       const fullRecord = { ...originalRecord, ...data };
-      const rules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
-      const validationErrors = validateRecordRules(fullRecord, rules, allFields);
+      const moduleRules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
+      const rules = mergeValidationRulesForModule(moduleData?.id || moduleId, moduleRules, externalRulesets);
+      const validationErrors = validateRecordRules(fullRecord, rules, allFields, {}, undefined, {
+        isNewRecord: false,
+        userRole: platformUser?.role
+      });
       if (validationErrors.length > 0) {
-        const hardErrors = validationErrors.filter(e => e.severity === 'error');
-        const bypassableWarnings = validationErrors.filter(e => {
-          const rule = rules.find((r: any) => r.id === e.ruleId);
-          return e.severity === 'warning' && rule?.bypassMode === 'confirm';
-        });
+        const hardErrors = validationErrors.filter(e => e.enforcement === 'block');
+        const bypassableWarnings = validationErrors.filter(e => e.enforcement === 'confirm');
 
         if (hardErrors.length > 0) {
           const toastErrors = hardErrors.filter(e => {
@@ -5742,14 +5756,16 @@ export const ModuleView = () => {
     // hasStatusField removed
 
     // Define the custom column accessor mapper
-    const mapCustomFieldToColumn = (field: any) => ({
-      header: field.label || field.name,
-      sortable: true,
-      sortKey: field.id || field.name,
-      filterKey: field.id || field.name,
-      className: densityClass,
-      style: field.columnWidth ? { width: `${field.columnWidth}px`, minWidth: `${field.columnWidth}px` } : undefined,
-      accessor: (record: any) => {
+    const mapCustomFieldToColumn = (field: any, colConfig?: any) => {
+      const colWidth = colConfig?.width || field.columnWidth;
+      return {
+        header: colConfig?.label || field.label || field.name,
+        sortable: true,
+        sortKey: field.id || field.name,
+        filterKey: field.id || field.name,
+        className: densityClass,
+        style: colWidth ? { width: `${colWidth}px`, minWidth: `${colWidth}px` } : undefined,
+        accessor: (record: any) => {
         const rawVal = record[field.id] || record[field.name];
         const val = isFieldMaskedBySecurity(field.id, moduleData, platformUser || user)
           ? formatMaskedFieldValue(rawVal)
@@ -5866,12 +5882,16 @@ export const ModuleView = () => {
 
         return baseContent;
       }
-    });
+    };
+    };
 
     // Define System fields columns
+    const getSysColLabel = (fieldId: string, fallback: string) =>
+      interfaceSettings.master.columns?.find((c: any) => c.fieldId === fieldId)?.label || fallback;
+
     const systemColumnsMap: Record<string, any> = {
       createdAt: {
-        header: 'Created',
+        header: getSysColLabel('createdAt', 'Created'),
         sortable: true,
         sortKey: 'createdAt',
         filterKey: 'createdAt',
@@ -5886,7 +5906,7 @@ export const ModuleView = () => {
         )
       },
       createdBy: {
-        header: 'Created By',
+        header: getSysColLabel('createdBy', 'Created By'),
         sortable: true,
         sortKey: 'createdBy',
         filterKey: 'createdBy',
@@ -5939,7 +5959,7 @@ export const ModuleView = () => {
         }
       },
       updatedAt: {
-        header: 'Updated',
+        header: getSysColLabel('updatedAt', 'Updated'),
         sortable: true,
         sortKey: 'updatedAt',
         filterKey: 'updatedAt',
@@ -5954,7 +5974,7 @@ export const ModuleView = () => {
         )
       },
       status: {
-        header: 'Status',
+        header: getSysColLabel('status', 'Status'),
         sortable: true,
         sortKey: 'status',
         filterKey: 'status',
@@ -5969,7 +5989,7 @@ export const ModuleView = () => {
         )
       },
       nextStep: {
-        header: 'Next Step',
+        header: getSysColLabel('nextStep', 'Next Step'),
         sortable: false,
         className: densityClass,
         style: interfaceSettings.master.columns?.find((c: any) => c.fieldId === 'nextStep')?.width 
@@ -6116,7 +6136,7 @@ export const ModuleView = () => {
         }
       },
       assigneeId: {
-        header: 'Assignee',
+        header: getSysColLabel('assigneeId', 'Assignee'),
         sortable: true,
         sortKey: 'assigneeId',
         filterKey: 'assigneeId',
@@ -6139,7 +6159,7 @@ export const ModuleView = () => {
         }
       },
       participantIds: {
-        header: 'Participants',
+        header: getSysColLabel('participantIds', 'Participants'),
         sortable: false,
         filterKey: 'participantIds',
         className: densityClass,
@@ -6173,7 +6193,7 @@ export const ModuleView = () => {
         // Is it a custom field?
         const customField = displayFields.find((f: any) => f.id === c.fieldId);
         if (customField) {
-          builtColumns.push(mapCustomFieldToColumn(customField));
+          builtColumns.push(mapCustomFieldToColumn(customField, c));
         } else if (systemColumnsMap[c.fieldId]) {
           // Is it a configured system field?
           builtColumns.push(systemColumnsMap[c.fieldId]);
@@ -6282,12 +6302,14 @@ export const ModuleView = () => {
       return Array.from(map.values());
     })();
 
+    const tbConfig = (interfaceSettings.master as any)?.toolbar || {};
+
     return (
       <div className="flex-1 h-full min-h-0 flex flex-col w-full overflow-hidden">
         <Table 
           key={`module_table_${moduleIdRaw || moduleData?.id}`}
           filterScopeId={moduleIdRaw || moduleData?.id}
-          enableSavedViews={true}
+          enableSavedViews={tbConfig.enableSavedViews !== false}
           scopeType="MODULE"
           scopeId={moduleIdRaw || moduleData?.id}
           tenantId={tenant?.id}
@@ -6312,9 +6334,10 @@ export const ModuleView = () => {
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
           searchPlaceholder="Search records..."
-          enableGrouping={true}
-          enableAskAurora={true}
-          enableChartToggle={true}
+          enableGrouping={tbConfig.enableGrouping !== false}
+          enableAskAurora={tbConfig.enableAskAurora !== false}
+          enableChartToggle={tbConfig.enableChartToggle !== false}
+          enableSpreadsheetMode={tbConfig.enableSpreadsheetMode === true}
           enableFilters={true}
           filterFields={moduleFilterFields}
           currentUserId={resolvedCurrentUserId}
@@ -6326,7 +6349,7 @@ export const ModuleView = () => {
           onPageSizeChange={setPageSize}
           totalCount={totalRecords}
           pageSizeOptions={[10, 25, 50, 100]}
-          enableSelection={true}
+          enableSelection={tbConfig.enableBulkActions !== false}
           selectedRowIds={selection.selectedIds}
           onSelectionChange={(ids) => selection.setSelectedIds(ids)}
           hideInternalBulkBar={true}
@@ -6406,6 +6429,10 @@ export const ModuleView = () => {
               ] as const;
 
               const currentLayout = interfaceSettings.master?.layoutType || 'table';
+              const enabledViews: string[] | undefined = (interfaceSettings.master as any)?.toolbar?.enabledViews;
+              const visibleLayouts = Array.isArray(enabledViews) && enabledViews.length > 0
+                ? ALL_MODULE_LAYOUTS.filter(l => enabledViews.includes(l.id) || l.id === currentLayout)
+                : ALL_MODULE_LAYOUTS;
               const activeLayout = ALL_MODULE_LAYOUTS.find((l) => l.id === currentLayout) || ALL_MODULE_LAYOUTS[0];
               const ActiveIcon = activeLayout.icon;
 
@@ -6442,7 +6469,7 @@ export const ModuleView = () => {
                         </div>
 
                         <div className="py-1 space-y-0.5 max-h-80 overflow-y-auto custom-scrollbar">
-                          {ALL_MODULE_LAYOUTS.map((layout) => {
+                          {visibleLayouts.map((layout) => {
                             const LayoutIcon = layout.icon;
                             const isSelected = currentLayout === layout.id;
                             return (
@@ -6520,13 +6547,15 @@ export const ModuleView = () => {
               <button
                 key={act.id}
                 onClick={() => {
-                  if (act.label?.trim().toLowerCase() === 'export pdf' && effectiveSelectedSplitRecordId) {
+                  if ((act.actionType === 'export_pdf' || act.label?.trim().toLowerCase() === 'export pdf') && effectiveSelectedSplitRecordId) {
                     window.dispatchEvent(new CustomEvent('aurora:export-record-pdf', {
                       detail: { recordId: effectiveSelectedSplitRecordId }
                     }));
                     return;
                   }
-                  const form = (moduleData as any)?.forms?.find((f: any) => f.usage === 'action_trigger');
+                  const form = act.targetFormId
+                    ? (moduleData as any)?.forms?.find((f: any) => f.id === act.targetFormId)
+                    : (moduleData as any)?.forms?.find((f: any) => f.usage === 'action_trigger');
                   setActiveQuickAction(act);
                   setActionForm(form || null);
                   const defaults: any = {};

@@ -47,7 +47,7 @@ import { FieldInput } from '../../components/FieldInput';
 import { generateAISummary, evaluateCalculations } from '../../services/aiService';
 import { cn, isFieldVisible, flattenFields, calculateHeight, getFieldValue, checkCondition, evaluateExpression, evaluateFormula, slugify } from '../../lib/utils';
 import { supabase } from '../../lib/supabase';
-import { validateRecordRules, ValidationError } from '../../lib/validationEngine';
+import { validateRecordRules, ValidationError, fetchExternalValidationRulesets, mergeValidationRulesForModule, evaluateVisualCondition, resolveDotPathValue } from '../../lib/validationEngine';
 import { getSystemMetaFields, resolveFormInitialValues } from '../../lib/formFieldUtils';
 
 import { compactLayout } from '../../lib/layoutEngine';
@@ -116,6 +116,12 @@ export const RecordDetailView = ({
   const queryClient = useQueryClient();
   const { session, user: supabaseUser } = auth;
   const { tenant, user: platformUser, isLoading: platformLoading, setBreadcrumbOverride, members, modules } = usePlatform();
+  const [externalRulesets, setExternalRulesets] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!tenant?.id) return;
+    fetchExternalValidationRulesets(API_BASE_URL, tenant.id, session?.access_token).then(setExternalRulesets);
+  }, [tenant?.id, session?.access_token]);
   
   const resolvedRouteModuleId = useMemo(() => {
     if (!routeModuleId || !modules) return routeModuleId || '';
@@ -371,13 +377,18 @@ export const RecordDetailView = ({
     }
   }
   const [isRailCollapsed, setIsRailCollapsed] = useState<boolean>(() => {
+    const modRailDefault = (moduleData as any)?.interfaceSettings?.detail?.contextRail?.defaultCollapsed;
+    if (typeof modRailDefault === 'boolean') return modRailDefault;
     try {
       return localStorage.getItem('aurora_record_rail_collapsed') === 'true';
     } catch {
       return false;
     }
   });
-  const [activeRailTab, setActiveRailTab] = useState<ContextRailTab>('overview');
+  const [activeRailTab, setActiveRailTab] = useState<ContextRailTab>(() => {
+    const modDefaultTab = (moduleData as any)?.interfaceSettings?.detail?.contextRail?.defaultTab;
+    return (modDefaultTab as ContextRailTab) || 'overview';
+  });
   const effectiveRecordId = recordId || record?.id || 'current';
 
   // Real-Time Collaboration & Presence (MS 365 / Figma style)
@@ -1436,24 +1447,31 @@ export const RecordDetailView = ({
   }, [recordId, record?._record_key, editData?._record_key, tenant?.id, session?.access_token, recordCacheKey, onRecordUpdate]);
 
   const activeValidations = useMemo(() => {
-    const rules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
-    return validateRecordRules(editData, rules, allFields, lookupData, bypassedRuleIds);
-  }, [editData, moduleData, allFields, lookupData, bypassedRuleIds]);
+    const moduleRules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
+    const rules = mergeValidationRulesForModule(moduleData?.id || resolvedRouteModuleId, moduleRules, externalRulesets);
+    return validateRecordRules(editData, rules, allFields, lookupData, bypassedRuleIds, {
+      isNewRecord: false,
+      userRole: platformUser?.role
+    });
+  }, [editData, moduleData, resolvedRouteModuleId, externalRulesets, allFields, lookupData, bypassedRuleIds, platformUser?.role]);
 
   const failedTabSeverities = useMemo(() => {
     const tabSeverities: Record<string, 'error' | 'warning'> = {};
-    const rules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
+    const moduleRules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
+    const rules = mergeValidationRulesForModule(moduleData?.id || resolvedRouteModuleId, moduleRules, externalRulesets);
     
     activeValidations.forEach(err => {
       const rule = rules.find((r: any) => r.id === err.ruleId);
       if (!rule) return;
       
       allFields.forEach((f: any) => {
-        const idMatch = rule.expression.includes(`{{${f.id}}}`);
-        const nameMatch = f.name && (rule.expression.includes(`{${f.name}}`) || rule.expression.includes(`{{${f.name}}}`));
-        const labelMatch = f.label && (rule.expression.includes(`{${f.label}}`) || rule.expression.includes(`{{${f.label}}}`));
+        const targetMatch = rule.targetFieldIds?.includes(f.id);
+        const expr = rule.expression || '';
+        const idMatch = expr.includes(`{{${f.id}}}`);
+        const nameMatch = f.name && (expr.includes(`{${f.name}}`) || expr.includes(`{{${f.name}}}`));
+        const labelMatch = f.label && (expr.includes(`{${f.label}}`) || expr.includes(`{{${f.label}}}`));
         
-        if (idMatch || nameMatch || labelMatch) {
+        if (targetMatch || idMatch || nameMatch || labelMatch) {
           const tabId = f.tabId || visibleTabs[0]?.id;
           if (tabId) {
             if (err.severity === 'error' || !tabSeverities[tabId]) {
@@ -1465,7 +1483,7 @@ export const RecordDetailView = ({
     });
     
     return tabSeverities;
-  }, [activeValidations, allFields, moduleData, visibleTabs]);
+  }, [activeValidations, allFields, moduleData, resolvedRouteModuleId, externalRulesets, visibleTabs]);
 
   // Tab overflow dropdown state and calculations
   const tabBarContainerRef = useRef<HTMLDivElement>(null);
@@ -1678,7 +1696,7 @@ export const RecordDetailView = ({
       let conditionMatches = false;
       if ((rule.triggerMode || 'visual') === 'visual') {
         if (rule.condition) {
-          conditionMatches = checkCondition(rule.condition, currentData, visibilityContext);
+          conditionMatches = evaluateVisualCondition(rule.condition, currentData, allFields);
         } else if (rule.triggerFieldId) {
           const triggerVal = getFieldValue(currentData, rule.triggerFieldId);
           conditionMatches = triggerVal !== null && triggerVal !== undefined && triggerVal !== '';
@@ -1744,7 +1762,8 @@ export const RecordDetailView = ({
 
           (rule.outputMappings || []).forEach((m: any) => {
             if (m.targetFieldId && m.sourceFieldId) {
-              const val = rawData[m.sourceFieldId];
+              const rawVal = resolveDotPathValue(rawData, m.sourceFieldId);
+              const val = (rawVal !== undefined && rawVal !== null && rawVal !== '') ? rawVal : (m.fallbackValue !== undefined && m.fallbackValue !== '' ? m.fallbackValue : undefined);
               if (val !== undefined) {
                 const targetField = currentFlatFields.find(f => f.id === m.targetFieldId);
                 if (targetField && targetField.type === 'repeatableGroup' && Array.isArray(val)) {
@@ -2174,7 +2193,7 @@ export const RecordDetailView = ({
       let conditionMatches = false;
       if ((rule.triggerMode || 'visual') === 'visual') {
         if (rule.condition) {
-          conditionMatches = checkCondition(rule.condition, currentData, visibilityContext);
+          conditionMatches = evaluateVisualCondition(rule.condition, currentData, allFields);
         } else if (rule.triggerFieldId) {
           const triggerVal = getFieldValue(currentData, rule.triggerFieldId);
           conditionMatches = triggerVal !== null && triggerVal !== undefined && triggerVal !== '';
@@ -2235,7 +2254,8 @@ export const RecordDetailView = ({
 
           (rule.outputMappings || []).forEach((m: any) => {
             if (m.targetFieldId && m.sourceFieldId) {
-              const val = rawData[m.sourceFieldId];
+              const rawVal = resolveDotPathValue(rawData, m.sourceFieldId);
+              const val = (rawVal !== undefined && rawVal !== null && rawVal !== '') ? rawVal : (m.fallbackValue !== undefined && m.fallbackValue !== '' ? m.fallbackValue : undefined);
               if (val !== undefined) {
                 const targetField = allFields.find(f => f.id === m.targetFieldId);
                 if (targetField && targetField.type === 'repeatableGroup' && Array.isArray(val)) {
@@ -2272,6 +2292,11 @@ export const RecordDetailView = ({
         }
       } catch (err) {
         console.error("Failed to run data population rule:", err);
+        if (rule.onFailure === 'block') {
+          toast.error(`Integration "${rule.name || rule.connectorId}" failed and blocked update.`);
+        } else if (rule.onFailure === 'warn') {
+          toast.warning(`Integration "${rule.name || rule.connectorId}" failed to populate fields.`);
+        }
       }
     }
   };
@@ -2488,14 +2513,15 @@ export const RecordDetailView = ({
     }
 
     // Validate business validation rules before saving
-    const rules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
-    const validationErrors = validateRecordRules(currentData, rules, allFields, lookupData, bypassedRuleIdsRef.current);
+    const moduleRules = moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [];
+    const rules = mergeValidationRulesForModule(moduleData?.id || resolvedRouteModuleId, moduleRules, externalRulesets);
+    const validationErrors = validateRecordRules(currentData, rules, allFields, lookupData, bypassedRuleIdsRef.current, {
+      isNewRecord: false,
+      userRole: platformUser?.role
+    });
     if (validationErrors.length > 0) {
-      const hardErrors = validationErrors.filter(e => e.severity === 'error');
-      const bypassableWarnings = validationErrors.filter(e => {
-        const rule = rules.find((r: any) => r.id === e.ruleId);
-        return e.severity === 'warning' && rule?.bypassMode === 'confirm';
-      });
+      const hardErrors = validationErrors.filter(e => e.enforcement === 'block');
+      const bypassableWarnings = validationErrors.filter(e => e.enforcement === 'confirm');
 
       const hasHardErrors = hardErrors.length > 0;
       const hasBypassableWarnings = bypassableWarnings.length > 0;
@@ -2519,9 +2545,10 @@ export const RecordDetailView = ({
           return rule?.showInline !== false;
         });
 
-        if (fieldIdBeingSaved && inlineError) {
+        const inlineTargetFieldId = inlineError?.targetFieldIds?.[0] || fieldIdBeingSaved;
+        if (inlineTargetFieldId && inlineError) {
           setValidationErrorField({
-            fieldId: fieldIdBeingSaved,
+            fieldId: inlineTargetFieldId,
             message: inlineError.message,
             severity: inlineError.severity
           });
@@ -3485,9 +3512,14 @@ export const RecordDetailView = ({
     const isErrorField = validationErrorField?.fieldId === nestedField.id;
     const isDirect = isDirectInteractableField(nestedField.type);
     
+    const nestedColSpan = Math.max(1, Math.min(12, nestedField.colSpan || 6));
+
     return (
       <div 
         key={nestedField.id} 
+        style={{
+          gridColumn: `span ${nestedColSpan}`
+        }}
         className={cn(
           "transition-all relative group/nestedField min-w-0",
           !activeFieldId && !isSecReadOnly && !isDirect && !['calculation', 'ai_summary', 'autonumber', 'automation'].includes(nestedField.type) && "cursor-pointer"
@@ -3856,17 +3888,37 @@ export const RecordDetailView = ({
     const density = (interfaceSettings.detail as any)?.density || 'standard';
     const ds = getDensityStyles(density);
 
+    const allMergedRules = mergeValidationRulesForModule(
+      moduleData?.id || resolvedRouteModuleId,
+      moduleData?.config?.validationRules || (moduleData as any)?.validationRules || [],
+      externalRulesets
+    );
+
     const tabValidations = activeValidations.filter(err => {
-      const rule = (moduleData?.config?.validationRules || (moduleData as any)?.validationRules || []).find((r: any) => r.id === err.ruleId);
-      if (!rule) return false;
+      if (!err.showBanner) return false;
+      const rule = allMergedRules.find((r: any) => r.id === err.ruleId);
+      if (!rule) return true;
+      // Show record-level / cross-module rules (no targetFieldIds and no field token on a specific tab) on every tab
+      const hasAnyTabFieldMatch = allFields.some((f: any) => {
+        const expr = rule.expression || '';
+        const targetMatch = rule.targetFieldIds?.includes(f.id);
+        const idMatch = expr.includes(`{{${f.id}}}`);
+        const nameMatch = f.name && (expr.includes(`{${f.name}}`) || expr.includes(`{{${f.name}}}`));
+        const labelMatch = f.label && (expr.includes(`{${f.label}}`) || expr.includes(`{{${f.label}}}`));
+        return targetMatch || idMatch || nameMatch || labelMatch;
+      });
+      if (!hasAnyTabFieldMatch) return true;
+
       return allFields.some((f: any) => {
         const firstVisibleTabId = visibleTabs[0]?.id;
         const fieldTabId = f.tabId || firstVisibleTabId;
         if (fieldTabId !== tabId) return false;
-        const idMatch = rule.expression.includes(`{{${f.id}}}`);
-        const nameMatch = f.name && (rule.expression.includes(`{${f.name}}`) || rule.expression.includes(`{{${f.name}}}`));
-        const labelMatch = f.label && (rule.expression.includes(`{${f.label}}`) || rule.expression.includes(`{{${f.label}}}`));
-        return idMatch || nameMatch || labelMatch;
+        const expr = rule.expression || '';
+        const targetMatch = rule.targetFieldIds?.includes(f.id);
+        const idMatch = expr.includes(`{{${f.id}}}`);
+        const nameMatch = f.name && (expr.includes(`{${f.name}}`) || expr.includes(`{{${f.name}}}`));
+        const labelMatch = f.label && (expr.includes(`{${f.label}}`) || expr.includes(`{{${f.label}}}`));
+        return targetMatch || idMatch || nameMatch || labelMatch;
       });
     });
 
@@ -3876,18 +3928,33 @@ export const RecordDetailView = ({
           <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
             {tabValidations.map((val, idx) => {
               const isWarning = val.severity === 'warning';
+              const isInfo = val.severity === 'info';
               return (
                 <div 
-                  key={idx} 
+                  key={val.ruleId || idx} 
                   className={cn(
-                    "p-3 rounded-2xl border text-xs font-bold flex items-center gap-2.5",
-                    isWarning 
-                      ? "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400"
-                      : "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400"
+                    "p-3 rounded-2xl border text-xs font-bold flex items-center justify-between gap-2.5",
+                    isInfo
+                      ? "bg-blue-500/10 border-blue-500/20 text-blue-600 dark:text-blue-400"
+                      : isWarning 
+                        ? "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400"
+                        : "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400"
                   )}
                 >
-                  {isWarning ? <AlertTriangle size={14} className="shrink-0" /> : <AlertCircle size={14} className="shrink-0" />}
-                  <span>{val.message}</span>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {isInfo ? <Info size={14} className="shrink-0" /> : isWarning ? <AlertTriangle size={14} className="shrink-0" /> : <AlertCircle size={14} className="shrink-0" />}
+                    <span>{val.message}</span>
+                  </div>
+                  {val.enforcement === 'allow' && val.ruleId && (
+                    <button
+                      type="button"
+                      onClick={() => setBypassedRuleIds(prev => new Set(prev).add(val.ruleId!))}
+                      className="text-current opacity-60 hover:opacity-100 px-1.5 py-0.5 rounded cursor-pointer shrink-0"
+                      title="Dismiss notice"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -3970,11 +4037,17 @@ export const RecordDetailView = ({
             ) : field.type === 'accordion' ? (
               <AccordionContainer 
                 field={field}
-                renderContent={(section) => (
-                  <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: `${ds.gapY} ${ds.gapX}` }}>
-                    {(section.fields || []).map(renderNestedField)}
-                  </div>
-                )}
+                renderContent={(section) => {
+                  const sortedSectionFields = [...(section.fields || [])].sort((a: any, b: any) => {
+                    if ((a.rowIndex || 0) !== (b.rowIndex || 0)) return (a.rowIndex || 0) - (b.rowIndex || 0);
+                    return (a.startCol || 1) - (b.startCol || 1);
+                  });
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-12" style={{ gap: `${ds.gapY} ${ds.gapX}` }}>
+                      {sortedSectionFields.map(renderNestedField)}
+                    </div>
+                  );
+                }}
               />
             ) : ['fieldGroup', 'group', 'card', 'tabs_nested', 'stepper', 'timeline'].includes(field.type) ? (
               <CollapsibleFieldGroup 
@@ -3982,8 +4055,13 @@ export const RecordDetailView = ({
                 isCollapsed={collapsedGroups[field.id] ?? field.defaultCollapsed ?? false}
                 onToggle={(collapsed) => setCollapsedGroups(prev => ({ ...prev, [field.id]: collapsed }))}
               >
-                <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: `${ds.gapY} ${ds.gapX}` }}>
-                  {(field.fields || []).map(renderNestedField)}
+                <div className="grid grid-cols-1 md:grid-cols-12" style={{ gap: `${ds.gapY} ${ds.gapX}` }}>
+                  {[...(field.fields || [])]
+                    .sort((a: any, b: any) => {
+                      if ((a.rowIndex || 0) !== (b.rowIndex || 0)) return (a.rowIndex || 0) - (b.rowIndex || 0);
+                      return (a.startCol || 1) - (b.startCol || 1);
+                    })
+                    .map(renderNestedField)}
                 </div>
               </CollapsibleFieldGroup>
             ) : field.type === 'sub_module' ? (
@@ -4508,7 +4586,10 @@ export const RecordDetailView = ({
             <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
               {(() => {
                 const config = moduleData.config || (moduleData as any).config;
-                const subtitleFieldIds = config?.subtitleFieldIds;
+                const subtitleFieldIds =
+                  config?.subtitleFieldIds ||
+                  (moduleData as any)?.subtitleFieldIds ||
+                  (moduleData as any)?.interfaceSettings?.master?.subtitleFieldIds;
                 
                 if (subtitleFieldIds && Array.isArray(subtitleFieldIds) && subtitleFieldIds.length > 0) {
                   const items = subtitleFieldIds.map((fieldId) => {

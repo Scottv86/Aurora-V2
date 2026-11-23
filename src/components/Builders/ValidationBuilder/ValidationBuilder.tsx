@@ -67,7 +67,27 @@ export const ValidationBuilder: React.FC<ValidationBuilderProps> = ({
     if (fields && fields.length > 0) return fields;
     if (associatedModuleId) {
       const mod = (modules || []).find(m => m.id === associatedModuleId);
-      if (mod?.layout) return mod.layout;
+      if (mod?.layout && Array.isArray(mod.layout)) {
+        const flat: any[] = [];
+        const walk = (items: any[]) => {
+          items.forEach((item) => {
+            if (!item || typeof item !== 'object') return;
+            if (Array.isArray(item.children)) walk(item.children);
+            if (Array.isArray(item.fields)) walk(item.fields);
+            if (Array.isArray(item.tabs)) {
+              item.tabs.forEach((t: any) => {
+                if (Array.isArray(t?.children)) walk(t.children);
+                if (Array.isArray(t?.fields)) walk(t.fields);
+              });
+            }
+            if (item.id && !['container', 'section', 'tabs', 'columns', 'grid'].includes(item.type)) {
+              flat.push(item);
+            }
+          });
+        };
+        walk(mod.layout);
+        if (flat.length > 0) return flat;
+      }
     }
     return [
       { id: 'name', label: 'Name / Title', type: 'text' },
@@ -120,48 +140,49 @@ export const ValidationBuilder: React.FC<ValidationBuilderProps> = ({
   };
 
   return (
-    <div className="h-full w-full bg-zinc-950 flex flex-col overflow-hidden">
+    <div className="h-full w-full bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col overflow-hidden">
 
-      <div className="px-6 py-3 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-emerald-950/80 text-emerald-400 border border-emerald-800/50 rounded-lg">
-            <ShieldCheck size={18} />
+      <div className="h-12 px-4 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-4 shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          <div className="w-7 h-7 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50 rounded-lg flex items-center justify-center shrink-0">
+            <ShieldCheck size={15} />
           </div>
-          <div>
+          <div className="min-w-0 flex-1 flex items-center gap-2">
             {builderContext.mode === 'global' ? (
               <>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => { setName(e.target.value); onDirtyChange?.(true); }}
-                  className="font-bold text-base bg-transparent border-none focus:outline-none focus:ring-1 focus:ring-emerald-500 rounded px-1 text-white"
+                  className="font-semibold text-sm bg-transparent border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 focus:border-indigo-500 focus:outline-none rounded-lg px-2 py-1 text-zinc-900 dark:text-zinc-100 min-w-[180px]"
                   placeholder="Ruleset Name..."
                 />
+                <span className="text-zinc-300 dark:text-zinc-700 hidden sm:inline">·</span>
                 <input
                   type="text"
                   value={description}
                   onChange={(e) => { setDescription(e.target.value); onDirtyChange?.(true); }}
-                  className="text-xs text-zinc-400 bg-transparent border-none focus:outline-none focus:ring-1 focus:ring-emerald-500 rounded px-1 block w-full"
+                  className="text-xs text-zinc-500 dark:text-zinc-400 bg-transparent border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 focus:border-indigo-500 focus:outline-none rounded-lg px-2 py-1 flex-1 min-w-0 hidden sm:block"
                   placeholder="Describe what this ruleset validates..."
                 />
               </>
             ) : (
-              <>
-                <h3 className="text-sm font-bold text-white">Validation Ruleset Studio</h3>
-                <p className="text-xs text-zinc-400">
-                  {`In-Context Validation Rules for [${builderContext.hostType?.toUpperCase()}]`}
-                </p>
-              </>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Validation Ruleset</h3>
+                <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                  {builderContext.hostType?.toUpperCase()}
+                </span>
+              </div>
             )}
           </div>
         </div>
 
         {builderContext.mode === 'global' && (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 shrink-0">
             <select
               value={associatedModuleId}
               onChange={(e) => { setAssociatedModuleId(e.target.value); onDirtyChange?.(true); }}
-              className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-200 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="h-8 px-2.5 text-xs font-medium rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 focus:outline-none focus:border-indigo-500"
               title="Scope Ruleset Globally or Associate with a Module"
             >
               <option value="">Global (All Modules)</option>
@@ -180,20 +201,21 @@ export const ValidationBuilder: React.FC<ValidationBuilderProps> = ({
             <Button
               onClick={handleSaveRuleset}
               disabled={saving}
-              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-4 py-2 rounded-lg font-semibold shadow-sm transition-all"
+              className="h-8 flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 rounded-lg font-medium shadow-sm transition-all"
             >
-              <Save size={14} />
+              <Save size={13} />
               <span>{saving ? 'Saving...' : 'Save Ruleset'}</span>
             </Button>
           </div>
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-hidden">
         <ValidationsTab
           fields={effectiveFields}
           validationRules={activeRules}
           setValidationRules={handleSetValidationRules}
+          showAiAssist={builderContext.mode === 'global'}
         />
       </div>
     </div>

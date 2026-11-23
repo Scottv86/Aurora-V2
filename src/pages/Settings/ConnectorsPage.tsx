@@ -20,7 +20,8 @@ import {
   Plug,
   GitBranch,
   Globe,
-  Trash2
+  Trash2,
+  Code
 } from 'lucide-react';
 import { NexusSelectionModal } from '../../components/Builder/NexusSelectionModal';
 import { EmptyState } from '../../components/UI/EmptyState';
@@ -222,6 +223,16 @@ export const ConnectorsPage: React.FC<{ isSettingsMode?: boolean }> = ({ isSetti
   const [activeTab, setActiveTab] = useState<'setup' | 'mapping' | 'usage' | 'test' | 'logs'>('setup');
   const [listTab, setListTab] = useState<'all' | 'active' | 'vault'>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showRestBuilder, setShowRestBuilder] = useState(false);
+  const [restForm, setRestForm] = useState({
+    name: '',
+    category: 'Custom REST',
+    method: 'POST',
+    endpointUrl: '',
+    authType: 'bearer' as 'none' | 'bearer' | 'apikey' | 'basic',
+    sampleJson: '{\n  "id": "123",\n  "status": "active",\n  "email": "user@example.com"\n}'
+  });
+  const [creatingRest, setCreatingRest] = useState(false);
   const [isConnectorDirty, setIsConnectorDirty] = useState(false);
   const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
 
@@ -364,7 +375,7 @@ export const ConnectorsPage: React.FC<{ isSettingsMode?: boolean }> = ({ isSetti
       }
     } catch (err) {
       console.error("Failed to forge connector:", err);
-      toast.error("Shadow Architect failed to generate connector");
+      toast.error("AI failed to generate connector");
     }
   };
 
@@ -541,13 +552,21 @@ export const ConnectorsPage: React.FC<{ isSettingsMode?: boolean }> = ({ isSetti
               </Button>
             </div>
           ) : (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
+              <Button
+                variant="secondary"
+                onClick={() => setShowRestBuilder(true)}
+                className="flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-xl cursor-pointer"
+              >
+                <Code size={14} />
+                <span>Custom REST API</span>
+              </Button>
               <Button 
                 onClick={() => setIsModalOpen(true)}
-                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
+                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2 rounded-xl shadow-sm transition-all cursor-pointer"
               >
-                <Plus size={16} />
-                <span>Create</span>
+                <Plus size={15} />
+                <span>Add from Library</span>
               </Button>
             </div>
           )
@@ -596,7 +615,7 @@ export const ConnectorsPage: React.FC<{ isSettingsMode?: boolean }> = ({ isSetti
               <EmptyState
                 icon={Plug}
                 title="No integrations found"
-                description="Connect external API endpoints, configure security secrets vault, or forge custom HTTP webhooks."
+                description="Connect external API endpoints, configure security secrets vault, or build custom HTTP webhooks."
                 action={{
                   label: "Create",
                   onClick: () => setIsModalOpen(true)
@@ -680,7 +699,7 @@ export const ConnectorsPage: React.FC<{ isSettingsMode?: boolean }> = ({ isSetti
           /* Selected Integration Detail View with Sub-Tabs Navigation */
           <div className="w-full space-y-6">
             {/* Detail Sub-Tabs Bar */}
-            <div className="flex gap-4 border-b border-zinc-200/60 dark:border-zinc-800/60 shrink-0 bg-white/40 dark:bg-zinc-900/20 px-6 py-2 rounded-2xl">
+            <div className="flex gap-1 border-b border-zinc-200 dark:border-zinc-800 shrink-0 bg-white dark:bg-zinc-900 px-3 pt-1 rounded-t-xl border-x border-t">
               {[
                 { id: 'setup', label: 'Setup', icon: Settings2 },
                 { id: 'mapping', label: 'Data Mapping', icon: ArrowRightLeft },
@@ -692,10 +711,10 @@ export const ConnectorsPage: React.FC<{ isSettingsMode?: boolean }> = ({ isSetti
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
                   className={clsx(
-                    "flex items-center gap-2 py-3 px-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all rounded-t-lg",
+                    "flex items-center gap-1.5 py-2.5 px-3 text-xs font-medium border-b-2 transition-colors cursor-pointer",
                     activeTab === tab.id 
-                      ? "border-indigo-500 text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/30" 
-                      : "border-transparent text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-300"
+                      ? "border-indigo-600 text-indigo-600 dark:text-indigo-400" 
+                      : "border-transparent text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
                   )}
                 >
                   <tab.icon className="w-3.5 h-3.5" />
@@ -705,7 +724,7 @@ export const ConnectorsPage: React.FC<{ isSettingsMode?: boolean }> = ({ isSetti
             </div>
 
             {/* Tab Views */}
-            <div className="bg-white/40 dark:bg-white/[0.02] backdrop-blur-xl border border-zinc-200/60 dark:border-white/5 rounded-3xl p-8 shadow-sm">
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-b-xl p-6">
               {activeTab === 'setup' && selectedConnector && (
                 <ConnectorSetup 
                   connector={selectedConnector} 
@@ -778,6 +797,158 @@ export const ConnectorsPage: React.FC<{ isSettingsMode?: boolean }> = ({ isSetti
           onCancel={() => setShowUnsavedConfirm(false)}
         />
       )}
+
+      {/* No-Code Custom REST / Webhook Builder Modal */}
+      {showRestBuilder && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-[100] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-lg p-5 shadow-xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Custom REST Connector</h3>
+                <p className="text-xs text-zinc-500">Define an HTTP endpoint and auto-infer output fields from sample JSON.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRestBuilder(false)}
+                className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 text-xs px-2 py-1 rounded-md cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Connector Name</label>
+                <input
+                  type="text"
+                  value={restForm.name}
+                  onChange={(e) => setRestForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g. Clearbit Enrichment"
+                  className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs text-zinc-900 dark:text-zinc-100"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Auth Type</label>
+                <select
+                  value={restForm.authType}
+                  onChange={(e) => setRestForm(prev => ({ ...prev, authType: e.target.value as any }))}
+                  className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 text-xs text-zinc-900 dark:text-zinc-100"
+                >
+                  <option value="bearer">Bearer Token</option>
+                  <option value="apikey">API Key Header</option>
+                  <option value="basic">Basic Auth</option>
+                  <option value="none">None (Public)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-4 gap-2">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Method</label>
+                <select
+                  value={restForm.method}
+                  onChange={(e) => setRestForm(prev => ({ ...prev, method: e.target.value }))}
+                  className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 text-xs font-mono text-zinc-900 dark:text-zinc-100"
+                >
+                  <option value="GET">GET</option>
+                  <option value="POST">POST</option>
+                  <option value="PUT">PUT</option>
+                  <option value="PATCH">PATCH</option>
+                </select>
+              </div>
+              <div className="col-span-3 space-y-1">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Endpoint URL</label>
+                <input
+                  type="url"
+                  value={restForm.endpointUrl}
+                  onChange={(e) => setRestForm(prev => ({ ...prev, endpointUrl: e.target.value }))}
+                  placeholder="https://api.example.com/v1/lookup"
+                  className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs font-mono text-zinc-900 dark:text-zinc-100"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Sample JSON Response (for Output Schema)</label>
+              <textarea
+                rows={4}
+                value={restForm.sampleJson}
+                onChange={(e) => setRestForm(prev => ({ ...prev, sampleJson: e.target.value }))}
+                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg p-2.5 text-xs font-mono text-zinc-900 dark:text-zinc-100"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="secondary" onClick={() => setShowRestBuilder(false)} className="text-xs px-3 py-1.5 rounded-lg">
+                Cancel
+              </Button>
+              <Button
+                disabled={creatingRest || !restForm.name.trim() || !restForm.endpointUrl.trim()}
+                onClick={async () => {
+                  setCreatingRest(true);
+                  try {
+                    let outputs: any[] = [];
+                    try {
+                      const parsed = JSON.parse(restForm.sampleJson || '{}');
+                      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                        outputs = Object.entries(parsed).map(([k, v]) => ({
+                          name: k,
+                          label: k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+                          type: typeof v === 'number' ? 'number' : typeof v === 'boolean' ? 'boolean' : Array.isArray(v) ? 'array' : 'string'
+                        }));
+                      }
+                    } catch {
+                      toast.error('Invalid sample JSON');
+                      setCreatingRest(false);
+                      return;
+                    }
+                    const config =
+                      restForm.authType === 'bearer'
+                        ? [{ name: 'api_token', label: 'Bearer Token', type: 'password', description: 'Authorization Bearer token' }]
+                        : restForm.authType === 'apikey'
+                          ? [{ name: 'api_key', label: 'API Key', type: 'password', description: 'X-API-Key header value' }]
+                          : restForm.authType === 'basic'
+                            ? [
+                                { name: 'username', label: 'Username', type: 'text', description: 'Basic auth username' },
+                                { name: 'password', label: 'Password', type: 'password', description: 'Basic auth password' }
+                              ]
+                            : [];
+                    await handleCreateCustomConnector({
+                      name: restForm.name.trim(),
+                      category: restForm.category,
+                      description: `${restForm.method} ${restForm.endpointUrl.trim()}`,
+                      edgeFunctionUrl: '/api/nexus-proxy/execute',
+                      ioSchema: {
+                        method: restForm.method,
+                        endpointUrl: restForm.endpointUrl.trim(),
+                        authType: restForm.authType,
+                        config,
+                        inputs: [{ name: 'query', label: 'Query / Payload', type: 'string', required: false }],
+                        outputs
+                      }
+                    });
+                    setShowRestBuilder(false);
+                    setRestForm({
+                      name: '',
+                      category: 'Custom REST',
+                      method: 'POST',
+                      endpointUrl: '',
+                      authType: 'bearer',
+                      sampleJson: '{\n  "id": "123",\n  "status": "active",\n  "email": "user@example.com"\n}'
+                    });
+                    toast.success('Custom REST connector created');
+                  } finally {
+                    setCreatingRest(false);
+                  }
+                }}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-4 py-1.5 rounded-lg"
+              >
+                {creatingRest ? 'Creating...' : 'Create Connector'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -831,6 +1002,7 @@ const ConnectorSetup = ({
   const { tenant } = usePlatform();
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [verifying, setVerifying] = useState(false);
 
   const fallbackKey = Object.keys(DEFAULT_CONFIG_FIELDS).find(k => connector.id.includes(k) || k.includes(connector.id));
   const configFields = (connector?.ioSchema?.config && connector.ioSchema.config.length > 0)
@@ -887,40 +1059,78 @@ const ConnectorSetup = ({
         </div>
       )}
 
-      <div className="space-y-6">
-        {configFields.map((field: any) => (
-          <div key={field.name} className="space-y-2">
-            <label className="text-xs font-bold text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">{field.label}</label>
-            <div className="relative">
-              <input 
-                type={field.type === 'password' ? 'password' : 'text'}
-                placeholder={field.description}
-                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 rounded-xl py-3 px-4 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all text-zinc-900 dark:text-zinc-100"
-                value={secrets[field.name] || ''}
-                onChange={(e) => {
-                  setSecrets(prev => ({ ...prev, [field.name]: e.target.value }));
-                  onDirtyChange?.(true);
-                }}
-              />
-              {activeConnector?.secrets?.find(s => s.secretKey === field.name) && (
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1 text-emerald-500 text-[10px] font-bold uppercase">
-                  <CheckCircle2 className="w-3 h-3" />
-                  Vaulted
-                </div>
-              )}
+      <div className="space-y-5">
+        {configFields.map((field: any) => {
+          const isVaulted = Boolean(activeConnector?.secrets?.find(s => s.secretKey === field.name));
+          return (
+            <div key={field.name} className="space-y-1.5">
+              <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">{field.label}</label>
+              <div className="relative">
+                <input 
+                  type={field.type === 'password' ? 'password' : 'text'}
+                  placeholder={isVaulted ? '•••••••• (Configured in vault — enter new value to rotate)' : field.description}
+                  className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg py-2.5 px-3.5 text-xs font-medium focus:outline-none focus:border-indigo-500 transition-colors text-zinc-900 dark:text-zinc-100"
+                  value={secrets[field.name] || ''}
+                  onChange={(e) => {
+                    setSecrets(prev => ({ ...prev, [field.name]: e.target.value }));
+                    onDirtyChange?.(true);
+                  }}
+                />
+                {isVaulted && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-emerald-600 dark:text-emerald-400 text-[10px] font-semibold">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Vaulted</span>
+                  </div>
+                )}
+              </div>
+              <p className="text-[11px] text-zinc-400 dark:text-zinc-500">{field.description}</p>
             </div>
-            <p className="text-[10px] text-zinc-400 dark:text-zinc-500">{field.description}</p>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      <button 
-        onClick={handleSave}
-        disabled={saving || Object.keys(secrets).length === 0}
-        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-bold text-xs transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-indigo-500/20"
-      >
-        {saving ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Save Secure Configuration'}
-      </button>
+      <div className="flex items-center gap-2.5">
+        <button 
+          onClick={handleSave}
+          disabled={saving || Object.keys(secrets).length === 0}
+          className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg font-medium text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+        >
+          {saving ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Save Secure Configuration'}
+        </button>
+        <button
+          type="button"
+          disabled={verifying || !activeConnector?.isActive}
+          onClick={async () => {
+            if (!tenant?.id || !connector.edgeFunctionUrl) {
+              toast.info('Connector has no test endpoint configured.');
+              return;
+            }
+            setVerifying(true);
+            try {
+              const url = connector.edgeFunctionUrl.startsWith('/') ? `${API_BASE_URL}${connector.edgeFunctionUrl}` : connector.edgeFunctionUrl;
+              const token = (import.meta as any).env.VITE_DEV_TOKEN || (window as any).session?.access_token;
+              const res = await fetch(url, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-tenant-id': tenant.id,
+                  ...(token ? { Authorization: `Bearer ${token}` } : {})
+                },
+                body: JSON.stringify({ connectorId: connector.id, payload: {}, test: true })
+              });
+              if (res.ok) toast.success('Connection verified successfully');
+              else toast.error(`Verification failed (${res.status})`);
+            } catch {
+              toast.error('Connection verification failed');
+            } finally {
+              setVerifying(false);
+            }
+          }}
+          className="px-4 py-2.5 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200 rounded-lg font-medium text-xs transition-colors disabled:opacity-50 cursor-pointer"
+        >
+          {verifying ? 'Verifying...' : 'Verify Connection'}
+        </button>
+      </div>
 
       <div className="p-4 bg-indigo-50 dark:bg-indigo-500/5 border border-indigo-100 dark:border-indigo-500/10 rounded-2xl flex gap-4">
         <ShieldCheck className="w-5 h-5 text-indigo-500 dark:text-indigo-400 shrink-0" />
@@ -1077,24 +1287,24 @@ const ConnectorTest = ({ connector }: { connector: Connector }) => {
         </button>
       </div>
 
-      <div className="flex flex-col overflow-hidden bg-zinc-950 rounded-2xl border border-zinc-800">
-        <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
-          <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Proxy Execution Response</span>
+      <div className="flex flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-zinc-200 dark:border-zinc-800">
+        <div className="px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-white dark:bg-zinc-900">
+          <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Proxy Execution Response</span>
           {response && (
             <span className={clsx(
-              "px-2 py-0.5 rounded-md text-[10px] font-bold uppercase",
-              response.error ? "bg-red-500/10 text-red-400" : "bg-emerald-500/10 text-emerald-400"
+              "px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase",
+              response.error ? "bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400" : "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400"
             )}>
               {response.error ? 'Error' : '200 OK'}
             </span>
           )}
         </div>
-        <div className="flex-1 p-6 font-mono text-[11px] overflow-auto text-emerald-400">
+        <div className="flex-1 p-4 font-mono text-[11px] overflow-auto text-zinc-800 dark:text-emerald-400">
           {response ? (
             <pre className="whitespace-pre-wrap">{JSON.stringify(response, null, 2)}</pre>
           ) : (
-            <div className="h-48 flex flex-col items-center justify-center text-zinc-600">
-              <Zap className="w-8 h-8 mb-2 opacity-30" />
+            <div className="h-48 flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600">
+              <Zap className="w-7 h-7 mb-2 opacity-40" />
               <p className="text-xs">Execute test to view response JSON...</p>
             </div>
           )}

@@ -31,13 +31,17 @@ export const ValidationsLibraryPage: React.FC = () => {
   const [selectedRuleset, setSelectedRuleset] = useState<ValidationRulesetEntity | null>(null);
 
   const fetchRulesets = async () => {
+    if (!tenant?.id) {
+      setLoading(true);
+      return;
+    }
     if (!builderCache.has(cacheKey)) {
       setLoading(true);
     }
     try {
       const res = await fetch(`${API_BASE_URL}/api/validations`, {
         headers: {
-          'x-tenant-id': tenant?.id || '',
+          'x-tenant-id': tenant.id,
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         }
       });
@@ -53,7 +57,9 @@ export const ValidationsLibraryPage: React.FC = () => {
       console.error('Failed to fetch validation rulesets:', err);
       if (!builderCache.has(cacheKey)) setRulesets([]);
     } finally {
-      setLoading(false);
+      if (tenant?.id) {
+        setLoading(false);
+      }
     }
   };
 
@@ -149,11 +155,11 @@ export const ValidationsLibraryPage: React.FC = () => {
               placeholder="Search rules..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-white/60 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-xl py-2 pl-10 pr-4 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all text-zinc-900 dark:text-zinc-100 font-medium"
+              className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg py-2 pl-9 pr-4 text-xs focus:outline-none focus:border-indigo-500 transition-colors text-zinc-900 dark:text-zinc-100 font-medium"
             />
           </div>
 
-          <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900 p-1 rounded-xl w-full sm:w-auto">
+          <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800 p-1 rounded-lg w-full sm:w-auto">
             {[
               { id: 'all', label: 'All' },
               { id: 'global', label: 'Global Rules' },
@@ -162,9 +168,9 @@ export const ValidationsLibraryPage: React.FC = () => {
               <button
                 key={tab.id}
                 onClick={() => setFilterTab(tab.id as any)}
-                className={`flex-1 sm:flex-initial px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                className={`flex-1 sm:flex-initial px-3 py-1 text-xs font-medium rounded-md transition-colors ${
                   filterTab === tab.id
-                    ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm'
+                    ? 'bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs'
                     : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
                 }`}
               >
@@ -174,8 +180,31 @@ export const ValidationsLibraryPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Glassmorphic 3-Column Grid matching Modules & Sites */}
-        {loading ? null : filteredRulesets.length === 0 ? (
+        {/* Crisp 3-Column Grid */}
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, idx) => (
+              <div
+                key={idx}
+                className="p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl min-h-[176px] flex flex-col justify-between animate-pulse"
+              >
+                <div>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="w-9 h-9 rounded-lg bg-zinc-100 dark:bg-zinc-800" />
+                    <div className="w-16 h-5 rounded-md bg-zinc-100 dark:bg-zinc-800" />
+                  </div>
+                  <div className="h-4 w-2/3 bg-zinc-100 dark:bg-zinc-800 rounded mb-2" />
+                  <div className="h-3 w-full bg-zinc-100 dark:bg-zinc-800 rounded mb-1" />
+                  <div className="h-3 w-4/5 bg-zinc-100 dark:bg-zinc-800 rounded" />
+                </div>
+                <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                  <div className="h-3 w-16 bg-zinc-100 dark:bg-zinc-800 rounded" />
+                  <div className="h-3 w-10 bg-zinc-100 dark:bg-zinc-800 rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : filteredRulesets.length === 0 ? (
           <EmptyState
             icon={ShieldCheck}
             title={search ? "No rules match your search" : "No rules found"}
@@ -193,40 +222,38 @@ export const ValidationsLibraryPage: React.FC = () => {
             }}
           />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredRulesets.map((ruleset, i) => (
               <motion.div
                 key={ruleset.id}
-                initial={{ opacity: 0, y: 8 }}
+                initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.25, delay: i * 0.03, ease: 'easeOut' }}
+                transition={{ duration: 0.2, delay: i * 0.02, ease: 'easeOut' }}
                 onClick={() => {
                   setSelectedRuleset(ruleset);
                   setIsBuilderOpen(true);
                 }}
-                className="group p-6 bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-white/20 dark:border-white/5 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 rounded-3xl transition-[border-color,box-shadow,background-color] duration-200 shadow-xl shadow-black/5 dark:shadow-none hover:shadow-indigo-500/10 cursor-pointer flex flex-col justify-between h-full relative overflow-hidden min-h-[220px]"
+                className="group p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-400 dark:hover:border-indigo-500/60 rounded-xl transition-colors duration-150 cursor-pointer flex flex-col justify-between h-full relative min-h-[176px]"
               >
-                <div className="absolute inset-0 bg-gradient-to-br from-white/[0.1] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-
-                <div className="relative z-10 flex flex-col h-full justify-between">
+                <div className="flex flex-col h-full justify-between">
                   <div>
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="p-3 rounded-2xl bg-zinc-100 dark:bg-white/5 border border-zinc-200 dark:border-white/10 text-zinc-500 group-hover:text-indigo-500 group-hover:border-indigo-500/30 transition-colors duration-200">
-                        <ShieldCheck size={22} />
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="w-9 h-9 rounded-lg bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/70 dark:border-zinc-700/70 text-zinc-500 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 flex items-center justify-center transition-colors">
+                        <ShieldCheck size={18} />
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider border ${
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border ${
                           ruleset.scope === 'GLOBAL'
-                            ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                            : 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20'
+                            ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/60'
+                            : 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800/60'
                         }`}>
                           {ruleset.scope === 'GLOBAL' ? 'Global' : (ruleset.moduleName || ruleset.scope || 'Module-Bound')}
                         </span>
 
                         <button
                           onClick={(e) => handleDeleteClick(e, ruleset)}
-                          className="p-2 rounded-xl bg-zinc-100/80 hover:bg-red-500/10 text-zinc-500 hover:text-red-500 dark:bg-zinc-800/80 dark:hover:bg-red-500/20 transition-colors duration-150 opacity-0 group-hover:opacity-100 z-20 cursor-pointer"
+                          className="p-1.5 rounded-lg text-zinc-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
                           title="Delete Ruleset"
                         >
                           <Trash2 size={14} />
@@ -234,7 +261,7 @@ export const ValidationsLibraryPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <h3 className="text-base font-bold text-zinc-900 dark:text-white group-hover:text-indigo-500 transition-colors duration-150">
+                    <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                       {ruleset.name}
                     </h3>
                     <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
@@ -242,14 +269,14 @@ export const ValidationsLibraryPage: React.FC = () => {
                     </p>
                   </div>
 
-                  <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-white/5 flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-xs text-zinc-500 font-semibold">
+                  <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-xs text-zinc-500 font-medium">
                       <ShieldCheck size={13} className="text-zinc-400" />
                       <span>{ruleset.rules?.length || 0} Rules</span>
                     </div>
 
-                    <div className="flex items-center gap-1 text-xs font-bold text-indigo-500 group-hover:translate-x-1 transition-transform duration-150">
-                      Edit in Builder <ArrowRight size={14} />
+                    <div className="flex items-center gap-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 group-hover:translate-x-0.5 transition-transform">
+                      Edit <ArrowRight size={13} />
                     </div>
                   </div>
                 </div>
@@ -257,24 +284,24 @@ export const ValidationsLibraryPage: React.FC = () => {
 
             ))}
 
-            {/* Dashed Create Card matching Custom Modules */}
+            {/* Dashed Create Card */}
             <motion.div
-              initial={{ opacity: 0, y: 8 }}
+              initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25, delay: filteredRulesets.length * 0.03, ease: 'easeOut' }}
+              transition={{ duration: 0.2, delay: filteredRulesets.length * 0.02, ease: 'easeOut' }}
               onClick={() => {
                 setSelectedRuleset(null);
                 setIsBuilderOpen(true);
               }}
-              className="group p-6 border-2 border-dashed border-zinc-300 dark:border-zinc-800 hover:border-indigo-500/50 rounded-3xl transition-[border-color,background-color] duration-200 cursor-pointer flex flex-col items-center justify-center text-center min-h-[220px] hover:bg-indigo-500/[0.01]"
+              className="group p-5 border border-dashed border-zinc-300 dark:border-zinc-700 hover:border-indigo-400 dark:hover:border-indigo-500/60 rounded-xl transition-colors cursor-pointer flex flex-col items-center justify-center text-center min-h-[176px] hover:bg-zinc-50 dark:hover:bg-zinc-900/50"
             >
-              <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-900 flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 group-hover:scale-110 transition-transform duration-200 mb-3">
-                <Plus size={24} />
+              <div className="w-10 h-10 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors mb-2.5">
+                <Plus size={20} />
               </div>
-              <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-500 transition-colors duration-150">
-                Create Validation
+              <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                Create Validation Ruleset
               </span>
-              <p className="text-[10px] text-zinc-400 mt-1 max-w-[200px]">
+              <p className="text-[11px] text-zinc-400 mt-1 max-w-[200px]">
                 Add a new validation ruleset.
               </p>
             </motion.div>

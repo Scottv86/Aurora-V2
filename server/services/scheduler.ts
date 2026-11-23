@@ -3,6 +3,8 @@ import { AutomationEngine } from './automationEngine';
 import { emitTenantUpdate } from '../socket';
 import { SlaService } from './slaService';
 import { DedupeService } from './dedupeService';
+import { WorkflowEngine } from './workflowEngine';
+import { ActionRegistry } from '../workflow/actions/core';
 
 export class AutomationScheduler {
   private static intervalId: NodeJS.Timeout | null = null;
@@ -48,6 +50,9 @@ export class AutomationScheduler {
     
     // Check SLA warning and breach deadlines
     await this.checkSLAs();
+
+    // Resume paused workflow Wait / SLA (DELAY) nodes whose waitUntil has elapsed
+    await this.checkWorkflowDelays();
 
     // Check KPI metric threshold alerts & workflow triggers
     await this.checkKpiThresholds();
@@ -363,6 +368,108 @@ export class AutomationScheduler {
       }
     } catch (err: any) {
       console.error('[Scheduler] SLA evaluation loop error:', err);
+    }
+  }
+
+  /**
+   * Scans records paused on workflow Wait / SLA (DELAY) nodes and resumes or escalates them once waitUntil elapses.
+   */
+  private static async checkWorkflowDelays() {
+    try {
+      const now = Date.now();
+      const activeRecords = await globalPrisma.record.findMany({
+        where: {
+          status: { notIn: ['CLOSED', 'CANCELLED', 'RESOLVED', 'COMPLETED', 'Archived'] },
+          workflowState: { not: null as any },
+        },
+        include: { module: true },
+        take: 250,
+      });
+
+      for (const record of activeRecords) {
+        const wfState = record.workflowState as any;
+        if (!wfState || !Array.isArray(wfState.history) || wfState.history.length === 0) continue;
+
+        const modConfig = (record.module?.config || {}) as any;
+        const workflow = modConfig.workflow || (Array.isArray(modConfig.workflows) ? modConfig.workflows[0] : null);
+        if (!workflow || !Array.isArray(workflow.nodes)) continue;
+
+        const activeIds: string[] = Array.isArray(wfState.activeNodeIds)
+          ? wfState.activeNodeIds
+          : wfState.currentNodeId ? [wfState.currentNodeId] : [];
+
+        const dueEntryIndex = wfState.history.findIndex((h: any) =>
+          activeIds.includes(h.nodeId) &&
+          h.result?.status === 'WAITING' &&
+          h.result?.waitUntil &&
+          new Date(h.result.waitUntil).getTime() <= now
+        );
+
+        if (dueEntryIndex === -1) continue;
+
+        const dueEntry = wfState.history[dueEntryIndex];
+        const delayNode = workflow.nodes.find((n: any) => n.id === dueEntry.nodeId);
+        if (!delayNode || delayNode.type !== 'DELAY') continue;
+
+        const isSla = Boolean(dueEntry.result?.isSla);
+        const breachAction = String(dueEntry.result?.breachAction || 'notify');
+        const slaTarget = dueEntry.result?.slaTarget ? String(dueEntry.result.slaTarget).trim() : '';
+
+        wfState.history[dueEntryIndex] = {
+          ...dueEntry,
+          result: {
+            ...dueEntry.result,
+            status: isSla ? 'BREACHED' : 'COMPLETED',
+            completedAt: new Date().toISOString(),
+          },
+        };
+
+        if (isSla && (breachAction === 'notify' || breachAction === 'escalate')) {
+          const msg = `SLA breached on "${(record.data as any)?.title || (record.data as any)?.name || record.id}" at step "${delayNode.name}"`;
+          try {
+            if (slaTarget.includes('@') && ActionRegistry.EMAIL) {
+              await ActionRegistry.EMAIL.execute(record, {
+                to: slaTarget,
+                subject: `SLA Breach Alert: ${delayNode.name}`,
+                body: msg,
+              });
+            } else if (ActionRegistry.NOTIFY) {
+              await ActionRegistry.NOTIFY.execute(record, {
+                channel: slaTarget || 'general',
+                message: msg,
+              });
+            }
+          } catch (notifyErr) {
+            console.error('[Scheduler] SLA breach notification failed:', notifyErr);
+          }
+        }
+
+        let updatedState = wfState;
+        if (!isSla || breachAction === 'escalate') {
+          updatedState = await WorkflowEngine.evaluate(
+            { id: record.id, tenantId: record.tenantId, moduleId: record.moduleId, ...((record.data as any) || {}) },
+            workflow,
+            wfState,
+            modConfig.layout
+          );
+        }
+
+        await globalPrisma.record.update({
+          where: { id: record.id },
+          data: {
+            workflowState: updatedState,
+            ...(isSla ? { slaStatus: 'BREACHED' } : {}),
+          },
+        });
+
+        emitTenantUpdate(record.tenantId, 'record_updated', {
+          recordId: record.id,
+          moduleId: record.moduleId,
+          workflowState: updatedState,
+        });
+      }
+    } catch (err: any) {
+      console.error('[Scheduler] Workflow delay resume loop error:', err);
     }
   }
 

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Save, ArrowLeft } from 'lucide-react';
+import { Save, ArrowLeft, X } from 'lucide-react';
 
 import { Button } from '../../UI/Primitives';
 import { StandaloneBuilderContext } from '../../../types/platform';
@@ -35,8 +35,6 @@ export const InContextBuilderModal: React.FC<InContextBuilderModalProps> = ({
 }) => {
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
 
-  if (!isOpen) return null;
-
   const handleAttemptClose = () => {
     if (isDirty) {
       setShowUnsavedModal(true);
@@ -44,6 +42,19 @@ export const InContextBuilderModal: React.FC<InContextBuilderModalProps> = ({
       onClose();
     }
   };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !showUnsavedModal) {
+        handleAttemptClose();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isOpen, isDirty, showUnsavedModal]);
+
+  if (!isOpen) return null;
 
   const handleSaveAndExit = async () => {
     if (onSaveAndExit) {
@@ -68,61 +79,57 @@ export const InContextBuilderModal: React.FC<InContextBuilderModalProps> = ({
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex flex-col w-screen h-screen bg-white dark:bg-zinc-950 overflow-hidden">
-      {/* Top Navigation Bar */}
-      <div className="flex items-center justify-between px-6 py-3 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
-        <div className="flex items-center gap-3">
+      {/* Google-Style Slim Top Bar (48px) */}
+      <div className="h-12 flex items-center justify-between px-4 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0">
           <button
+            type="button"
             onClick={handleAttemptClose}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/70 dark:hover:bg-zinc-800 transition-all text-xs font-bold"
-            title="Back to Platform Settings"
+            className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-xs font-medium cursor-pointer shrink-0"
+            title="Back"
           >
-            <ArrowLeft size={16} />
+            <ArrowLeft size={15} />
             <span>Back</span>
           </button>
 
-          <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800" />
+          <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 shrink-0" />
 
-          <div>
-            <div className="flex items-center gap-1.5 text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-              <span>{builderContext.mode === 'global' ? 'Platform Settings' : `${builderContext.hostType?.toUpperCase()} Host`}</span>
-              <span>/</span>
-              <span className="text-indigo-600 dark:text-indigo-400">{title}</span>
-            </div>
-            <h2 className="text-sm font-bold text-zinc-900 dark:text-white leading-tight">
+          <div className="flex items-center gap-2 min-w-0">
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">
               {title}
             </h2>
             {subtitle && (
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+              <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 shrink-0">
                 {subtitle}
-              </p>
+              </span>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Button
-            variant="secondary"
-            onClick={handleAttemptClose}
-            className="text-xs px-3.5 py-1.5 rounded-xl"
-          >
-            Close
-          </Button>
-
+        <div className="flex items-center gap-2 shrink-0">
           {onSave && (
             <Button
               onClick={onSave}
               disabled={isSaving}
-              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-4 py-1.5 rounded-xl font-semibold shadow-md transition-all"
+              className="h-8 flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3.5 rounded-lg font-medium shadow-xs transition-colors cursor-pointer"
             >
-              <Save size={14} />
+              <Save size={13} />
               <span>{isSaving ? 'Saving...' : 'Save & Exit'}</span>
             </Button>
           )}
+          <button
+            type="button"
+            onClick={handleAttemptClose}
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+            title="Close (Esc)"
+          >
+            <X size={16} />
+          </button>
         </div>
       </div>
 
       {/* Full-Screen Builder Content Area */}
-      <div className="flex-1 overflow-y-auto bg-zinc-100/50 dark:bg-zinc-900/30">
+      <div className="flex-1 overflow-hidden bg-zinc-50/40 dark:bg-zinc-950">
         {children}
       </div>
 

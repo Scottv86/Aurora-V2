@@ -1,4 +1,4 @@
-import { SchemaChange } from '../components/Builder/SchemaDiffModal';
+import type { SchemaChange } from '../components/Builder/SchemaDiffModal';
 
 export interface GenerateReleaseNotesOptions {
   moduleName: string;

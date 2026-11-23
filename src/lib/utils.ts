@@ -341,8 +341,12 @@ export const calculateHeight = (field: any, placeholder?: { index: number, span?
   const type = field.type;
   
   if (type === 'placeholder') return field.rowSpan || 2;
-  if (type === 'sub_module') return Math.max(4, field.rowSpan || 4);
-  if (type === 'textarea' || type === 'rich_text') return Math.max(2, field.rowSpan || 3);
+  if (!isContainerField(type) && typeof field.rowSpan === 'number' && field.rowSpan >= 1) {
+    return field.rowSpan;
+  }
+  if (type === 'divider' || type === 'spacer' || type === 'heading') return 1;
+  if (type === 'sub_module' || type === 'relationship_m2m' || type === 'datatable' || type === 'chat' || type === 'map') return 4;
+  if (type === 'textarea' || type === 'longText' || type === 'rich_text' || type === 'richtext' || type === 'signature' || type === 'canvas' || type === 'html' || type === 'video') return 3;
   
   if (isContainerField(type)) {
     // If collapsed, return 2 units to match standard field height

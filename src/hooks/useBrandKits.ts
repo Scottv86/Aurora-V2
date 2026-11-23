@@ -5,13 +5,14 @@ import { BrandKit, BrandKitService, AIPaletteSuggestion } from '../services/bran
 import { toast } from 'sonner';
 
 export function useBrandKits() {
-  const { session } = useAuth();
+  const { session, loading: authLoading } = useAuth();
   const { tenant } = usePlatform();
   const [brandKits, setBrandKits] = useState<BrandKit[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchBrandKits = useCallback(async (forceRefresh?: boolean | any) => {
+    if (authLoading) return;
     const effectiveToken = session?.access_token || (typeof localStorage !== 'undefined' ? localStorage.getItem('aurora_token') || undefined : undefined);
     const effectiveTenantId = tenant?.id || (typeof localStorage !== 'undefined' ? localStorage.getItem('aurora_tenant_id') || undefined : undefined);
 
@@ -32,7 +33,7 @@ export function useBrandKits() {
     } finally {
       setLoading(false);
     }
-  }, [session?.access_token, tenant?.id]);
+  }, [session?.access_token, tenant?.id, authLoading]);
 
   useEffect(() => {
     fetchBrandKits();

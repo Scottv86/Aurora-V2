@@ -2,6 +2,7 @@ import { Workflow, WorkflowNode } from '../../src/types/platform';
 import { ActionRegistry } from '../workflow/actions/core';
 import { globalPrisma } from '../lib/prisma';
 import { emitTenantUpdate } from '../socket';
+import { SlaService } from './slaService';
 
 export interface WorkflowState {
   currentNodeId: string;
@@ -88,6 +89,45 @@ export class WorkflowEngine {
             }) - 1;
 
             actionsToRun.push({ node: nextNode, historyIndex });
+          } else if (nextNode.type === 'DELAY') {
+            currentActive.add(nextNode.id);
+            const delayCfg = nextNode.config || {};
+            let waitUntil: string | undefined;
+            if (delayCfg.waitMode === 'field' && delayCfg.targetDateField && record[delayCfg.targetDateField]) {
+              const parsed = new Date(record[delayCfg.targetDateField]);
+              if (!isNaN(parsed.getTime())) waitUntil = parsed.toISOString();
+            } else {
+              const duration = Math.max(1, Number(delayCfg.duration) || 24);
+              const unit = String(delayCfg.unit || 'hours');
+              if (delayCfg.businessHoursOnly) {
+                const hoursNeeded =
+                  unit === 'minutes' ? duration / 60 :
+                  unit === 'hours' ? duration :
+                  unit === 'days' ? duration * 8 :
+                  unit === 'weeks' ? duration * 40 : duration;
+                waitUntil = SlaService.calculateBusinessDeadline(new Date(), hoursNeeded).toISOString();
+              } else {
+                const mult =
+                  unit === 'minutes' ? 60 * 1000 :
+                  unit === 'hours' ? 60 * 60 * 1000 :
+                  unit === 'days' ? 24 * 60 * 60 * 1000 :
+                  unit === 'weeks' ? 7 * 24 * 60 * 60 * 1000 : 60 * 60 * 1000;
+                waitUntil = new Date(Date.now() + duration * mult).toISOString();
+              }
+            }
+            state.history.push({
+              nodeId: nextNode.id,
+              timestamp: new Date().toISOString(),
+              action: delayCfg.isSla ? 'SLA Timer Started' : 'Wait / Delay Started',
+              triggerCondition: transition.condition || undefined,
+              result: {
+                status: 'WAITING',
+                waitUntil,
+                isSla: Boolean(delayCfg.isSla),
+                breachAction: delayCfg.breachAction || 'notify',
+                slaTarget: delayCfg.slaTarget || null,
+              }
+            });
           } else if (nextNode.type === 'STATUS' || nextNode.type === 'START' || nextNode.type === 'END') {
             state.history.push({
               nodeId: nextNode.id,

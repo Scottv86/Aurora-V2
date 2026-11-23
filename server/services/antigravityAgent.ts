@@ -902,7 +902,32 @@ export const runAgentLoop = async (
       }
     }
 
-    contextBlock += `\n================================================================================
+    if (ae.domain === 'module_builder') {
+      contextBlock += `\n================================================================================
+USER'S ACTIVE MODULE BUILDER IN FOCUS (GROUNDED INSTANT CONTEXT):
+  - Module Name: "${ae.title}"
+  - Module ID: "${ae.module?.id || ae.id}"
+  - Active Builder Tab: "${ae.activeTab || 'Interface'}"
+  - Schema & Layout Snapshot:
+${attrLines || '    * (Empty module schema)'}
+
+AURORA MODULE BUILDER AI PLAYBOOK:
+1. Context & Target: The user is ACTIVELY DESIGNING Module "${ae.title}" (ID: "${ae.module?.id || ae.id}") on the "${ae.activeTab || 'Interface'}" tab. Use moduleId "${ae.module?.id || ae.id}" directly in module-builder tools without asking the user for IDs.
+2. Schema & 12-Column Grid Conventions:
+   - Valid field types: text, textarea, number, currency, select, multi_select, checkbox, date, datetime, user, party, lookup, calculation, file, url, email, phone, group, fieldGroup, repeatableGroup, sub_module.
+   - Grid layout uses 12 columns (colSpan: 12 = Full, 8 = 2/3, 6 = 1/2, 4 = 1/3, 3 = 1/4; startCol: 1..12). Prefer balanced 2-column (colSpan: 6) or full-width (colSpan: 12) layouts.
+   - Calculated fields use type "calculation" with calculationLogic referencing fields["<fieldId>"] and calculationTriggers listing dependency field IDs.
+3. Tab-Aware Guidance:
+   - Interface / Forms: Organize fields into clean fieldGroup sections, ensure clear labels, placeholders, and appropriate required flags.
+   - Workflow: Design clean START -> STATUS -> DECISION -> ACTION / DELAY (Wait/SLA) -> END flows. Supported workflow actions include CREATE_RECORD, UPDATE, ROUTE_TO_MODULE, EMAIL, NOTIFY, SLACK, CREATE_NOTE, PIN_RECORD_NOTE, CREATE_REMINDER, COMPLETE_REMINDER, PDF, STRIPE_PAYMENT_LINK, AI_SUMMARIZE, GEMINI_PROMPT, AI_AGENT, WEBHOOK, GOOGLE_SHEETS_SYNC, RUN_AUTOMATION. DELAY nodes support duration/unit, targetDateField, businessHoursOnly, isSla, breachAction, and slaTarget.
+   - Rules: Recommend Error (Block Save), Warning (Confirm to Bypass), or Info validation rules with clear user-facing messages.
+   - Integrations: Recommend external API connectors, design REST endpoints (baseUrl, method, ioSchema), and map outputs to module fields.
+   - Automations: Build When -> If -> Then pipelines using triggers (RECORD_CREATED, RECORD_UPDATED, STATUS_CHANGED, ASSIGNEE_CHANGED, FORM_SUBMITTED, CRON, SLA_AGE, QUICK_ACTION) and {{ trigger.record.<field> }} / {{ steps.<id>.output.<key> }} variable syntax.
+4. Safety Guardrails:
+   - Always prefer non-destructive ADD or UPDATE operations. Never delete existing fields, tabs, validation rules, or workflow nodes unless the user explicitly asks to remove them.
+================================================================================\n`;
+    } else {
+      contextBlock += `\n================================================================================
 USER'S ACTIVE RECORD IN FOCUS (GROUNDED INSTANT CONTEXT):
   - Entity Domain: "${ae.domain}"
   - Entity / Record ID: "${ae.id}"
@@ -918,6 +943,7 @@ GROUNDING DIRECTIVE FOR ACTIVE RECORD:
 4. If the user asks to perform any other action on this record (e.g. adding an activity note, generating a document), use Entity ID "${ae.id}"${ae.module?.id ? ` and Module ID "${ae.module.id}"` : ''} directly without asking the user to specify or confirm the record ID.
 5. If the user explicitly asks to CREATE A NEW record (e.g. "Create a new record in [Module]", "Add a new ticket", "New entry"), do NOT pass recordId. Call "upsert_record" with moduleId: "${ae.module?.id || '<moduleId>'}" and omit recordId entirely so a new record is created with its own unique record key. Never update the currently active record when the user's intent is creating a new one.
 ================================================================================\n`;
+    }
   } else if (context && context.path) {
     contextBlock += `\nUse this route information to ground your understanding. For example, if they ask to add a field, create an automation, or query data, they likely refer to the active module/page they are currently viewing listed above.\n`;
   }

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { GripVertical, Trash2, Folder, ListPlus, Move, BrainCircuit, Settings2, Copy, ChevronDown, Box, LayoutGrid, FolderTree, ListOrdered, GitCommit, Layers, Plus } from 'lucide-react';
+import { GripVertical, Trash2, Folder, ListPlus, Move, BrainCircuit, Settings2, Copy, ChevronDown, Box, LayoutGrid, FolderTree, ListOrdered, GitCommit, Layers, Plus, ExternalLink, Sparkles } from 'lucide-react';
 import { cn, calculateHeight } from '../../lib/utils';
 import { GRID_CONFIG } from '../ModuleEditor';
 
@@ -38,7 +38,7 @@ interface FieldGroupProps {
   onDelete: (id: string) => void;
   onDrop: (e: React.DragEvent, parentId?: string) => void;
   onDragOver?: (e: React.DragEvent, parentId?: string) => void;
-  onDragStart: (e: React.DragEvent, data: any) => void;
+  onDragStart?: (e: any, data?: any) => void;
   isDraggingOver?: boolean;
   renderNested?: (fields: Field[], parentId: string) => React.ReactNode;
   viewportSize: 'desktop' | 'tablet' | 'mobile';
@@ -50,7 +50,23 @@ interface FieldGroupProps {
   density?: 'compact' | 'standard' | 'spacious';
   style?: React.CSSProperties;
   className?: string;
+  availableFieldsToNest?: Array<{ id: string; label: string; type: string }>;
+  onMoveFieldToContainer?: (containerId: string, fieldId: string) => void;
+  onRequestAddSubfield?: (containerId: string, containerLabel: string) => void;
+  onCreateFieldInContainer?: (containerId: string, fieldType?: string) => void;
+  onMoveToRoot?: (fieldId: string) => void;
 }
+
+const SPAN_CYCLE: number[] = [12, 8, 6, 4, 3];
+const getSpanLabel = (colSpan?: number) => {
+  const s = colSpan || 12;
+  if (s === 12) return 'Full';
+  if (s === 8) return '2/3';
+  if (s === 6) return '1/2';
+  if (s === 4) return '1/3';
+  if (s === 3) return '1/4';
+  return `${s}/12`;
+};
 
 export const FieldGroup = React.forwardRef<HTMLDivElement, FieldGroupProps & Omit<React.HTMLAttributes<HTMLDivElement>, 'onSelect' | 'onDragStart' | 'onDrop' | 'onDragOver'>>(({
   block,
@@ -60,7 +76,7 @@ export const FieldGroup = React.forwardRef<HTMLDivElement, FieldGroupProps & Omi
   onDelete,
   onDrop,
   onDragOver,
-  onDragStart,
+  onDragStart: _onDragStart,
   renderNested,
   viewportSize,
   onClone,
@@ -72,6 +88,11 @@ export const FieldGroup = React.forwardRef<HTMLDivElement, FieldGroupProps & Omi
   density = 'standard',
   style,
   className,
+  availableFieldsToNest = [],
+  onMoveFieldToContainer,
+  onRequestAddSubfield,
+  onCreateFieldInContainer,
+  onMoveToRoot,
   ...rest
 }, ref) => {
   const isSelected = selectedIds.includes(block.id);
@@ -109,7 +130,7 @@ export const FieldGroup = React.forwardRef<HTMLDivElement, FieldGroupProps & Omi
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [isResizing] = useState<'left' | 'right' | null>(null);
-  const [isContentHovered, setIsContentHovered] = useState(false);
+  const [, setIsContentHovered] = useState(false);
 
   const gc = gridConfig || GRID_CONFIG;
   const isCollapsed = block.collapsible ? (block.isCollapsed ?? block.defaultCollapsed ?? false) : false;
@@ -159,109 +180,122 @@ export const FieldGroup = React.forwardRef<HTMLDivElement, FieldGroupProps & Omi
       )}
       <div className={cn("absolute inset-0 bg-gradient-to-br from-zinc-50/50 to-transparent dark:from-zinc-900/20 dark:to-transparent pointer-events-none", density === 'compact' ? 'rounded-lg' : density === 'spacious' ? 'rounded-2xl' : 'rounded-xl')} />
 
-      <div className={cn("flex items-center justify-between", headerMargin)}>
-        <div className={cn("flex items-center", density === 'compact' ? 'gap-1.5' : 'gap-3')}>
+      <div className={cn("flex items-center justify-between gap-2 pb-2 border-b border-zinc-200/60 dark:border-zinc-800/60", headerMargin)}>
+        <div className={cn("flex items-center min-w-0", density === 'compact' ? 'gap-1.5' : 'gap-2.5')}>
           <div 
             className={cn(
-              "drag-handle text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 cursor-grab active:cursor-grabbing p-0.5 rounded flex items-center shrink-0",
+              "drag-handle text-zinc-400 hover:text-indigo-500 dark:text-zinc-500 dark:hover:text-indigo-400 cursor-grab active:cursor-grabbing p-1 -ml-1 rounded-lg flex items-center shrink-0 transition-colors",
               isNested ? "nested-drag-handle" : "root-drag-handle"
             )}
-            title="Drag to move"
-            onPointerDown={(e: any) => {
-              e.stopPropagation();
-              if (onDragStart) {
-                onDragStart(e, { type: 'move', fieldId: block.id, parentId: block.parentId });
-              }
-            }}
+            title="Drag to move container"
           >
             <GripVertical size={14} />
           </div>
-          {showIcon && (
-            <div className={cn(
-              "flex items-center justify-center transition-all duration-500",
-              iconBoxSize,
-              isSelected ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/30 rotate-3" : 
-              isRepeatable ? "bg-amber-500/10 text-amber-500" :
-              isCard ? "bg-blue-500/10 text-blue-500" :
-              isAccordion ? "bg-purple-500/10 text-purple-500" :
-              isTabs ? "bg-emerald-500/10 text-emerald-500" :
-              "bg-zinc-100 dark:bg-zinc-900 text-zinc-500"
-            )}>
-              {getIcon(iconSize)}
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <p className={cn("font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider truncate", titleTextSize)}>
+                {block.label}
+              </p>
+              <span className={cn("px-1.5 py-0.5 rounded bg-zinc-200/70 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 font-mono font-bold uppercase shrink-0", subtitleTextSize)}>
+                {({
+                  repeatableGroup: 'Repeater (1:N)',
+                  fieldGroup: 'Field Group',
+                  group: 'Group',
+                  card: 'Card',
+                  accordion: 'Accordion',
+                  tabs_nested: 'Tabs',
+                  stepper: 'Stepper',
+                  timeline: 'Timeline',
+                } as Record<string, string>)[block.type] || block.type}
+              </span>
+              <span className="px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800/80 rounded text-[9px] font-mono font-semibold text-zinc-500 border border-zinc-200/60 dark:border-zinc-700/60 shrink-0">
+                {block.fields?.length || 0}
+              </span>
             </div>
-          )}
-          <div>
-            <h4 className={cn("font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.15em] mb-0.5", subtitleTextSize)}>
-              {({
-                repeatableGroup: 'Collection',
-                fieldGroup: 'Field Group',
-                group: 'Group',
-                card: 'Card',
-                accordion: 'Accordion',
-                tabs_nested: 'Tabs',
-                stepper: 'Stepper',
-                timeline: 'Timeline',
-              } as Record<string, string>)[block.type] || block.type.replace('Group', ' Group')}
-            </h4>
-            <p className={cn("font-bold text-zinc-900 dark:text-zinc-100 tracking-tight", titleTextSize)}>{block.label}</p>
+            {block.helperText && (
+              <p className="text-[10px] text-zinc-400 font-medium truncate mt-0.5">
+                {block.helperText}
+              </p>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 shrink-0">
+          {block.visibilityRule && (
+            <div className="flex items-center gap-1 px-2 py-0.5 bg-amber-500/10 rounded-md border border-amber-500/20" title="Conditional Logic Applied">
+              <BrainCircuit size={11} className="text-amber-500" />
+              <span className="text-[8px] font-black text-amber-600 dark:text-amber-400 uppercase">Logic</span>
+            </div>
+          )}
+
+          {/* 1-Click Width Cycle Pill (FormBuilder consistency) */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              const cur = block.colSpan || 12;
+              const idx = SPAN_CYCLE.indexOf(cur);
+              const nextSpan = SPAN_CYCLE[(idx + 1) % SPAN_CYCLE.length];
+              const maxStart = Math.max(1, 13 - nextSpan);
+              const nextStart = Math.min(block.startCol || 1, maxStart);
+              onUpdate(block.id, { colSpan: nextSpan, startCol: nextStart });
+            }}
+            title="Click to cycle width (Full → 2/3 → 1/2 → 1/3 → 1/4)"
+            className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-zinc-200/70 dark:bg-zinc-800 hover:bg-indigo-500/20 hover:text-indigo-600 dark:hover:text-indigo-400 text-zinc-600 dark:text-zinc-400 transition-colors cursor-pointer"
+          >
+            {getSpanLabel(block.colSpan)}
+          </button>
+
+          {isNested && onMoveToRoot && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveToRoot(block.id);
+              }}
+              className="p-1 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors cursor-pointer"
+              title="Move container out to main canvas"
+            >
+              <ExternalLink size={12} />
+            </button>
+          )}
+
+          <button 
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onClone(block.id); }}
+            className="p-1 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-zinc-200/60 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
+            title="Duplicate Group"
+          >
+            <Copy size={12} />
+          </button>
+
+          <button 
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onDelete(block.id); }}
+            className="p-1 text-zinc-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+            title="Delete Group"
+          >
+            <Trash2 size={12} />
+          </button>
+
           {block.collapsible && (
             <button 
+              type="button"
               onClick={(e) => { e.stopPropagation(); onUpdate(block.id, { isCollapsed: !isCollapsed }); }}
               className={cn(
-                "w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300",
+                "w-6 h-6 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer",
                 isCollapsed ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-400" : "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500"
               )}
+              title={isCollapsed ? "Expand Group" : "Collapse Group"}
             >
               <ChevronDown 
-                size={14} 
-                className={cn("transition-transform duration-500 ease-out", isCollapsed ? "-rotate-90" : "rotate-0")} 
+                size={13} 
+                className={cn("transition-transform duration-200 ease-out", isCollapsed ? "-rotate-90" : "rotate-0")} 
               />
             </button>
           )}
-          {block.visibilityRule && (
-            <div className="flex items-center gap-1.5 px-3 py-1 bg-indigo-500/10 rounded-full border border-indigo-500/20 shadow-sm shadow-indigo-500/10" title="Conditional Logic Applied">
-              <BrainCircuit size={12} className="text-indigo-500" />
-              <span className="text-[10px] font-black text-indigo-500 uppercase tracking-tighter">Logic</span>
-            </div>
-          )}
         </div>
       </div>
-
-      {/* Floating Action Buttons */}
-      <button 
-        onClick={(e) => { e.stopPropagation(); onClone(block.id); }}
-        className={cn(
-          "absolute -top-4 right-10 w-8 h-8 bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-full flex items-center justify-center transition-opacity shadow-lg z-50 hover:scale-110 active:scale-95 border border-zinc-200 dark:border-zinc-700",
-          "opacity-0",
-          !isContentHovered && "group-hover/group:opacity-100"
-        )}
-        title="Duplicate Group"
-      >
-        <Copy size={14} />
-      </button>
-
-      <button 
-        onClick={(e) => { e.stopPropagation(); onDelete(block.id); }}
-        className={cn(
-          "absolute -top-4 -right-4 w-8 h-8 bg-rose-500 text-white rounded-full flex items-center justify-center transition-opacity shadow-lg z-50 hover:scale-110 active:scale-95",
-          "opacity-0",
-          !isContentHovered && "group-hover/group:opacity-100"
-        )}
-        title="Delete Group"
-      >
-        <Trash2 size={16} />
-      </button>
-
-      {/* Selection Pill */}
-      {isSelected && (
-        <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-50">
-          Selected
-        </div>
-      )}
 
       {!isCollapsed && (
         <div className="flex-1 flex flex-col min-h-0 w-full">
@@ -464,26 +498,121 @@ export const FieldGroup = React.forwardRef<HTMLDivElement, FieldGroupProps & Omi
               ) : (
                 ((block.fields && block.fields.length > 0) || isDraggingOver) ? (
                   <div 
-                    className="relative w-full min-h-full z-10"
+                    className="relative w-full flex-1 min-h-0 z-10 flex flex-col justify-between"
                     style={{ 
                       padding: `${gc.nestedPadding}px`
                     }}
                   >
-                    {isDragging && (
-                      <div className="absolute inset-0 pointer-events-none z-0 grid grid-cols-12 opacity-50" style={{ gap: `${gc.gap}px`, padding: `${gc.nestedPadding}px` }}>
-                        {Array.from({ length: 12 }).map((_, i) => (
-                          <div key={i} className="h-full border-x border-dashed border-indigo-500/10 bg-indigo-500/[0.005] rounded-xl" />
-                        ))}
+                    <div className="relative w-full flex-1">
+                      {isDragging && (
+                        <div className="absolute inset-0 pointer-events-none z-0 grid grid-cols-12 opacity-50" style={{ gap: `${gc.gap}px` }}>
+                          {Array.from({ length: 12 }).map((_, i) => (
+                            <div key={i} className="h-full border-x border-dashed border-indigo-500/10 bg-indigo-500/[0.005] rounded-xl" />
+                          ))}
+                        </div>
+                      )}
+                      {renderNested && renderNested(block.fields || [], block.id)}
+                    </div>
+
+                    {/* FormBuilder-style Inline Add Field to Group Toolbar */}
+                    {(onMoveFieldToContainer || onCreateFieldInContainer) && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 mt-2 border-t border-zinc-200/70 dark:border-zinc-800/80 relative z-20">
+                        <div className="flex items-center gap-1.5">
+                          {onMoveFieldToContainer && availableFieldsToNest.length > 0 && (
+                            <select
+                              value=""
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                if (e.target.value) {
+                                  onMoveFieldToContainer(block.id, e.target.value);
+                                }
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-white dark:bg-zinc-900 border border-indigo-200 dark:border-indigo-800/70 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold focus:outline-none cursor-pointer shadow-2xs"
+                            >
+                              <option value="">+ Move Existing Field into {isRepeatable ? 'Repeater' : 'Group'}...</option>
+                              {availableFieldsToNest.map((af) => (
+                                <option key={af.id} value={af.id}>
+                                  {af.label} ({af.type})
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          {(onRequestAddSubfield || onCreateFieldInContainer) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (onRequestAddSubfield) {
+                                  onRequestAddSubfield(block.id, block.label || 'Group');
+                                } else if (onCreateFieldInContainer) {
+                                  onCreateFieldInContainer(block.id);
+                                }
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95"
+                            >
+                              <Plus size={11} />
+                              <span>New Sub-Field</span>
+                            </button>
+                          )}
+                        </div>
+                        <span className="text-[9px] text-zinc-400 font-semibold">
+                          {isSelected ? 'Active target: click any palette block to add here' : `${block.fields?.length || 0} nested`}
+                        </span>
                       </div>
                     )}
-                    {renderNested && renderNested(block.fields || [], block.id)}
                   </div>
                 ) : (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 opacity-40">
-                    <div className="p-3 bg-zinc-200 dark:bg-zinc-800 rounded-full border-2 border-dashed border-zinc-300 dark:border-zinc-700">
-                      <Move size={20} className="text-zinc-400" />
+                  <div className="flex-1 flex flex-col items-center justify-center gap-2 py-4 px-3">
+                    <div className="flex flex-col items-center gap-1.5 opacity-60">
+                      <div className="p-2.5 bg-zinc-200/70 dark:bg-zinc-800 rounded-full border border-dashed border-zinc-300 dark:border-zinc-700">
+                        <Move size={16} className="text-zinc-500" />
+                      </div>
+                      <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest text-center">
+                        {isSelected ? 'Selected — click any block in Left Palette or drop here to nest' : 'Drop fields here or select group to add fields'}
+                      </p>
                     </div>
-                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Drop fields to nest</p>
+                    {(onMoveFieldToContainer || onCreateFieldInContainer) && (
+                      <div className="flex flex-wrap items-center justify-center gap-1.5 mt-1 relative z-20">
+                        {onMoveFieldToContainer && availableFieldsToNest.length > 0 && (
+                          <select
+                            value=""
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              if (e.target.value) {
+                                onMoveFieldToContainer(block.id, e.target.value);
+                              }
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-white dark:bg-zinc-900 border border-indigo-200 dark:border-indigo-800/70 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold focus:outline-none cursor-pointer shadow-2xs"
+                          >
+                            <option value="">+ Move Existing Field Here...</option>
+                            {availableFieldsToNest.map((af) => (
+                              <option key={af.id} value={af.id}>
+                                {af.label} ({af.type})
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        {(onRequestAddSubfield || onCreateFieldInContainer) && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onRequestAddSubfield) {
+                                onRequestAddSubfield(block.id, block.label || 'Group');
+                              } else if (onCreateFieldInContainer) {
+                                onCreateFieldInContainer(block.id);
+                              }
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95"
+                          >
+                            <Plus size={11} />
+                            <span>New Sub-Field</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )
               )}

@@ -14,6 +14,8 @@ import {
   ShieldAlert,
   Pin,
   X,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -25,9 +27,15 @@ import { useAuth } from '../../hooks/useAuth';
 import { useActiveEntityContext } from '../../context/ActiveEntityContext';
 import { DriveService } from '../../services/driveService';
 import { AgentExecutionTrace } from '../AI/AgentExecutionTrace';
+import {
+  InlineChartRenderer,
+  InlineMapRenderer,
+  WorkflowDAGRenderer,
+} from '../chat';
 
 export interface CompactAIAssistantViewProps {
   compactLevel?: 'side' | 'bottom';
+  onClose?: () => void;
 }
 
 const ANTIGRAVITY_API = `${API_BASE_URL}/api/antigravity`;
@@ -93,6 +101,158 @@ interface AgentToolTrace {
   status: 'running' | 'done';
 }
 
+const renderInlineMarkdown = (text: string) => {
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*\n]+\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g);
+  return parts.map((part, pIdx) => {
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+      return (
+        <strong key={pIdx} className="font-semibold text-zinc-900 dark:text-white">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    if (part.startsWith('*') && part.endsWith('*') && part.length > 2 && !part.startsWith('**')) {
+      return (
+        <em key={pIdx} className="italic">
+          {part.slice(1, -1)}
+        </em>
+      );
+    }
+    if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
+      return (
+        <code
+          key={pIdx}
+          className="px-1 py-0.5 rounded bg-zinc-200/70 dark:bg-zinc-800 text-indigo-600 dark:text-indigo-300 font-mono text-[11px]"
+        >
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+    if (linkMatch) {
+      const [, label, href] = linkMatch;
+      const isSafe = href.startsWith('http://') || href.startsWith('https://') || href.startsWith('/');
+      if (isSafe) {
+        return (
+          <a
+            key={pIdx}
+            href={href}
+            target={href.startsWith('http') ? '_blank' : undefined}
+            rel={href.startsWith('http') ? 'noopener noreferrer' : undefined}
+            className="text-indigo-600 dark:text-indigo-400 underline underline-offset-2 hover:text-indigo-500"
+          >
+            {label}
+          </a>
+        );
+      }
+    }
+    return <React.Fragment key={pIdx}>{part}</React.Fragment>;
+  });
+};
+
+const highlightCodeLine = (line: string): React.ReactNode => {
+  const tokenRegex =
+    /(\/\/.*$|--.*$|"(?:[^"\\]|\\.)*"\s*:|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\b(?:true|false|null|undefined|const|let|var|function|return|async|await|import|from|export|if|else|for|while|switch|case|break|new|typeof|interface|type|SELECT|FROM|WHERE|AND|OR|INSERT|INTO|VALUES|UPDATE|SET|DELETE|ORDER BY|GROUP BY|LIMIT)\b|-?\b\d+(?:\.\d+)?\b)/g;
+
+  const parts = line.split(tokenRegex);
+  return parts.map((part, idx) => {
+    if (!part) return null;
+    if (part.startsWith('//') || part.startsWith('--')) {
+      return (
+        <span key={idx} className="text-zinc-500 italic">
+          {part}
+        </span>
+      );
+    }
+    if (/^"(?:[^"\\]|\\.)*"\s*:$/.test(part)) {
+      const colonIdx = part.lastIndexOf(':');
+      return (
+        <React.Fragment key={idx}>
+          <span className="text-sky-300">{part.slice(0, colonIdx)}</span>
+          <span className="text-zinc-400">{part.slice(colonIdx)}</span>
+        </React.Fragment>
+      );
+    }
+    if (
+      (part.startsWith('"') && part.endsWith('"')) ||
+      (part.startsWith("'") && part.endsWith("'"))
+    ) {
+      return (
+        <span key={idx} className="text-emerald-400">
+          {part}
+        </span>
+      );
+    }
+    if (
+      /^(?:true|false|null|undefined|const|let|var|function|return|async|await|import|from|export|if|else|for|while|switch|case|break|new|typeof|interface|type|SELECT|FROM|WHERE|AND|OR|INSERT|INTO|VALUES|UPDATE|SET|DELETE|ORDER BY|GROUP BY|LIMIT)$/.test(
+        part
+      )
+    ) {
+      return (
+        <span key={idx} className="text-violet-400 font-medium">
+          {part}
+        </span>
+      );
+    }
+    if (/^-?\d+(?:\.\d+)?$/.test(part)) {
+      return (
+        <span key={idx} className="text-amber-300">
+          {part}
+        </span>
+      );
+    }
+    return <React.Fragment key={idx}>{part}</React.Fragment>;
+  });
+};
+
+const CodeSnippetBlock: React.FC<{ language: string; code: string }> = ({ language, code }) => {
+  const [copied, setCopied] = useState(false);
+  const lines = code.split('\n');
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      toast.error('Failed to copy code');
+    }
+  };
+
+  return (
+    <div className="my-1.5 rounded-xl overflow-hidden border border-zinc-800 bg-zinc-950 shadow-xs">
+      <div className="px-3 py-1.5 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between gap-2">
+        <span className="text-[10px] font-mono font-medium uppercase tracking-wider text-zinc-400">
+          {language || 'code'}
+        </span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+          title="Copy code"
+        >
+          {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+          <span>{copied ? 'Copied' : 'Copy'}</span>
+        </button>
+      </div>
+      <div className="overflow-x-auto py-2.5 font-mono text-[11px] leading-5 text-zinc-100">
+        <table className="w-full border-collapse">
+          <tbody>
+            {lines.map((line, idx) => (
+              <tr key={idx} className="hover:bg-zinc-900/60">
+                <td className="select-none text-right pl-3 pr-3 text-[10px] text-zinc-600 border-r border-zinc-800/80 w-8 align-top">
+                  {idx + 1}
+                </td>
+                <td className="pl-3 pr-4 whitespace-pre">{highlightCodeLine(line)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
 const CompactMarkdown: React.FC<{ text: string }> = ({ text }) => {
   if (!text) return null;
   const blocks = text.split(/(```[\s\S]*?```)/g);
@@ -101,45 +261,202 @@ const CompactMarkdown: React.FC<{ text: string }> = ({ text }) => {
     <div className="space-y-1.5 text-xs leading-relaxed break-words">
       {blocks.map((block, i) => {
         if (block.startsWith('```') && block.endsWith('```')) {
-          const inner = block.slice(3, -3).replace(/^[a-zA-Z0-9_-]*\n/, '');
-          return (
-            <pre
-              key={i}
-              className="p-2 rounded-lg bg-zinc-100 dark:bg-zinc-950/80 border border-zinc-200 dark:border-zinc-800 text-[11px] font-mono text-zinc-800 dark:text-zinc-200 overflow-x-auto whitespace-pre-wrap"
-            >
-              {inner.trim()}
-            </pre>
-          );
-        }
-        return (
-          <div key={i} className="whitespace-pre-wrap">
-            {block.split('\n').map((line, lineIdx) => {
-              const parts = line.split(/(\*\*.*?\*\*|`[^`]+`)/g);
+          const langMatch = block.slice(3, -3).match(/^([a-zA-Z0-9_:-]*)\n([\s\S]*)$/);
+          const language = langMatch ? langMatch[1] : '';
+          const inner = (langMatch ? langMatch[2] : block.slice(3, -3)).trim();
+          const lang = language.toLowerCase().trim();
+
+          if (lang === 'chart' || lang.startsWith('chart:') || lang === 'recharts') {
+            try {
+              const parsed = JSON.parse(inner);
               return (
-                <div key={lineIdx} className={line.trim() === '' ? 'h-1.5' : undefined}>
-                  {parts.map((part, pIdx) => {
-                    if (part.startsWith('**') && part.endsWith('**')) {
-                      return (
-                        <strong key={pIdx} className="font-semibold text-zinc-900 dark:text-white">
-                          {part.slice(2, -2)}
-                        </strong>
-                      );
-                    }
-                    if (part.startsWith('`') && part.endsWith('`')) {
-                      return (
-                        <code
-                          key={pIdx}
-                          className="px-1 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-indigo-600 dark:text-indigo-300 font-mono text-[11px]"
-                        >
-                          {part.slice(1, -1)}
-                        </code>
-                      );
-                    }
-                    return <React.Fragment key={pIdx}>{part}</React.Fragment>;
-                  })}
+                <InlineChartRenderer
+                  key={i}
+                  title={parsed.title || 'Data Visualisation'}
+                  type={parsed.type || 'bar'}
+                  data={parsed.data || []}
+                  dataKeys={parsed.dataKeys || [{ key: 'value', name: 'Value' }]}
+                  xAxisKey={parsed.xAxisKey || 'name'}
+                  height={220}
+                />
+              );
+            } catch {
+              return <CodeSnippetBlock key={i} language={language} code={inner} />;
+            }
+          }
+
+          if (lang === 'map' || lang === 'leaflet') {
+            try {
+              const parsed = JSON.parse(inner);
+              return (
+                <InlineMapRenderer
+                  key={i}
+                  title={parsed.title}
+                  center={parsed.center}
+                  zoom={parsed.zoom}
+                  markers={parsed.markers || []}
+                  height={220}
+                />
+              );
+            } catch {
+              return <CodeSnippetBlock key={i} language={language} code={inner} />;
+            }
+          }
+
+          if (lang === 'workflow' || lang === 'dag') {
+            try {
+              const parsed = JSON.parse(inner);
+              if (Array.isArray(parsed.nodes) || Array.isArray(parsed.edges)) {
+                return (
+                  <WorkflowDAGRenderer
+                    key={i}
+                    title={parsed.title}
+                    nodes={parsed.nodes}
+                    edges={parsed.edges}
+                    height={220}
+                  />
+                );
+              }
+            } catch {
+              // fallback to code snippet
+            }
+          }
+
+          return <CodeSnippetBlock key={i} language={language} code={inner} />;
+        }
+
+        const lines = block.split('\n');
+        const elements: React.ReactNode[] = [];
+
+        for (let idx = 0; idx < lines.length; idx++) {
+          const rawLine = lines[idx];
+          const trimmed = rawLine.trim();
+
+          if (!trimmed) {
+            elements.push(<div key={idx} className="h-1" />);
+            continue;
+          }
+
+          // Markdown Table detection
+          if (trimmed.startsWith('|') && trimmed.endsWith('|') && idx + 1 < lines.length) {
+            const nextTrimmed = lines[idx + 1].trim();
+            if (/^\|[\s:|-]+\|$/.test(nextTrimmed)) {
+              const parseRow = (r: string) =>
+                r
+                  .slice(1, -1)
+                  .split('|')
+                  .map((c) => c.trim());
+              const headers = parseRow(trimmed);
+              const rows: string[][] = [];
+              let j = idx + 2;
+              while (j < lines.length && lines[j].trim().startsWith('|') && lines[j].trim().endsWith('|')) {
+                rows.push(parseRow(lines[j].trim()));
+                j++;
+              }
+              elements.push(
+                <div
+                  key={idx}
+                  className="my-1.5 overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800"
+                >
+                  <table className="w-full text-left border-collapse text-[11px]">
+                    <thead className="bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
+                      <tr>
+                        {headers.map((h, hIdx) => (
+                          <th key={hIdx} className="px-2.5 py-1.5 font-semibold text-zinc-700 dark:text-zinc-200">
+                            {renderInlineMarkdown(h)}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-200/70 dark:divide-zinc-800/70">
+                      {rows.map((row, rIdx) => (
+                        <tr key={rIdx} className="bg-white dark:bg-zinc-950/50">
+                          {row.map((cell, cIdx) => (
+                            <td key={cIdx} className="px-2.5 py-1.5 text-zinc-600 dark:text-zinc-300">
+                              {renderInlineMarkdown(cell)}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               );
-            })}
+              idx = j - 1;
+              continue;
+            }
+          }
+
+          if (/^(-{3,}|\*{3,})$/.test(trimmed)) {
+            elements.push(<hr key={idx} className="my-2 border-zinc-200 dark:border-zinc-800" />);
+            continue;
+          }
+
+          const headingMatch = trimmed.match(/^(#{1,4})\s+(.+)$/);
+          if (headingMatch) {
+            const level = headingMatch[1].length;
+            const headingText = headingMatch[2];
+            elements.push(
+              <div
+                key={idx}
+                className={cn(
+                  'font-semibold text-zinc-900 dark:text-white pt-1.5',
+                  level === 1 && 'text-sm font-bold',
+                  level === 2 && 'text-[13px]',
+                  level >= 3 && 'text-xs'
+                )}
+              >
+                {renderInlineMarkdown(headingText)}
+              </div>
+            );
+            continue;
+          }
+
+          const blockquoteMatch = trimmed.match(/^>\s?(.*)$/);
+          if (blockquoteMatch) {
+            elements.push(
+              <div
+                key={idx}
+                className="pl-2.5 border-l-2 border-indigo-400/60 text-zinc-600 dark:text-zinc-300 italic"
+              >
+                {renderInlineMarkdown(blockquoteMatch[1])}
+              </div>
+            );
+            continue;
+          }
+
+          const bulletMatch = rawLine.match(/^(\s*)[*-]\s+(.+)$/);
+          if (bulletMatch) {
+            const indent = bulletMatch[1].length >= 2 ? 'pl-3' : '';
+            elements.push(
+              <div key={idx} className={cn('flex items-start gap-2', indent)}>
+                <span className="mt-1.5 w-1 h-1 rounded-full bg-zinc-400 dark:bg-zinc-500 shrink-0" />
+                <span className="flex-1 min-w-0">{renderInlineMarkdown(bulletMatch[2])}</span>
+              </div>
+            );
+            continue;
+          }
+
+          const orderedMatch = rawLine.match(/^(\s*)(\d+)\.\s+(.+)$/);
+          if (orderedMatch) {
+            const indent = orderedMatch[1].length >= 2 ? 'pl-3' : '';
+            elements.push(
+              <div key={idx} className={cn('flex items-start gap-1.5', indent)}>
+                <span className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 shrink-0 min-w-[14px]">
+                  {orderedMatch[2]}.
+                </span>
+                <span className="flex-1 min-w-0">{renderInlineMarkdown(orderedMatch[3])}</span>
+              </div>
+            );
+            continue;
+          }
+
+          elements.push(<div key={idx}>{renderInlineMarkdown(rawLine)}</div>);
+        }
+
+        return (
+          <div key={i} className="space-y-1">
+            {elements}
           </div>
         );
       })}
@@ -149,6 +466,7 @@ const CompactMarkdown: React.FC<{ text: string }> = ({ text }) => {
 
 export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = ({
   compactLevel = 'side',
+  onClose,
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -664,6 +982,42 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = ({
     }
     const targetName = activeContext.recordKey || activeContext.title;
     switch (activeContext.domain) {
+      case 'module_builder': {
+        const tab = (activeContext.activeTab || '').toLowerCase();
+        if (tab === 'workflow') {
+          return [
+            `Design an approval & SLA workflow for ${activeContext.title}`,
+            "Add a Wait / SLA timer and escalation alert",
+            "Audit workflow transitions for dead ends",
+          ];
+        }
+        if (tab === 'rules') {
+          return [
+            `Suggest Error & Warning validation rules for ${activeContext.title}`,
+            "Add required-if conditional rules based on status",
+            "Audit existing rules for conflicts",
+          ];
+        }
+        if (tab === 'integrations') {
+          return [
+            `Suggest API integrations for ${activeContext.title}`,
+            "Design a custom REST endpoint & I/O schema",
+            "Recommend output-to-field mappings",
+          ];
+        }
+        if (tab === 'automations') {
+          return [
+            `Create a When → If → Then automation for ${activeContext.title}`,
+            "Set up an SLA age alert & notification rule",
+            "Add an outbound webhook on record creation",
+          ];
+        }
+        return [
+          `Audit ${activeContext.title}'s schema & 12-column layout`,
+          "Add a financial calculation block (Subtotal, Tax, Total)",
+          "Suggest missing fields, rules, and automations",
+        ];
+      }
       case 'module_record':
         return [
           `Summarize ${targetName}`,
@@ -755,21 +1109,33 @@ export const CompactAIAssistantView: React.FC<CompactAIAssistantViewProps> = ({
           </button>
         </div>
 
-        <button
-          type="button"
-          onClick={() =>
-            navigate(
-              activeSessionId
-                ? `/workspace/aurora-vibe/${activeSessionId}`
-                : '/workspace/aurora-vibe'
-            )
-          }
-          className="inline-flex items-center gap-1 text-[10px] font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 cursor-pointer shrink-0"
-          title="Open conversation in Aurora Vibe"
-        >
-          Full Canvas
-          <ExternalLink className="w-3 h-3" />
-        </button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={() =>
+              navigate(
+                activeSessionId
+                  ? `/workspace/aurora-vibe/${activeSessionId}`
+                  : '/workspace/aurora-vibe'
+              )
+            }
+            className="inline-flex items-center gap-1 text-[10px] font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 cursor-pointer shrink-0"
+            title="Open conversation in Aurora Vibe"
+          >
+            Full Canvas
+            <ExternalLink className="w-3 h-3" />
+          </button>
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              title="Close AI Assistant"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Session Picker Drawer OR Active Chat */}

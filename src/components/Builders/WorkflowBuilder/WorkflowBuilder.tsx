@@ -46,7 +46,7 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
     ]
   });
 
-  const [showDebugger, setShowDebugger] = useState(false);
+  const [showDebugger, setShowDebugger] = useState(true);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [rightSidebarTab, setRightSidebarTab] = useState<'inspector' | 'debugger' | 'architect'>('inspector');
@@ -144,38 +144,38 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-zinc-950 text-white overflow-hidden">
+    <div className="flex flex-col h-full w-full bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 overflow-hidden">
 
-      {/* Workflow Builder Header */}
-      <div className="flex items-center justify-between px-6 py-3 bg-zinc-900 border-b border-zinc-800">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-indigo-950/80 text-indigo-400 border border-indigo-800/50 rounded-lg">
-            <GitBranch size={18} />
+      {/* Workflow Builder Header (48px, matching Module Builder) */}
+      <div className="h-12 flex items-center justify-between px-4 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+            <GitBranch size={15} />
           </div>
-          <div>
+          <div className="flex items-center gap-2 min-w-0">
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="font-bold text-base bg-transparent border-none focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded px-1 text-white"
-              placeholder="Workflow Name"
+              onChange={(e) => { setName(e.target.value); onDirtyChange?.(true); }}
+              className="text-sm font-semibold bg-transparent border-none focus:outline-none focus:ring-1 focus:ring-indigo-500/30 rounded-md px-1.5 py-0.5 text-zinc-900 dark:text-white min-w-[140px]"
+              placeholder="Untitled Workflow"
             />
             <input
               type="text"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="text-xs text-zinc-400 bg-transparent border-none focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded px-1 block w-full"
-              placeholder="Add workflow description..."
+              onChange={(e) => { setDescription(e.target.value); onDirtyChange?.(true); }}
+              className="hidden md:block text-xs text-zinc-400 bg-transparent border-none focus:outline-none focus:ring-1 focus:ring-indigo-500/30 rounded-md px-1.5 py-0.5 w-64 truncate"
+              placeholder="Add description..."
             />
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {builderContext.mode === 'global' && (
             <select
               value={associatedModuleId}
               onChange={(e) => setAssociatedModuleId(e.target.value)}
-              className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="px-2.5 py-1 text-xs font-medium rounded-lg bg-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-200 focus:outline-none cursor-pointer transition-colors"
               title="Associate Workflow with a Module or keep Global"
             >
               <option value="">Global (Cross-Module Flow)</option>
@@ -193,29 +193,33 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
           )}
 
           <button
-            onClick={() => setShowDebugger(!showDebugger)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-all"
+            type="button"
+            onClick={() => {
+              setRightSidebarTab('debugger');
+              setShowDebugger(true);
+            }}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
           >
-            <Bug size={14} className={showDebugger ? "text-amber-400" : "text-zinc-400"} />
-            <span>Debugger</span>
+            <Bug size={14} className="text-indigo-500" />
+            <span>Test & Runs</span>
           </button>
 
           <Button
             onClick={handleSaveWorkflow}
             disabled={saving}
-            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-4 py-2 rounded-lg font-semibold shadow-sm transition-all"
+            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3.5 py-1.5 rounded-lg font-semibold shadow-xs transition-colors cursor-pointer"
           >
             <Save size={14} />
-            <span>{saving ? 'Saving...' : 'Save Workflow'}</span>
+            <span>{saving ? 'Saving...' : 'Save'}</span>
           </Button>
         </div>
       </div>
 
       {/* Visual Canvas */}
-      <div className="flex-1 relative">
-        <WorkflowGraphEditor
-          workflow={currentWorkflow}
-          onChange={(updatedWf: Workflow) => setCurrentWorkflow(updatedWf)}
+      <div className="flex-1 relative overflow-hidden">
+          <WorkflowGraphEditor
+            workflow={currentWorkflow}
+            onChange={(updatedWf: Workflow) => { setCurrentWorkflow(updatedWf); onDirtyChange?.(true); }}
           showDebugger={showDebugger}
           setShowDebugger={setShowDebugger}
           selectedNodeId={selectedNodeId}

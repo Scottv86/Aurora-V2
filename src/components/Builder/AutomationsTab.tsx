@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
 import { usePositions } from '../../hooks/usePositions';
@@ -8,11 +9,12 @@ import {
   Mail, MessageSquare, ChevronDown, ChevronUp, RefreshCw, Database,
   ArrowRight, ToggleLeft, ToggleRight, Clock, HelpCircle, Search, Sparkles, Code, Play, Layers,
   Copy, GripVertical, UserCheck, GitFork, Route, RotateCw, FileText, Grid, CreditCard,
-  Bell, CheckSquare, StickyNote, Pin, Bot
+  Bell, CheckSquare, StickyNote, Pin, Bot, Globe, ChevronLeft, ChevronRight, X, Filter
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn, flattenFields } from '../../lib/utils';
 import { PLATFORM_MODULES } from '../../config/platformModules';
+import { DeleteConfirmationModal } from '../Common/DeleteConfirmationModal';
 
 interface AutomationsTabProps {
   moduleId: string | undefined;
@@ -403,12 +405,12 @@ const VisualFieldsMapper: React.FC<VisualFieldsMapperProps> = ({
           <div className="flex gap-2 items-start px-2 py-1.5 border-b border-zinc-200/60 dark:border-zinc-800/80 mb-1 select-none">
             <div className="w-1/3 min-w-[120px]">
               <span className="text-[10px] font-bold text-zinc-600 dark:text-zinc-400 block uppercase tracking-wider">Field to Populate</span>
-              <span className="text-[8px] font-normal text-zinc-450 dark:text-zinc-400 block leading-tight">The field to fill in the record.</span>
+              <span className="text-[8px] font-normal text-zinc-400 dark:text-zinc-400 block leading-tight">The field to fill in the record.</span>
             </div>
             <div className="w-[10px]" /> {/* Spacer matching arrow right */}
             <div className="flex-1">
               <span className="text-[10px] font-bold text-zinc-600 dark:text-zinc-400 block uppercase tracking-wider">Value / Source Data</span>
-              <span className="text-[8px] font-normal text-zinc-450 dark:text-zinc-400 block leading-tight">Static text or dynamic trigger fields (⚡).</span>
+              <span className="text-[8px] font-normal text-zinc-400 dark:text-zinc-400 block leading-tight">Static text or dynamic trigger fields (⚡).</span>
             </div>
             <div className="w-[19px]" /> {/* Spacer matching trash icon */}
           </div>
@@ -501,7 +503,7 @@ const VisualFieldsMapper: React.FC<VisualFieldsMapperProps> = ({
                           <button 
                             type="button"
                             onClick={() => setActiveDropdown(null)} 
-                            className="hover:text-zinc-650 dark:hover:text-white bg-transparent border-0 cursor-pointer text-[9px]"
+                            className="hover:text-zinc-600 dark:hover:text-white bg-transparent border-0 cursor-pointer text-[9px]"
                           >
                             Close
                           </button>
@@ -537,7 +539,7 @@ const VisualFieldsMapper: React.FC<VisualFieldsMapperProps> = ({
                                     }, 50);
                                   }
                                 }}
-                                className="w-full text-left px-2.5 py-1 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/20 hover:text-indigo-600 dark:hover:text-indigo-400 rounded transition-all text-zinc-650 dark:text-zinc-300 font-mono text-[9px] truncate bg-transparent border-0 cursor-pointer block"
+                                className="w-full text-left px-2.5 py-1 hover:bg-indigo-500/10 dark:hover:bg-indigo-500/20 hover:text-indigo-600 dark:hover:text-indigo-400 rounded transition-all text-zinc-600 dark:text-zinc-300 font-mono text-[9px] truncate bg-transparent border-0 cursor-pointer block"
                                 title={item.value}
                               >
                                 {item.label}
@@ -563,7 +565,7 @@ const VisualFieldsMapper: React.FC<VisualFieldsMapperProps> = ({
           </div>
         </div>
       ) : (
-        <div className="py-4 border border-dashed border-zinc-250 dark:border-zinc-800 rounded-xl text-center">
+        <div className="py-4 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl text-center">
           <p className="text-[10px] text-zinc-400 italic">No field mappings configured. Record will be created empty.</p>
         </div>
       )}
@@ -620,14 +622,14 @@ const AssigneeSelect: React.FC<AssigneeSelectProps> = ({ value, onChange, member
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white cursor-pointer hover:border-zinc-350 dark:hover:border-zinc-700 focus:outline-none transition-all"
+        className="w-full flex items-center justify-between bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white cursor-pointer hover:border-zinc-300 dark:hover:border-zinc-700 focus:outline-none transition-all"
       >
         <div className="flex items-center gap-2">
           {selectedMember && selectedMember.avatarUrl ? (
             <img 
               src={selectedMember.avatarUrl} 
               alt={displayName} 
-              className="w-5 h-5 rounded-full object-cover border border-zinc-200 dark:border-zinc-850 shrink-0"
+              className="w-5 h-5 rounded-full object-cover border border-zinc-200 dark:border-zinc-800 shrink-0"
             />
           ) : selectedMember ? (
             <div className="w-5 h-5 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-[8px] font-black text-indigo-600">
@@ -672,7 +674,7 @@ const AssigneeSelect: React.FC<AssigneeSelectProps> = ({ value, onChange, member
                     <img 
                       src={m.avatarUrl} 
                       alt={mName} 
-                      className="w-5 h-5 rounded-full object-cover border border-zinc-200 dark:border-zinc-850 shrink-0"
+                      className="w-5 h-5 rounded-full object-cover border border-zinc-200 dark:border-zinc-800 shrink-0"
                     />
                   ) : (
                     <div className={cn(
@@ -686,7 +688,7 @@ const AssigneeSelect: React.FC<AssigneeSelectProps> = ({ value, onChange, member
                   )}
                   <div className="flex flex-col">
                     <span className="font-bold">{mName}</span>
-                    <span className="text-[9px] text-zinc-450 dark:text-zinc-500">{m.email}</span>
+                    <span className="text-[9px] text-zinc-400 dark:text-zinc-500">{m.email}</span>
                   </div>
                 </button>
               );
@@ -698,6 +700,53 @@ const AssigneeSelect: React.FC<AssigneeSelectProps> = ({ value, onChange, member
   );
 };
 
+const TRIGGER_CATALOG = [
+  { id: 'RECORD_CREATED', label: 'Record Created', category: 'Record Events', desc: 'When a new record is added to this module' },
+  { id: 'RECORD_UPDATED', label: 'Record Updated', category: 'Record Events', desc: 'When any field on a record changes' },
+  { id: 'STATUS_CHANGED', label: 'Status Changed', category: 'Record Events', desc: 'When a record transitions between statuses' },
+  { id: 'ASSIGNEE_CHANGED', label: 'Assignee Changed', category: 'Record Events', desc: 'When record ownership is reassigned' },
+  { id: 'PARTICIPANTS_CHANGED', label: 'Participants Changed', category: 'Record Events', desc: 'When record participants are updated' },
+  { id: 'RELATION_LINKED', label: 'Relation Linked', category: 'Record Events', desc: 'When a related record is linked' },
+  { id: 'USER_MENTIONED', label: 'User Mentioned', category: 'Collaboration', desc: 'When a user is @mentioned in comments' },
+  { id: 'FORM_SUBMITTED', label: 'Form Submitted', category: 'Intake & Schedules', desc: 'When a public or internal form is submitted' },
+  { id: 'CRON', label: 'Scheduled (Cron)', category: 'Intake & Schedules', desc: 'Run automatically on a recurring time schedule' },
+  { id: 'SLA_AGE', label: 'SLA Age Limit', category: 'Intake & Schedules', desc: 'When an open record exceeds an age threshold' },
+  { id: 'QUICK_ACTION', label: 'Quick Action Button', category: 'Manual & API', desc: 'Triggered manually from a record detail button' },
+  { id: 'CALL_ONLY', label: 'Callable / Workflow Only', category: 'Manual & API', desc: 'Invoked from another workflow or API call' },
+  { id: 'SERVICE_DESK_SESSION_STARTED', label: 'Service Desk Started', category: 'Service Desk', desc: 'When a new chat or call session begins' },
+  { id: 'SERVICE_DESK_ALLOCATED', label: 'Service Desk Allocated', category: 'Service Desk', desc: 'When a session is assigned to AI or Human' },
+  { id: 'SERVICE_DESK_ESCALATED', label: 'Service Desk Escalated', category: 'Service Desk', desc: 'When a session is handed off to a human queue' },
+  { id: 'SERVICE_DESK_RESOLVED', label: 'Service Desk Resolved', category: 'Service Desk', desc: 'When a chat or call session is closed' },
+];
+
+const ACTION_CATALOG = [
+  { id: 'CREATE_RECORD', label: 'Create Record', category: 'Records & Data', desc: 'Insert a new record into any module', icon: Database },
+  { id: 'UPDATE_RECORD', label: 'Update Record', category: 'Records & Data', desc: 'Modify fields on the triggering or target record', icon: RefreshCw },
+  { id: 'GET_RECORD', label: 'Fetch Record', category: 'Records & Data', desc: 'Look up a record by field value', icon: ArrowRight },
+  { id: 'SET_ASSIGNEE', label: 'Set Assignee', category: 'Records & Data', desc: 'Assign record ownership to a user', icon: UserCheck },
+  { id: 'ADD_PARTICIPANT', label: 'Add Participant', category: 'Records & Data', desc: 'Add a collaborator to the record', icon: UserCheck },
+  { id: 'REMOVE_PARTICIPANT', label: 'Remove Participant', category: 'Records & Data', desc: 'Remove a collaborator from the record', icon: UserCheck },
+  { id: 'ROUTE_TO_MODULE', label: 'Route to Module', category: 'Records & Data', desc: 'Move or copy record data to another module', icon: GitFork },
+  { id: 'SEND_EMAIL', label: 'Send Email', category: 'Communication', desc: 'Dispatch a templated email via SMTP', icon: Mail },
+  { id: 'SEND_INTERNAL_PING', label: 'Internal Ping', category: 'Communication', desc: 'Post a notification to an internal channel', icon: MessageSquare },
+  { id: 'CREATE_NOTE', label: 'Create Note', category: 'Communication', desc: 'Log an operational note on the record', icon: StickyNote },
+  { id: 'PIN_RECORD_NOTE', label: 'Pin Alert Note', category: 'Communication', desc: 'Pin a high-visibility banner note on the record', icon: Pin },
+  { id: 'CREATE_REMINDER', label: 'Create Reminder', category: 'Communication', desc: 'Schedule a follow-up reminder task', icon: Bell },
+  { id: 'COMPLETE_REMINDER', label: 'Complete Reminder', category: 'Communication', desc: 'Mark matching record reminders as done', icon: CheckSquare },
+  { id: 'IF_CONDITION', label: 'Condition Branch', category: 'Logic & Flow', desc: 'Branch execution with If / Else rules', icon: GitFork },
+  { id: 'SWITCH_CASE', label: 'Switch Path', category: 'Logic & Flow', desc: 'Route based on matching field values', icon: Route },
+  { id: 'LOOP_FOREACH', label: 'Loop (For Each)', category: 'Logic & Flow', desc: 'Iterate over a list of items', icon: RotateCw },
+  { id: 'DELAY', label: 'Wait / Delay', category: 'Logic & Flow', desc: 'Pause execution for a set number of seconds', icon: Clock },
+  { id: 'GEMINI_PROMPT', label: 'Gemini AI Prompt', category: 'AI & Documents', desc: 'Run a Gemini prompt and capture structured output', icon: Sparkles },
+  { id: 'INVOKE_AGENT', label: 'Invoke AI Agent', category: 'AI & Documents', desc: 'Delegate work to an autonomous AI coworker', icon: Bot },
+  { id: 'GENERATE_PDF', label: 'Generate PDF', category: 'AI & Documents', desc: 'Create a PDF document from a template', icon: FileText },
+  { id: 'WEBHOOK', label: 'Outbound Webhook', category: 'Integrations', desc: 'Send an HTTP request to an external API', icon: Globe },
+  { id: 'GOOGLE_SHEETS_SYNC', label: 'Google Sheets Sync', category: 'Integrations', desc: 'Append record data to a Google Sheet', icon: Grid },
+  { id: 'STRIPE_PAYMENT_LINK', label: 'Stripe Payment Link', category: 'Integrations', desc: 'Generate a Stripe checkout payment link', icon: CreditCard },
+  { id: 'ALLOCATE_SERVICE_DESK_SESSION', label: 'Allocate Service Desk', category: 'Service Desk', desc: 'Route chat or call to an AI or human agent', icon: UserCheck },
+  { id: 'SEND_SERVICE_DESK_MESSAGE', label: 'Service Desk Reply', category: 'Service Desk', desc: 'Send an automated Service Desk message', icon: MessageSquare },
+];
+
 interface AutomationsTabProps {
   moduleId: string | undefined;
   fields?: any[];
@@ -705,6 +754,11 @@ interface AutomationsTabProps {
   setAutomations: React.Dispatch<React.SetStateAction<any[]>>;
   deletedAutomationIds: string[];
   setDeletedAutomationIds: React.Dispatch<React.SetStateAction<string[]>>;
+  mode?: 'module' | 'global';
+  initialSelectedRuleId?: string | null;
+  onSaveRule?: (rule: any) => Promise<void>;
+  isSaving?: boolean;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export const AutomationsTab: React.FC<AutomationsTabProps> = ({
@@ -713,7 +767,12 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
   automations,
   setAutomations,
   deletedAutomationIds,
-  setDeletedAutomationIds
+  setDeletedAutomationIds,
+  mode = 'module',
+  initialSelectedRuleId,
+  onSaveRule,
+  isSaving = false,
+  onDirtyChange
 }) => {
   const { tenant, modules: customModules = [], members = [], teams = [] } = usePlatform();
   const modules = useMemo(() => {
@@ -740,7 +799,13 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
     console.log(deletedAutomationIds);
   }
   const loading = false; // loader state handled by parent module editor
-  const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
+  const [selectedRuleId, setSelectedRuleId] = useState<string | null>(initialSelectedRuleId ?? null);
+
+  useEffect(() => {
+    if (initialSelectedRuleId !== undefined) {
+      setSelectedRuleId(initialSelectedRuleId);
+    }
+  }, [initialSelectedRuleId]);
   
   // Runs list states
   const [runs, setRuns] = useState<any[]>([]);
@@ -803,10 +868,33 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
   const [isAdvancedCondition, setIsAdvancedCondition] = useState(false);
   const [rightSidebarTab, setRightSidebarTab] = useState<'properties' | 'runs'>('properties');
   const [searchQuery, setSearchQuery] = useState('');
+  const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false);
+  const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false);
+  const [isTestingRun, setIsTestingRun] = useState(false);
+  const [ruleToDelete, setRuleToDelete] = useState<any | null>(null);
+  const [showTriggerModal, setShowTriggerModal] = useState(false);
+  const [triggerSearch, setTriggerSearch] = useState('');
+  const [showActionModal, setShowActionModal] = useState(false);
+  const [actionSearch, setActionSearch] = useState('');
+  const [actionCategory, setActionCategory] = useState('All');
+  const preconditionsRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showTriggerModal && !showActionModal) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowTriggerModal(false);
+        setShowActionModal(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showTriggerModal, showActionModal]);
 
   // Reactive property update helpers
   const handleUpdateRuleProperty = (updates: Partial<any>) => {
     if (!selectedRuleId) return;
+    onDirtyChange?.(true);
     setAutomations(prev => prev.map(a => a.id === selectedRuleId ? { ...a, ...updates } : a));
   };
 
@@ -903,6 +991,12 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
         cronExpression: '*/5 * * * *',
         moduleId: moduleId
       });
+    } else if (newType === 'SLA_AGE') {
+      triggersPayload.push({
+        type: 'SLA_AGE',
+        ageLimitHours: 24,
+        moduleId: moduleId
+      });
     }
     handleUpdateRuleProperty({ triggers: triggersPayload });
   };
@@ -957,12 +1051,19 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
 
   const handleDeleteRule = (id: string, event: React.MouseEvent) => {
     event.stopPropagation();
-    if (!confirm('Are you sure you want to delete this automation?')) return;
+    const target = automations.find(a => a.id === id) || { id, name: 'this automation' };
+    setRuleToDelete(target);
+  };
+
+  const confirmDeleteRule = () => {
+    if (!ruleToDelete) return;
+    const id = ruleToDelete.id;
     if (!String(id).startsWith('temp-')) {
       setDeletedAutomationIds(prev => [...prev, id]);
     }
     setAutomations(prev => prev.filter(a => a.id !== id));
     if (selectedRuleId === id) setSelectedRuleId(null);
+    setRuleToDelete(null);
     toast.success('Automation marked for deletion (click Save to persist)');
   };
 
@@ -1012,7 +1113,8 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
       COMPLETE_REMINDER: { match: 'ALL_ON_RECORD', titleContains: '' },
       CREATE_NOTE: { title: 'Operational Note', body: '', color: 'zinc', isPinned: false },
       PIN_RECORD_NOTE: { title: 'Important Alert', body: '', color: 'amber' },
-      INVOKE_AGENT: { agentId: '', promptTemplate: 'Evaluate record {{id}} and execute required task', outputVariable: 'agent_result' }
+      INVOKE_AGENT: { agentId: '', promptTemplate: 'Evaluate record {{id}} and execute required task', outputVariable: 'agent_result' },
+      WEBHOOK: { url: '', method: 'POST', headers: {} }
     };
 
     const newActions = [...actions, { type, config: defaultConfigs[type] || {} }];
@@ -1093,6 +1195,43 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
     }
   };
 
+  const handleTestRun = async () => {
+    if (!selectedRule) return;
+    if (String(selectedRule.id).startsWith('temp-')) {
+      toast.info('Save the module first before running a test execution.');
+      return;
+    }
+    if (!selectedRule.isActive) {
+      toast.info('Enable this automation before running a test.');
+      return;
+    }
+    setIsTestingRun(true);
+    try {
+      const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || '';
+      const res = await fetch(`${API_BASE_URL}/api/automations/${selectedRule.id}/trigger`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': tenant.id || '',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ inputs: {} })
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to trigger test run');
+      }
+      toast.success('Test run triggered');
+      setRightSidebarCollapsed(false);
+      setRightSidebarTab('runs');
+      setTimeout(() => viewRuns(selectedRule), 500);
+    } catch (err: any) {
+      toast.error(err?.message || 'Test run failed');
+    } finally {
+      setIsTestingRun(false);
+    }
+  };
+
   const handleAddConditionRow = () => {
     const defaultField = fields[0]?.id || '';
     setVisualConditions(prev => [
@@ -1134,32 +1273,60 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
   }, [automations, searchQuery]);
 
   return (
-    <div className="flex h-full w-full bg-transparent overflow-hidden">
+    <div className="flex h-full w-full bg-zinc-50/40 dark:bg-zinc-950 overflow-hidden">
       
       {/* COLUMN 1: Rules Directory Sidebar */}
-      <aside className="w-72 flex-shrink-0 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 p-6 flex flex-col gap-4">
-        <div className="flex-shrink-0">
-          <h3 className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-1">Automations</h3>
+      {!leftSidebarCollapsed && (
+      <aside className="w-64 flex-shrink-0 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 flex flex-col">
+        <div className="h-11 px-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <Zap size={14} className="text-indigo-500 shrink-0" />
+            <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">Automations</span>
+            <span className="px-1.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-[10px] font-medium text-zinc-500">
+              {automations.length}
+            </span>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={handleCreateRule}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-medium transition-colors cursor-pointer"
+              title="New automation"
+            >
+              <Plus size={12} />
+              New
+            </button>
+            <button
+              type="button"
+              onClick={() => setLeftSidebarCollapsed(true)}
+              className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              title="Collapse automations list"
+            >
+              <ChevronLeft size={14} />
+            </button>
+          </div>
         </div>
         
         {/* Search */}
-        <div className="relative flex-shrink-0">
-          <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-          <input 
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search scripts..."
-            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-8 pr-4 py-2 text-xs focus:outline-none focus:border-indigo-500/55 transition-all dark:text-white"
-          />
+        <div className="p-3 pb-2 shrink-0">
+          <div className="relative">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+            <input 
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search automations..."
+              className="w-full h-8 bg-zinc-100/80 dark:bg-zinc-800/80 border border-transparent rounded-lg pl-8 pr-3 text-xs focus:bg-white dark:focus:bg-zinc-900 focus:outline-none focus:border-indigo-500 transition-all dark:text-white"
+            />
+          </div>
         </div>
 
         {/* Scrollable List */}
-        <div className="flex-1 overflow-y-auto pr-1 space-y-2 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-1.5 custom-scrollbar">
           {loading ? (
             <div className="py-8 flex flex-col items-center justify-center gap-2">
               <RefreshCw className="animate-spin text-indigo-500 w-4 h-4" />
-              <p className="text-[9px] text-zinc-400">Loading...</p>
+              <p className="text-[11px] text-zinc-400">Loading...</p>
             </div>
           ) : filteredAutomations.map((rule) => {
             const isSelected = selectedRuleId === rule.id;
@@ -1171,46 +1338,40 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                 key={rule.id}
                 onClick={() => setSelectedRuleId(rule.id)}
                 className={cn(
-                  "w-full text-left p-3.5 rounded-2xl border transition-all flex flex-col gap-1 group select-none relative",
+                  "w-full text-left p-3 rounded-xl border transition-all flex flex-col gap-1.5 group select-none relative cursor-pointer",
                   isSelected
-                    ? "bg-indigo-650 border-indigo-600 text-white shadow-lg shadow-indigo-600/10"
-                    : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-650 dark:text-zinc-350 hover:bg-zinc-50 dark:hover:bg-zinc-900/50"
+                    ? "bg-indigo-50/80 dark:bg-indigo-500/15 border-indigo-300 dark:border-indigo-500/40 text-zinc-900 dark:text-white"
+                    : "bg-white dark:bg-zinc-900 border-zinc-200/80 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                 )}
               >
-                <div className="flex items-center justify-between w-full">
-                  <span className="text-xs font-bold truncate pr-2">{rule.name}</span>
+                <div className="flex items-center justify-between w-full gap-2">
+                  <span className="text-xs font-medium truncate">{rule.name}</span>
                   <span className={cn(
-                    "px-1.5 py-0.5 rounded text-[7px] font-black uppercase border shrink-0",
+                    "px-1.5 py-0.5 rounded-full text-[10px] font-medium shrink-0",
                     rule.isActive
-                      ? (isSelected ? "bg-white/20 border-white/30 text-white" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-600")
-                      : (isSelected ? "bg-white/10 border-white/20 text-white/60" : "bg-zinc-500/10 border-zinc-550/25 text-zinc-500")
+                      ? "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                      : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400"
                   )}>
-                    {rule.isActive ? 'Active' : 'Inactive'}
+                    {rule.isActive ? 'Active' : 'Paused'}
                   </span>
                 </div>
                 
-                <div className="flex items-center justify-between w-full mt-1 pt-1.5 border-t border-dashed border-zinc-200/80 dark:border-zinc-800/80">
-                  <span className="text-[7.5px] uppercase tracking-wider font-semibold opacity-70">
-                    {isQuickAction ? 'Quick Action' : 'Record Event'}
+                <div className="flex items-center justify-between w-full pt-1 border-t border-zinc-100 dark:border-zinc-800/80">
+                  <span className="text-[10px] text-zinc-400">
+                    {isQuickAction ? 'Quick Action' : `${(rule.actions || []).length} steps`}
                   </span>
                   
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1">
                     <div 
                       onClick={(e) => handleToggleActive(rule, e)}
-                      className={cn(
-                        "p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors",
-                        isSelected ? "text-white" : "text-zinc-400 hover:text-zinc-650 dark:hover:text-zinc-200"
-                      )}
+                      className="p-0.5 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200/60 dark:hover:bg-zinc-700/60 transition-colors"
                       title={rule.isActive ? 'Deactivate' : 'Activate'}
                     >
-                      {rule.isActive ? <ToggleRight size={13} /> : <ToggleLeft size={13} />}
+                      {rule.isActive ? <ToggleRight size={13} className="text-emerald-500" /> : <ToggleLeft size={13} />}
                     </div>
                     <div 
                       onClick={(e) => handleDeleteRule(rule.id, e)}
-                      className={cn(
-                        "p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors",
-                        isSelected ? "text-white" : "text-zinc-400 hover:text-red-500"
-                      )}
+                      className="p-0.5 rounded text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
                       title="Delete"
                     >
                       <Trash2 size={11} />
@@ -1221,137 +1382,175 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
             );
           })}
           {!loading && filteredAutomations.length === 0 && (
-            <p className="text-[10px] text-zinc-400 text-center py-8">No automations found</p>
+            <p className="text-xs text-zinc-400 text-center py-8">No automations found</p>
           )}
         </div>
-
-        {/* New Rule Button */}
-        <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800">
-          <button
-            onClick={handleCreateRule}
-            className="w-full py-2.5 bg-indigo-650 hover:bg-indigo-755 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <Plus size={12} />
-            New Automation
-          </button>
-        </div>
       </aside>
+      )}
 
       {selectedRuleId !== null ? (
         <>
-          {/* COLUMN 2: Triggers & Actions Palette */}
-          <aside className="w-60 flex-shrink-0 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 p-5 flex flex-col gap-6 overflow-y-auto custom-scrollbar">
-            
-            {/* Trigger Palette section */}
-            <div className="space-y-3">
-              <h4 className="text-[9px] font-black text-zinc-450 dark:text-zinc-500 uppercase tracking-widest px-1">Trigger Hooks</h4>
-              <div className="flex flex-col gap-2">
-                {[
-                  { id: 'RECORD_CREATED', label: 'On Created', desc: 'When record is added' },
-                  { id: 'RECORD_UPDATED', label: 'On Updated', desc: 'When record changes' },
-                  { id: 'STATUS_CHANGED', label: 'Status Changed', desc: 'When status transitions' },
-                  { id: 'ASSIGNEE_CHANGED', label: 'Assignee Changed', desc: 'When assignee updates' },
-                  { id: 'PARTICIPANTS_CHANGED', label: 'Participants Changed', desc: 'When participants update' },
-                  { id: 'RELATION_LINKED', label: 'Relation Linked', desc: 'When records are linked' },
-                  { id: 'USER_MENTIONED', label: 'User Mentioned', desc: 'Mentions in comments' },
-                  { id: 'FORM_SUBMITTED', label: 'Form Submitted', desc: 'Public form ingestion' },
-                  { id: 'SERVICE_DESK_SESSION_STARTED', label: 'Service Desk Started', desc: 'New Site Chat or Call session' },
-                  { id: 'SERVICE_DESK_ALLOCATED', label: 'Service Desk Allocated', desc: 'Allocated to AI or Human' },
-                  { id: 'SERVICE_DESK_ESCALATED', label: 'Service Desk Escalated', desc: 'Handed off to human queue' },
-                  { id: 'SERVICE_DESK_RESOLVED', label: 'Service Desk Resolved', desc: 'Chat or call session closed' },
-                  { id: 'QUICK_ACTION', label: 'Quick Action', desc: 'Detail page button click' },
-                  { id: 'CALL_ONLY', label: 'No Trigger', desc: 'Triggered by Workflow/API' }
-                ].map((trig) => (
+          {/* COLUMN 2 (Center): Zapier/Jira-Style Vertical Flow Pipeline */}
+          <main className="flex-1 bg-zinc-50/70 dark:bg-zinc-950 bg-[radial-gradient(#e4e4e7_1px,transparent_1px)] dark:bg-[radial-gradient(#27272a_1px,transparent_1px)] [background-size:20px_20px] flex flex-col min-w-0 overflow-hidden">
+            {/* Aligned h-11 Top Bar */}
+            <div className="h-11 px-4 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                {leftSidebarCollapsed && (
                   <button
-                    key={trig.id}
                     type="button"
-                    onClick={() => setTriggerType(trig.id)}
-                    className={cn(
-                      "p-3 border rounded-xl text-left transition-all flex flex-col gap-1 cursor-pointer",
-                      triggerType === trig.id
-                        ? "bg-white dark:bg-zinc-900 border-indigo-500/50 ring-1 ring-indigo-500/50 shadow-sm"
-                        : "bg-transparent border-zinc-250 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
-                    )}
+                    onClick={() => setLeftSidebarCollapsed(false)}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-xs font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700/80 transition-colors cursor-pointer shrink-0"
                   >
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-800 dark:text-zinc-200">
-                      <Zap size={11} className={triggerType === trig.id ? 'text-indigo-500' : 'text-zinc-400'} />
-                      <span>{trig.label}</span>
-                    </div>
-                    <span className="text-[8px] text-zinc-400 leading-normal">{trig.desc}</span>
+                    <ChevronRight size={13} />
+                    <span>Automations</span>
                   </button>
-                ))}
+                )}
+                <Zap size={14} className="text-indigo-500 shrink-0" />
+                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+                  {name || 'Untitled Automation'}
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 shrink-0">
+                  {actions.length} {actions.length === 1 ? 'action' : 'actions'}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActionSearch('');
+                    setActionCategory('All');
+                    setShowActionModal(true);
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium transition-colors cursor-pointer"
+                >
+                  <Plus size={13} />
+                  <span>Add Action</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleTestRun}
+                  disabled={isTestingRun}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 disabled:opacity-50 transition-colors cursor-pointer"
+                  title="Trigger a test run"
+                >
+                  <Play size={12} className="text-indigo-500" />
+                  <span>{isTestingRun ? 'Running...' : 'Test Run'}</span>
+                </button>
+                {onSaveRule && selectedRule && (
+                  <button
+                    type="button"
+                    onClick={() => onSaveRule(selectedRule)}
+                    disabled={isSaving}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium disabled:opacity-50 transition-colors cursor-pointer"
+                  >
+                    <CheckCircle2 size={12} />
+                    <span>{isSaving ? 'Saving...' : 'Save'}</span>
+                  </button>
+                )}
+                {rightSidebarCollapsed && (
+                  <button
+                    type="button"
+                    onClick={() => setRightSidebarCollapsed(false)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-xs font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700/80 transition-colors cursor-pointer"
+                  >
+                    <ChevronLeft size={13} />
+                    <span>Settings</span>
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* Actions steps library palette */}
-            <div className="space-y-3 pt-2">
-              <h4 className="text-[9px] font-black text-zinc-450 dark:text-zinc-500 uppercase tracking-widest px-1">Action Library</h4>
-              <div className="flex flex-col gap-2">
-                {[
-                  { id: 'CREATE_RECORD', label: 'Create Record', desc: 'Insert new row', icon: Database },
-                  { id: 'UPDATE_RECORD', label: 'Update Record', desc: 'Update row parameters', icon: RefreshCw },
-                  { id: 'GET_RECORD', label: 'Fetch Record', desc: 'Lookup rows', icon: ArrowRight },
-                  { id: 'SET_ASSIGNEE', label: 'Set Assignee', desc: 'Assign row to user', icon: UserCheck },
-                  { id: 'ADD_PARTICIPANT', label: 'Add Participant', desc: 'Add team member', icon: UserCheck },
-                  { id: 'REMOVE_PARTICIPANT', label: 'Remove Participant', desc: 'Remove team member', icon: UserCheck },
-                  { id: 'SEND_EMAIL', label: 'Send Email', desc: 'Dispatch SMTP alert', icon: Mail },
-                  { id: 'SEND_INTERNAL_PING', label: 'Internal Ping', desc: 'Log channel message', icon: MessageSquare },
-                  { id: 'IF_CONDITION', label: 'Condition Branch', desc: 'If/Else step branching', icon: GitFork },
-                  { id: 'SWITCH_CASE', label: 'Switch Path', desc: 'Value route branching', icon: Route },
-                  { id: 'LOOP_FOREACH', label: 'Loop (For Each)', desc: 'Iterate list records', icon: RotateCw },
-                  { id: 'DELAY', label: 'Wait / Delay', desc: 'Pause thread duration', icon: Clock },
-                  { id: 'GEMINI_PROMPT', label: 'Gemini AI Prompt', desc: 'Query LLM agent', icon: Sparkles },
-                  { id: 'GENERATE_PDF', label: 'Generate PDF', desc: 'Create document file', icon: FileText },
-                  { id: 'GOOGLE_SHEETS_SYNC', label: 'Google Sheets', desc: 'Append sheet row', icon: Grid },
-                  { id: 'STRIPE_PAYMENT_LINK', label: 'Stripe Payment', desc: 'Generate payment link', icon: CreditCard },
-                  { id: 'ROUTE_TO_MODULE', label: 'Route Record', desc: 'Migrate to another module', icon: GitFork },
-                  { id: 'CREATE_REMINDER', label: 'Create Reminder', desc: 'Schedule follow-up task', icon: Bell },
-                  { id: 'COMPLETE_REMINDER', label: 'Complete Reminder', desc: 'Mark record tasks done', icon: CheckSquare },
-                  { id: 'CREATE_NOTE', label: 'Create Note', desc: 'Log note on record', icon: StickyNote },
-                  { id: 'PIN_RECORD_NOTE', label: 'Pin Alert Note', desc: 'Pin banner note to top', icon: Pin },
-                  { id: 'INVOKE_AGENT', label: 'Invoke AI Agent', desc: 'Run digital coworker tool', icon: Bot },
-                  { id: 'ALLOCATE_SERVICE_DESK_SESSION', label: 'Allocate Service Desk', desc: 'Route chat/call to AI or Human', icon: UserCheck },
-                  { id: 'SEND_SERVICE_DESK_MESSAGE', label: 'Service Desk Reply', desc: 'Send automated chat message', icon: MessageSquare }
-                ].map((actionType) => {
-                  const Icon = actionType.icon;
+            {/* Vertical Pipeline Canvas */}
+            <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-7 custom-scrollbar">
+              <div className="max-w-2xl mx-auto flex flex-col items-center">
+                {/* 1. WHEN — Trigger Card */}
+                {(() => {
+                  const activeTrigger = TRIGGER_CATALOG.find(t => t.id === triggerType) || {
+                    id: triggerType,
+                    label: triggerType,
+                    category: 'Event',
+                    desc: 'Triggers this automation flow'
+                  };
                   return (
-                    <button
-                      key={actionType.id}
-                      onClick={() => handleAddAction(actionType.id)}
-                      className="p-3 border border-zinc-250 dark:border-zinc-800 hover:border-indigo-500/50 rounded-xl text-left bg-transparent hover:bg-white dark:hover:bg-zinc-900 flex items-start gap-2.5 transition-all group cursor-pointer"
-                    >
-                      <div className="p-1.5 bg-indigo-500/10 text-indigo-500 rounded group-hover:bg-indigo-500 group-hover:text-white transition-colors shrink-0">
-                        <Icon size={11} />
+                    <div className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xs p-4 flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-lg bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                          <Zap size={17} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 text-[10px] font-semibold uppercase tracking-wide">
+                              When
+                            </span>
+                            <h3 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+                              {activeTrigger.label}
+                            </h3>
+                          </div>
+                          <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 truncate">
+                            {activeTrigger.desc}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-[9.5px] font-bold text-zinc-800 dark:text-zinc-200">{actionType.label}</p>
-                        <p className="text-[7.5px] text-zinc-400 mt-0.5 leading-normal">{actionType.desc}</p>
-                      </div>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTriggerSearch('');
+                          setShowTriggerModal(true);
+                        }}
+                        className="px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-xs font-medium text-zinc-700 dark:text-zinc-200 transition-colors cursor-pointer shrink-0"
+                      >
+                        Change
+                      </button>
+                    </div>
                   );
-                })}
-              </div>
-            </div>
-          </aside>
+                })()}
 
-          {/* COLUMN 3: Sequence Steps Canvas (The Biggest One) */}
-          <main className="flex-1 bg-transparent p-8 overflow-y-auto custom-scrollbar flex flex-col gap-6 min-w-0">
-            
-            {/* Header control center */}
-            <div className="flex items-center justify-between flex-shrink-0 border-b border-zinc-200 dark:border-zinc-800/80 pb-5">
-              <div>
-                <h2 className="text-xl font-bold text-zinc-900 dark:text-white tracking-tight flex items-center gap-2">
-                  <Layers className="text-indigo-500 w-4 h-4" />
-                  <span>Action Sequence Steps</span>
-                </h2>
-                <p className="text-zinc-500 text-xs mt-0.5">Design sequential task blocks triggered by system events.</p>
-              </div>
+                <div className="w-px h-5 bg-zinc-300 dark:bg-zinc-700" />
 
-              {/* Save header actions removed, parent module save handles rules persistence */}
-            </div>
+                {/* 2. IF — Filter Conditions Card */}
+                <div className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xs px-4 py-3 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                      <Filter size={15} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400 text-[10px] font-semibold uppercase tracking-wide">
+                          If
+                        </span>
+                        <span className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate">
+                          {isAdvancedCondition && conditions
+                            ? 'Custom expression filter'
+                            : visualConditions.length > 0
+                              ? `Match ${conditionMatchType === 'OR' ? 'ANY' : 'ALL'} of ${visualConditions.length} condition${visualConditions.length === 1 ? '' : 's'}`
+                              : 'All matching records (no filter)'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (visualConditions.length === 0 && !isAdvancedCondition) {
+                        handleAddConditionRow();
+                      }
+                      setRightSidebarCollapsed(false);
+                      setRightSidebarTab('properties');
+                      setTimeout(() => {
+                        preconditionsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }, 60);
+                    }}
+                    className="px-2.5 py-1 rounded-lg text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors cursor-pointer shrink-0"
+                  >
+                    {visualConditions.length > 0 || conditions ? 'Edit' : '+ Filter'}
+                  </button>
+                </div>
 
-            {/* Canvas steps list */}
-            <div className="flex-1 space-y-4">
+                <div className="w-px h-5 bg-zinc-300 dark:bg-zinc-700" />
+
+                {/* 3. THEN — Action Steps */}
+                <div className="w-full space-y-3">
               {actions.map((action: any, idx: number) => (
                 <div 
                   key={idx}
@@ -1410,7 +1609,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                   </div>
 
                   {expandedActionIdx === idx && (
-                    <div className="px-6 pb-6 pt-4 border-t border-zinc-250 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-950/20 space-y-4">
+                    <div className="px-6 pb-6 pt-4 border-t border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/50 dark:bg-zinc-950/20 space-y-4">
                       {/* Step Name / Label Input */}
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-zinc-400">Step Custom Label</label>
@@ -1631,7 +1830,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                           </div>
 
                           {(action.config.assignmentType === 'TEAM' || action.config.assignmentType === 'POSITION') && (
-                            <div className="bg-zinc-900/10 dark:bg-zinc-950/20 border border-zinc-250/20 dark:border-zinc-900/40 p-2.5 rounded-xl text-[9px] text-zinc-550 flex items-center gap-2">
+                            <div className="bg-zinc-900/10 dark:bg-zinc-950/20 border border-zinc-200/20 dark:border-zinc-900/40 p-2.5 rounded-xl text-[9px] text-zinc-500 flex items-center gap-2">
                               <Sparkles size={11} className="text-indigo-400 shrink-0" />
                               <span>
                                 <strong>Round-Robin Auto-balancing:</strong> The system will assign new records to the active member who was assigned a record least recently.
@@ -1927,7 +2126,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                                 updated[idx].config.archiveSource = e.target.checked;
                                 setActions(updated);
                               }}
-                              className="rounded border-zinc-300 dark:border-zinc-850 bg-white dark:bg-zinc-950 text-indigo-650"
+                              className="rounded border-zinc-300 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-indigo-600"
                             />
                             Archive source Intake record automatically upon routing
                           </label>
@@ -2479,61 +2678,140 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                           </div>
                         </div>
                       )}
+                      {/* Outbound Webhook Form */}
+                      {action.type === 'WEBHOOK' && (
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-medium text-zinc-500">Method</label>
+                              <select
+                                value={action.config.method || 'POST'}
+                                onChange={(e) => {
+                                  const updated = [...actions];
+                                  updated[idx].config.method = e.target.value;
+                                  setActions(updated);
+                                }}
+                                className="w-full h-8 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 text-xs text-zinc-900 dark:text-white"
+                              >
+                                <option value="POST">POST</option>
+                                <option value="PUT">PUT</option>
+                                <option value="PATCH">PATCH</option>
+                                <option value="GET">GET</option>
+                              </select>
+                            </div>
+                            <div className="sm:col-span-3 space-y-1">
+                              <label className="text-[11px] font-medium text-zinc-500">Endpoint URL</label>
+                              <input
+                                type="url"
+                                value={action.config.url || ''}
+                                onChange={(e) => {
+                                  const updated = [...actions];
+                                  updated[idx].config.url = e.target.value;
+                                  setActions(updated);
+                                }}
+                                placeholder="https://api.example.com/webhook"
+                                className="w-full h-8 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 text-xs font-mono text-zinc-900 dark:text-white"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Step Error Policy */}
+                      <div className="pt-2.5 mt-2 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-zinc-500">On step failure</span>
+                        <select
+                          value={action.onError || 'stop'}
+                          onChange={(e) => {
+                            const updated = [...actions];
+                            updated[idx] = { ...updated[idx], onError: e.target.value };
+                            setActions(updated);
+                          }}
+                          className="h-7 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-md px-2 text-[11px] text-zinc-700 dark:text-zinc-300 cursor-pointer"
+                        >
+                          <option value="stop">Stop automation</option>
+                          <option value="continue">Continue to next step</option>
+                        </select>
+                      </div>
                     </div>
                   )}
                 </div>
               ))}
-              
-              {actions.length === 0 && (
-                <div className="py-20 text-center border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl flex flex-col items-center justify-center gap-3">
-                  <Play size={24} className="text-zinc-350 dark:text-zinc-600" />
-                  <p className="text-xs text-zinc-400">Your automation sequence is empty. Click actions from the library panel on the left to add steps.</p>
                 </div>
-              )}
+
+                {actions.length > 0 && <div className="w-px h-5 bg-zinc-300 dark:bg-zinc-700" />}
+
+                {/* Add Action CTA */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActionSearch('');
+                    setActionCategory('All');
+                    setShowActionModal(true);
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 text-xs font-medium text-zinc-700 dark:text-zinc-200 shadow-2xs transition-colors cursor-pointer"
+                >
+                  <Plus size={14} className="text-indigo-500" />
+                  <span>{actions.length === 0 ? 'Add first action' : 'Add action'}</span>
+                </button>
+              </div>
             </div>
           </main>
 
           {/* COLUMN 4: Properties Sidebar & Logs History */}
-          <aside className="w-80 flex-shrink-0 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 p-5 flex flex-col gap-5 overflow-y-auto custom-scrollbar">
+          {!rightSidebarCollapsed && (
+          <aside className="w-80 flex-shrink-0 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 flex flex-col">
             
-            {/* Header Settings vs Runs History Tabs */}
-            <div className="flex bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-1 shrink-0">
+            {/* Aligned h-11 Header Settings vs Runs History Tabs */}
+            <div className="h-11 px-2.5 border-b border-zinc-200 dark:border-zinc-800 flex items-center gap-1.5 shrink-0">
+              <div className="flex-1 grid grid-cols-2 gap-1 bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg">
+                <button
+                  onClick={() => setRightSidebarTab('properties')}
+                  className={cn(
+                    "py-1 rounded-md text-xs font-medium transition-colors cursor-pointer",
+                    rightSidebarTab === 'properties'
+                      ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs"
+                      : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                  )}
+                >
+                  Settings
+                </button>
+                <button
+                  onClick={() => {
+                    setRightSidebarTab('runs');
+                    viewRuns(selectedRule);
+                  }}
+                  className={cn(
+                    "py-1 rounded-md text-xs font-medium transition-colors cursor-pointer flex items-center justify-center gap-1.5",
+                    rightSidebarTab === 'runs'
+                      ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs"
+                      : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                  )}
+                >
+                  <Clock size={12} />
+                  Runs
+                </button>
+              </div>
               <button
-                onClick={() => setRightSidebarTab('properties')}
-                className={cn(
-                  "flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer",
-                  rightSidebarTab === 'properties'
-                    ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm"
-                    : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
-                )}
+                type="button"
+                onClick={() => setRightSidebarCollapsed(true)}
+                className="p-1.5 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer shrink-0"
+                title="Collapse settings"
               >
-                Settings
-              </button>
-              <button
-                onClick={() => {
-                  setRightSidebarTab('runs');
-                  viewRuns(selectedRule);
-                }}
-                className={cn(
-                  "flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1",
-                  rightSidebarTab === 'runs'
-                    ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm"
-                    : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
-                )}
-              >
-                <Clock size={10} />
-                Runs History
+                <ChevronRight size={14} />
               </button>
             </div>
+
+            <div className="flex-1 p-4 flex flex-col gap-5 overflow-y-auto custom-scrollbar">
 
             {rightSidebarTab === 'properties' ? (
               <div className="space-y-6 flex-1">
                 
                 {/* Properties form */}
                 <div className="space-y-3.5">
-                  <h4 className="text-[9px] font-black text-zinc-450 dark:text-zinc-500 uppercase tracking-widest px-1">Properties</h4>
+                  <h4 className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-1">Properties</h4>
                   
-                  <div className="space-y-3 bg-zinc-55/35 dark:bg-zinc-900/10 p-4 border border-zinc-200 dark:border-zinc-800/80 rounded-2xl">
+                  <div className="space-y-3 bg-zinc-50/35 dark:bg-zinc-900/10 p-4 border border-zinc-200 dark:border-zinc-800/80 rounded-2xl">
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-zinc-500">Automation Name</label>
                       <input 
@@ -2554,6 +2832,21 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                         placeholder="Description"
                       />
                     </div>
+                    {mode === 'global' && (
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-zinc-500">Target Module</label>
+                        <select
+                          value={selectedRule?.moduleId || ''}
+                          onChange={(e) => handleUpdateRuleProperty({ moduleId: e.target.value || null })}
+                          className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                        >
+                          <option value="">Global (Tenant-wide)</option>
+                          {modules.map((m: any) => (
+                            <option key={m.id} value={m.id}>{m.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between pt-1">
                       <label className="text-[10px] font-bold text-zinc-500 cursor-pointer select-none" htmlFor="activeToggle">Enabled</label>
                       <button
@@ -2575,10 +2868,10 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                 {/* Trigger configuration details */}
                 {selectedRule && (
                   <div className="space-y-3">
-                    <h4 className="text-[9px] font-black text-zinc-450 dark:text-zinc-500 uppercase tracking-widest px-1">Trigger Config</h4>
-                    <div className="space-y-3 bg-zinc-55/35 dark:bg-zinc-900/10 p-4 border border-zinc-200 dark:border-zinc-800/80 rounded-2xl">
+                    <h4 className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-1">Trigger Config</h4>
+                    <div className="space-y-3 bg-zinc-50/35 dark:bg-zinc-900/10 p-4 border border-zinc-200 dark:border-zinc-800/80 rounded-2xl">
                       <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-zinc-550 dark:text-zinc-500">Trigger Type</label>
+                        <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-500">Trigger Type</label>
                         <div className="text-xs font-bold text-indigo-655 dark:text-indigo-400 capitalize bg-indigo-500/10 border border-indigo-500/20 px-3 py-1.5 rounded-lg max-w-max">
                           {triggerType.replace(/_/g, ' ')}
                         </div>
@@ -2586,9 +2879,9 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
 
                       {/* If triggerType is FORM_SUBMITTED or CRON (Scheduled Interval) */}
                       {((moduleId && triageModule && moduleId === triageModule.id) || triggerType === 'FORM_SUBMITTED' || triggerType === 'CRON') && (
-                        <div className="space-y-3 pt-1.5 border-t border-dashed border-zinc-200 dark:border-zinc-850">
+                        <div className="space-y-3 pt-1.5 border-t border-dashed border-zinc-200 dark:border-zinc-800">
                           <div className="space-y-1">
-                            <label className="text-[10px] font-bold text-zinc-550 dark:text-zinc-500">Trigger Mode</label>
+                            <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-500">Trigger Mode</label>
                             <select
                               value={
                                 triggerType === 'CRON'
@@ -2626,7 +2919,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                           {triggerType === 'CRON' && triggerConfig?.cronExpression !== 'GLOBAL' && (
                             <div className="space-y-3">
                               <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-zinc-550 dark:text-zinc-500">Distribution Schedule</label>
+                                <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-500">Distribution Schedule</label>
                                 <select
                                   value={
                                     ['*/5 * * * *', '*/15 * * * *', '0 * * * *', '0 0 * * *'].includes(triggerConfig?.cronExpression || '')
@@ -2655,7 +2948,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
 
                               {(!['*/5 * * * *', '*/15 * * * *', '0 * * * *', '0 0 * * *'].includes(triggerConfig?.cronExpression || '') || triggerConfig?.cronExpression === 'CUSTOM') && (
                                 <div className="space-y-1 animate-in fade-in duration-100">
-                                  <label className="text-[10px] font-bold text-zinc-550 dark:text-zinc-500">Cron Expression</label>
+                                  <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-500">Cron Expression</label>
                                   <input
                                     type="text"
                                     value={triggerConfig?.cronExpression || ''}
@@ -2683,9 +2976,9 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                 )}
 
                 {/* Preconditions visual editor */}
-                <div className="space-y-3">
+                <div ref={preconditionsRef} className="space-y-3">
                   <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800/80 pb-1.5">
-                    <h4 className="text-[9px] font-black text-zinc-450 dark:text-zinc-500 uppercase tracking-widest px-1">Precondition Gates</h4>
+                    <h4 className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-1">Precondition Gates</h4>
                     <button
                       type="button"
                       onClick={handleToggleAdvanced}
@@ -2729,7 +3022,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                           const operators = getFieldOperators(selectedField);
                           
                           return (
-                            <div key={row.id} className="p-3 bg-zinc-55/40 dark:bg-zinc-900/10 border border-zinc-200 dark:border-zinc-800/80 rounded-xl flex flex-col gap-2 relative group animate-in fade-in duration-100">
+                            <div key={row.id} className="p-3 bg-zinc-50/40 dark:bg-zinc-900/10 border border-zinc-200 dark:border-zinc-800/80 rounded-xl flex flex-col gap-2 relative group animate-in fade-in duration-100">
                               <select
                                 value={selectedField?.id || row.fieldId}
                                 onChange={(e) => handleUpdateConditionRow(row.id, { fieldId: e.target.value })}
@@ -2827,7 +3120,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                   <h4 className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Runs Audit Logs</h4>
                   <button 
                     onClick={() => viewRuns(selectedRule)}
-                    className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-lg text-zinc-450 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
+                    className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-lg text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
                     title="Refresh logs"
                   >
                     <RefreshCw size={11} className={loadingRuns ? 'animate-spin' : ''} />
@@ -2846,7 +3139,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                     runs.map((run) => (
                       <div 
                         key={run.id}
-                        className="bg-zinc-55/20 dark:bg-zinc-900/10 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden"
+                        className="bg-zinc-50/20 dark:bg-zinc-900/10 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden"
                       >
                         <div 
                           onClick={() => setExpandedRunId(expandedRunId === run.id ? null : run.id)}
@@ -2887,7 +3180,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
 
                             <div className="space-y-1.5">
                               {((run.stepLogs as any[]) || []).map((step, sIdx) => (
-                                <div key={sIdx} className="p-2 bg-white dark:bg-zinc-900 border border-zinc-150 dark:border-zinc-800 rounded-lg flex flex-col gap-1">
+                                <div key={sIdx} className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg flex flex-col gap-1">
                                   <div className="flex items-center justify-between text-[9px]">
                                     <span className="font-bold text-zinc-700 dark:text-zinc-300">{sIdx + 1}. {step.actionType}</span>
                                     <span className={cn(
@@ -2911,24 +3204,260 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
                 </div>
               </div>
             )}
+            </div>
           </aside>
+          )}
         </>
       ) : (
         /* Empty Workspace State */
-        <div className="flex-1 flex items-center justify-center bg-zinc-50/20 dark:bg-zinc-950/10">
-          <div className="max-w-sm text-center space-y-4">
-            <div className="w-16 h-16 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl flex items-center justify-center mx-auto text-zinc-450 shadow-sm">
-              <Zap size={28} className="text-zinc-400 dark:text-zinc-500" />
-            </div>
-            <div className="space-y-1">
-              <h3 className="text-base font-bold text-zinc-900 dark:text-white">Automation Workspace</h3>
-              <p className="text-zinc-500 text-xs leading-relaxed">
-                Select an automation script from the left sidebar or click **+ New Automation** to design background task flows.
-              </p>
+        <div className="flex-1 flex flex-col overflow-hidden bg-zinc-50/40 dark:bg-zinc-950">
+          <div className="h-11 px-4 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center gap-2 shrink-0">
+            {leftSidebarCollapsed && (
+              <button
+                type="button"
+                onClick={() => setLeftSidebarCollapsed(false)}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-xs font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700/80 transition-colors cursor-pointer"
+              >
+                <ChevronRight size={13} />
+                <span>Automations</span>
+              </button>
+            )}
+            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Automation Workspace</span>
+          </div>
+          <div className="flex-1 flex items-center justify-center p-6">
+            <div className="max-w-sm text-center space-y-4">
+              <div className="w-12 h-12 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl flex items-center justify-center mx-auto shadow-xs">
+                <Zap size={22} className="text-indigo-500" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Automation Workspace</h3>
+                <p className="text-zinc-500 text-xs leading-relaxed">
+                  Select an automation from the left sidebar or create a new one to design event-driven background flows.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCreateRule}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium transition-colors cursor-pointer"
+              >
+                <Plus size={14} />
+                New Automation
+              </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Trigger Picker Modal */}
+      <AnimatePresence>
+      {showTriggerModal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-950/60 backdrop-blur-xs"
+          onClick={() => setShowTriggerModal(false)}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.97, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.97, y: 10 }}
+            transition={{ duration: 0.16, ease: 'easeOut' }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-3xl max-h-[82vh] overflow-hidden shadow-2xl flex flex-col"
+          >
+            <div className="px-6 py-4 border-b border-zinc-200/80 dark:border-zinc-800 flex items-center justify-between gap-4 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                  <Zap size={18} />
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Choose Trigger</h2>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">Select the event that starts this automation.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTriggerModal(false)}
+                className="p-2 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="px-6 py-3 border-b border-zinc-200/80 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/40 shrink-0">
+              <div className="relative">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <input
+                  type="text"
+                  autoFocus
+                  value={triggerSearch}
+                  onChange={(e) => setTriggerSearch(e.target.value)}
+                  placeholder="Search triggers (e.g. Created, Status, Cron, SLA...)"
+                  className="w-full h-9 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg pl-9 pr-3 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-6 py-5 custom-scrollbar">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {TRIGGER_CATALOG.filter(t => {
+                  const q = triggerSearch.trim().toLowerCase();
+                  return !q || t.label.toLowerCase().includes(q) || t.desc.toLowerCase().includes(q) || t.category.toLowerCase().includes(q);
+                }).map(trig => {
+                  const active = triggerType === trig.id;
+                  return (
+                    <button
+                      key={trig.id}
+                      type="button"
+                      onClick={() => {
+                        setTriggerType(trig.id);
+                        setShowTriggerModal(false);
+                      }}
+                      className={cn(
+                        'p-4 rounded-xl border text-left transition-all flex items-start gap-3 cursor-pointer',
+                        active
+                          ? 'bg-indigo-50/70 dark:bg-indigo-500/10 border-indigo-400 dark:border-indigo-500/50 ring-1 ring-indigo-500/30'
+                          : 'bg-white dark:bg-zinc-900/60 border-zinc-200/90 dark:border-zinc-800 hover:border-indigo-300 dark:hover:border-indigo-500/50'
+                      )}
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                        <Zap size={15} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">{trig.label}</span>
+                          <span className="text-[10px] text-zinc-400 shrink-0">{trig.category}</span>
+                        </div>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">{trig.desc}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+      </AnimatePresence>
+
+      {/* Action Picker Modal */}
+      <AnimatePresence>
+      {showActionModal && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-950/60 backdrop-blur-xs"
+          onClick={() => setShowActionModal(false)}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.97, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.97, y: 10 }}
+            transition={{ duration: 0.16, ease: 'easeOut' }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[84vh] overflow-hidden shadow-2xl flex flex-col"
+          >
+            <div className="px-6 py-4 border-b border-zinc-200/80 dark:border-zinc-800 flex items-center justify-between gap-4 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                  <Plus size={18} />
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Add Automation Action</h2>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">Choose an action step to append to this automation.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowActionModal(false)}
+                className="p-2 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="px-6 py-3.5 border-b border-zinc-200/80 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/40 space-y-3 shrink-0">
+              <div className="relative">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <input
+                  type="text"
+                  autoFocus
+                  value={actionSearch}
+                  onChange={(e) => setActionSearch(e.target.value)}
+                  placeholder="Search actions (e.g. Create record, Email, Webhook, AI...)"
+                  className="w-full h-9 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg pl-9 pr-3 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                {['All', 'Records & Data', 'Communication', 'Logic & Flow', 'AI & Documents', 'Integrations', 'Service Desk'].map(cat => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setActionCategory(cat)}
+                    className={cn(
+                      'px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap border transition-colors cursor-pointer',
+                      actionCategory === cat
+                        ? 'bg-indigo-50 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-500/40'
+                        : 'bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border-zinc-200/80 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-800/70'
+                    )}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-6 py-5 custom-scrollbar">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {ACTION_CATALOG.filter(a => {
+                  const matchesCat = actionCategory === 'All' || a.category === actionCategory;
+                  const q = actionSearch.trim().toLowerCase();
+                  const matchesQ = !q || a.label.toLowerCase().includes(q) || a.desc.toLowerCase().includes(q) || a.category.toLowerCase().includes(q);
+                  return matchesCat && matchesQ;
+                }).map(act => {
+                  const Icon = act.icon;
+                  return (
+                    <button
+                      key={act.id}
+                      type="button"
+                      onClick={() => {
+                        handleAddAction(act.id);
+                        setShowActionModal(false);
+                      }}
+                      className="group p-4 rounded-xl border border-zinc-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 hover:border-indigo-300 dark:hover:border-indigo-500/50 hover:bg-zinc-50/60 dark:hover:bg-zinc-900 text-left transition-all flex flex-col gap-2.5 cursor-pointer"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                          <Icon size={16} />
+                        </div>
+                        <span className="text-[10px] font-medium text-zinc-400">{act.category}</span>
+                      </div>
+                      <div>
+                        <h3 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                          {act.label}
+                        </h3>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed line-clamp-2">
+                          {act.desc}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+      </AnimatePresence>
+
+      <DeleteConfirmationModal
+        isOpen={Boolean(ruleToDelete)}
+        onClose={() => setRuleToDelete(null)}
+        onConfirm={confirmDeleteRule}
+        title="Delete Automation"
+        description="Are you sure you want to remove this automation rule? Changes take effect when you save the module."
+        itemName={ruleToDelete?.name}
+      />
 
     </div>
   );

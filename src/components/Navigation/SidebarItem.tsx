@@ -178,22 +178,22 @@ export const SidebarItem = ({
           className="z-[99999] pointer-events-none flex items-center animate-in fade-in zoom-in-[0.98] slide-in-from-left-1 duration-150 ease-out"
         >
           <div className={cn(
-            "flex items-center gap-3 h-full px-3 rounded-lg whitespace-nowrap shadow-2xl shadow-black/40 border transition-colors",
+            "flex items-center gap-3 h-full px-3 rounded-lg whitespace-nowrap shadow-lg shadow-zinc-900/10 dark:shadow-2xl dark:shadow-black/40 border transition-colors",
             active
-              ? "bg-zinc-900 dark:bg-zinc-800 text-white border-zinc-700/80 ring-1 ring-white/10"
-              : "bg-zinc-900/95 dark:bg-zinc-800/95 text-white dark:text-zinc-100 border-zinc-700/70 backdrop-blur-md"
+              ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white border-zinc-200 dark:border-zinc-700/80 ring-1 ring-zinc-900/5 dark:ring-white/10"
+              : "bg-white/95 dark:bg-zinc-800/95 text-zinc-900 dark:text-zinc-100 border-zinc-200 dark:border-zinc-700/70 backdrop-blur-md"
           )}>
             <div className="shrink-0 flex items-center justify-center">
-              <Icon size={18} className={cn(active ? "text-indigo-400 dark:text-white" : "text-zinc-300 dark:text-zinc-300")} />
+              <Icon size={18} className={cn(active ? "text-indigo-600 dark:text-white" : "text-zinc-500 dark:text-zinc-300")} />
             </div>
-            <span className="text-sm font-medium tracking-normal text-white dark:text-zinc-100 pr-1">{label}</span>
+            <span className="text-sm font-medium tracking-normal text-zinc-900 dark:text-zinc-100 pr-1">{label}</span>
             {badge && (
               <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-blue-500 text-white shadow-xs">
                 {badge}
               </span>
             )}
             {isComingSoon && (
-              <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-zinc-800 dark:bg-zinc-700 text-zinc-400 uppercase tracking-wider border border-zinc-700">
+              <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400 uppercase tracking-wider border border-zinc-200 dark:border-zinc-700">
                 Soon
               </span>
             )}

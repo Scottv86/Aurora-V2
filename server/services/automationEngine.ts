@@ -212,6 +212,7 @@ export class AutomationEngine {
       console.log(`[AutomationEngine] Executing action ${action.type}`);
       let output: any = null;
 
+      try {
       switch (action.type) {
         case 'CREATE_RECORD': {
           const targetModuleId = action.config.targetModuleId;
@@ -586,8 +587,9 @@ export class AutomationEngine {
         }
 
         default: {
-          // Check if it is a shared action from the core ActionRegistry
-          const sharedAction = ActionRegistry[action.type];
+          // Check if it is a shared action from the core ActionRegistry (with INVOKE_AGENT -> AI_AGENT alias)
+          const resolvedType = action.type === 'INVOKE_AGENT' ? 'AI_AGENT' : action.type;
+          const sharedAction = ActionRegistry[resolvedType];
           if (sharedAction) {
             const interpolatedConfig = this.interpolateObject(action.config || {}, context);
             output = await sharedAction.execute(context.trigger.record, interpolatedConfig);
@@ -606,6 +608,20 @@ export class AutomationEngine {
         status: 'SUCCESS',
         output
       });
+      } catch (stepErr: any) {
+        if (action.onError === 'continue') {
+          const stepKey = action.id || String(stepLogs.length);
+          context.steps[stepKey] = { error: stepErr?.message || 'Step failed' };
+          stepLogs.push({
+            step: stepLogs.length,
+            actionType: action.type,
+            status: 'FAILED',
+            error: stepErr?.message || 'Step failed'
+          });
+          continue;
+        }
+        throw stepErr;
+      }
     }
   }
 

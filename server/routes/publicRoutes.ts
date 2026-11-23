@@ -538,6 +538,71 @@ router.post('/forms/:formId/submit', async (req, res) => {
 
     const { formRow, formatted, moduleData, tenantId } = resolved;
 
+    // 1. Form Availability & Governance Checks (openAt, closeAt, maxSubmissions, oneSubmissionPerUser)
+    const gov = formatted.settings?.governance;
+    if (gov) {
+      const now = Date.now();
+      if (gov.openAt) {
+        const openTs = new Date(gov.openAt).getTime();
+        if (!isNaN(openTs) && now < openTs) {
+          return res.status(403).json({
+            error: gov.closedMessage || `This form is not yet open for submissions (opens ${new Date(gov.openAt).toLocaleString()}).`,
+          });
+        }
+      }
+      if (gov.closeAt) {
+        const closeTs = new Date(gov.closeAt).getTime();
+        if (!isNaN(closeTs) && now > closeTs) {
+          return res.status(403).json({
+            error: gov.closedMessage || `Submissions for this form closed on ${new Date(gov.closeAt).toLocaleString()}.`,
+          });
+        }
+      }
+      if ((gov.maxSubmissions && gov.maxSubmissions > 0) || gov.oneSubmissionPerUser) {
+        try {
+          const allTenantRecords = await globalPrisma.record.findMany({
+            where: { tenantId },
+            select: { id: true, data: true },
+            take: 1000,
+          });
+          const existingForForm = allTenantRecords.filter((r: any) => {
+            const d = r.data && typeof r.data === 'object' ? r.data : {};
+            return d._formId === formatted.id;
+          });
+          if (gov.maxSubmissions && gov.maxSubmissions > 0 && existingForForm.length >= gov.maxSubmissions) {
+            return res.status(403).json({
+              error: gov.closedMessage || `This form has reached its maximum submission quota (${gov.maxSubmissions}).`,
+            });
+          }
+          if (gov.oneSubmissionPerUser) {
+            const subEmail = String(
+              data?.email || data?.workEmail || context?.user?.email || ''
+            )
+              .trim()
+              .toLowerCase();
+            const subUserId = String(context?.user?.id || context?.user?.userId || '').trim();
+            if (subEmail || subUserId) {
+              const duplicate = existingForForm.some((r: any) => {
+                const d = (r.data || {}) as any;
+                const recEmail = String(d.email || d.workEmail || d._submittedByEmail || '')
+                  .trim()
+                  .toLowerCase();
+                const recUserId = String(d._submittedByUserId || '').trim();
+                return (subEmail && recEmail === subEmail) || (subUserId && recUserId === subUserId);
+              });
+              if (duplicate) {
+                return res.status(409).json({
+                  error: 'A submission has already been recorded for your account/email address.',
+                });
+              }
+            }
+          }
+        } catch (govErr) {
+          console.warn('[PublicAPI] Governance quota check warning:', govErr);
+        }
+      }
+    }
+
     const screeningResult = SecurityScreeningService.screenPayload(data || {});
     if (!screeningResult.isClean) {
       await globalPrisma.quarantineRecord.create({
@@ -631,6 +696,79 @@ router.post('/forms/:formId/submit', async (req, res) => {
       formatted.settings?.autoTransitionStatus ||
       'New';
 
+    // 2. Auto-Upsert Contact / Party in People & Organisations Directory (if enabled)
+    let resolvedPartyId = context?.user?.partyId || cleanData.partyId || undefined;
+    let resolvedPartyName = undefined;
+    if (formatted.settings?.upsertDirectoryParty) {
+      try {
+        const candEmail = String(
+          cleanData.email ||
+            cleanData.workEmail ||
+            cleanData.contactEmail ||
+            context?.user?.email ||
+            ''
+        ).trim();
+        const candName = String(
+          cleanData.fullName ||
+            cleanData.applicantName ||
+            cleanData.contactName ||
+            cleanData.name ||
+            (cleanData.first_name || cleanData.firstName
+              ? `${cleanData.first_name || cleanData.firstName} ${cleanData.family_name || cleanData.last_name || cleanData.lastName || ''}`.trim()
+              : '') ||
+            context?.user?.name ||
+            context?.user?.displayName ||
+            candEmail ||
+            ''
+        ).trim();
+        const candPhone = String(
+          cleanData.phone || cleanData.mobile || cleanData.contactPhone || context?.user?.phone || ''
+        ).trim();
+
+        if (candEmail || candName) {
+          let existingParty = candEmail
+            ? await globalPrisma.party.findFirst({
+                where: { tenantId, email: { equals: candEmail, mode: 'insensitive' } },
+              })
+            : null;
+
+          if (!existingParty && candName) {
+            existingParty = await globalPrisma.party.findFirst({
+              where: { tenantId, displayName: { equals: candName, mode: 'insensitive' } },
+            });
+          }
+
+          if (existingParty) {
+            resolvedPartyId = existingParty.id;
+            resolvedPartyName = existingParty.displayName || candName;
+          } else {
+            const createdParty = await globalPrisma.party.create({
+              data: {
+                tenantId,
+                partyType: 'PERSON',
+                displayName: candName || candEmail,
+                email: candEmail || null,
+                phone: candPhone || null,
+                classifications: ['Applicant', 'Form Submitter'],
+                tags: [formatted.name],
+                creationContextLog: `Auto-created via Form Submission (${formatted.name} - ${customerRef})`,
+              },
+            });
+            resolvedPartyId = createdParty.id;
+            resolvedPartyName = createdParty.displayName || candName;
+          }
+        }
+      } catch (partyErr) {
+        console.warn('[PublicAPI] Directory Party auto-upsert warning:', partyErr);
+      }
+    }
+
+    // 3. Official Payable Form Invoice Number Generation
+    let invoiceNumber: string | undefined = undefined;
+    if (formatted.settings?.payment?.enabled && Number(cleanData._paymentAmount || 0) > 0) {
+      invoiceNumber = `INV-${Date.now().toString(36).toUpperCase().slice(-5)}-${Math.floor(100 + Math.random() * 900)}`;
+    }
+
     const submissionData: Record<string, any> = {
       ...cleanData,
       _formId: formatted.id,
@@ -639,11 +777,13 @@ router.post('/forms/:formId/submit', async (req, res) => {
       _originalModuleId: moduleData?.id || undefined,
       _submissionSource: context?.source || (formatted.usage === 'portal_site' ? 'Portal Site Form' : 'Public Form'),
       _customerRef: customerRef,
+      ...(invoiceNumber ? { _invoiceNumber: invoiceNumber } : {}),
+      ...(resolvedPartyId ? { _submittedByPartyId: resolvedPartyId, _submittedByPartyName: resolvedPartyName } : {}),
       ...(context?.user ? {
         _submittedByUserId: context.user.id || context.user.userId,
         _submittedByEmail: context.user.email,
         _submittedByName: context.user.name || context.user.displayName,
-        _submittedByPartyId: context.user.partyId
+        ...(context.user.partyId && !resolvedPartyId ? { _submittedByPartyId: context.user.partyId } : {})
       } : {}),
       ...(context?.parentRecordId ? { _parentRecordId: context.parentRecordId } : {}),
       ...(context?.siteId ? { _siteId: context.siteId } : {}),
@@ -707,6 +847,8 @@ router.post('/forms/:formId/submit', async (req, res) => {
       success: true,
       id: record.id,
       customerRef,
+      invoiceNumber,
+      partyId: resolvedPartyId,
       pdfTemplateId: formatted.settings?.postSubmit?.pdfTemplateId || undefined,
       redirectUrl: formatted.settings?.redirectUrl || undefined,
       message: formatted.settings?.successMessage || 'Submission received successfully!'

@@ -1,29 +1,29 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  Zap, 
-  Plus, 
-  Search, 
-  Database, 
-  Network, 
-  Cpu, 
-  Settings2, 
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import {
+  Zap,
+  Plus,
+  Search,
+  Database,
+  Network,
+  Cpu,
+  Settings2,
   Trash2,
-  AlertCircle, 
-  Info, 
+  AlertCircle,
+  Info,
   PlusCircle,
   Play,
   Code,
   Loader2,
-  CheckCircle,
+  CheckCircle2,
   Sparkles,
   BrainCircuit,
   Check,
   AlertTriangle,
   FileText,
-  ShieldCheck,
-  ChevronDown,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  RotateCcw,
+  ArrowRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn, flattenFields } from '../../lib/utils';
@@ -32,28 +32,12 @@ import { Field } from '../ModuleEditor';
 import { API_BASE_URL } from '../../config';
 import { usePlatform } from '../../hooks/usePlatform';
 import { useAuth } from '../../hooks/useAuth';
-import { ConditionModal } from './ConditionModal';
 import { ExpressionEditor } from './ExpressionEditor';
-
-const getRuleSummary = (rule: any, fields: any[]): string => {
-  if (!rule) return 'No conditions defined (runs on any change to referenced fields)';
-  if (rule.type === 'rule') {
-    const field = fields.find(f => f.id === rule.fieldId);
-    const label = field ? field.label : rule.fieldId;
-    return `${label || rule.fieldId} ${rule.operator} ${rule.value || ''}`;
-  }
-  if (rule.type === 'group') {
-    const children = (rule.rules || []).map((r: any) => getRuleSummary(r, fields)).filter((c: string) => c && !c.includes('No conditions'));
-    if (children.length === 0) return 'No conditions defined (runs on any change to referenced fields)';
-    return `(${children.join(` ${rule.logicalOperator || 'AND'} `)})`;
-  }
-  if (rule.fieldId) {
-    const field = fields.find(f => f.id === rule.fieldId);
-    const label = field ? field.label : rule.fieldId;
-    return `${label || rule.fieldId} ${rule.operator || 'equals'} ${rule.value || ''}`;
-  }
-  return 'No conditions defined (runs on any change to referenced fields)';
-};
+import {
+  VisualRuleBuilder,
+  createDefaultConditionGroup
+} from './VisualRuleBuilder';
+import { ValidationConditionNode } from '../../lib/validationEngine';
 
 interface ConnectorsTabProps {
   layout: Field[];
@@ -70,6 +54,8 @@ interface ConnectorsTabProps {
   setTabs?: React.Dispatch<React.SetStateAction<any[]>>;
   handleForgeConnector: (prompt: string) => Promise<any>;
   handleCreateCustomConnector: (connector: any) => Promise<any>;
+  showAiAssist?: boolean;
+  mode?: 'module' | 'global';
 }
 
 export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
@@ -86,13 +72,22 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
   tabs = [],
   setTabs,
   handleForgeConnector,
-  handleCreateCustomConnector
+  handleCreateCustomConnector,
+  showAiAssist = true
 }) => {
   const { tenant } = usePlatform();
   const { session } = useAuth();
   const [selectedConnectorId, setSelectedConnectorId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  
+
+  // Resizable & Collapsible Sidebars (aligned with Interface, Forms, Workflows & Rules)
+  const [leftWidth, setLeftWidth] = useState(264);
+  const [rightWidth, setRightWidth] = useState(320);
+  const [isLeftCollapsed, setIsLeftCollapsed] = useState(false);
+  const [isRightCollapsed, setIsRightCollapsed] = useState(false);
+  const [resizingSide, setResizingSide] = useState<'left' | 'right' | null>(null);
+  const resizingSideRef = useRef<'left' | 'right' | null>(null);
+
   // Placement selection and creation states
   const [selectedPlacementId, setSelectedPlacementId] = useState<string | null>(null);
   const [showAddPlacementDropdown, setShowAddPlacementDropdown] = useState(false);
@@ -114,11 +109,11 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
   }, [selectedPlacementId]);
 
   // Right sidebar tab and data states
-  const [rightTab, setRightTab] = useState<'setup' | 'sandbox' | 'logs' | 'ai' | 'json'>('setup');
+  const [rightTab, setRightTab] = useState<'setup' | 'sandbox' | 'logs' | 'json'>('setup');
   const [logs, setLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
-  const [logFilter, setLogFilter] = useState<'all' | 'prod' | 'test'>('all');
+  const [logFilter, setLogFilter] = useState<'all' | 'success' | 'error'>('all');
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   const [savingSecrets, setSavingSecrets] = useState(false);
   const [testData, setTestData] = useState<Record<string, any>>({});
@@ -128,10 +123,44 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
     outputType: string;
   } | null>(null);
   const [selectedDestinationTabId, setSelectedDestinationTabId] = useState<string>('default-tab');
-  const [editingTriggerCondition, setEditingTriggerCondition] = useState<{ ruleId: string; rule: any } | null>(null);
   const [showCreateTabForm, setShowCreateTabForm] = useState(false);
   const [newTabLabel, setNewTabLabel] = useState('');
   const [newTabParentId, setNewTabParentId] = useState('');
+  const [testing, setTesting] = useState(false);
+  const [testResponse, setTestResponse] = useState<any>(null);
+
+  // Sidebar resize listeners
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!resizingSideRef.current) return;
+      if (resizingSideRef.current === 'left') {
+        const next = Math.min(380, Math.max(220, e.clientX - 56));
+        setLeftWidth(next);
+      } else {
+        const next = Math.min(440, Math.max(260, window.innerWidth - e.clientX));
+        setRightWidth(next);
+      }
+    };
+    const handleMouseUp = () => {
+      resizingSideRef.current = null;
+      setResizingSide(null);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
+  const startResize = (side: 'left' | 'right') => {
+    resizingSideRef.current = side;
+    setResizingSide(side);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
 
   const displayTabs = useMemo(() => {
     if (!tabs || tabs.length === 0) {
@@ -146,7 +175,6 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
         result.push({ ...sub, depth: 1 });
       });
     });
-    // fallback for any orphaned subtabs
     tabs.forEach((t: any) => {
       if (t.parentId && !result.some(r => r.id === t.id)) {
         result.push({ ...t, depth: 1 });
@@ -160,14 +188,7 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
       setSelectedDestinationTabId(currentTabId || (tabs && tabs[0]?.id) || 'default-tab');
     }
   }, [pendingFieldCreation, currentTabId, tabs]);
-  const [testing, setTesting] = useState(false);
-  const [testResponse, setTestResponse] = useState<any>(null);
 
-  // AI states
-  const [aiPrompt, setAiPrompt] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
-
-  // Reset test state and test inputs when selected connector transitions
   useEffect(() => {
     setTestData({});
     setTestResponse(null);
@@ -192,7 +213,7 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
       });
       if (res.ok) {
         const data = await res.json();
-        setLogs(data);
+        setLogs(Array.isArray(data) ? data : []);
       }
     } catch (err) {
       console.error('Failed to fetch connector logs:', err);
@@ -216,7 +237,7 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
         body: JSON.stringify({ secrets })
       });
       if (res.ok) {
-        toast.success('Configuration saved successfully');
+        toast.success('Configuration saved');
         setSecrets({});
         new BroadcastChannel('nexus_connectors').postMessage('refresh');
       } else {
@@ -253,6 +274,104 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
     }
   }, [showInlineLookupModal, currentTabId, tabs]);
 
+  // Normalize details retrieval for a connector
+  const getConnectorDetails = (c: any) => {
+    const connId = c.connectorId || c.id;
+    const registryEntry = connectorRegistry.find(r => r.id === connId);
+    return {
+      id: connId,
+      name: c.displayName || c.name || registryEntry?.name || 'Unnamed Connector',
+      icon: c.icon || registryEntry?.icon || c.connector?.icon || 'Zap',
+      category: c.category || registryEntry?.category || c.connector?.category || 'Utility',
+      ioSchema: c.ioSchema || registryEntry?.ioSchema || c.connector?.ioSchema || { inputs: [], outputs: [] },
+      edgeFunctionUrl: c.edgeFunctionUrl || registryEntry?.edgeFunctionUrl || c.connector?.edgeFunctionUrl,
+      hasSecrets: Boolean(c.isActive && (!c.secretsSchema?.length || c.configuredSecrets?.length > 0 || c.hasCredentials !== false))
+    };
+  };
+
+  const usedConnectorIds = useMemo(() => {
+    const ids = new Set<string>(
+      flattenFields(layout)
+        .filter(f => (f.type === 'connector' || f.lookupSource === 'connector') && f.connectorId)
+        .map(f => f.connectorId as string)
+    );
+    (dataPopulationRules || []).forEach((r: any) => {
+      if (r.connectorId) ids.add(r.connectorId);
+    });
+    return ids;
+  }, [layout, dataPopulationRules]);
+
+  const sortedConnectors = useMemo(() => {
+    return activeConnectors.map(c => {
+      const details = getConnectorDetails(c);
+      const isUsed = usedConnectorIds.has(details.id);
+      return { ...c, ...details, isUsed };
+    });
+  }, [activeConnectors, connectorRegistry, usedConnectorIds]);
+
+  useEffect(() => {
+    const used = sortedConnectors.filter(c => c.isUsed);
+    if (used.length > 0 && (!selectedConnectorId || !used.some(c => c.id === selectedConnectorId))) {
+      setSelectedConnectorId(used[0].id);
+    } else if (used.length === 0 && selectedConnectorId) {
+      setSelectedConnectorId(null);
+    }
+  }, [sortedConnectors, selectedConnectorId]);
+
+  const filteredConnectors = useMemo(() => {
+    return sortedConnectors.filter(c =>
+      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.category.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [sortedConnectors, searchQuery]);
+
+  const selectedConnector = useMemo(() => {
+    if (!selectedConnectorId) return null;
+    return sortedConnectors.find(c => c.id === selectedConnectorId) || null;
+  }, [sortedConnectors, selectedConnectorId]);
+
+  const targetFields = useMemo(() => {
+    return flattenFields(layout).filter(f =>
+      f.type !== 'connector' &&
+      !['heading', 'divider', 'spacer', 'alert', 'group', 'fieldGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'html', 'button', 'sub_module'].includes(f.type)
+    );
+  }, [layout]);
+
+  const placements = useMemo(() => {
+    if (!selectedConnectorId) return [];
+    const list: any[] = [];
+
+    const fields = flattenFields(layout).filter(f => f.connectorId === selectedConnectorId);
+    fields.forEach(f => {
+      list.push({
+        id: f.id,
+        type: (f.type === 'lookup' || f.lookupSource === 'connector') ? 'lookup' : 'connector_field',
+        label: f.label || f.name || f.id,
+        fieldName: f.name,
+        tabId: f.tabId,
+        details: f
+      });
+    });
+
+    const rules = (dataPopulationRules || []).filter((r: any) => r.connectorId === selectedConnectorId);
+    rules.forEach((r: any) => {
+      list.push({
+        id: r.id,
+        type: 'rule',
+        label: r.name || `Trigger Rule (${r.id})`,
+        details: r
+      });
+    });
+
+    return list;
+  }, [selectedConnectorId, layout, dataPopulationRules]);
+
+  const selectedPlacement = useMemo(() => {
+    if (placements.length === 0) return null;
+    if (!selectedPlacementId) return placements[0];
+    return placements.find(p => p.id === selectedPlacementId) || placements[0];
+  }, [placements, selectedPlacementId]);
+
   const handleAddCustomRule = () => {
     if (!selectedConnector) return;
     const newRuleId = `rule-${Math.random().toString(36).substring(2, 9)}`;
@@ -261,7 +380,9 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
       connectorId: selectedConnector.id,
       name: `Populate on field change`,
       triggerFieldId: '',
-      condition: { fieldId: '', operator: 'not_null', value: '' },
+      triggerMode: 'visual',
+      onFailure: 'ignore',
+      condition: createDefaultConditionGroup(targetFields),
       inputMappings: [] as any[],
       outputMappings: [] as any[]
     };
@@ -279,7 +400,7 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
   const initiateDeletePlacement = (placement: any) => {
     const associatedFieldIds: string[] = [];
     const associatedFieldLabels: string[] = [];
-    
+
     if (placement.type === 'rule') {
       const rule = placement.details;
       (rule.outputMappings || []).forEach((m: any) => {
@@ -291,12 +412,12 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
           }
         }
       });
-      
+
       if (associatedFieldIds.length === 0) {
         handleDeleteCustomRule(placement.id);
         return;
       }
-      
+
       setDeletePlacementConfirmation({
         id: placement.id,
         type: 'rule',
@@ -308,7 +429,7 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
       const field = placement.details;
       associatedFieldIds.push(field.id);
       associatedFieldLabels.push(`${field.label || field.name} (Lookup Field)`);
-      
+
       (field.lookupOutputMappings || []).forEach((m: any) => {
         if (m.targetFieldId) {
           const f = targetFields.find(tf => tf.id === m.targetFieldId);
@@ -318,7 +439,7 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
           }
         }
       });
-      
+
       setDeletePlacementConfirmation({
         id: placement.id,
         type: 'lookup',
@@ -331,7 +452,7 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
 
   const confirmDeletePlacement = (keepFields: boolean) => {
     if (!deletePlacementConfirmation) return;
-    
+
     if (deletePlacementConfirmation.type === 'rule') {
       if (!keepFields) {
         setLayout(prev => prev.filter(f => !deletePlacementConfirmation.associatedFieldIds.includes(f.id)));
@@ -361,7 +482,7 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
         toast.success("Removed lookup placement trigger (kept layout fields)");
       }
     }
-    
+
     setDeletePlacementConfirmation(null);
   };
 
@@ -398,98 +519,6 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
     toast.success(`Created lookup field "${label}"`);
   };
 
-  // Normalize details retrieval for a connector
-  const getConnectorDetails = (c: any) => {
-    const connId = c.connectorId || c.id;
-    const registryEntry = connectorRegistry.find(r => r.id === connId);
-    return {
-      id: connId,
-      name: c.displayName || c.name || registryEntry?.name || 'Unnamed Connector',
-      icon: c.icon || registryEntry?.icon || c.connector?.icon || 'Zap',
-      category: c.category || registryEntry?.category || c.connector?.category || 'Utility',
-      ioSchema: c.ioSchema || registryEntry?.ioSchema || c.connector?.ioSchema || { inputs: [], outputs: [] },
-      edgeFunctionUrl: c.edgeFunctionUrl || registryEntry?.edgeFunctionUrl || c.connector?.edgeFunctionUrl,
-    };
-  };
-
-  // Identify connectors currently utilized by fields in this module layout
-  const usedConnectorIds = useMemo(() => {
-    return new Set(
-      flattenFields(layout)
-        .filter(f => (f.type === 'connector' || f.lookupSource === 'connector') && f.connectorId)
-        .map(f => f.connectorId)
-    );
-  }, [layout]);
-
-  // List active connectors and separate them by usage
-  const sortedConnectors = useMemo(() => {
-    return activeConnectors.map(c => {
-      const details = getConnectorDetails(c);
-      const isUsed = usedConnectorIds.has(details.id);
-      return { ...c, ...details, isUsed };
-    });
-  }, [activeConnectors, connectorRegistry, usedConnectorIds]);
-
-  // Filter based on search query
-  const filteredConnectors = useMemo(() => {
-    return sortedConnectors.filter(c => 
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.category.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [sortedConnectors, searchQuery]);
-
-  const selectedConnector = useMemo(() => {
-    if (!selectedConnectorId) return null;
-    return sortedConnectors.find(c => c.id === selectedConnectorId) || null;
-  }, [sortedConnectors, selectedConnectorId]);
-
-  // Get compatible target fields in the layout for mapping
-  const targetFields = useMemo(() => {
-    return flattenFields(layout).filter(f => 
-      f.type !== 'connector' && 
-      !['heading', 'divider', 'spacer', 'alert', 'group', 'fieldGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'html', 'button', 'sub_module'].includes(f.type)
-    );
-  }, [layout]);
-
-  // Find fields in layout or execution rules in config that use this connector
-  const placements = useMemo(() => {
-    if (!selectedConnectorId) return [];
-    const list: any[] = [];
-    
-    // 1. Find lookup fields or connector block fields in the layout
-    const fields = flattenFields(layout).filter(f => f.connectorId === selectedConnectorId);
-    fields.forEach(f => {
-      list.push({
-        id: f.id,
-        type: (f.type === 'lookup' || f.lookupSource === 'connector') ? 'lookup' : 'connector_field',
-        label: f.label || f.name || f.id,
-        fieldName: f.name,
-        tabId: f.tabId,
-        details: f
-      });
-    });
-    
-    // 2. Find data population rules
-    const rules = (dataPopulationRules || []).filter((r: any) => r.connectorId === selectedConnectorId);
-    rules.forEach((r: any) => {
-      list.push({
-        id: r.id,
-        type: 'rule',
-        label: r.name || `Execution Rule (${r.id})`,
-        details: r
-      });
-    });
-    
-    return list;
-  }, [selectedConnectorId, layout, dataPopulationRules]);
-
-  const selectedPlacement = useMemo(() => {
-    if (placements.length === 0) return null;
-    if (!selectedPlacementId) return placements[0];
-    return placements.find(p => p.id === selectedPlacementId) || placements[0];
-  }, [placements, selectedPlacementId]);
-
-  // Auto-map output fields to layout fields of the same name/label
   const handleAutoMap = () => {
     if (!selectedConnector || !selectedPlacement) return;
     const outputs = selectedConnector.ioSchema?.outputs || [];
@@ -507,8 +536,8 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
           const currentMappings = [...(f.lookupOutputMappings || [])];
           outputs.forEach((output: any) => {
             if (currentMappings.some(m => m.sourceFieldId === output.name)) return;
-            const match = targetFields.find(tf => 
-              tf.id === output.name || 
+            const match = targetFields.find(tf =>
+              tf.id === output.name ||
               (tf.name && tf.name.toLowerCase() === output.name.toLowerCase()) ||
               tf.label.toLowerCase() === (output.label || output.name).toLowerCase()
             );
@@ -532,8 +561,8 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
           const currentMappings = [...(r.outputMappings || [])];
           outputs.forEach((output: any) => {
             if (currentMappings.some(m => m.sourceFieldId === output.name)) return;
-            const match = targetFields.find(tf => 
-              tf.id === output.name || 
+            const match = targetFields.find(tf =>
+              tf.id === output.name ||
               (tf.name && tf.name.toLowerCase() === output.name.toLowerCase()) ||
               tf.label.toLowerCase() === (output.label || output.name).toLowerCase()
             );
@@ -553,8 +582,8 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
       const currentMappings = { ...(connectorMappings[selectedConnector.id] || {}) };
       outputs.forEach((output: any) => {
         if (currentMappings[output.name]) return;
-        const match = targetFields.find(tf => 
-          tf.id === output.name || 
+        const match = targetFields.find(tf =>
+          tf.id === output.name ||
           (tf.name && tf.name.toLowerCase() === output.name.toLowerCase()) ||
           tf.label.toLowerCase() === (output.label || output.name).toLowerCase()
         );
@@ -567,14 +596,13 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
     }
 
     if (count > 0) {
-      toast.success(`Successfully auto-mapped ${count} fields.`);
+      toast.success(`Auto-mapped ${count} fields.`);
     } else {
       toast.info("No matching layout fields found by name or label.");
     }
   };
 
-  // Manually update mapping
-  const handleMapField = (outputName: string, targetFieldId: string) => {
+  const handleMapField = (outputName: string, targetFieldId: string, fallbackValue?: string) => {
     if (!selectedConnectorId || !selectedPlacement) return;
 
     if (selectedPlacement.type === 'lookup') {
@@ -583,18 +611,18 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
         if (f.id === fieldId) {
           const currentMappings = [...(f.lookupOutputMappings || [])];
           const idx = currentMappings.findIndex(m => m.sourceFieldId === outputName);
-          if (targetFieldId === '') {
+          if (targetFieldId === '' && fallbackValue === undefined) {
             if (idx > -1) currentMappings.splice(idx, 1);
-          } else {
-            if (idx > -1) {
-              currentMappings[idx].targetFieldId = targetFieldId;
-            } else {
-              currentMappings.push({
-                id: Math.random().toString(36).substr(2, 9),
-                sourceFieldId: outputName,
-                targetFieldId: targetFieldId
-              });
-            }
+          } else if (idx > -1) {
+            if (targetFieldId !== undefined) currentMappings[idx].targetFieldId = targetFieldId;
+            if (fallbackValue !== undefined) currentMappings[idx].fallbackValue = fallbackValue;
+          } else if (targetFieldId) {
+            currentMappings.push({
+              id: Math.random().toString(36).substr(2, 9),
+              sourceFieldId: outputName,
+              targetFieldId,
+              ...(fallbackValue !== undefined ? { fallbackValue } : {})
+            });
           }
           return { ...f, lookupOutputMappings: currentMappings };
         }
@@ -606,17 +634,17 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
         if (r.id === ruleId) {
           const currentMappings = [...(r.outputMappings || [])];
           const idx = currentMappings.findIndex(m => m.sourceFieldId === outputName);
-          if (targetFieldId === '') {
+          if (targetFieldId === '' && fallbackValue === undefined) {
             if (idx > -1) currentMappings.splice(idx, 1);
-          } else {
-            if (idx > -1) {
-              currentMappings[idx].targetFieldId = targetFieldId;
-            } else {
-              currentMappings.push({
-                sourceFieldId: outputName,
-                targetFieldId: targetFieldId
-              });
-            }
+          } else if (idx > -1) {
+            if (targetFieldId !== undefined) currentMappings[idx].targetFieldId = targetFieldId;
+            if (fallbackValue !== undefined) currentMappings[idx].fallbackValue = fallbackValue;
+          } else if (targetFieldId) {
+            currentMappings.push({
+              sourceFieldId: outputName,
+              targetFieldId,
+              ...(fallbackValue !== undefined ? { fallbackValue } : {})
+            });
           }
           return { ...r, outputMappings: currentMappings };
         }
@@ -635,13 +663,11 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
     }
   };
 
-  // Create a new layout field and map it directly
   const handleCreateAndMapField = (outputName: string, outputLabel: string, outputType: string, customTabId?: string) => {
     if (!selectedConnector || !selectedPlacement) return;
     const label = outputLabel || outputName;
     const newFieldId = `field-${Math.random().toString(36).substring(2, 9)}`;
 
-    // Generate unique slug
     const baseSlug = label.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/__+/g, '_').replace(/^_+|_+$/g, '');
     let finalSlug = baseSlug || 'field';
     let suffix = 1;
@@ -683,42 +709,7 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
     }
 
     setLayout(prev => [...prev, newField]);
-
-    if (selectedPlacement.type === 'lookup') {
-      const fieldId = selectedPlacement.id;
-      setLayout(prev => prev.map(f => {
-        if (f.id === fieldId) {
-          const currentMappings = [...(f.lookupOutputMappings || [])];
-          currentMappings.push({
-            id: Math.random().toString(36).substr(2, 9),
-            sourceFieldId: outputName,
-            targetFieldId: newFieldId
-          });
-          return { ...f, lookupOutputMappings: currentMappings };
-        }
-        return f;
-      }));
-    } else if (selectedPlacement.type === 'rule') {
-      const ruleId = selectedPlacement.id;
-      setDataPopulationRules(prev => prev.map(r => {
-        if (r.id === ruleId) {
-          const currentMappings = [...(r.outputMappings || [])];
-          currentMappings.push({
-            sourceFieldId: outputName,
-            targetFieldId: newFieldId
-          });
-          return { ...r, outputMappings: currentMappings };
-        }
-        return r;
-      }));
-    } else {
-      setConnectorMappings(prev => {
-        const currentMappings = { ...(prev[selectedConnector.id] || {}) };
-        currentMappings[outputName] = newFieldId;
-        return { ...prev, [selectedConnector.id]: currentMappings };
-      });
-    }
-
+    handleMapField(outputName, newFieldId);
     toast.success(`Created field "${label}" and mapped to ${outputName}`);
   };
 
@@ -726,43 +717,36 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
     if (!selectedConnector) return;
     const connectorId = selectedConnector.id;
 
-    // 1. Remove references from layout fields
-    setLayout(prev => {
-      return prev.map(f => {
-        // If it's a legacy connector block referencing this connector
-        if (f.type === 'connector' && f.connectorId === connectorId) {
-          return {
-            ...f,
-            connectorId: undefined
-          } as Field;
-        }
-        // If it's a field (e.g. lookup) referencing this connector
-        if (f.connectorId === connectorId) {
-          return {
-            ...f,
-            connectorId: undefined,
-            lookupSource: f.type === 'lookup' ? 'module_records' : undefined,
-            connectorSearchParam: undefined,
-            connectorLabelField: undefined,
-            connectorValueField: undefined,
-            lookupOutputMappings: undefined
-          } as Field;
-        }
-        return f;
-      });
-    });
+    setLayout(prev => prev.map(f => {
+      if (f.type === 'connector' && f.connectorId === connectorId) {
+        return { ...f, connectorId: undefined } as Field;
+      }
+      if (f.connectorId === connectorId) {
+        return {
+          ...f,
+          connectorId: undefined,
+          lookupSource: f.type === 'lookup' ? 'module_records' : undefined,
+          connectorSearchParam: undefined,
+          connectorLabelField: undefined,
+          connectorValueField: undefined,
+          lookupOutputMappings: undefined
+        } as Field;
+      }
+      return f;
+    }));
 
-    // 2. Remove mappings
+    // Also remove any dataPopulationRules referencing this connector
+    setDataPopulationRules(prev => (prev || []).filter((r: any) => r.connectorId !== connectorId));
+
     setConnectorMappings(prev => {
       const updated = { ...prev };
       delete updated[connectorId];
       return updated;
     });
 
-    toast.success(`Successfully disconnected ${selectedConnector.name} integration`);
+    toast.success(`Disconnected ${selectedConnector.name}`);
   };
 
-  // Live proxy test execution
   const runTest = async () => {
     if (!selectedConnector) return;
     if (!selectedConnector.edgeFunctionUrl) {
@@ -802,1311 +786,1178 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
     }
   };
 
-  // AI connector forge executor
-  const handleGenerateAI = async () => {
-    if (!aiPrompt.trim()) return;
-    setIsGenerating(true);
-    try {
-      const generatedSchema = await handleForgeConnector(aiPrompt);
-      if (generatedSchema) {
-        const created = await handleCreateCustomConnector(generatedSchema);
-        toast.success(`Successfully forged and active connector "${generatedSchema.name || 'AI Custom Connector'}"`);
-        setAiPrompt('');
-        setRightTab('sandbox');
-        
-        // Auto-select newly forged connector
-        if (created && (created.id || created.activation?.id)) {
-          setSelectedConnectorId(created.id || created.activation?.id);
-        }
-      } else {
-        throw new Error("No connector configuration generated.");
-      }
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err.message || "Shadow Architect failed to forge connector configuration.");
-    } finally {
-      setIsGenerating(false);
-    }
+  const getNestedValue = (obj: any, path: string): any => {
+    if (!obj || typeof obj !== 'object' || !path) return undefined;
+    if (obj[path] !== undefined) return obj[path];
+    return path.split('.').reduce((acc, part) => (acc && typeof acc === 'object' ? acc[part] : undefined), obj);
   };
 
+  // Compute dry-run mapped output preview from testResponse
+  const dryRunMappedPreview = useMemo(() => {
+    if (!testResponse || testResponse.error || !selectedPlacement || !selectedConnector) return [];
+    const payload = testResponse.data || testResponse.result || testResponse;
+    if (!payload || typeof payload !== 'object') return [];
+
+    const mappings =
+      selectedPlacement.type === 'lookup'
+        ? selectedPlacement.details.lookupOutputMappings || []
+        : selectedPlacement.type === 'rule'
+          ? selectedPlacement.details.outputMappings || []
+          : Object.entries(connectorMappings[selectedConnector.id] || {}).map(([k, v]) => ({
+              sourceFieldId: k,
+              targetFieldId: v
+            }));
+
+    return mappings.map((m: any) => {
+      const tf = targetFields.find(f => f.id === m.targetFieldId);
+      const rawVal = getNestedValue(payload, m.sourceFieldId);
+      const resolvedVal = rawVal !== undefined && rawVal !== null && rawVal !== '' ? rawVal : (m.fallbackValue ?? '—');
+      return {
+        source: m.sourceFieldId,
+        targetLabel: tf?.label || tf?.name || m.targetFieldId,
+        value: typeof resolvedVal === 'object' ? JSON.stringify(resolvedVal) : String(resolvedVal)
+      };
+    });
+  }, [testResponse, selectedPlacement, selectedConnector, connectorMappings, targetFields]);
+
+  const filteredLogs = useMemo(() => {
+    return logs.filter(log => {
+      const isErr = Boolean(log.error || (log.status && log.status >= 400));
+      if (logFilter === 'error') return isErr;
+      if (logFilter === 'success') return !isErr;
+      return true;
+    });
+  }, [logs, logFilter]);
+
   return (
-    <div className="flex h-full w-full overflow-hidden bg-transparent">
-      {/* Left Panel: Connectors List */}
-      <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col h-full overflow-hidden">
-        {/* Search Header */}
-        <div className="p-4 border-b border-zinc-200 dark:border-zinc-900 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">Integrations</h3>
-            <button 
-              onClick={() => setShowConnectorModal(true)}
-              className="flex items-center gap-1 px-2 py-1 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500 hover:text-white rounded-md text-[9px] font-bold uppercase tracking-wider transition-all"
-            >
-              <Plus size={10} /> Add
-            </button>
-          </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
-            <input 
-              type="text" 
-              placeholder="Search active integrations..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl py-2 pl-9 pr-4 text-[11px] focus:outline-none focus:ring-1 focus:ring-indigo-500 text-zinc-900 dark:text-zinc-100"
-            />
-          </div>
-        </div>
-
-        {/* Connectors List Scroll Container */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-4 custom-scrollbar">
-          {/* Active in Module Section */}
-          <div className="space-y-1.5">
-            <div className="px-2 text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">
-              Active in Module ({filteredConnectors.filter(c => c.isUsed).length})
-            </div>
-            {filteredConnectors.filter(c => c.isUsed).length === 0 ? (
-              <div className="p-4 text-center rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 text-[10px] text-zinc-400 italic">
-                No integrations added to layout
+    <div className="flex h-full w-full overflow-hidden bg-zinc-50 dark:bg-zinc-950 relative">
+      {/* 1. Left Panel: Integrations (Animated, Collapsible & Resizable) */}
+      <AnimatePresence initial={false}>
+        {!isLeftCollapsed && (
+          <motion.aside
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: leftWidth, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={resizingSide === 'left' ? { duration: 0 } : { duration: 0.2, ease: 'easeOut' }}
+            className="relative flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col h-full overflow-hidden"
+          >
+            {/* Header */}
+            <div className="h-11 px-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Integrations</span>
+                <span className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[10px] font-medium text-zinc-500">
+                  {sortedConnectors.length}
+                </span>
               </div>
-            ) : (
-              filteredConnectors.filter(c => c.isUsed).map(c => (
+              <div className="flex items-center gap-1">
                 <button
-                  key={c.id}
-                  onClick={() => setSelectedConnectorId(c.id)}
-                  className={cn(
-                    "w-full text-left p-3.5 rounded-2xl border transition-all flex items-center gap-3 relative overflow-hidden group",
-                    selectedConnectorId === c.id 
-                      ? "bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-500/50 shadow-md shadow-indigo-500/5"
-                      : "bg-white dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
-                  )}
+                  onClick={() => setShowConnectorModal(true)}
+                  className="h-7 px-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer"
                 >
-                  <div className={cn(
-                    "p-2 rounded-xl text-white shadow-sm flex items-center justify-center",
-                    selectedConnectorId === c.id ? "bg-indigo-600" : "bg-zinc-500/20 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
-                  )}>
-                    <Zap size={14} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">{c.name}</p>
-                    <p className="text-[9px] text-zinc-400 dark:text-zinc-500 font-medium uppercase tracking-widest">{c.category}</p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1.5">
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[8px] font-bold uppercase tracking-wider">
-                      In Use
-                    </span>
-                  </div>
+                  <Plus size={12} />
+                  <span>Add</span>
                 </button>
-              ))
-            )}
-          </div>
-
-          {/* Other Configured Connectors Section */}
-          <div className="space-y-1.5">
-            <div className="px-2 text-[9px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">
-              Available Integrations ({filteredConnectors.filter(c => !c.isUsed).length})
-            </div>
-            {filteredConnectors.filter(c => !c.isUsed).length === 0 ? (
-              <div className="p-4 text-center rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 text-[10px] text-zinc-400 italic">
-                No inactive integrations
-              </div>
-            ) : (
-              filteredConnectors.filter(c => !c.isUsed).map(c => (
                 <button
-                  key={c.id}
-                  onClick={() => setSelectedConnectorId(c.id)}
-                  className={cn(
-                    "w-full text-left p-3.5 rounded-2xl border transition-all flex items-center gap-3 relative overflow-hidden group",
-                    selectedConnectorId === c.id 
-                      ? "bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-500/50 shadow-md shadow-indigo-500/5"
-                      : "bg-white dark:bg-zinc-900/40 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
-                  )}
+                  onClick={() => setIsLeftCollapsed(true)}
+                  className="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors cursor-pointer"
+                  title="Collapse Integrations panel"
                 >
-                  <div className={cn(
-                    "p-2 rounded-xl text-white shadow-sm flex items-center justify-center",
-                    selectedConnectorId === c.id ? "bg-indigo-600" : "bg-zinc-500/20 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400"
-                  )}>
-                    <Zap size={14} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">{c.name}</p>
-                    <p className="text-[9px] text-zinc-400 dark:text-zinc-500 font-medium uppercase tracking-widest">{c.category}</p>
-                  </div>
-                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 text-[8px] font-bold uppercase tracking-wider">
-                    Ready
-                  </span>
+                  <ChevronLeft size={14} />
                 </button>
-              ))
-            )}
-          </div>
-        </div>
-      </aside>
-
-      {/* Right Panel: Detail & Mappings */}
-      {!selectedConnector ? (
-        <div className="flex-1 bg-zinc-50/50 dark:bg-zinc-950/50 flex flex-col items-center justify-center p-12 text-center space-y-8 overflow-y-auto h-full">
-          <div className="relative inline-flex items-center justify-center p-8 bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-transparent rounded-[3rem] border border-indigo-500/20 shadow-xl shadow-indigo-500/5">
-            <Network className="w-16 h-16 text-indigo-500 animate-pulse" />
-            <div className="absolute -inset-2 bg-indigo-500/20 rounded-[3.5rem] blur-xl opacity-50 -z-10 animate-pulse" />
-          </div>
-          <div className="space-y-3">
-            <h2 className="text-2xl font-black text-zinc-900 dark:text-white tracking-tight">Connector Integrations Hub</h2>
-            <p className="text-zinc-500 dark:text-zinc-400 text-sm max-w-lg mx-auto leading-relaxed">
-              Map real-time third party API data directly into module fields. Add a Connector trigger to your forms, then configure response maps below.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left max-w-xl mx-auto pt-4">
-            <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-2">
-              <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-500">
-                <Cpu size={16} />
               </div>
-              <h4 className="text-xs font-bold text-zinc-900 dark:text-white">Auto-Provisioning</h4>
-              <p className="text-[10px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                Auto-create compatible fields with proper data-types instantly matching API payloads.
-              </p>
             </div>
-            <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-2">
-              <div className="w-8 h-8 rounded-lg bg-teal-500/10 flex items-center justify-center text-teal-500">
-                <Database size={16} />
-              </div>
-              <h4 className="text-xs font-bold text-zinc-900 dark:text-white">Live Data Pipelines</h4>
-              <p className="text-[10px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
-                Input search values in the form, and watch downstream inputs instantly resolve API output responses.
-              </p>
-            </div>
-          </div>
 
-          <div className="pt-4">
-            <button
-              onClick={() => setShowConnectorModal(true)}
-              className="inline-flex items-center gap-2 px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-indigo-500/20 transition-all cursor-pointer"
-            >
-              <Plus size={14} /> Add New Integration
-            </button>
-          </div>
-        </div>
-      ) : (
-        <>
-          {/* Column 2: Module Triggers (side panel) */}
-          <aside className="w-72 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 flex flex-col gap-8 overflow-y-auto custom-scrollbar flex-shrink-0">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between px-1">
-                <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Module Triggers</h3>
-                
-                <div className="relative">
-                  <button 
-                    onClick={() => setShowAddPlacementDropdown(prev => !prev)}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 hover:text-white rounded-xl text-[9px] font-bold uppercase tracking-widest transition-all cursor-pointer"
-                  >
-                    <Plus size={10} /> Add
-                  </button>
-                  
-                  {showAddPlacementDropdown && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setShowAddPlacementDropdown(false)} />
-                      <div className="absolute right-0 mt-1.5 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl z-50 py-1.5 text-left">
-                        <button
-                          onClick={() => {
-                            setShowAddPlacementDropdown(false);
-                            setShowInlineLookupModal(true);
-                          }}
-                          className="w-full px-3.5 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 text-[10px] font-bold text-zinc-700 dark:text-zinc-300 transition-colors flex items-center gap-2 cursor-pointer"
-                        >
-                          <Search size={12} className="text-zinc-400" />
-                          <span>Add Lookup Field</span>
-                        </button>
-                        <button
-                          onClick={() => {
-                            setShowAddPlacementDropdown(false);
-                            handleAddCustomRule();
-                          }}
-                          className="w-full px-3.5 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 text-[10px] font-bold text-zinc-700 dark:text-zinc-300 transition-colors flex items-center gap-2 cursor-pointer"
-                        >
-                          <BrainCircuit size={12} className="text-zinc-400" />
-                          <span>Add Custom Trigger Rule</span>
-                        </button>
+            {/* Search */}
+            <div className="p-2.5 border-b border-zinc-100 dark:border-zinc-800/80">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
+                <input
+                  type="text"
+                  placeholder="Search integrations..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full h-8 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg pl-8 pr-3 text-xs focus:outline-none focus:border-indigo-500 text-zinc-900 dark:text-zinc-100"
+                />
+              </div>
+            </div>
+
+            {/* Connectors List (Module-Bound Integrations Only) */}
+            <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar">
+              <div className="space-y-1">
+                <div className="px-2 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+                  Module Integrations ({filteredConnectors.filter(c => c.isUsed).length})
+                </div>
+                {filteredConnectors.filter(c => c.isUsed).length === 0 ? (
+                  <div className="p-4 text-center rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 space-y-2 mt-1">
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                      No integrations added to this module yet.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowConnectorModal(true)}
+                      className="h-7 px-2.5 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-600 hover:text-white rounded-md text-[11px] font-medium inline-flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <Plus size={12} />
+                      <span>Browse Library</span>
+                    </button>
+                  </div>
+                ) : (
+                  filteredConnectors.filter(c => c.isUsed).map(c => (
+                    <button
+                      key={c.id}
+                      onClick={() => setSelectedConnectorId(c.id)}
+                      className={cn(
+                        "w-full text-left px-2.5 py-2 rounded-lg border transition-colors flex items-center gap-2.5 cursor-pointer",
+                        selectedConnectorId === c.id
+                          ? "bg-indigo-50/80 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800/60"
+                          : "bg-transparent border-transparent hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-7 h-7 rounded-md flex items-center justify-center shrink-0",
+                        selectedConnectorId === c.id
+                          ? "bg-indigo-600 text-white"
+                          : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400"
+                      )}>
+                        <Zap size={13} />
                       </div>
-                    </>
-                  )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate">{c.name}</p>
+                        <p className="text-[10px] text-zinc-500 truncate">{c.category}</p>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Resize Handle */}
+            <div
+              onMouseDown={() => startResize('left')}
+              className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-indigo-500/40 transition-colors z-10"
+            />
+          </motion.aside>
+        )}
+      </AnimatePresence>
+
+      {/* 2. Center Main Workspace */}
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-zinc-50/70 dark:bg-zinc-950">
+        {/* Inline h-11 Top Bar (matching Interface & Rules) */}
+        <div className="h-11 px-4 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            {isLeftCollapsed && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setIsLeftCollapsed(false)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer shrink-0"
+                  title="Expand Integrations panel"
+                >
+                  <ChevronRight size={14} />
+                  <span className="hidden sm:inline">Integrations</span>
+                </button>
+                <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 shrink-0" />
+              </>
+            )}
+            {selectedConnector ? (
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+                  {selectedConnector.name}
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 text-[10px] font-medium shrink-0">
+                  {selectedConnector.category}
+                </span>
+              </div>
+            ) : (
+              <span className="text-xs text-zinc-400 truncate">Connector Integrations</span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {selectedConnector && (
+              <>
+                {selectedConnector.isUsed && (
+                  <button
+                    type="button"
+                    onClick={handleDisconnectConnector}
+                    className="h-7 px-2.5 rounded-md border border-rose-200 dark:border-rose-900/50 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <Trash2 size={12} />
+                    <span className="hidden sm:inline">Disconnect</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowConnectorModal(true)}
+                  className="h-7 px-2.5 rounded-md border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                >
+                  <Settings2 size={12} />
+                  <span className="hidden sm:inline">Switch</span>
+                </button>
+              </>
+            )}
+
+            {selectedConnector && isRightCollapsed && (
+              <>
+                <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 shrink-0" />
+                <button
+                  type="button"
+                  onClick={() => setIsRightCollapsed(false)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer shrink-0"
+                  title="Expand Inspector panel"
+                >
+                  <ChevronLeft size={14} />
+                  <span className="hidden sm:inline">Inspector</span>
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Center Body */}
+        {!selectedConnector ? (
+          <div className="flex-1 overflow-y-auto px-8 pt-8 pb-24 flex">
+            <div className="m-auto w-full max-w-lg text-center space-y-5">
+              <div className="w-12 h-12 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center mx-auto text-indigo-600 dark:text-indigo-400">
+                <Network size={24} />
+              </div>
+              <div className="space-y-1.5">
+                <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Connector Integrations</h2>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                  Map live API data directly into module fields. Select an integration on the left or add one to configure triggers, inputs, and output mappings.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
+                <div className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-1.5">
+                  <div className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                    <Cpu size={14} />
+                  </div>
+                  <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Auto-Provisioning</h4>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                    Create compatible fields directly from API output schemas.
+                  </p>
+                </div>
+                <div className="bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-1.5">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                    <Database size={14} />
+                  </div>
+                  <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Trigger Pipelines</h4>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                    Trigger API lookups or conditional auto-population on field changes.
+                  </p>
                 </div>
               </div>
-              <p className="text-[10px] text-zinc-400 dark:text-zinc-500 leading-normal px-1">
-                Triggers that execute this connector.
-              </p>
+              <button
+                onClick={() => setShowConnectorModal(true)}
+                className="inline-flex items-center gap-1.5 px-4 h-9 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium transition-colors cursor-pointer"
+              >
+                <Plus size={14} />
+                <span>Add Integration</span>
+              </button>
             </div>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
+            <div className="max-w-4xl mx-auto space-y-4">
+              {/* Module Triggers Bar */}
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Module Triggers</span>
+                    <span className="text-[11px] text-zinc-400">({placements.length})</span>
+                  </div>
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowAddPlacementDropdown(prev => !prev)}
+                      className="h-7 px-2.5 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-600 hover:text-white rounded-md text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <Plus size={12} />
+                      <span>Add Trigger</span>
+                    </button>
 
-            <div className="space-y-3">
-                  {placements.length === 0 ? (
-                    <div className="p-6 text-center bg-white dark:bg-zinc-900 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl space-y-3">
-                      <AlertCircle size={20} className="mx-auto text-amber-500 animate-bounce" />
-                      <div className="space-y-1">
-                        <p className="text-[9px] font-bold text-zinc-700 dark:text-zinc-200 uppercase tracking-widest">No Active Triggers</p>
-                        <p className="text-[8px] text-zinc-400 leading-relaxed">
-                          Configure a Lookup field or custom execution rule.
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    placements.map(p => {
+                    {showAddPlacementDropdown && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowAddPlacementDropdown(false)} />
+                        <div className="absolute right-0 mt-1.5 w-52 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg z-50 py-1 text-left">
+                          <button
+                            onClick={() => {
+                              setShowAddPlacementDropdown(false);
+                              setShowInlineLookupModal(true);
+                            }}
+                            className="w-full px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-xs font-medium text-zinc-700 dark:text-zinc-200 transition-colors flex items-center gap-2 cursor-pointer"
+                          >
+                            <Search size={13} className="text-zinc-400" />
+                            <span>Add Lookup Field</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowAddPlacementDropdown(false);
+                              handleAddCustomRule();
+                            }}
+                            className="w-full px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-xs font-medium text-zinc-700 dark:text-zinc-200 transition-colors flex items-center gap-2 cursor-pointer"
+                          >
+                            <BrainCircuit size={13} className="text-zinc-400" />
+                            <span>Add Trigger Rule</span>
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {placements.length === 0 ? (
+                  <div className="p-3 text-center bg-zinc-50 dark:bg-zinc-950 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg text-xs text-zinc-500">
+                    No triggers configured yet. Click <strong>+ Add Trigger</strong> to add a Lookup field or conditional rule.
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {placements.map(p => {
                       const isSelected = selectedPlacement?.id === p.id;
                       return (
                         <div
                           key={p.id}
                           onClick={() => setSelectedPlacementId(p.id)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              setSelectedPlacementId(p.id);
-                            }
-                          }}
-                          role="button"
-                          tabIndex={0}
                           className={cn(
-                            "w-full text-left p-4 rounded-2xl border transition-all flex items-center gap-3 relative overflow-hidden group cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500/20",
-                            isSelected 
-                              ? "bg-indigo-50/40 dark:bg-indigo-950/10 border-indigo-500/50 shadow-sm"
-                              : "bg-white dark:bg-zinc-900/30 border-zinc-200 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700"
+                            "flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs cursor-pointer transition-colors group",
+                            isSelected
+                              ? "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 font-medium"
+                              : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700"
                           )}
                         >
-                          <div className={cn(
-                            "w-8 h-8 rounded-xl flex items-center justify-center text-white shrink-0",
-                            isSelected 
-                              ? "bg-indigo-600" 
-                              : "bg-zinc-500/10 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400"
-                          )}>
-                            {p.type === 'rule' ? <BrainCircuit size={14} /> : <Search size={14} />}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">{p.label}</p>
-                            <p className="text-[9px] text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-wider mt-0.5">
-                              {p.type === 'rule' 
-                                ? `On: ${flattenFields(layout).find(f => f.id === p.details.triggerFieldId)?.label || 'No trigger'}`
-                                : `Field: ${p.fieldName}`}
-                            </p>
-                          </div>
+                          {p.type === 'rule' ? <BrainCircuit size={13} /> : <Search size={13} />}
+                          <span className="truncate max-w-[180px]">{p.label}</span>
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               initiateDeletePlacement(p);
                             }}
-                            className="p-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/20 text-zinc-400 hover:text-rose-500 rounded-lg transition-colors cursor-pointer shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100"
+                            className="p-0.5 text-zinc-400 hover:text-rose-500 rounded opacity-60 group-hover:opacity-100 transition-opacity cursor-pointer"
+                            title="Remove trigger"
                           >
-                            <Trash2 size={12} />
+                            <Trash2 size={11} />
                           </button>
                         </div>
                       );
-                    })
-                  )}
-            </div>
-          </aside>
-
-          {/* Column 3: Settings & Mappings (main panel) */}
-          <div className="flex-1 overflow-y-auto p-12 custom-scrollbar bg-zinc-50/50 dark:bg-zinc-950/50 flex flex-col gap-8">
-                {/* Header Card */}
-                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shrink-0">
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                      <Zap size={28} />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-xl font-bold text-zinc-900 dark:text-white tracking-tight">{selectedConnector.name}</h2>
-                        <span className="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 text-[9px] font-black uppercase tracking-wider">
-                          {selectedConnector.category}
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-widest mt-1">
-                        ID: {selectedConnector.id}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-3 self-stretch md:self-auto border-t md:border-t-0 pt-4 md:pt-0 border-zinc-100 dark:border-zinc-800">
-                    {selectedConnector.isUsed && (
-                      <button
-                        onClick={handleDisconnectConnector}
-                        className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 border border-rose-200 dark:border-rose-900/50 hover:border-rose-500 text-rose-600 dark:text-rose-400 hover:bg-rose-50/50 dark:hover:bg-rose-950/10 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all cursor-pointer"
-                      >
-                        <Trash2 size={12} />
-                        Disconnect
-                      </button>
-                    )}
-                    <button
-                      onClick={() => setShowConnectorModal(true)}
-                      className="flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-4 py-2 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-500 text-zinc-700 dark:text-zinc-300 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all"
-                    >
-                      <Settings2 size={12} />
-                      Credentials Settings
-                    </button>
-                  </div>
-                </div>
-
-                {!selectedPlacement ? (
-                  <div className="p-12 text-center bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] flex flex-col items-center justify-center flex-1 min-h-[300px]">
-                    <Settings2 size={32} className="text-zinc-300 dark:text-zinc-700 animate-spin mb-4" />
-                    <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-widest">Select trigger</p>
-                    <p className="text-[10px] text-zinc-400 mt-1 max-w-xs mx-auto leading-relaxed">
-                      Choose a trigger from the left list or click "Add" to start mapping API outputs to form fields.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="flex-1 flex flex-col gap-6 max-w-4xl mx-auto w-full">
-                    {/* Stepper progress bar */}
-                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 flex items-center justify-between gap-4 shadow-sm text-left shrink-0">
-                      {[
-                        { step: 1, label: selectedPlacement.type === 'lookup' ? 'General' : 'Details' },
-                        { step: 2, label: selectedPlacement.type === 'lookup' ? 'Input Param' : 'Conditions' },
-                        { step: 3, label: selectedPlacement.type === 'lookup' ? 'Display & Value' : 'Inputs Payload' },
-                        { step: 4, label: 'Output Mappings' }
-                      ].map((s, i) => {
-                        const isActive = s.step === activeStep;
-                        const isCompleted = s.step < activeStep;
-                        const isUpcoming = s.step > activeStep;
-                        return (
-                          <React.Fragment key={s.step}>
-                            <button
-                              type="button"
-                              onClick={() => setActiveStep(s.step)}
-                              className="flex items-center gap-2 focus:outline-none cursor-pointer group text-left"
-                            >
-                              <div className={cn(
-                                "w-6 h-6 rounded-full border text-[9px] font-black flex items-center justify-center transition-all duration-350",
-                                isActive && "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-500/25 scale-110",
-                                isCompleted && "bg-emerald-500/10 border-emerald-500/20 text-emerald-650 dark:text-emerald-400 group-hover:bg-emerald-500/20",
-                                isUpcoming && "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-400 dark:text-zinc-500 group-hover:border-zinc-300 dark:group-hover:border-zinc-750"
-                              )}>
-                                {isCompleted ? <Check size={10} className="stroke-[3]" /> : s.step}
-                              </div>
-                              <div className="flex flex-col">
-                                <span className={cn(
-                                  "text-[7.5px] font-black uppercase tracking-widest transition-colors duration-300",
-                                  isActive && "text-indigo-650 dark:text-indigo-400 font-black",
-                                  isCompleted && "text-zinc-500 dark:text-zinc-400 font-medium",
-                                  isUpcoming && "text-zinc-400 dark:text-zinc-600 font-medium"
-                                )}>
-                                  Step 0{s.step}
-                                </span>
-                                <span className={cn(
-                                  "text-[9px] font-black uppercase tracking-widest transition-colors duration-300 mt-0.5",
-                                  isActive && "text-zinc-900 dark:text-white",
-                                  isCompleted && "text-zinc-650 dark:text-zinc-350",
-                                  isUpcoming && "text-zinc-400 dark:text-zinc-500"
-                                )}>
-                                  {s.label}
-                                </span>
-                              </div>
-                            </button>
-                            {i < 3 && (
-                              <div className={cn(
-                                "h-0.5 flex-1 transition-all duration-300",
-                                s.step < activeStep ? "bg-indigo-500/40" : "bg-zinc-200 dark:bg-zinc-800"
-                              )} />
-                            )}
-                          </React.Fragment>
-                        );
-                      })}
-                    </div>
-
-                    {/* Step Cards Stack */}
-                    <div className="space-y-6 flex-1 overflow-y-auto pr-1 custom-scrollbar">
-                      {selectedPlacement.type === 'lookup' ? (
-                        <>
-                          {/* LOOKUP STEP 1 */}
-                          {activeStep === 1 && (
-                            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm space-y-4 text-left">
-                              <div className="flex items-center justify-between gap-4 pb-3 border-b border-zinc-100 dark:border-zinc-800">
-                                <div className="flex items-center gap-3">
-                                  <span className="px-2.5 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 text-[8px] font-black uppercase tracking-widest border border-indigo-500/20">
-                                    STEP 01
-                                  </span>
-                                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">General Info & Destination</h4>
-                                </div>
-                                <span className="text-[9px] text-zinc-400 dark:text-zinc-500 font-medium">Placement Settings</span>
-                              </div>
-                              
-                              <p className="text-[10px] text-zinc-400 dark:text-zinc-500 leading-normal">
-                                Configure the field label and which tab in the module page layout this lookup field will reside.
-                              </p>
-                              
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                  <label className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block mb-1">Field Label</label>
-                                  <input
-                                    type="text"
-                                    value={selectedPlacement.label}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setLayout(prev => prev.map(f => f.id === selectedPlacement.id ? { ...f, label: val } : f));
-                                    }}
-                                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500/50 dark:text-white font-bold"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block mb-1">Destination Tab</label>
-                                  <select
-                                    value={selectedPlacement.tabId || 'default-tab'}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setLayout(prev => prev.map(f => f.id === selectedPlacement.id ? { ...f, tabId: val } : f));
-                                    }}
-                                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500/50 text-zinc-700 dark:text-zinc-300 font-bold"
-                                  >
-                                    {displayTabs.map((t: any) => (
-                                      <option key={t.id} value={t.id}>
-                                        {t.depth === 1 ? '↳ ' : ''}{t.label || t.id}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* LOOKUP STEP 2 */}
-                          {activeStep === 2 && (
-                            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm space-y-4 text-left">
-                              <div className="flex items-center justify-between gap-4 pb-3 border-b border-zinc-100 dark:border-zinc-800">
-                                <div className="flex items-center gap-3">
-                                  <span className="px-2.5 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 text-[8px] font-black uppercase tracking-widest border border-indigo-500/20">
-                                    STEP 02
-                                  </span>
-                                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">Lookup Search Parameter (Input)</h4>
-                                </div>
-                                <span className="text-[9px] text-zinc-400 dark:text-zinc-500 font-medium">Request Parameter</span>
-                              </div>
-                              
-                              <p className="text-[10px] text-zinc-400 dark:text-zinc-500 leading-normal">
-                                Select the API request parameter that will be mapped to the search term entered into this lookup field.
-                              </p>
-                              
-                              <div>
-                                <label className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block mb-1">Search Parameter</label>
-                                <select
-                                  value={selectedPlacement.details.connectorSearchParam || ''}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setLayout(prev => prev.map(f => f.id === selectedPlacement.id ? { ...f, connectorSearchParam: val } : f));
-                                  }}
-                                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500/50 text-zinc-755 dark:text-zinc-300 font-mono text-[10px]"
-                                >
-                                  <option value="">-- Select parameter --</option>
-                                  {(selectedConnector.ioSchema?.inputs || []).map((input: any) => (
-                                    <option key={input.name} value={input.name}>{input.label || input.name}</option>
-                                  ))}
-                                </select>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* LOOKUP STEP 3 */}
-                          {activeStep === 3 && (
-                            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm space-y-4 text-left">
-                              <div className="flex items-center justify-between gap-4 pb-3 border-b border-zinc-100 dark:border-zinc-800">
-                                <div className="flex items-center gap-3">
-                                  <span className="px-2.5 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 text-[8px] font-black uppercase tracking-widest border border-indigo-500/20">
-                                    STEP 03
-                                  </span>
-                                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">Display & Value Mapping</h4>
-                                </div>
-                                <span className="text-[9px] text-zinc-400 dark:text-zinc-500 font-medium">Core Mappings</span>
-                              </div>
-                              
-                              <p className="text-[10px] text-zinc-400 dark:text-zinc-500 leading-normal">
-                                Specify which API response output fields represent the display label and the stored database value.
-                              </p>
-                              
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                  <label className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block mb-1">Label Field (Display Output)</label>
-                                  <select
-                                    value={selectedPlacement.details.connectorLabelField || ''}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setLayout(prev => prev.map(f => f.id === selectedPlacement.id ? { ...f, connectorLabelField: val } : f));
-                                    }}
-                                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500/50 text-zinc-755 dark:text-zinc-300 font-mono text-[10px]"
-                                  >
-                                    <option value="">-- Select output --</option>
-                                    {(selectedConnector.ioSchema?.outputs || []).map((output: any) => (
-                                      <option key={output.name} value={output.name}>{output.label || output.name}</option>
-                                    ))}
-                                  </select>
-                                </div>
-                                <div>
-                                  <label className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block mb-1">Value Field (Database Store Output)</label>
-                                  <select
-                                    value={selectedPlacement.details.connectorValueField || ''}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setLayout(prev => prev.map(f => f.id === selectedPlacement.id ? { ...f, connectorValueField: val } : f));
-                                    }}
-                                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500/50 text-zinc-755 dark:text-zinc-300 font-mono text-[10px]"
-                                  >
-                                    <option value="">-- Select output --</option>
-                                    {(selectedConnector.ioSchema?.outputs || []).map((output: any) => (
-                                      <option key={output.name} value={output.name}>{output.label || output.name}</option>
-                                    ))}
-                                  </select>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          {/* RULE STEP 1 */}
-                          {activeStep === 1 && (
-                            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm space-y-4 text-left">
-                              <div className="flex items-center justify-between gap-4 pb-3 border-b border-zinc-100 dark:border-zinc-800">
-                                <div className="flex items-center gap-3">
-                                  <span className="px-2.5 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 text-[8px] font-black uppercase tracking-widest border border-indigo-500/20">
-                                    STEP 01
-                                  </span>
-                                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">Rule Details</h4>
-                                </div>
-                                <span className="text-[9px] text-zinc-400 dark:text-zinc-500 font-medium">Basic Info</span>
-                              </div>
-                              
-                              <p className="text-[10px] text-zinc-400 dark:text-zinc-500 leading-normal">
-                                Give your data population rule a clear name and choose which layout field triggers this connection when changed.
-                              </p>
-                              
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                  <label className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block mb-1">Rule Name</label>
-                                  <input
-                                    type="text"
-                                    value={selectedPlacement.details.name || ''}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setDataPopulationRules(prev => prev.map(r => r.id === selectedPlacement.id ? { ...r, name: val } : r));
-                                    }}
-                                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500/50 dark:text-white font-bold"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block mb-1">Trigger Field (On Change)</label>
-                                  <select
-                                    value={selectedPlacement.details.triggerFieldId || ''}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setDataPopulationRules(prev => prev.map(r => r.id === selectedPlacement.id ? { ...r, triggerFieldId: val } : r));
-                                    }}
-                                    className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500/50 text-zinc-700 dark:text-zinc-300 font-bold"
-                                  >
-                                    <option value="">-- None (Auto-detect from conditions) --</option>
-                                    {targetFields.map((f: any) => (
-                                      <option key={f.id} value={f.id}>{f.label} ({f.name})</option>
-                                    ))}
-                                  </select>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* RULE STEP 2 */}
-                          {activeStep === 2 && (
-                            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm space-y-4 text-left">
-                              <div className="flex items-center justify-between gap-4 pb-3 border-b border-zinc-100 dark:border-zinc-800">
-                                <div className="flex items-center gap-3">
-                                  <span className="px-2.5 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-655 dark:text-indigo-400 text-[8px] font-black uppercase tracking-widest border border-indigo-500/20">
-                                    STEP 02
-                                  </span>
-                                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">Trigger Conditions</h4>
-                                </div>
-                                <span className="text-[9px] text-zinc-400 dark:text-zinc-500 font-medium">Logical Filter</span>
-                              </div>
-                              
-                              <p className="text-[10px] text-zinc-400 dark:text-zinc-500 leading-normal">
-                                Configure the logical filter that must evaluate to true for the integration trigger to execute.
-                              </p>
-                              
-                              <div>
-                                <label className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block mb-1">Trigger Condition Mode</label>
-                                <div className="flex bg-zinc-100 dark:bg-zinc-900 rounded-xl p-1 border border-zinc-200 dark:border-zinc-800 mb-3 max-w-xs">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setDataPopulationRules(prev => prev.map(r => r.id === selectedPlacement.id ? { ...r, triggerMode: 'visual' } : r));
-                                    }}
-                                    className={cn(
-                                      "flex-1 py-1 rounded-lg text-[10px] font-bold transition-all",
-                                      (selectedPlacement.details.triggerMode || 'visual') === 'visual'
-                                        ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm"
-                                        : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
-                                    )}
-                                  >
-                                    Visual Builder
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setDataPopulationRules(prev => prev.map(r => r.id === selectedPlacement.id ? { ...r, triggerMode: 'expression' } : r));
-                                    }}
-                                    className={cn(
-                                      "flex-1 py-1 rounded-lg text-[10px] font-bold transition-all",
-                                      selectedPlacement.details.triggerMode === 'expression'
-                                        ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-sm"
-                                        : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
-                                    )}
-                                  >
-                                    Custom Expression
-                                  </button>
-                                </div>
-                              </div>
-
-                              {(selectedPlacement.details.triggerMode || 'visual') === 'visual' ? (
-                                <div className="space-y-2.5">
-                                  <label className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block">Trigger Conditions</label>
-                                  <div className="bg-zinc-50 dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 space-y-3">
-                                    <div className="text-[10px] font-medium text-zinc-700 dark:text-zinc-300 font-mono bg-white dark:bg-zinc-950 px-3 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800 max-h-24 overflow-y-auto break-all">
-                                      {getRuleSummary(selectedPlacement.details.condition, targetFields)}
-                                    </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => setEditingTriggerCondition({
-                                        ruleId: selectedPlacement.id,
-                                        rule: selectedPlacement.details.condition
-                                      })}
-                                      className="w-full flex items-center justify-center gap-1.5 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md shadow-indigo-500/10"
-                                    >
-                                      <BrainCircuit size={14} />
-                                      Edit Conditions
-                                    </button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="space-y-2">
-                                  <ExpressionEditor
-                                    value={selectedPlacement.details.conditionExpression || ''}
-                                    onChange={(val) => {
-                                      setDataPopulationRules(prev => prev.map(r => r.id === selectedPlacement.id ? { ...r, conditionExpression: val } : r));
-                                    }}
-                                    placeholder="e.g. AND({status} == 'Approved', {priority} == 'High')"
-                                    availableFields={targetFields}
-                                    showConsole={true}
-                                    title="Custom Trigger Expression"
-                                  />
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {/* RULE STEP 3 */}
-                          {activeStep === 3 && (
-                            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm space-y-4 text-left">
-                              <div className="flex items-center justify-between gap-4 pb-3 border-b border-zinc-100 dark:border-zinc-800">
-                                <div className="flex items-center gap-3">
-                                  <span className="px-2.5 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 text-[8px] font-black uppercase tracking-widest border border-indigo-500/20">
-                                    STEP 03
-                                  </span>
-                                  <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">Request Input Parameters</h4>
-                                </div>
-                                <span className="text-[9px] text-zinc-400 dark:text-zinc-500 font-medium">Input Payload</span>
-                              </div>
-                              
-                              <p className="text-[10px] text-zinc-400 dark:text-zinc-500 leading-normal">
-                                Map source fields or write custom expression formulas to populate the required payload parameters sent to this integration.
-                              </p>
-                              
-                              <div className="space-y-3">
-                                {(selectedConnector.ioSchema?.inputs || []).map((input: any) => {
-                                  const mappings = selectedPlacement.details.inputMappings || [];
-                                  const currentMapping = mappings.find((m: any) => m.inputName === input.name);
-                                  const isExpr = currentMapping?.mappingType === 'expression';
-                                  const currentVal = isExpr ? (currentMapping?.expression || '') : (currentMapping?.sourceFieldId || '');
-                                  
-                                  return (
-                                    <div key={input.name} className="space-y-2 p-3 border border-zinc-200 dark:border-zinc-800 rounded-2xl bg-zinc-50/50 dark:bg-zinc-900/30">
-                                      <div className="flex items-center justify-between gap-3">
-                                        <span className="text-[10px] font-bold text-zinc-700 dark:text-zinc-300 font-mono">.{input.name}</span>
-                                        
-                                        <div className="flex bg-zinc-100 dark:bg-zinc-900 rounded-lg p-0.5 border border-zinc-200 dark:border-zinc-800">
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setDataPopulationRules(prev => prev.map(r => {
-                                                if (r.id === selectedPlacement.id) {
-                                                  const inputs = [...(r.inputMappings || [])];
-                                                  const idx = inputs.findIndex((m: any) => m.inputName === input.name);
-                                                  if (idx > -1) {
-                                                    inputs[idx].mappingType = 'field';
-                                                    inputs[idx].expression = undefined;
-                                                  } else {
-                                                    inputs.push({ inputName: input.name, mappingType: 'field' });
-                                                  }
-                                                  return { ...r, inputMappings: inputs };
-                                                }
-                                                return r;
-                                              }));
-                                            }}
-                                            className={cn(
-                                              "px-2 py-0.5 rounded-md text-[8.5px] font-bold transition-all",
-                                              !isExpr ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs" : "text-zinc-500"
-                                            )}
-                                          >
-                                            Field
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setDataPopulationRules(prev => prev.map(r => {
-                                                if (r.id === selectedPlacement.id) {
-                                                  const inputs = [...(r.inputMappings || [])];
-                                                  const idx = inputs.findIndex((m: any) => m.inputName === input.name);
-                                                  if (idx > -1) {
-                                                    inputs[idx].mappingType = 'expression';
-                                                    inputs[idx].sourceFieldId = undefined;
-                                                  } else {
-                                                    inputs.push({ inputName: input.name, mappingType: 'expression' });
-                                                  }
-                                                  return { ...r, inputMappings: inputs };
-                                                }
-                                                return r;
-                                              }));
-                                            }}
-                                            className={cn(
-                                              "px-2 py-0.5 rounded-md text-[8.5px] font-bold transition-all",
-                                              isExpr ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs" : "text-zinc-500"
-                                            )}
-                                          >
-                                            Expr
-                                          </button>
-                                        </div>
-                                      </div>
-
-                                      {!isExpr ? (
-                                        <select
-                                          value={currentVal}
-                                          onChange={(e) => {
-                                            const sourceId = e.target.value;
-                                            setDataPopulationRules(prev => prev.map(r => {
-                                              if (r.id === selectedPlacement.id) {
-                                                const currentInputs = [...(r.inputMappings || [])];
-                                                const idx = currentInputs.findIndex((m: any) => m.inputName === input.name);
-                                                if (sourceId === '') {
-                                                  if (idx > -1) currentInputs.splice(idx, 1);
-                                                } else {
-                                                  if (idx > -1) {
-                                                    currentInputs[idx].sourceFieldId = sourceId;
-                                                    currentInputs[idx].mappingType = 'field';
-                                                  } else {
-                                                    currentInputs.push({
-                                                      inputName: input.name,
-                                                      sourceFieldId: sourceId,
-                                                      mappingType: 'field'
-                                                    });
-                                                  }
-                                                }
-                                                return { ...r, inputMappings: currentInputs };
-                                              }
-                                              return r;
-                                            }));
-                                          }}
-                                          className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl py-1.5 px-3 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 text-zinc-700 dark:text-zinc-300"
-                                        >
-                                          <option value="">-- None --</option>
-                                          {targetFields.map((f: any) => (
-                                            <option key={f.id} value={f.id}>{f.label} ({f.name})</option>
-                                          ))}
-                                        </select>
-                                      ) : (
-                                        <ExpressionEditor
-                                          value={currentVal}
-                                          onChange={(val) => {
-                                            setDataPopulationRules(prev => prev.map(r => {
-                                              if (r.id === selectedPlacement.id) {
-                                                const currentInputs = [...(r.inputMappings || [])];
-                                                const idx = currentInputs.findIndex((m: any) => m.inputName === input.name);
-                                                if (idx > -1) {
-                                                  currentInputs[idx].expression = val;
-                                                } else {
-                                                  currentInputs.push({
-                                                    inputName: input.name,
-                                                    expression: val,
-                                                    mappingType: 'expression'
-                                                  });
-                                                }
-                                                return { ...r, inputMappings: currentInputs };
-                                              }
-                                              return r;
-                                            }));
-                                          }}
-                                          placeholder="e.g. CONCAT({first_name}, ' ', {last_name})"
-                                          availableFields={targetFields}
-                                          compact={true}
-                                        />
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
-                        </>
-                      )}
-
-                      {/* LOOKUP/RULE STEP 4: OUTPUT MAPPINGS */}
-                      {activeStep === 4 && (
-                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 space-y-6 shadow-sm text-left">
-                          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-900 pb-2">
-                            <div className="flex items-center gap-2">
-                              <span className="px-2.5 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 text-[8px] font-black uppercase tracking-widest border border-indigo-500/20">
-                                STEP 04
-                              </span>
-                              <h4 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider">Output Mappings</h4>
-                            </div>
-
-                            <button 
-                              onClick={handleAutoMap}
-                              className="flex items-center gap-1 px-2 py-1 bg-indigo-500/10 hover:bg-indigo-500 text-indigo-650 dark:text-indigo-400 hover:text-white rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer shadow-sm"
-                            >
-                              Auto-Map
-                            </button>
-                          </div>
-                          
-                          <p className="text-[10px] text-zinc-400 dark:text-zinc-500 leading-normal">
-                            {selectedPlacement.type === 'lookup' 
-                              ? 'Map other API response fields to auto-populate layout fields on selection.'
-                              : 'Choose which layout fields will auto-populate with the API response outputs.'}
-                          </p>
-
-                          {(!selectedConnector.ioSchema?.outputs || selectedConnector.ioSchema.outputs.length === 0) ? (
-                            <div className="p-8 text-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl">
-                              <Info size={20} className="mx-auto text-zinc-300 dark:text-zinc-600 mb-2" />
-                              <p className="text-[10px] text-zinc-400 font-bold uppercase">No outputs defined in schema</p>
-                            </div>
-                          ) : (
-                            <div className="space-y-3 max-h-96 overflow-y-auto custom-scrollbar pr-1">
-                              {selectedConnector.ioSchema.outputs.filter((o: any) => selectedPlacement.type === 'rule' || o.name !== selectedPlacement.details.connectorValueField).map((output: any) => {
-                                let targetFieldId = '';
-                                if (selectedPlacement.type === 'lookup') {
-                                  const mappings = selectedPlacement.details.lookupOutputMappings || [];
-                                  targetFieldId = mappings.find((m: any) => m.sourceFieldId === output.name)?.targetFieldId || '';
-                                } else if (selectedPlacement.type === 'rule') {
-                                  const mappings = selectedPlacement.details.outputMappings || [];
-                                  targetFieldId = mappings.find((m: any) => m.sourceFieldId === output.name)?.targetFieldId || '';
-                                } else {
-                                  const mappings = connectorMappings[selectedConnector.id] || {};
-                                  targetFieldId = mappings[output.name] || '';
-                                }
-
-                                return (
-                                  <div key={output.name} className="flex items-center justify-between gap-3 p-3 border border-zinc-200 dark:border-zinc-800 bg-zinc-50/20 dark:bg-zinc-900/10 rounded-2xl hover:border-indigo-500/25 transition-all">
-                                    <div className="min-w-0 text-left">
-                                      <span className="block text-[10px] font-bold text-zinc-800 dark:text-zinc-200 truncate">{output.label || output.name}</span>
-                                      <span className="block text-[7.5px] font-mono text-zinc-400">.{output.name} ({output.type || 'string'})</span>
-                                    </div>
-
-                                    <div className="flex items-center gap-1.5 shrink-0">
-                                      <select
-                                        value={targetFieldId}
-                                        onChange={(e) => handleMapField(output.name, e.target.value)}
-                                        className="w-32 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl py-1 px-2 text-[9px] focus:outline-none focus:ring-1 focus:ring-indigo-500 text-zinc-700 dark:text-zinc-300"
-                                      >
-                                        <option value="">-- Unmapped --</option>
-                                        {targetFields.map(f => (
-                                          <option key={f.id} value={f.id}>{f.label} ({f.name})</option>
-                                        ))}
-                                      </select>
-                                      
-                                      {!targetFieldId && (
-                                        <button
-                                          onClick={() => setPendingFieldCreation({
-                                            outputName: output.name,
-                                            outputLabel: output.label || output.name,
-                                            outputType: output.type || 'string'
-                                          })}
-                                          className="p-1 text-indigo-650 hover:text-white hover:bg-indigo-600 rounded-lg transition-colors border border-indigo-500/20 cursor-pointer"
-                                        >
-                                          <PlusCircle size={12} />
-                                        </button>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Wizard footer Next/Back buttons */}
-                    <div className="flex items-center justify-between border-t border-zinc-200 dark:border-zinc-800 pt-4 mt-auto shrink-0 bg-transparent">
-                      <button
-                        type="button"
-                        onClick={() => setActiveStep(prev => Math.max(1, prev - 1))}
-                        disabled={activeStep === 1}
-                        className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-zinc-800 dark:hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-all flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <ChevronLeft size={12} /> Back
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (activeStep < 4) {
-                            setActiveStep(prev => prev + 1);
-                          } else {
-                            toast.success("All configuration steps mapped!");
-                          }
-                        }}
-                        className="px-5 py-2 bg-indigo-650 hover:bg-indigo-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-indigo-650/10"
-                      >
-                        {activeStep === 4 ? 'Done' : 'Next'} <ChevronRight size={12} />
-                      </button>
-                    </div>
+                    })}
                   </div>
                 )}
               </div>
 
-            {/* Column 4: Sandbox, AI Builder & Schema */}
-            <aside className="w-80 flex-shrink-0 bg-white dark:bg-zinc-900 p-4 flex flex-col gap-6 border-l border-zinc-200 dark:border-zinc-800 overflow-y-auto custom-scrollbar">
-          {/* Tab Selector */}
-          <div className="flex gap-1 border-b border-zinc-100 dark:border-zinc-900 pb-2 bg-transparent shrink-0">
-            {[
-              { id: 'setup', label: 'Setup', icon: Settings2 },
-              { id: 'sandbox', label: 'Sandbox', icon: Play },
-              { id: 'logs', label: 'Logs', icon: FileText },
-              { id: 'ai', label: 'AI', icon: Sparkles },
-              { id: 'json', label: 'Schema', icon: Code }
-            ].map(tab => (
-              <button 
-                key={tab.id}
-                onClick={() => setRightTab(tab.id as any)}
-                className={cn(
-                  "flex-1 py-2 text-[8px] font-bold uppercase tracking-widest rounded-lg transition-all border flex flex-col items-center justify-center gap-1 cursor-pointer",
-                  rightTab === tab.id 
-                    ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 border-indigo-500/20 shadow-sm" 
-                    : "text-zinc-500 border-transparent hover:bg-zinc-100/50"
-                )}
-              >
-                <tab.icon size={11} />
-                <span>{tab.label}</span>
-              </button>
-            ))}
-          </div>
-
-          {rightTab === 'setup' ? (
-            <div className="flex flex-col gap-4 flex-1 min-h-0 text-left">
-              <div className="space-y-1">
-                <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Secure Configuration</h3>
-                <p className="text-[9px] text-zinc-400 leading-relaxed">
-                  Provide credentials, API tokens, and connection secrets for this integration.
-                </p>
-              </div>
-
-              {!selectedTenantConnector?.isActive ? (
-                <div className="flex flex-col items-center justify-center py-10 bg-zinc-50 dark:bg-zinc-900/30 rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-800">
-                  <AlertCircle className="w-8 h-8 text-zinc-300 dark:text-zinc-700 mb-2" />
-                  <p className="text-zinc-400 dark:text-zinc-500 text-[10px] font-medium text-center px-4 leading-normal">
-                    Activate this integration in the main tab to configure secure secrets.
+              {!selectedPlacement ? (
+                <div className="p-10 text-center bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl flex flex-col items-center justify-center">
+                  <Settings2 size={24} className="text-zinc-300 dark:text-zinc-700 mb-2" />
+                  <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">Select or Add a Trigger</p>
+                  <p className="text-xs text-zinc-500 mt-1 max-w-xs">
+                    Choose a trigger above to configure conditions, input payloads, and output field mappings.
                   </p>
                 </div>
               ) : (
-                <div className="space-y-4 overflow-y-auto pr-1 flex-1 custom-scrollbar">
-                  {(selectedConnector.ioSchema?.config || []).map((field: any) => (
-                    <div key={field.name} className="space-y-1">
-                      <label className="text-[9px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider block">
-                        {field.label || field.name}
-                      </label>
-                      <div className="relative">
-                        <input 
-                          type={field.type === 'password' ? 'password' : 'text'}
-                          placeholder={field.description}
-                          className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl py-2 px-3 text-[10px] focus:outline-none focus:border-indigo-500/50 dark:text-white"
-                          value={secrets[field.name] || ''}
-                          onChange={(e) => setSecrets(prev => ({ ...prev, [field.name]: e.target.value }))}
-                        />
-                        {selectedTenantConnector.secrets?.some((s: any) => s.secretKey === field.name) && (
-                          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-0.5 text-emerald-500 text-[8px] font-bold uppercase select-none">
-                            <Check className="w-3 h-3" />
-                            Vaulted
+                <div className="space-y-4">
+                  {/* Compact Stepper Bar */}
+                  <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 flex items-center justify-between gap-2">
+                    {[
+                      { step: 1, label: selectedPlacement.type === 'lookup' ? 'General' : 'Details' },
+                      { step: 2, label: selectedPlacement.type === 'lookup' ? 'Input Param' : 'Conditions' },
+                      { step: 3, label: selectedPlacement.type === 'lookup' ? 'Display & Value' : 'Inputs' },
+                      { step: 4, label: 'Output Mappings' }
+                    ].map((s, i) => {
+                      const isActive = s.step === activeStep;
+                      const isCompleted = s.step < activeStep;
+                      return (
+                        <React.Fragment key={s.step}>
+                          <button
+                            type="button"
+                            onClick={() => setActiveStep(s.step)}
+                            className="flex items-center gap-2 focus:outline-none cursor-pointer group text-left"
+                          >
+                            <div className={cn(
+                              "w-6 h-6 rounded-full border text-[11px] font-semibold flex items-center justify-center transition-colors",
+                              isActive
+                                ? "bg-indigo-600 border-indigo-600 text-white"
+                                : isCompleted
+                                  ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400"
+                                  : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-400"
+                            )}>
+                              {isCompleted ? <Check size={11} /> : s.step}
+                            </div>
+                            <span className={cn(
+                              "text-xs font-medium hidden sm:inline",
+                              isActive ? "text-zinc-900 dark:text-zinc-100" : "text-zinc-500"
+                            )}>
+                              {s.label}
+                            </span>
+                          </button>
+                          {i < 3 && (
+                            <div className={cn(
+                              "flex-1 h-px transition-colors",
+                              isCompleted ? "bg-emerald-400/50" : "bg-zinc-200 dark:bg-zinc-800"
+                            )} />
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+
+                  {/* Step Content */}
+                  {selectedPlacement.type === 'lookup' ? (
+                    <>
+                      {activeStep === 1 && (
+                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 space-y-4">
+                          <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Lookup Field Details</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Field Label</label>
+                              <input
+                                type="text"
+                                value={selectedPlacement.details.label || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setLayout(prev => prev.map(f => f.id === selectedPlacement.id ? { ...f, label: val } : f));
+                                }}
+                                className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs focus:outline-none focus:border-indigo-500 dark:text-zinc-100"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Destination Tab</label>
+                              <select
+                                value={selectedPlacement.details.tabId || 'default-tab'}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setLayout(prev => prev.map(f => f.id === selectedPlacement.id ? { ...f, tabId: val } : f));
+                                }}
+                                className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 text-xs text-zinc-800 dark:text-zinc-200 focus:outline-none focus:border-indigo-500"
+                              >
+                                {displayTabs.map((t: any) => (
+                                  <option key={t.id} value={t.id}>{t.label || t.id}</option>
+                                ))}
+                              </select>
+                            </div>
                           </div>
-                        )}
+                        </div>
+                      )}
+
+                      {activeStep === 2 && (
+                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 space-y-3">
+                          <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Search Input Parameter</h4>
+                          <p className="text-xs text-zinc-500">Select which API input parameter receives the user&apos;s lookup search query.</p>
+                          <select
+                            value={selectedPlacement.details.connectorSearchParam || ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setLayout(prev => prev.map(f => f.id === selectedPlacement.id ? { ...f, connectorSearchParam: val } : f));
+                            }}
+                            className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs text-zinc-800 dark:text-zinc-200 focus:outline-none focus:border-indigo-500"
+                          >
+                            <option value="">-- Select parameter --</option>
+                            {(selectedConnector.ioSchema?.inputs || []).map((input: any) => (
+                              <option key={input.name} value={input.name}>{input.label || input.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {activeStep === 3 && (
+                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 space-y-4">
+                          <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Display &amp; Value Mapping</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Label Field (Display)</label>
+                              <select
+                                value={selectedPlacement.details.connectorLabelField || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setLayout(prev => prev.map(f => f.id === selectedPlacement.id ? { ...f, connectorLabelField: val } : f));
+                                }}
+                                className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 text-xs text-zinc-800 dark:text-zinc-200 focus:outline-none focus:border-indigo-500"
+                              >
+                                <option value="">-- Select output --</option>
+                                {(selectedConnector.ioSchema?.outputs || []).map((output: any) => (
+                                  <option key={output.name} value={output.name}>{output.label || output.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Value Field (Stored)</label>
+                              <select
+                                value={selectedPlacement.details.connectorValueField || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setLayout(prev => prev.map(f => f.id === selectedPlacement.id ? { ...f, connectorValueField: val } : f));
+                                }}
+                                className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 text-xs text-zinc-800 dark:text-zinc-200 focus:outline-none focus:border-indigo-500"
+                              >
+                                <option value="">-- Select output --</option>
+                                {(selectedConnector.ioSchema?.outputs || []).map((output: any) => (
+                                  <option key={output.name} value={output.name}>{output.label || output.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {activeStep === 1 && (
+                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 space-y-4">
+                          <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Rule Details &amp; Failure Policy</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Rule Name</label>
+                              <input
+                                type="text"
+                                value={selectedPlacement.details.name || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setDataPopulationRules(prev => prev.map(r => r.id === selectedPlacement.id ? { ...r, name: val } : r));
+                                }}
+                                className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs focus:outline-none focus:border-indigo-500 dark:text-zinc-100"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Trigger Field (On Change)</label>
+                              <select
+                                value={selectedPlacement.details.triggerFieldId || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setDataPopulationRules(prev => prev.map(r => r.id === selectedPlacement.id ? { ...r, triggerFieldId: val } : r));
+                                }}
+                                className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 text-xs text-zinc-800 dark:text-zinc-200 focus:outline-none focus:border-indigo-500"
+                              >
+                                <option value="">Auto-detect from conditions</option>
+                                {targetFields.map((f: any) => (
+                                  <option key={f.id} value={f.id}>{f.label} ({f.name})</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">On API Error</label>
+                              <select
+                                value={selectedPlacement.details.onFailure || 'ignore'}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setDataPopulationRules(prev => prev.map(r => r.id === selectedPlacement.id ? { ...r, onFailure: val } : r));
+                                }}
+                                className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 text-xs text-zinc-800 dark:text-zinc-200 focus:outline-none focus:border-indigo-500"
+                              >
+                                <option value="ignore">Ignore (Use Fallbacks)</option>
+                                <option value="warn">Show Warning Toast</option>
+                                <option value="block">Block Record Save</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {activeStep === 2 && (
+                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 space-y-4">
+                          <div className="flex items-center justify-between gap-2">
+                            <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Trigger Conditions</h4>
+                            <div className="inline-flex p-0.5 bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg">
+                              <button
+                                type="button"
+                                onClick={() => setDataPopulationRules(prev => prev.map(r => r.id === selectedPlacement.id ? { ...r, triggerMode: 'visual' } : r))}
+                                className={cn(
+                                  "px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer",
+                                  (selectedPlacement.details.triggerMode || 'visual') === 'visual'
+                                    ? "bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 shadow-xs"
+                                    : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
+                                )}
+                              >
+                                Visual Builder
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDataPopulationRules(prev => prev.map(r => r.id === selectedPlacement.id ? { ...r, triggerMode: 'expression' } : r))}
+                                className={cn(
+                                  "px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer",
+                                  selectedPlacement.details.triggerMode === 'expression'
+                                    ? "bg-white dark:bg-zinc-800 text-indigo-600 dark:text-indigo-400 shadow-xs"
+                                    : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
+                                )}
+                              >
+                                Expression
+                              </button>
+                            </div>
+                          </div>
+
+                          {(selectedPlacement.details.triggerMode || 'visual') === 'visual' ? (
+                            <VisualRuleBuilder
+                              conditionTree={
+                                selectedPlacement.details.condition?.type
+                                  ? (selectedPlacement.details.condition as ValidationConditionNode)
+                                  : createDefaultConditionGroup(targetFields)
+                              }
+                              onChange={(nextTree) => {
+                                setDataPopulationRules(prev => prev.map(r => r.id === selectedPlacement.id ? { ...r, condition: nextTree } : r));
+                              }}
+                              fields={targetFields}
+                            />
+                          ) : (
+                            <ExpressionEditor
+                              value={selectedPlacement.details.conditionExpression || ''}
+                              onChange={(val) => {
+                                setDataPopulationRules(prev => prev.map(r => r.id === selectedPlacement.id ? { ...r, conditionExpression: val } : r));
+                              }}
+                              placeholder="e.g. AND({status} == 'Approved', {priority} == 'High')"
+                              availableFields={targetFields}
+                              showConsole={true}
+                              title="Custom Trigger Expression"
+                            />
+                          )}
+                        </div>
+                      )}
+
+                      {activeStep === 3 && (
+                        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 space-y-3">
+                          <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Request Input Parameters</h4>
+                          <div className="space-y-2.5">
+                            {(selectedConnector.ioSchema?.inputs || []).map((input: any) => {
+                              const mappings = selectedPlacement.details.inputMappings || [];
+                              const currentMapping = mappings.find((m: any) => m.inputName === input.name);
+                              const isExpr = currentMapping?.mappingType === 'expression';
+                              const currentVal = isExpr ? (currentMapping?.expression || '') : (currentMapping?.sourceFieldId || '');
+
+                              return (
+                                <div key={input.name} className="space-y-2 p-3 border border-zinc-200 dark:border-zinc-800 rounded-lg bg-zinc-50/50 dark:bg-zinc-950/40">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <span className="text-xs font-mono font-medium text-zinc-800 dark:text-zinc-200">.{input.name}</span>
+                                    <div className="flex bg-zinc-100 dark:bg-zinc-900 rounded-md p-0.5 border border-zinc-200 dark:border-zinc-800">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setDataPopulationRules(prev => prev.map(r => {
+                                            if (r.id === selectedPlacement.id) {
+                                              const inputs = [...(r.inputMappings || [])];
+                                              const idx = inputs.findIndex((m: any) => m.inputName === input.name);
+                                              if (idx > -1) {
+                                                inputs[idx].mappingType = 'field';
+                                                inputs[idx].expression = undefined;
+                                              } else {
+                                                inputs.push({ inputName: input.name, mappingType: 'field' });
+                                              }
+                                              return { ...r, inputMappings: inputs };
+                                            }
+                                            return r;
+                                          }));
+                                        }}
+                                        className={cn(
+                                          "px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer",
+                                          !isExpr ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs" : "text-zinc-500"
+                                        )}
+                                      >
+                                        Field
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setDataPopulationRules(prev => prev.map(r => {
+                                            if (r.id === selectedPlacement.id) {
+                                              const inputs = [...(r.inputMappings || [])];
+                                              const idx = inputs.findIndex((m: any) => m.inputName === input.name);
+                                              if (idx > -1) {
+                                                inputs[idx].mappingType = 'expression';
+                                                inputs[idx].sourceFieldId = undefined;
+                                              } else {
+                                                inputs.push({ inputName: input.name, mappingType: 'expression' });
+                                              }
+                                              return { ...r, inputMappings: inputs };
+                                            }
+                                            return r;
+                                          }));
+                                        }}
+                                        className={cn(
+                                          "px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer",
+                                          isExpr ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs" : "text-zinc-500"
+                                        )}
+                                      >
+                                        Expr
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {!isExpr ? (
+                                    <select
+                                      value={currentVal}
+                                      onChange={(e) => {
+                                        const sourceId = e.target.value;
+                                        setDataPopulationRules(prev => prev.map(r => {
+                                          if (r.id === selectedPlacement.id) {
+                                            const currentInputs = [...(r.inputMappings || [])];
+                                            const idx = currentInputs.findIndex((m: any) => m.inputName === input.name);
+                                            if (sourceId === '') {
+                                              if (idx > -1) currentInputs.splice(idx, 1);
+                                            } else if (idx > -1) {
+                                              currentInputs[idx].sourceFieldId = sourceId;
+                                              currentInputs[idx].mappingType = 'field';
+                                            } else {
+                                              currentInputs.push({ inputName: input.name, sourceFieldId: sourceId, mappingType: 'field' });
+                                            }
+                                            return { ...r, inputMappings: currentInputs };
+                                          }
+                                          return r;
+                                        }));
+                                      }}
+                                      className="w-full h-8 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-md px-2.5 text-xs focus:outline-none focus:border-indigo-500 text-zinc-700 dark:text-zinc-300"
+                                    >
+                                      <option value="">-- None --</option>
+                                      {targetFields.map((f: any) => (
+                                        <option key={f.id} value={f.id}>{f.label} ({f.name})</option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <ExpressionEditor
+                                      value={currentVal}
+                                      onChange={(val) => {
+                                        setDataPopulationRules(prev => prev.map(r => {
+                                          if (r.id === selectedPlacement.id) {
+                                            const currentInputs = [...(r.inputMappings || [])];
+                                            const idx = currentInputs.findIndex((m: any) => m.inputName === input.name);
+                                            if (idx > -1) {
+                                              currentInputs[idx].expression = val;
+                                            } else {
+                                              currentInputs.push({ inputName: input.name, expression: val, mappingType: 'expression' });
+                                            }
+                                            return { ...r, inputMappings: currentInputs };
+                                          }
+                                          return r;
+                                        }));
+                                      }}
+                                      placeholder="e.g. CONCAT({first_name}, ' ', {last_name})"
+                                      availableFields={targetFields}
+                                      compact={true}
+                                    />
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {activeStep === 4 && (
+                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 space-y-4">
+                      <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-2.5">
+                        <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Output Mappings</h4>
+                        <button
+                          onClick={handleAutoMap}
+                          className="px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-600 text-indigo-600 dark:text-indigo-400 hover:text-white rounded-md text-xs font-medium transition-colors cursor-pointer"
+                        >
+                          Auto-Map
+                        </button>
                       </div>
-                      <p className="text-[8px] text-zinc-400 dark:text-zinc-600 leading-normal">{field.description}</p>
-                    </div>
-                  ))}
 
-                  <button 
-                    onClick={handleSaveSecrets}
-                    disabled={savingSecrets || Object.keys(secrets).length === 0}
-                    className="w-full bg-zinc-900 dark:bg-zinc-100 hover:bg-indigo-650 hover:text-white dark:hover:bg-indigo-650 text-white dark:text-zinc-900 py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md cursor-pointer"
-                  >
-                    {savingSecrets ? <Loader2 className="w-3.5 h-3.5 animate-spin mx-auto" /> : 'Save Secure Configuration'}
-                  </button>
+                      {(!selectedConnector.ioSchema?.outputs || selectedConnector.ioSchema.outputs.length === 0) ? (
+                        <div className="p-6 text-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg">
+                          <Info size={18} className="mx-auto text-zinc-400 mb-1.5" />
+                          <p className="text-xs text-zinc-500">No outputs defined in schema</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2 max-h-96 overflow-y-auto custom-scrollbar pr-1">
+                          {selectedConnector.ioSchema.outputs
+                            .filter((o: any) => selectedPlacement.type === 'rule' || o.name !== selectedPlacement.details.connectorValueField)
+                            .map((output: any) => {
+                              let mappingObj: any = null;
+                              let targetFieldId = '';
+                              if (selectedPlacement.type === 'lookup') {
+                                mappingObj = (selectedPlacement.details.lookupOutputMappings || []).find((m: any) => m.sourceFieldId === output.name);
+                                targetFieldId = mappingObj?.targetFieldId || '';
+                              } else if (selectedPlacement.type === 'rule') {
+                                mappingObj = (selectedPlacement.details.outputMappings || []).find((m: any) => m.sourceFieldId === output.name);
+                                targetFieldId = mappingObj?.targetFieldId || '';
+                              } else {
+                                targetFieldId = (connectorMappings[selectedConnector.id] || {})[output.name] || '';
+                              }
 
-                  <div className="p-3.5 bg-indigo-50/50 dark:bg-indigo-950/10 border border-indigo-100 dark:border-indigo-950/20 rounded-2xl flex gap-3">
-                    <ShieldCheck className="w-4 h-4 text-indigo-500 dark:text-indigo-400 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-300 leading-none">Security Vault</p>
-                      <p className="text-[8px] text-indigo-500 dark:text-indigo-300/50 mt-1 leading-relaxed">
-                        Credentials are encrypted and never exposed on clients. They are only injected inside server-side Edge Functions.
-                      </p>
+                              return (
+                                <div key={output.name} className="flex flex-wrap items-center justify-between gap-2 p-2.5 border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/40 rounded-lg">
+                                  <div className="min-w-0 flex-1">
+                                    <span className="block text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate">{output.label || output.name}</span>
+                                    <span className="block text-[10px] font-mono text-zinc-400">.{output.name} ({output.type || 'string'})</span>
+                                  </div>
+
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <select
+                                      value={targetFieldId}
+                                      onChange={(e) => handleMapField(output.name, e.target.value)}
+                                      className="h-8 w-40 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md px-2 text-xs focus:outline-none focus:border-indigo-500 text-zinc-700 dark:text-zinc-200"
+                                    >
+                                      <option value="">-- Unmapped --</option>
+                                      {targetFields.map(f => (
+                                        <option key={f.id} value={f.id}>{f.label} ({f.name})</option>
+                                      ))}
+                                    </select>
+
+                                    {targetFieldId && selectedPlacement.type !== 'connector_field' && (
+                                      <input
+                                        type="text"
+                                        value={mappingObj?.fallbackValue || ''}
+                                        onChange={(e) => handleMapField(output.name, targetFieldId, e.target.value)}
+                                        placeholder="Fallback..."
+                                        title="Optional fallback value if API returns null"
+                                        className="h-8 w-24 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md px-2 text-[11px] focus:outline-none focus:border-indigo-500 text-zinc-700 dark:text-zinc-200"
+                                      />
+                                    )}
+
+                                    {!targetFieldId && (
+                                      <button
+                                        onClick={() => setPendingFieldCreation({
+                                          outputName: output.name,
+                                          outputLabel: output.label || output.name,
+                                          outputType: output.type || 'string'
+                                        })}
+                                        className="h-8 w-8 flex items-center justify-center text-indigo-600 dark:text-indigo-400 hover:text-white hover:bg-indigo-600 rounded-md transition-colors border border-indigo-200 dark:border-indigo-800 cursor-pointer"
+                                        title="Create & map new module field"
+                                      >
+                                        <PlusCircle size={13} />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      )}
                     </div>
+                  )}
+
+                  {/* Footer Next/Back */}
+                  <div className="flex items-center justify-between pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveStep(prev => Math.max(1, prev - 1))}
+                      disabled={activeStep === 1}
+                      className="h-8 px-3 text-xs font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 disabled:opacity-30 disabled:pointer-events-none flex items-center gap-1 cursor-pointer"
+                    >
+                      <ChevronLeft size={13} /> Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeStep < 4) setActiveStep(prev => prev + 1);
+                        else toast.success("Configuration steps saved in draft");
+                      }}
+                      className="h-8 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium flex items-center gap-1 cursor-pointer"
+                    >
+                      {activeStep === 4 ? 'Done' : 'Next'} <ChevronRight size={13} />
+                    </button>
                   </div>
                 </div>
               )}
             </div>
-          ) : rightTab === 'logs' ? (
-            <div className="flex flex-col gap-4 flex-1 min-h-0 text-left">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Audit Logs</h3>
-                  <p className="text-[9px] text-zinc-400 leading-relaxed">External API queries audit history.</p>
-                </div>
-                <button 
-                  onClick={fetchLogs} 
-                  disabled={loadingLogs}
-                  className="flex items-center gap-1 px-2 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-lg text-[9px] font-bold text-indigo-500 transition-all border border-zinc-205 dark:border-zinc-800 cursor-pointer"
-                >
-                  {loadingLogs ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3 rotate-90" />}
-                  <span>Reload</span>
-                </button>
-              </div>
+          </div>
+        )}
+      </div>
 
-              {/* Filter pills */}
-              <div className="flex bg-zinc-100 dark:bg-zinc-900 rounded-xl p-0.5 border border-zinc-200 dark:border-zinc-800 shrink-0">
+      {/* 3. Right Sidebar: Inspector (Animated, Collapsible & Resizable) */}
+      <AnimatePresence initial={false}>
+        {selectedConnector && !isRightCollapsed && (
+          <motion.aside
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: rightWidth, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={resizingSide === 'right' ? { duration: 0 } : { duration: 0.2, ease: 'easeOut' }}
+            className="relative flex-shrink-0 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 flex flex-col overflow-hidden"
+          >
+            {/* Resize Handle */}
+            <div
+              onMouseDown={() => startResize('right')}
+              className="absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-indigo-500/40 transition-colors z-10"
+            />
+
+            {/* Header Tabs */}
+            <div className="h-11 px-2 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-1 shrink-0">
+              <div className="flex items-center gap-0.5 flex-1 min-w-0 overflow-x-auto">
                 {[
-                  { id: 'all', label: 'All' },
-                  { id: 'prod', label: 'Prod' },
-                  { id: 'test', label: 'Test' }
-                ].map(opt => (
+                  { id: 'setup', label: 'Setup', icon: Settings2 },
+                  { id: 'sandbox', label: 'Test', icon: Play },
+                  { id: 'logs', label: 'Logs', icon: FileText },
+                  { id: 'json', label: 'Schema', icon: Code }
+                ].map(tab => (
                   <button
-                    key={opt.id}
-                    onClick={() => setLogFilter(opt.id as any)}
+                    key={tab.id}
+                    onClick={() => setRightTab(tab.id as any)}
                     className={cn(
-                      "flex-1 py-1 rounded-md text-[9px] font-bold transition-all",
-                      logFilter === opt.id 
-                        ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs"
-                        : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+                      "px-2 py-1 text-[11px] font-medium rounded-md transition-colors flex items-center gap-1 cursor-pointer shrink-0",
+                      rightTab === tab.id
+                        ? "bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400"
+                        : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
                     )}
                   >
-                    {opt.label}
+                    <tab.icon size={11} />
+                    <span>{tab.label}</span>
                   </button>
                 ))}
               </div>
+              <button
+                onClick={() => setIsRightCollapsed(true)}
+                className="p-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors cursor-pointer shrink-0"
+                title="Collapse Inspector panel"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
 
-              {loadingLogs && logs.length === 0 ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-5 h-5 animate-spin text-indigo-500" />
+            {/* Panel Body */}
+            <div className="flex-1 overflow-y-auto p-3.5 custom-scrollbar">
+              {rightTab === 'setup' ? (
+                <div className="space-y-3">
+                  <div>
+                    <h3 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Credentials &amp; Secrets</h3>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Encrypted connection tokens for this integration.</p>
+                  </div>
+
+                  {!selectedTenantConnector?.isActive ? (
+                    <div className="py-8 px-4 text-center bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 space-y-2">
+                      <AlertCircle size={18} className="mx-auto text-amber-500" />
+                      <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Not Activated</p>
+                      <p className="text-[11px] text-zinc-400">Activate this integration to configure credentials.</p>
+                    </div>
+                  ) : !selectedTenantConnector.secretsSchema || selectedTenantConnector.secretsSchema.length === 0 ? (
+                    <div className="py-8 px-4 text-center bg-zinc-50 dark:bg-zinc-950 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 space-y-1.5">
+                      <CheckCircle2 size={18} className="mx-auto text-emerald-500" />
+                      <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Zero-Config Ready</p>
+                      <p className="text-[11px] text-zinc-400">No external API keys required.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {selectedTenantConnector.secretsSchema.map((field: any) => (
+                        <div key={field.name} className="space-y-1">
+                          <label className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300 flex items-center justify-between">
+                            <span>{field.label || field.name}</span>
+                            {field.required && <span className="text-rose-500">*</span>}
+                          </label>
+                          <input
+                            type={field.type === 'password' ? 'password' : 'text'}
+                            value={secrets[field.name] || ''}
+                            onChange={(e) => setSecrets(prev => ({ ...prev, [field.name]: e.target.value }))}
+                            placeholder={field.description || `Enter ${field.name}...`}
+                            className="w-full h-8 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 text-xs focus:outline-none focus:border-indigo-500 dark:text-zinc-100"
+                          />
+                        </div>
+                      ))}
+                      <button
+                        onClick={handleSaveSecrets}
+                        disabled={savingSecrets}
+                        className="w-full h-8 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50 cursor-pointer"
+                      >
+                        {savingSecrets ? <Loader2 className="w-3.5 h-3.5 animate-spin mx-auto" /> : 'Save Credentials'}
+                      </button>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="space-y-2 overflow-y-auto pr-1 flex-1 custom-scrollbar">
-                  {logs.filter(log => {
-                    const isTest = log.payload?.metadata?.isTest === true;
-                    if (logFilter === 'prod') return !isTest;
-                    if (logFilter === 'test') return isTest;
-                    return true;
-                  }).map(log => {
-                    const isExpanded = expandedLogId === log.id;
-                    const dateStr = new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    const isError = log.status === 'ERROR';
+              ) : rightTab === 'logs' ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Execution Logs</h3>
+                    <button
+                      onClick={fetchLogs}
+                      disabled={loadingLogs}
+                      className="p-1 text-zinc-400 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                      title="Refresh logs"
+                    >
+                      {loadingLogs ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
 
-                    return (
-                      <div 
-                        key={log.id}
+                  <div className="grid grid-cols-3 gap-1 p-0.5 bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg">
+                    {(['all', 'success', 'error'] as const).map(f => (
+                      <button
+                        key={f}
+                        type="button"
+                        onClick={() => setLogFilter(f)}
                         className={cn(
-                          "border rounded-xl transition-all overflow-hidden bg-zinc-50/20 dark:bg-zinc-900/10",
-                          isError ? "border-rose-500/20" : "border-zinc-200 dark:border-zinc-800"
+                          "py-1 text-[11px] font-medium rounded capitalize transition-colors cursor-pointer",
+                          logFilter === f
+                            ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-xs"
+                            : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
                         )}
                       >
-                        <button
-                          type="button"
-                          onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
-                          className="w-full p-2.5 flex items-center justify-between gap-2 text-left"
-                        >
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", isError ? "bg-rose-500 animate-pulse" : "bg-emerald-500")} />
-                              <span className="text-[10px] font-bold dark:text-white truncate uppercase tracking-tight">
-                                {log.status}
-                              </span>
-                            </div>
-                            <p className="text-[8px] text-zinc-400 mt-0.5">{dateStr} • {log.latencyMs ? `${log.latencyMs}ms` : 'Proxy'}</p>
-                          </div>
-                          <ChevronDown size={12} className={cn("text-zinc-450 transition-transform", isExpanded && "rotate-180")} />
-                        </button>
+                        {f}
+                      </button>
+                    ))}
+                  </div>
 
-                        <AnimatePresence>
-                          {isExpanded && (
-                            <motion.div 
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: 'auto', opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              className="border-t border-zinc-200 dark:border-zinc-800 p-2.5 bg-zinc-50 dark:bg-black/20 text-[8px] font-mono space-y-2 overflow-x-auto"
+                  {loadingLogs && logs.length === 0 ? (
+                    <div className="py-10 flex justify-center">
+                      <Loader2 className="w-5 h-5 animate-spin text-indigo-500" />
+                    </div>
+                  ) : filteredLogs.length === 0 ? (
+                    <p className="text-xs text-zinc-400 text-center py-8">No logs matching filter</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {filteredLogs.map((log: any, idx: number) => {
+                        const isErr = Boolean(log.error || (log.status && log.status >= 400));
+                        const isExpanded = expandedLogId === (log.id || String(idx));
+                        return (
+                          <div
+                            key={log.id || idx}
+                            className="border border-zinc-200 dark:border-zinc-800 rounded-lg bg-zinc-50/50 dark:bg-zinc-950/50 overflow-hidden"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => setExpandedLogId(isExpanded ? null : (log.id || String(idx)))}
+                              className="w-full px-2.5 py-2 flex items-center justify-between gap-2 text-left text-xs cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/40"
                             >
-                              <div>
-                                <span className="block text-zinc-400 font-bold uppercase tracking-wider mb-0.5">Payload:</span>
-                                <pre className="text-zinc-700 dark:text-zinc-300 leading-normal max-h-24 overflow-auto whitespace-pre-wrap">{JSON.stringify(log.payload, null, 2)}</pre>
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", isErr ? "bg-rose-500" : "bg-emerald-500")} />
+                                <span className="font-mono text-[11px] truncate text-zinc-800 dark:text-zinc-200">
+                                  {log.status || (isErr ? 'ERR' : '200')}
+                                </span>
+                                {log.latencyMs && (
+                                  <span className="text-[10px] text-zinc-400">{log.latencyMs}ms</span>
+                                )}
                               </div>
-                              {log.response && (
-                                <div>
-                                  <span className="block text-zinc-400 font-bold uppercase tracking-wider mb-0.5">Response:</span>
-                                  <pre className="text-zinc-700 dark:text-zinc-300 leading-normal max-h-24 overflow-auto whitespace-pre-wrap">{JSON.stringify(log.response, null, 2)}</pre>
-                                </div>
-                              )}
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                    );
-                  })}
-                  {logs.length === 0 && (
-                    <div className="py-8 text-center text-zinc-400 text-[10px] italic">No logs found for this connector.</div>
+                              <span className="text-[10px] text-zinc-400 shrink-0">
+                                {log.createdAt ? new Date(log.createdAt).toLocaleTimeString() : 'Recent'}
+                              </span>
+                            </button>
+                            {isExpanded && (
+                              <div className="p-2.5 border-t border-zinc-200 dark:border-zinc-800 space-y-2">
+                                {log.payload && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setTestData(log.payload);
+                                      setRightTab('sandbox');
+                                      toast.info('Loaded log payload into Sandbox');
+                                    }}
+                                    className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Play size={10} />
+                                    <span>Replay in Sandbox</span>
+                                  </button>
+                                )}
+                                <pre className="text-[10px] font-mono text-zinc-600 dark:text-zinc-300 overflow-x-auto whitespace-pre-wrap max-h-40">
+                                  {JSON.stringify(log.response || log.error || log, null, 2)}
+                                </pre>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
+                </div>
+              ) : rightTab === 'sandbox' ? (
+                <div className="space-y-3">
+                  <div>
+                    <h3 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Test Sandbox</h3>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Execute live test requests and preview field mappings.</p>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    {(selectedConnector.ioSchema?.inputs || []).map((input: any) => (
+                      <div key={input.name} className="space-y-1">
+                        <label className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300 flex items-center justify-between">
+                          <span>{input.label || input.name}</span>
+                          {input.required && <span className="text-rose-500">*</span>}
+                        </label>
+                        <input
+                          type={input.type === 'number' ? 'number' : 'text'}
+                          placeholder={input.description || `Value for ${input.name}`}
+                          value={testData[input.name] || ''}
+                          onChange={(e) => setTestData(prev => ({ ...prev, [input.name]: e.target.value }))}
+                          className="w-full h-8 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 text-xs focus:outline-none focus:border-indigo-500 dark:text-zinc-100"
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={runTest}
+                    disabled={testing}
+                    className="w-full h-8 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    {testing ? <Loader2 size={12} className="animate-spin" /> : <Play size={11} />}
+                    <span>Run Test</span>
+                  </button>
+
+                  {/* Dry-Run Mapped Output Preview */}
+                  {dryRunMappedPreview.length > 0 && (
+                    <div className="p-2.5 rounded-lg border border-indigo-200 dark:border-indigo-800/50 bg-indigo-50/50 dark:bg-indigo-950/20 space-y-1.5">
+                      <p className="text-[11px] font-semibold text-indigo-700 dark:text-indigo-300">
+                        Mapped Field Preview
+                      </p>
+                      <div className="space-y-1">
+                        {dryRunMappedPreview.map((row: any, idx: number) => (
+                          <div key={idx} className="flex items-center justify-between gap-2 text-[11px]">
+                            <span className="text-zinc-500 flex items-center gap-1 truncate">
+                              <code className="font-mono">.{row.source}</code>
+                              <ArrowRight size={10} />
+                              <span className="font-medium text-zinc-700 dark:text-zinc-200 truncate">{row.targetLabel}</span>
+                            </span>
+                            <span className="font-mono text-zinc-900 dark:text-zinc-100 truncate max-w-[100px]">{row.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {testResponse && (
+                    <div className={cn(
+                      "p-3 rounded-lg border space-y-1.5",
+                      testResponse.error
+                        ? "bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800/50 text-rose-700 dark:text-rose-400"
+                        : "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/50 text-emerald-700 dark:text-emerald-400"
+                    )}>
+                      <div className="flex items-center justify-between text-xs font-semibold">
+                        <span>{testResponse.error ? 'Test Failed' : '200 OK'}</span>
+                      </div>
+                      <pre className="text-[10px] font-mono overflow-x-auto whitespace-pre-wrap max-h-48">
+                        {JSON.stringify(testResponse, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  <div>
+                    <h3 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">IO Schema</h3>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Raw input/output schema definition.</p>
+                  </div>
+                  <pre className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-3 rounded-lg text-[10px] font-mono overflow-y-auto custom-scrollbar text-zinc-700 dark:text-zinc-300 max-h-[60vh]">
+                    {JSON.stringify(selectedConnector.ioSchema, null, 2)}
+                  </pre>
                 </div>
               )}
             </div>
-          ) : rightTab === 'sandbox' ? (
-            <div className="flex flex-col gap-6 flex-1 min-h-0 text-left">
-              <div className="space-y-1">
-                <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Sandbox Testing</h3>
-                <p className="text-[9px] text-zinc-400">Mock API payloads to run proxy test calls.</p>
-              </div>
+          </motion.aside>
+        )}
+      </AnimatePresence>
 
-              {/* Dynamic Mock Inputs */}
-              <div className="space-y-4 flex-1 overflow-y-auto custom-scrollbar pr-1">
-                {(selectedConnector.ioSchema?.inputs || []).map((input: any) => (
-                  <div key={input.name} className="space-y-1">
-                    <label className="text-[9px] font-bold text-zinc-600 dark:text-zinc-400 flex items-center justify-between">
-                      <span>{input.label || input.name}</span>
-                      <span className="text-[7.5px] font-mono text-zinc-400">{input.type || 'string'}</span>
-                    </label>
-                    <input 
-                      type="text"
-                      placeholder={input.description || `Value for ${input.name}`}
-                      value={testData[input.name] ?? ''}
-                      onChange={(e) => setTestData(prev => ({ ...prev, [input.name]: e.target.value }))}
-                      className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-[10px] focus:outline-none focus:border-indigo-500/50 dark:text-white placeholder:text-zinc-400"
-                    />
-                  </div>
-                ))}
-                {(selectedConnector.ioSchema?.inputs || []).length === 0 && (
-                  <p className="text-[10px] text-zinc-400 text-center py-4 italic">No inputs required for this connector.</p>
-                )}
-              </div>
-
-              {/* Test Action */}
-              <div className="space-y-3 pt-4 border-t border-zinc-100 dark:border-zinc-900 shrink-0">
-                <button
-                  onClick={runTest}
-                  disabled={testing}
-                  className="w-full py-2.5 bg-zinc-900 dark:bg-zinc-100 hover:bg-indigo-650 hover:text-white dark:hover:bg-indigo-650 text-white dark:text-zinc-900 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  {testing ? <Loader2 size={10} className="animate-spin" /> : <Play size={10} />}
-                  Execute Test Call
-                </button>
-
-                {/* Test Results Output */}
-                {testResponse && (
-                  <div className={cn(
-                    "p-4 rounded-2xl border flex flex-col gap-2 animate-in fade-in duration-200 max-h-48 overflow-y-auto custom-scrollbar",
-                    testResponse.error 
-                      ? "bg-rose-500/5 border-rose-500/20 text-rose-600 dark:text-rose-455"
-                      : "bg-emerald-500/5 border-emerald-500/20 text-emerald-600 dark:text-emerald-400"
-                  )}>
-                    <div className="flex items-center gap-2">
-                      {testResponse.error ? (
-                        <AlertCircle size={14} className="shrink-0" />
-                      ) : (
-                        <CheckCircle size={14} className="shrink-0" />
-                      )}
-                      <span className="text-[10px] font-bold">
-                        {testResponse.error ? 'Test Execution Failed' : 'Test Call Successful'}
-                      </span>
-                    </div>
-                    <pre className="text-[9px] font-mono opacity-90 leading-relaxed overflow-x-auto whitespace-pre-wrap">
-                      {JSON.stringify(testResponse, null, 2)}
-                    </pre>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : rightTab === 'ai' ? (
-            <div className="flex flex-col gap-6 flex-1 min-h-0 text-left">
-              <div className="space-y-1">
-                <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">AI Connector Architect</h3>
-                <p className="text-[9px] text-zinc-400 leading-relaxed">
-                  Describe what you want this custom connector to do, and the AI will forge its secure schema and integrations.
-                </p>
-              </div>
-
-              <div className="p-5 bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-2xl relative overflow-hidden shadow-lg shadow-indigo-500/10 flex flex-col gap-4">
-                <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 blur-xl -mr-12 -mt-12 pointer-events-none" />
-                <div className="relative z-10 space-y-4">
-                  <div className="flex items-center gap-2 text-white">
-                    <Sparkles size={12} className="animate-pulse" />
-                    <span className="text-[9px] font-black uppercase tracking-widest">AI Assistant</span>
-                  </div>
-                  
-                  <textarea 
-                    rows={6}
-                    placeholder="e.g. Create a Salesforce Lead sync connector that requires leadEmail, name, and notes, and returns leadId and status..."
-                    value={aiPrompt}
-                    onChange={(e) => setAiPrompt(e.target.value)}
-                    className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-xs text-white placeholder:text-white/40 focus:outline-none focus:bg-white/20 transition-all resize-none leading-relaxed"
-                  />
-                  
-                  <button 
-                    onClick={handleGenerateAI}
-                    disabled={isGenerating || !aiPrompt.trim()}
-                    className="w-full py-2.5 bg-white text-indigo-700 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-zinc-50 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
-                  >
-                    {isGenerating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-                    <span>Forge Connector</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-4 flex-1 min-h-0 text-left">
-              <div className="space-y-1">
-                <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">JSON Schema</h3>
-                <p className="text-[9px] text-zinc-400 leading-relaxed">
-                  The raw IO schema definition for inputs and outputs.
-                </p>
-              </div>
-              <div className="flex-1 overflow-hidden flex flex-col">
-                <pre className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-2xl text-[9px] font-mono overflow-y-auto custom-scrollbar text-zinc-650 dark:text-zinc-300">
-                  {JSON.stringify(selectedConnector.ioSchema, null, 2)}
-                </pre>
-              </div>
-            </div>
-          )}
-        </aside>
-      </>
-    )}
       {/* Placement Tab Prompt Modal */}
       <AnimatePresence>
         {pendingFieldCreation && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.97 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-900 rounded-[2rem] w-full max-w-md p-6 shadow-2xl space-y-6"
+              exit={{ opacity: 0, scale: 0.97 }}
+              className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md p-5 shadow-xl space-y-4"
             >
               <div>
-                <h4 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-wider">Select Placement Tab</h4>
-                <p className="text-[10px] text-zinc-500 uppercase tracking-widest mt-1">
-                  Choose which tab in the module should contain the new field: <strong className="text-indigo-500">{pendingFieldCreation.outputLabel || pendingFieldCreation.outputName}</strong>
+                <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Select Placement Tab</h4>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  Choose where to place the new field: <strong className="text-indigo-600 dark:text-indigo-400">{pendingFieldCreation.outputLabel || pendingFieldCreation.outputName}</strong>
                 </p>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-1">Destination Tab</label>
-                <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar border border-zinc-200 dark:border-zinc-900 rounded-xl p-1 bg-zinc-50 dark:bg-zinc-900/50">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Destination Tab</label>
+                <div className="space-y-1 max-h-44 overflow-y-auto custom-scrollbar border border-zinc-200 dark:border-zinc-800 rounded-lg p-1 bg-zinc-50 dark:bg-zinc-950">
                   {displayTabs.map((tab: any) => (
                     <button
                       key={tab.id}
                       onClick={() => setSelectedDestinationTabId(tab.id)}
                       className={cn(
-                        "w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between",
+                        "w-full text-left px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center justify-between cursor-pointer",
                         selectedDestinationTabId === tab.id
-                          ? "bg-indigo-600 text-white shadow-sm"
-                          : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                          ? "bg-indigo-600 text-white"
+                          : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                       )}
                       style={{ paddingLeft: tab.depth === 1 ? '1.5rem' : '0.75rem' }}
                     >
@@ -2114,73 +1965,51 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
                         {tab.depth === 1 && <span className="opacity-40">↳</span>}
                         <span>{tab.label || tab.id}</span>
                       </span>
-                      <span className="text-[9px] opacity-60 font-mono">ID: {tab.id}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
               {setTabs && (
-                <div className="pt-2 border-t border-zinc-100 dark:border-zinc-900">
+                <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
                   {showCreateTabForm ? (
-                    <div className="p-4 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50/50 dark:bg-zinc-900/20 space-y-3">
-                      <h5 className="text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-wider">Create New Tab or Section</h5>
-                      <div className="space-y-2">
-                        <div>
-                          <label className="text-[8px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block mb-1">Label</label>
-                          <input 
-                            type="text"
-                            placeholder="e.g. Weather Data"
-                            value={newTabLabel}
-                            onChange={(e) => setNewTabLabel(e.target.value)}
-                            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-indigo-500 dark:text-white"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[8px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block mb-1">Parent Tab (Optional)</label>
-                          <select
-                            value={newTabParentId}
-                            onChange={(e) => setNewTabParentId(e.target.value)}
-                            className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-500 text-zinc-700 dark:text-zinc-300"
-                          >
-                            <option value="">None (Root Tab)</option>
-                            {tabs.filter((t: any) => !t.parentId).map((t: any) => (
-                              <option key={t.id} value={t.id}>{t.label || t.id}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-end gap-2 pt-1">
+                    <div className="p-3 border border-zinc-200 dark:border-zinc-800 rounded-lg bg-zinc-50 dark:bg-zinc-950 space-y-2.5">
+                      <input
+                        type="text"
+                        placeholder="New tab label..."
+                        value={newTabLabel}
+                        onChange={(e) => setNewTabLabel(e.target.value)}
+                        className="w-full h-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md px-2.5 text-xs focus:outline-none focus:border-indigo-500 dark:text-zinc-100"
+                      />
+                      <select
+                        value={newTabParentId}
+                        onChange={(e) => setNewTabParentId(e.target.value)}
+                        className="w-full h-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md px-2 text-xs text-zinc-700 dark:text-zinc-300"
+                      >
+                        <option value="">Root Tab</option>
+                        {tabs.filter((t: any) => !t.parentId).map((t: any) => (
+                          <option key={t.id} value={t.id}>{t.label || t.id}</option>
+                        ))}
+                      </select>
+                      <div className="flex justify-end gap-2">
                         <button
-                          onClick={() => {
-                            setShowCreateTabForm(false);
-                            setNewTabLabel('');
-                            setNewTabParentId('');
-                          }}
-                          className="px-2.5 py-1 text-[9px] font-black uppercase tracking-wider text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                          onClick={() => { setShowCreateTabForm(false); setNewTabLabel(''); setNewTabParentId(''); }}
+                          className="px-2.5 py-1 text-xs text-zinc-500 hover:text-zinc-800 cursor-pointer"
                         >
                           Cancel
                         </button>
                         <button
                           onClick={() => {
-                            if (!newTabLabel.trim()) {
-                              toast.error("Please enter a tab label");
-                              return;
-                            }
+                            if (!newTabLabel.trim()) return toast.error("Please enter a tab label");
                             const newTabId = `tab-${Math.random().toString(36).substring(2, 9)}`;
-                            const newTab = {
-                              id: newTabId,
-                              label: newTabLabel.trim(),
-                              parentId: newTabParentId || undefined
-                            };
+                            const newTab = { id: newTabId, label: newTabLabel.trim(), parentId: newTabParentId || undefined };
                             setTabs([...tabs, newTab]);
                             setSelectedDestinationTabId(newTabId);
                             setShowCreateTabForm(false);
                             setNewTabLabel('');
                             setNewTabParentId('');
-                            toast.success(`Created tab "${newTab.label}"`);
                           }}
-                          className="px-2.5 py-1 bg-indigo-600 text-white rounded-lg text-[9px] font-black uppercase tracking-wider shadow-sm hover:bg-indigo-500"
+                          className="px-2.5 py-1 bg-indigo-600 text-white rounded-md text-xs font-medium cursor-pointer"
                         >
                           Create
                         </button>
@@ -2189,58 +2018,35 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
                   ) : (
                     <button
                       onClick={() => setShowCreateTabForm(true)}
-                      className="w-full py-2 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-black uppercase tracking-wider text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-all flex items-center justify-center gap-1.5 bg-zinc-50/20 dark:bg-zinc-900/10 cursor-pointer"
+                      className="w-full py-1.5 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg text-xs font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 flex items-center justify-center gap-1 cursor-pointer"
                     >
                       <Plus size={12} />
-                      <span>Create New Tab or Sub-tab</span>
+                      <span>Create New Tab</span>
                     </button>
                   )}
                 </div>
               )}
 
-              <div className="flex items-center gap-3 justify-end pt-2">
+              <div className="flex items-center gap-2 justify-end pt-1">
                 <button
                   onClick={() => setPendingFieldCreation(null)}
-                  className="px-4 py-2 border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 rounded-xl text-xs font-black uppercase tracking-wider transition-all"
+                  className="h-8 px-3 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-lg text-xs font-medium cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={() => {
                     if (pendingFieldCreation) {
-                      let finalTabId = selectedDestinationTabId;
-                      let finalTabs = [...tabs];
-
-                      // Auto-create new tab if form is open and has a non-empty label
-                      if (showCreateTabForm && newTabLabel.trim()) {
-                        const newTabId = `tab-${Math.random().toString(36).substring(2, 9)}`;
-                        const newTab = {
-                          id: newTabId,
-                          label: newTabLabel.trim(),
-                          parentId: newTabParentId || undefined
-                        };
-                        finalTabs = [...finalTabs, newTab];
-                        finalTabId = newTabId;
-
-                        if (setTabs) {
-                          setTabs(finalTabs);
-                        }
-                        setSelectedDestinationTabId(newTabId);
-                        setShowCreateTabForm(false);
-                        setNewTabLabel('');
-                        setNewTabParentId('');
-                      }
-
                       handleCreateAndMapField(
                         pendingFieldCreation.outputName,
                         pendingFieldCreation.outputLabel,
                         pendingFieldCreation.outputType,
-                        finalTabId
+                        selectedDestinationTabId
                       );
                       setPendingFieldCreation(null);
                     }
                   }}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-indigo-500/20"
+                  className="h-8 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium cursor-pointer"
                 >
                   Create Field
                 </button>
@@ -2253,79 +2059,69 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
       {/* Inline Lookup Field Modal */}
       <AnimatePresence>
         {showInlineLookupModal && selectedConnector && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.97 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-900 rounded-[2rem] w-full max-w-md p-6 shadow-2xl space-y-6"
+              exit={{ opacity: 0, scale: 0.97 }}
+              className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md p-5 shadow-xl space-y-4"
             >
               <div>
-                <h4 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-wider">Create Lookup Field</h4>
-                <p className="text-[10px] text-zinc-500 uppercase tracking-widest mt-1">
-                  Add a new Lookup field to trigger the connector <strong className="text-indigo-500">{selectedConnector.name}</strong>
+                <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Create Lookup Field</h4>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  Add a Lookup field powered by <strong className="text-indigo-600 dark:text-indigo-400">{selectedConnector.name}</strong>.
                 </p>
               </div>
 
-              <div className="space-y-4">
-                <div>
-                  <label className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-1 block mb-1">Field Label</label>
-                  <input 
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Field Label</label>
+                  <input
                     type="text"
                     placeholder="e.g. Zipcode Lookup"
                     value={inlineLookupLabel}
                     onChange={(e) => setInlineLookupLabel(e.target.value)}
-                    className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 font-bold"
+                    className="w-full h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-[9px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-1">Destination Tab</label>
-                  <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar border border-zinc-200 dark:border-zinc-900 rounded-xl p-1 bg-zinc-50 dark:bg-zinc-900/50">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Destination Tab</label>
+                  <div className="space-y-1 max-h-44 overflow-y-auto custom-scrollbar border border-zinc-200 dark:border-zinc-800 rounded-lg p-1 bg-zinc-50 dark:bg-zinc-950">
                     {displayTabs.map((tab: any) => (
                       <button
                         key={tab.id}
                         onClick={() => setInlineLookupTabId(tab.id)}
                         className={cn(
-                          "w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between",
+                          "w-full text-left px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center justify-between cursor-pointer",
                           inlineLookupTabId === tab.id
-                            ? "bg-indigo-600 text-white shadow-sm"
-                            : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                            ? "bg-indigo-600 text-white"
+                            : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                         )}
                         style={{ paddingLeft: tab.depth === 1 ? '1.5rem' : '0.75rem' }}
                       >
-                        <span className="flex items-center gap-1">
-                          {tab.depth === 1 && <span className="opacity-40">↳</span>}
-                          <span>{tab.label || tab.id}</span>
-                        </span>
-                        <span className="text-[9px] opacity-60 font-mono">ID: {tab.id}</span>
+                        <span>{tab.label || tab.id}</span>
                       </button>
                     ))}
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 justify-end pt-2">
+              <div className="flex items-center gap-2 justify-end pt-1">
                 <button
-                  onClick={() => {
-                    setShowInlineLookupModal(false);
-                    setInlineLookupLabel('');
-                  }}
-                  className="px-4 py-2 border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 rounded-xl text-xs font-black uppercase tracking-wider transition-all"
+                  onClick={() => { setShowInlineLookupModal(false); setInlineLookupLabel(''); }}
+                  className="h-8 px-3 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-lg text-xs font-medium cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={() => {
-                    if (!inlineLookupLabel.trim()) {
-                      toast.error("Please enter a field label");
-                      return;
-                    }
+                    if (!inlineLookupLabel.trim()) return toast.error("Please enter a field label");
                     handleCreateLookupField(inlineLookupLabel.trim(), inlineLookupTabId);
                     setShowInlineLookupModal(false);
                     setInlineLookupLabel('');
                   }}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-indigo-500/20"
+                  className="h-8 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium cursor-pointer"
                 >
                   Create Field
                 </button>
@@ -2338,60 +2134,52 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
       {/* Delete Placement Confirmation Modal */}
       <AnimatePresence>
         {deletePlacementConfirmation && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }}
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.97 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-900 rounded-[2rem] w-full max-w-md p-6 shadow-2xl space-y-6 text-left"
+              exit={{ opacity: 0, scale: 0.97 }}
+              className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-md p-5 shadow-xl space-y-4 text-left"
             >
-              <div>
-                <div className="w-12 h-12 bg-amber-500/10 text-amber-500 rounded-2xl flex items-center justify-center mb-4">
-                  <AlertTriangle size={24} />
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 rounded-lg flex items-center justify-center shrink-0">
+                  <AlertTriangle size={18} />
                 </div>
-                <h4 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-wider">Remove Placement Trigger</h4>
-                <p className="text-[10px] text-zinc-500 uppercase tracking-widest mt-1">
-                  You are removing the placement trigger: <strong className="text-indigo-500">{deletePlacementConfirmation.label}</strong>
-                </p>
+                <div>
+                  <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Remove Placement Trigger</h4>
+                  <p className="text-xs text-zinc-500 mt-0.5">
+                    Removing <strong>{deletePlacementConfirmation.label}</strong> affects these mapped fields:
+                  </p>
+                </div>
               </div>
 
-              <div className="space-y-3">
-                <p className="text-xs text-zinc-650 dark:text-zinc-400 leading-relaxed">
-                  {deletePlacementConfirmation.type === 'rule' 
-                    ? "This trigger rule is associated with the following populated fields:"
-                    : "This lookup trigger is associated with the following layout fields:"}
-                </p>
-                <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-900 rounded-xl p-3 max-h-36 overflow-y-auto custom-scrollbar space-y-1.5">
-                  {deletePlacementConfirmation.associatedFieldLabels.map((label, idx) => (
-                    <div key={idx} className="text-[10px] font-bold text-zinc-750 dark:text-zinc-300 flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                      <span>{label}</span>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-[10px] text-zinc-400 italic">
-                  Choose whether you want to delete these fields from your layout entirely, or keep them as standard unmapped fields.
-                </p>
+              <div className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 max-h-32 overflow-y-auto custom-scrollbar space-y-1">
+                {deletePlacementConfirmation.associatedFieldLabels.map((label, idx) => (
+                  <div key={idx} className="text-xs text-zinc-700 dark:text-zinc-300 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                    <span>{label}</span>
+                  </div>
+                ))}
               </div>
 
-              <div className="flex flex-col gap-2 pt-2">
+              <div className="flex flex-col gap-2">
                 <button
                   onClick={() => confirmDeletePlacement(false)}
-                  className="w-full py-2.5 bg-rose-650 hover:bg-rose-600 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full h-8 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Trash2 size={12} />
-                  Delete Associated Fields
+                  <span>Delete Associated Fields</span>
                 </button>
                 <button
                   onClick={() => confirmDeletePlacement(true)}
-                  className="w-full py-2.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full h-8 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Check size={12} />
-                  Keep Associated Fields (Unmap)
+                  <span>Keep Fields (Unmap Only)</span>
                 </button>
                 <button
                   onClick={() => setDeletePlacementConfirmation(null)}
-                  className="w-full py-2.5 border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center cursor-pointer"
+                  className="w-full h-8 border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 rounded-lg text-xs font-medium cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -2400,28 +2188,6 @@ export const ConnectorsTab: React.FC<ConnectorsTabProps> = ({
           </div>
         )}
       </AnimatePresence>
-
-      {editingTriggerCondition && (
-        <ConditionModal 
-          isOpen={true}
-          onClose={() => setEditingTriggerCondition(null)}
-          onSave={(rule) => {
-            const ruleId = editingTriggerCondition.ruleId;
-            setDataPopulationRules(prev => prev.map(r => r.id === ruleId ? {
-              ...r,
-              condition: rule
-            } : r));
-            setEditingTriggerCondition(null);
-            toast.success("Updated trigger conditions");
-          }}
-          initialRule={editingTriggerCondition.rule}
-          availableFields={targetFields}
-          tabs={tabs}
-          targetLabel={selectedPlacement?.details?.name || 'Trigger Conditions'}
-          title="Trigger Conditions"
-          hideActionSelector={true}
-        />
-      )}
     </div>
   );
 };

@@ -1108,7 +1108,13 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
     });
   }, [meaningfulActivities, activityFilter]);
 
+  const contextRailConfig = moduleData?.interfaceSettings?.detail?.contextRail;
+
   const railTabs = useMemo(() => {
+    const enabledTabs: string[] | undefined = Array.isArray(contextRailConfig?.enabledTabs) && contextRailConfig.enabledTabs.length > 0
+      ? contextRailConfig.enabledTabs
+      : undefined;
+
     const tabs: Array<{ id: ContextRailTab; label: string; icon: any; count: number; isLoading: boolean }> = [
       { id: 'overview', label: 'Overview', icon: SlidersHorizontal, count: 0, isLoading: false }
     ];
@@ -1128,8 +1134,11 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
       { id: 'tasks', label: 'Tasks & Reminders', icon: Calendar, count: tasks.filter(t => t.status !== 'COMPLETED').length, isLoading: tasksLoading && tasks.length === 0 },
       { id: 'time', label: 'Time & Billing', icon: DollarSign, count: 0, isLoading: false }
     );
+    if (enabledTabs) {
+      return tabs.filter(t => t.id === 'overview' || enabledTabs.includes(t.id));
+    }
     return tabs;
-  }, [workflow, pendingRequiredSubstepsCount, isTransitioning, meaningfulActivities.length, activityLoading, activities.length, notes.length, notesLoading, files.length, filesLoading, tasks, tasksLoading]);
+  }, [workflow, contextRailConfig?.enabledTabs, pendingRequiredSubstepsCount, isTransitioning, meaningfulActivities.length, activityLoading, activities.length, notes.length, notesLoading, files.length, filesLoading, tasks, tasksLoading]);
 
   const activeTabMeta = useMemo(() => {
     switch (activeTab) {
@@ -1163,6 +1172,10 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
       switchTab(tabId);
     }
   };
+
+  if (contextRailConfig?.enabled === false) {
+    return null;
+  }
 
   return (
     <div className="shrink-0 h-full flex transition-all duration-300 select-none">
@@ -1850,6 +1863,32 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
                   )}
                 </div>
               </div>
+
+              {/* 3.5 Pinned Key Properties (configured in Module Builder) */}
+              {Array.isArray(contextRailConfig?.pinnedFieldIds) && contextRailConfig.pinnedFieldIds.length > 0 && (
+                <div className="p-3.5 bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl shadow-2xs space-y-2.5">
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Pin size={11} className="text-indigo-500" />
+                    <span>Key Properties</span>
+                  </span>
+                  <div className="space-y-2 text-xs">
+                    {contextRailConfig.pinnedFieldIds.map((fid: string) => {
+                      const fDef = propAllFields.find((f: any) => f.id === fid || f.name === fid);
+                      if (!fDef) return null;
+                      const rawVal = editData?.[fDef.id] ?? editData?.[fDef.name] ?? record?.[fDef.id] ?? record?.[fDef.name] ?? record?.data?.[fDef.id] ?? record?.data?.[fDef.name];
+                      const displayVal = rawVal !== undefined && rawVal !== null && rawVal !== ''
+                        ? (typeof rawVal === 'object' ? JSON.stringify(rawVal) : String(rawVal))
+                        : '—';
+                      return (
+                        <div key={fid} className="flex items-center justify-between gap-2 py-0.5 border-b border-zinc-100/70 dark:border-zinc-800/50 last:border-b-0">
+                          <span className="text-zinc-500 dark:text-zinc-400 truncate">{fDef.label || fDef.name}</span>
+                          <span className="font-semibold text-zinc-800 dark:text-zinc-200 truncate max-w-[160px] text-right">{displayVal}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* 4. Dates & Audit */}
               <div className="p-3.5 bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl shadow-2xs space-y-2.5">

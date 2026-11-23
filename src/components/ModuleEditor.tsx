@@ -136,6 +136,8 @@ import {
   Video,
   Music,
   Zap,
+  Plug,
+  Workflow as WorkflowIcon,
   Lock,
   ShieldCheck,
   FileCode,
@@ -162,7 +164,11 @@ import {
   Undo2,
   Redo2,
   RefreshCw,
-  Building2
+  Building2,
+  Bookmark,
+  Filter,
+  BarChart3,
+  MoreHorizontal
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -190,6 +196,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { CommandPalette } from './CommandPalette';
 import { extractPaletteFields, getSystemMetaFields, getUnifiedFieldDefinition, GroupedModuleFields } from '../lib/formFieldUtils';
 import { FormBuilder } from './Builders/FormBuilder/FormBuilder';
+import { FormRenderer } from './Builders/FormBuilder/FormRenderer';
 import { cn, calculateHeight, flattenFields, isFieldVisible, isContainerField } from '../lib/utils';
 import { compactLayout } from '../lib/layoutEngine';
 import { usePlatform } from '../hooks/usePlatform';
@@ -215,6 +222,7 @@ import { NexusSelectionModal } from './Builder/NexusSelectionModal';
 import { ConnectorConfigDrawer } from './Builder/ConnectorConfigDrawer';
 import { DynamicIcon } from './UI/DynamicIcon';
 import { FieldSelectorModal } from './Builder/FieldSelectorModal';
+import { SubfieldTypeModal } from './Builder/SubfieldTypeModal';
 import { SubmoduleSetupModal } from './Builder/SubmoduleSetupModal';
 import { ValidationRule } from '../lib/validationEngine';
 import { ValidationsTab } from './Builder/ValidationsTab';
@@ -332,7 +340,7 @@ const NestedRglContainer: React.FC<NestedRglContainerProps> = ({
     <div ref={containerRef} className="w-full col-span-12 relative min-h-[60px]">
       {mounted && width > 0 ? (
         <ReactGridLayout
-          key={`nested-grid-${parentId}-${fields.map(f => `${f.id}_h${calculateHeight(f)}_c${f.fields?.length || 0}`).join('_')}`}
+          key={`nested-grid-${parentId}`}
           className={cn("layout", isDraggingOutside && "is-dragging-cross-container")}
           layout={rglLayout}
           width={width}
@@ -345,10 +353,13 @@ const NestedRglContainer: React.FC<NestedRglContainerProps> = ({
           }}
           dragConfig={{
             enabled: true,
-            handle: ".nested-drag-handle"
+            handle: ".nested-drag-handle",
+            cancel: "button, input, select, textarea, a",
+            threshold: 4
           }}
           resizeConfig={{
-            enabled: true
+            enabled: true,
+            handles: ['e', 'w', 'se']
           }}
         >
           {children}
@@ -362,6 +373,126 @@ const NestedRglContainer: React.FC<NestedRglContainerProps> = ({
         </ReactGridLayout>
       ) : (
         <div className="w-full">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+};
+
+interface SectionRglContainerProps {
+  sectionTabId: string;
+  fields: Field[];
+  viewportSize: 'desktop' | 'tablet' | 'mobile';
+  dragOverInfo?: { active: boolean; parentId?: string; tabId?: string; col: number; span: number; index: number; rowSpan?: number } | null;
+  resolveCollisionsInArray?: (triggerField: Field, fields: Field[]) => Field[];
+  onLayoutChange: (newLayout: any[], targetTabId: string) => void;
+  children: React.ReactNode;
+}
+
+const SectionRglContainer: React.FC<SectionRglContainerProps> = ({
+  sectionTabId,
+  fields,
+  viewportSize,
+  dragOverInfo,
+  resolveCollisionsInArray,
+  onLayoutChange,
+  children
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState<number>(0);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0) {
+          setWidth(entry.contentRect.width);
+          setMounted(true);
+        }
+      }
+    });
+    observer.observe(containerRef.current);
+    if (containerRef.current.clientWidth > 0) {
+      setWidth(containerRef.current.clientWidth);
+      setMounted(true);
+    }
+    return () => observer.disconnect();
+  }, []);
+
+  const rglLayout = useMemo(() => {
+    let activeFields = fields;
+    if (dragOverInfo?.active && !dragOverInfo?.parentId && (!dragOverInfo.tabId || dragOverInfo.tabId === sectionTabId)) {
+      const placeholderField: Field = {
+        id: '__cross_drop_placeholder__',
+        name: '__cross_drop_placeholder__',
+        type: 'text',
+        label: 'Drop Zone',
+        startCol: dragOverInfo.col || 1,
+        rowIndex: typeof dragOverInfo.index === 'number' ? dragOverInfo.index : 0,
+        colSpan: dragOverInfo.span || 6
+      };
+      if (resolveCollisionsInArray) {
+        activeFields = resolveCollisionsInArray(placeholderField, [...fields, placeholderField]);
+      } else {
+        activeFields = [...fields, placeholderField];
+      }
+    }
+    return activeFields.map(f => ({
+      i: f.id,
+      x: Math.max(0, Math.min(11, (f.startCol ? f.startCol - 1 : 0))),
+      y: typeof f.rowIndex === 'number' ? f.rowIndex : 0,
+      w: Math.max(1, Math.min(12, f.colSpan || 6)),
+      h: calculateHeight(f),
+      minW: isContainerField(f.type) ? 4 : 2,
+      minH: 1
+    }));
+  }, [fields, dragOverInfo, sectionTabId, resolveCollisionsInArray]);
+
+  return (
+    <div ref={containerRef} className="w-full col-span-12 relative min-h-[120px]">
+      {mounted && width > 0 ? (
+        <ReactGridLayout
+          key={`section-rgl-${sectionTabId}`}
+          className={cn("layout", dragOverInfo?.active && dragOverInfo?.parentId && "is-dragging-cross-container")}
+          layout={rglLayout}
+          width={width}
+          onLayoutChange={(newLayout: any[]) => onLayoutChange(newLayout, sectionTabId)}
+          gridConfig={{
+            cols: viewportSize === 'mobile' ? 1 : 12,
+            rowHeight: GRID_CONFIG.rowHeight,
+            margin: [GRID_CONFIG.gap, GRID_CONFIG.gap],
+            containerPadding: [0, 0]
+          }}
+          dragConfig={{
+            enabled: true,
+            handle: ".root-drag-handle",
+            cancel: "button, input, select, textarea, a",
+            threshold: 4
+          }}
+          resizeConfig={{
+            enabled: true,
+            handles: ['e', 'w', 'se']
+          }}
+        >
+          {children}
+          {dragOverInfo?.active && !dragOverInfo.parentId && (!dragOverInfo.tabId || dragOverInfo.tabId === sectionTabId) && (
+            <div
+              key="__cross_drop_placeholder__"
+              className="react-grid-placeholder"
+              style={{ pointerEvents: 'none' }}
+            />
+          )}
+        </ReactGridLayout>
+      ) : (
+        <div
+          className="w-full col-span-12 grid grid-cols-1 md:grid-cols-12"
+          style={{
+            gap: `${GRID_CONFIG.gap}px`,
+            gridAutoRows: `${GRID_CONFIG.rowHeight}px`
+          }}
+        >
           {children}
         </div>
       )}
@@ -1935,7 +2066,7 @@ export const ModuleEditor = () => {
     category: 'Custom',
     iconName: 'Box',
     type: 'RECORD' as ModuleType,
-    status: 'ACTIVE' as const,
+    status: 'ACTIVE' as 'ACTIVE' | 'DRAFT' | 'ARCHIVED',
     recordKeyPrefix: '',
     recordKeySuffix: '',
     nextKeyNumber: 1,
@@ -2003,6 +2134,15 @@ export const ModuleEditor = () => {
       portfolioSettings: {
         galleryFieldId: '',
         keyInfoFieldIds: [] as string[]
+      },
+      toolbar: {
+        enableSavedViews: true,
+        enableGrouping: true,
+        enableAskAurora: true,
+        enableChartToggle: true,
+        enableSpreadsheetMode: false,
+        enableBulkActions: true,
+        enabledViews: ['table', 'split', 'kanban', 'calendar', 'analytics', 'pipeline', 'timeline', 'gantt', 'cards', 'portfolio', 'map'] as string[]
       }
     },
     detail: {
@@ -2010,10 +2150,17 @@ export const ModuleEditor = () => {
       density: 'standard' as 'compact' | 'standard' | 'spacious',
       showWorkflow: true,
       showTabIcons: false,
-      wizardSaveMode: 'step' as 'step' | 'end'
+      wizardSaveMode: 'step' as 'step' | 'end',
+      contextRail: {
+        enabled: true,
+        defaultCollapsed: false,
+        defaultTab: 'overview' as 'overview' | 'workflow' | 'activity' | 'notes' | 'files' | 'tasks' | 'time',
+        enabledTabs: ['overview', 'workflow', 'activity', 'notes', 'files', 'tasks', 'time'] as string[],
+        pinnedFieldIds: [] as string[]
+      }
     },
     filters: [] as { fieldId: string, type: string }[],
-    actions: [] as { id: string, label: string, icon: string }[]
+    actions: [] as { id: string, label: string, icon: string, actionType?: string, targetFormId?: string }[]
   });
   const getRecordTitle = React.useCallback((r: any) => {
     const fieldId = moduleSettings.titleFieldId;
@@ -2136,6 +2283,57 @@ export const ModuleEditor = () => {
     return defaultMockData;
   }, [useRealData, realRecords, customMockData, defaultMockData]);
   const [rightSidebarTab, setRightSidebarTab] = useState<'inspector' | 'architect'>('inspector');
+  const [isHeaderMoreOpen, setIsHeaderMoreOpen] = useState(false);
+  const [isPageRegionsOpen, setIsPageRegionsOpen] = useState(false);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(288);
+  const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
+  const [rightPanelWidth, setRightPanelWidth] = useState(340);
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
+  const [copilotWidth, setCopilotWidth] = useState(360);
+  const [resizingPanel, setResizingPanel] = useState<'left' | 'right' | 'copilot' | null>(null);
+
+  const startPanelResize = useCallback((panel: 'left' | 'right' | 'copilot', e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth =
+      panel === 'left' ? leftPanelWidth : panel === 'right' ? rightPanelWidth : copilotWidth;
+    setResizingPanel(panel);
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientX - startX;
+      if (panel === 'left') {
+        setLeftPanelWidth(Math.max(220, Math.min(440, startWidth + delta)));
+      } else if (panel === 'right') {
+        setRightPanelWidth(Math.max(260, Math.min(520, startWidth - delta)));
+      } else {
+        setCopilotWidth(Math.max(300, Math.min(580, startWidth - delta)));
+      }
+    };
+
+    const onMouseUp = () => {
+      setResizingPanel(null);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [leftPanelWidth, rightPanelWidth, copilotWidth]);
+  const headerMoreRef = useRef<HTMLDivElement>(null);
+  const pageRegionsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (headerMoreRef.current && !headerMoreRef.current.contains(e.target as Node)) {
+        setIsHeaderMoreOpen(false);
+      }
+      if (pageRegionsRef.current && !pageRegionsRef.current.contains(e.target as Node)) {
+        setIsPageRegionsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
   const [architectMessages, setArchitectMessages] = useState<{ role: 'user' | 'assistant', content: string }[]>([
     { role: 'assistant', content: 'Hello! I am the Shadow Architect. How can I help you optimize your module today?' }
   ]);
@@ -2144,7 +2342,11 @@ export const ModuleEditor = () => {
   const [activeDragItem, setActiveDragItem] = useState<{ type: string, fieldType?: string, fieldId?: string } | null>(null);
   const [_draggedFieldInfo, setDraggedFieldInfo] = useState<{ type: string, fieldType?: string, fieldId?: string, label?: string, icon?: any } | null>(null);
   const lastDragOverTimeRef = useRef<number>(0);
-  const [dragOverInfo, setDragOverInfo] = useState<{ col: number, span: number, index: number, active: boolean, parentId?: string, height?: number, rowSpan?: number } | null>(null);
+  const [dragOverInfo, setDragOverInfo] = useState<{ col: number, span: number, index: number, active: boolean, parentId?: string, tabId?: string, height?: number, rowSpan?: number } | null>(null);
+  const [fieldInspectorTab, setFieldInspectorTab] = useState<'layout' | 'logic'>('layout');
+  const [canvasRailCollapsed, setCanvasRailCollapsed] = useState<boolean>(false);
+  const [canvasRailTab, setCanvasRailTab] = useState<string>('overview');
+  const [subfieldModalTarget, setSubfieldModalTarget] = useState<{ containerId: string; containerLabel: string } | null>(null);
   const [previewLayout, setPreviewLayout] = useState<Field[] | null>(null);
   const [hoveredMapping, setHoveredMapping] = useState<{ connectorId: string, sourceOutput: string, targetFieldId: string } | null>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
@@ -2792,7 +2994,18 @@ export const ModuleEditor = () => {
               titleFieldId: data.interfaceSettings.master?.titleFieldId || '',
               subtitleFieldIds: data.interfaceSettings.master?.subtitleFieldIds || [],
               cardFields: data.interfaceSettings.master?.cardFields || [],
-              formattingRules: data.interfaceSettings.master?.formattingRules || data.formattingRules || data.config?.formattingRules || []
+              formattingRules: data.interfaceSettings.master?.formattingRules || data.formattingRules || data.config?.formattingRules || [],
+              toolbar: {
+                enableSavedViews: data.interfaceSettings.master?.toolbar?.enableSavedViews !== false,
+                enableGrouping: data.interfaceSettings.master?.toolbar?.enableGrouping !== false,
+                enableAskAurora: data.interfaceSettings.master?.toolbar?.enableAskAurora !== false,
+                enableChartToggle: data.interfaceSettings.master?.toolbar?.enableChartToggle !== false,
+                enableSpreadsheetMode: !!data.interfaceSettings.master?.toolbar?.enableSpreadsheetMode,
+                enableBulkActions: data.interfaceSettings.master?.toolbar?.enableBulkActions !== false,
+                enabledViews: Array.isArray(data.interfaceSettings.master?.toolbar?.enabledViews) && data.interfaceSettings.master.toolbar.enabledViews.length > 0
+                  ? data.interfaceSettings.master.toolbar.enabledViews
+                  : ['table', 'split', 'kanban', 'calendar', 'analytics', 'pipeline', 'timeline', 'gantt', 'cards', 'portfolio', 'map']
+              }
             },
             detail: {
               ...data.interfaceSettings.detail,
@@ -2800,8 +3013,21 @@ export const ModuleEditor = () => {
               density: data.interfaceSettings.detail?.density || 'standard',
               showWorkflow: data.interfaceSettings.detail?.showWorkflow !== false,
               showTabIcons: !!data.interfaceSettings.detail?.showTabIcons,
-              wizardSaveMode: data.interfaceSettings.detail?.wizardSaveMode || 'step'
-            }
+              wizardSaveMode: data.interfaceSettings.detail?.wizardSaveMode || 'step',
+              contextRail: {
+                enabled: data.interfaceSettings.detail?.contextRail?.enabled !== false,
+                defaultCollapsed: !!data.interfaceSettings.detail?.contextRail?.defaultCollapsed,
+                defaultTab: data.interfaceSettings.detail?.contextRail?.defaultTab || 'overview',
+                enabledTabs: Array.isArray(data.interfaceSettings.detail?.contextRail?.enabledTabs) && data.interfaceSettings.detail.contextRail.enabledTabs.length > 0
+                  ? data.interfaceSettings.detail.contextRail.enabledTabs
+                  : ['overview', 'workflow', 'activity', 'notes', 'files', 'tasks', 'time'],
+                pinnedFieldIds: Array.isArray(data.interfaceSettings.detail?.contextRail?.pinnedFieldIds)
+                  ? data.interfaceSettings.detail.contextRail.pinnedFieldIds
+                  : []
+              }
+            },
+            filters: data.interfaceSettings.filters || [],
+            actions: data.interfaceSettings.actions || []
           });
         }
         
@@ -3112,8 +3338,11 @@ export const ModuleEditor = () => {
   
   const [activeTab, setActiveTab] = useState<'details' | 'schema' | 'builder' | 'workflow' | 'validations' | 'connectors' | 'automation' | 'experience' | 'security' | 'localization' | 'map' | 'assets' | 'forms' | 'deployment' | 'preview'>('details');
   const [activeViewMode, setActiveViewMode] = useState<'master' | 'detail'>('detail');
-  const [detailsTab, setDetailsTab] = useState<'general' | 'schema' | 'scheduling' | 'localization' | 'dependencies' | 'assets'>('general');
-  const [previewView, setPreviewView] = useState<'table' | 'detail' | 'create'>('table');
+  const [detailsTab, setDetailsTab] = useState<'general' | 'schema' | 'scheduling' | 'dependencies'>('general');
+  const [schemaSubTab, setSchemaSubTab] = useState<'fields' | 'relationships'>('fields');
+  const [previewView, setPreviewView] = useState<'table' | 'detail' | 'create' | 'form'>('table');
+  const [previewFormId, setPreviewFormId] = useState<string>('');
+  const [previewReturnTab, setPreviewReturnTab] = useState<'builder' | 'forms' | 'details' | 'workflow' | 'validations' | 'connectors' | 'automation' | 'security' | 'deployment'>('builder');
   const [previewSelectedId, setPreviewSelectedId] = useState<string | null>(null);
   const [previewStepId, setPreviewStepId] = useState<string | null>(null);
   const [showConsole, setShowConsole] = useState(false);
@@ -3194,6 +3423,7 @@ export const ModuleEditor = () => {
       { id: 'createdBy', label: 'Created By', type: 'user' },
       { id: 'updatedAt', label: 'Updated Date', type: 'date' },
       { id: 'status', label: 'Status', type: 'select' },
+      { id: 'nextStep', label: 'Next Step (Workflow)', type: 'text' },
       { id: 'assigneeId', label: 'Assignee', type: 'user' },
       { id: 'participantIds', label: 'Participants', type: 'multi-user' }
     ];
@@ -3206,6 +3436,7 @@ export const ModuleEditor = () => {
       { id: 'createdBy', label: 'Created By', type: 'user' },
       { id: 'updatedAt', label: 'Updated Date', type: 'date' },
       { id: 'status', label: 'Status', type: 'select' },
+      { id: 'nextStep', label: 'Next Step (Workflow)', type: 'text' },
       { id: 'assigneeId', label: 'Assignee', type: 'user' },
       { id: 'participantIds', label: 'Participants', type: 'multi-user' }
     ];
@@ -3214,12 +3445,12 @@ export const ModuleEditor = () => {
 
     if (configured.length > 0) {
       return configured
-        .filter(c => c.visible !== false)
+        .filter(c => c.visible !== false && c.fieldId !== '_record_key')
         .map(c => {
           const custom = displayFields.find(df => df.id === c.fieldId);
-          if (custom) return { ...custom, ...c };
+          if (custom) return { ...custom, ...c, fieldLabel: custom.label, label: c.label || custom.label };
           const sys = systemFieldsDef.find(sf => sf.id === c.fieldId);
-          if (sys) return { ...sys, ...c };
+          if (sys) return { ...sys, ...c, fieldLabel: sys.label, label: c.label || sys.label };
           return null;
         })
         .filter(Boolean) as any[];
@@ -3715,11 +3946,13 @@ export const ModuleEditor = () => {
     }
   };
 
-  // ReactGridLayout layout change handler
-  const handleRglLayoutChange = useCallback((newLayout: any[]) => {
+  // ReactGridLayout layout change handler (supports any section tab)
+  const handleRglLayoutChange = useCallback((newLayout: any[], targetTabId?: string) => {
+    if (dragOverInfo?.active || newLayout.some(l => l.i === '__cross_drop_placeholder__')) return;
+    const effectiveTabId = targetTabId || currentTabId;
     let hasChanged = false;
     const updated = layout.map(f => {
-      if (f.parentId || (f.tabId !== currentTabId && (f.tabId || currentTabId !== tabs[0]?.id))) {
+      if (f.parentId || (f.tabId !== effectiveTabId && (f.tabId || effectiveTabId !== tabs[0]?.id))) {
         return f;
       }
       const match = newLayout.find(l => l.i === f.id);
@@ -3727,13 +3960,16 @@ export const ModuleEditor = () => {
         const newCol = match.x + 1;
         const newRow = match.y;
         const newSpan = match.w;
-        if (f.startCol !== newCol || f.rowIndex !== newRow || f.colSpan !== newSpan) {
+        const currentH = calculateHeight(f);
+        const newRowSpan = (!isContainerField(f.type) && match.h && match.h !== currentH) ? match.h : f.rowSpan;
+        if (f.startCol !== newCol || f.rowIndex !== newRow || f.colSpan !== newSpan || f.rowSpan !== newRowSpan) {
           hasChanged = true;
           return {
             ...f,
             startCol: newCol,
             rowIndex: newRow,
-            colSpan: newSpan
+            colSpan: newSpan,
+            ...(newRowSpan !== undefined ? { rowSpan: newRowSpan } : {})
           };
         }
       }
@@ -3743,10 +3979,11 @@ export const ModuleEditor = () => {
     if (hasChanged) {
       setLayout(updated);
     }
-  }, [layout, currentTabId, tabs]);
+  }, [layout, currentTabId, tabs, dragOverInfo?.active]);
 
   // Nested ReactGridLayout layout change handler
   const handleNestedRglLayoutChange = useCallback((parentId: string, newLayout: any[]) => {
+    if (dragOverInfo?.active || newLayout.some(l => l.i === '__cross_drop_placeholder__')) return;
     let hasChanged = false;
     setLayout(prevLayout => {
       const updateRecursive = (fields: Field[]): Field[] => {
@@ -3758,9 +3995,17 @@ export const ModuleEditor = () => {
                 const newCol = match.x + 1;
                 const newRow = match.y;
                 const newSpan = match.w;
-                if (child.startCol !== newCol || child.rowIndex !== newRow || child.colSpan !== newSpan) {
+                const currentH = calculateHeight(child);
+                const newRowSpan = (!isContainerField(child.type) && match.h && match.h !== currentH) ? match.h : child.rowSpan;
+                if (child.startCol !== newCol || child.rowIndex !== newRow || child.colSpan !== newSpan || child.rowSpan !== newRowSpan) {
                   hasChanged = true;
-                  return { ...child, startCol: newCol, rowIndex: newRow, colSpan: newSpan };
+                  return {
+                    ...child,
+                    startCol: newCol,
+                    rowIndex: newRow,
+                    colSpan: newSpan,
+                    ...(newRowSpan !== undefined ? { rowSpan: newRowSpan } : {})
+                  };
                 }
               }
               return child;
@@ -3776,7 +4021,159 @@ export const ModuleEditor = () => {
       const updated = updateRecursive(prevLayout);
       return hasChanged ? updated : prevLayout;
     });
-  }, []);
+  }, [dragOverInfo?.active]);
+
+  // Move an existing field into a container (group / repeater / accordion section)
+  const moveFieldToContainer = useCallback((containerId: string, fieldId: string) => {
+    if (!containerId || !fieldId || containerId === fieldId) return;
+    const targetField = findFieldRecursive(layout, fieldId);
+    const targetContainer = findFieldRecursive(layout, containerId);
+    if (!targetField || !targetContainer) return;
+
+    const isDescendant = (parentField: Field, searchId: string): boolean => {
+      if (parentField.id === searchId) return true;
+      return (parentField.fields || []).some(f => isDescendant(f, searchId));
+    };
+    if (isContainerField(targetField.type) && isDescendant(targetField, containerId)) {
+      toast.error("Cannot nest a container inside itself");
+      return;
+    }
+
+    setLayout(prev => {
+      const cleaned = removeFieldRecursive(prev, fieldId);
+      const updatedField: Field = {
+        ...targetField,
+        parentId: containerId,
+        tabId: undefined,
+        startCol: 1,
+        rowIndex: 999,
+        colSpan: targetField.colSpan || 6
+      };
+
+      const insertIntoParent = (fields: Field[]): Field[] => {
+        return fields.map(f => {
+          if (f.id === containerId) {
+            if (f.type === 'accordion' && updatedField.type !== 'group' && updatedField.type !== 'fieldGroup') {
+              if (!f.fields || f.fields.length === 0) {
+                const sectionId = `section-${Date.now()}`;
+                const fieldWithParent = { ...updatedField, parentId: sectionId };
+                const newSection: Field = {
+                  id: sectionId,
+                  type: 'group' as FieldType,
+                  label: 'Section 1',
+                  name: `section_${Date.now()}`,
+                  parentId: f.id,
+                  fields: [fieldWithParent]
+                };
+                return { ...f, fields: [newSection] };
+              }
+              const firstSection = f.fields[0];
+              const fieldWithParent = { ...updatedField, parentId: firstSection.id };
+              const updatedSections = f.fields.map((s, idx) =>
+                idx === 0 ? { ...s, fields: normalizeLayout([...(s.fields || []), fieldWithParent]) } : s
+              );
+              return { ...f, fields: updatedSections };
+            }
+            return { ...f, fields: normalizeLayout([...(f.fields || []), updatedField]) };
+          }
+          if (f.fields) {
+            return { ...f, fields: insertIntoParent(f.fields) };
+          }
+          return f;
+        });
+      };
+
+      return normalizeLayout(insertIntoParent(cleaned));
+    });
+    setSelectedId(fieldId);
+    toast.success(`Moved "${targetField.label}" into "${targetContainer.label}"`);
+  }, [layout]);
+
+  // Move a nested field back out to the root section canvas
+  const moveFieldToRoot = useCallback((fieldId: string) => {
+    const targetField = findFieldRecursive(layout, fieldId);
+    if (!targetField || !targetField.parentId) return;
+
+    // Find top-level container to preserve its tabId
+    const findRootTabId = (fields: Field[], searchId: string, rootTab?: string): string | undefined => {
+      for (const f of fields) {
+        const currentTab = rootTab || f.tabId;
+        if (f.id === searchId) return currentTab;
+        if (f.fields) {
+          const found = findRootTabId(f.fields, searchId, currentTab);
+          if (found) return found;
+        }
+      }
+      return undefined;
+    };
+
+    const targetTabId = findRootTabId(layout, fieldId) || currentTabId;
+
+    setLayout(prev => {
+      const cleaned = removeFieldRecursive(prev, fieldId);
+      const updatedField: Field = {
+        ...targetField,
+        parentId: undefined,
+        tabId: targetTabId,
+        startCol: 1,
+        rowIndex: 999
+      };
+      return normalizeLayout([...cleaned, updatedField]);
+    });
+    setSelectedId(fieldId);
+    toast.success(`Moved "${targetField.label}" to root canvas`);
+  }, [layout, currentTabId]);
+
+  // Create a new field directly inside a container (group / repeater / accordion section)
+  const createFieldInContainer = useCallback((containerId: string, fieldType: FieldType = 'text') => {
+    const targetContainer = findFieldRecursive(layout, containerId);
+    if (!targetContainer) return;
+
+    const newField = createField(fieldType);
+    newField.parentId = containerId;
+    newField.tabId = undefined;
+    newField.startCol = 1;
+    newField.rowIndex = 999;
+    newField.colSpan = ['heading', 'divider', 'spacer', 'alert', 'html'].includes(newField.type) ? 12 : 6;
+
+    setLayout(prev => {
+      const insertIntoParent = (fields: Field[]): Field[] => {
+        return fields.map(f => {
+          if (f.id === containerId) {
+            if (f.type === 'accordion' && newField.type !== 'group' && newField.type !== 'fieldGroup') {
+              if (!f.fields || f.fields.length === 0) {
+                const sectionId = `section-${Date.now()}`;
+                const fieldWithParent = { ...newField, parentId: sectionId };
+                const newSection: Field = {
+                  id: sectionId,
+                  type: 'group' as FieldType,
+                  label: 'Section 1',
+                  name: `section_${Date.now()}`,
+                  parentId: f.id,
+                  fields: [fieldWithParent]
+                };
+                return { ...f, fields: [newSection] };
+              }
+              const firstSection = f.fields[0];
+              const fieldWithParent = { ...newField, parentId: firstSection.id };
+              const updatedSections = f.fields.map((s, idx) =>
+                idx === 0 ? { ...s, fields: normalizeLayout([...(s.fields || []), fieldWithParent]) } : s
+              );
+              return { ...f, fields: updatedSections };
+            }
+            return { ...f, fields: normalizeLayout([...(f.fields || []), newField]) };
+          }
+          if (f.fields) {
+            return { ...f, fields: insertIntoParent(f.fields) };
+          }
+          return f;
+        });
+      };
+      return normalizeLayout(insertIntoParent(prev));
+    });
+    setSelectedId(newField.id);
+    toast.success(`Added ${newField.label} inside "${targetContainer.label}"`);
+  }, [layout, currentTabId]);
 
   // Unified pointer drag handler for instant cross-container moves (group-to-group, group-to-canvas, canvas-to-group, group nesting)
   const handleUnifiedPointerDrag = useCallback((fieldId: string, parentId?: string) => (e: React.PointerEvent) => {
@@ -4027,6 +4424,7 @@ export const ModuleEditor = () => {
       index: rowIndex, 
       active: true, 
       parentId,
+      tabId: targetTabId || currentTabId,
       rowSpan: draggedHeight
     };
 
@@ -4034,6 +4432,7 @@ export const ModuleEditor = () => {
     if (dragOverInfo?.col === info.col && 
         dragOverInfo?.index === info.index && 
         dragOverInfo?.parentId === info.parentId &&
+        dragOverInfo?.tabId === info.tabId &&
         dragOverInfo?.active === info.active) {
       return;
     }
@@ -4364,12 +4763,30 @@ export const ModuleEditor = () => {
     setTabs(prev => prev.map(t => t.id === tabId ? { ...t, ...updates } : t));
   };
 
-  const mockRecords = [
-    { id: '1', _record_key: 'REQ-001', title: 'Website Redesign', status: 'In Progress', assignee: 'Scott V.', date: '2026-05-29', end_date: '2026-06-15', location: 'San Francisco, CA' },
-    { id: '2', _record_key: 'REQ-002', title: 'Database Optimization', status: 'To Do', assignee: 'Jane D.', date: '2026-05-30', end_date: '2026-06-05', location: 'New York, NY' },
-    { id: '3', _record_key: 'REQ-003', title: 'API Integration', status: 'Done', assignee: 'Alex M.', date: '2026-05-28', end_date: '2026-05-28', location: 'Los Angeles, CA' },
-    { id: '4', _record_key: 'REQ-004', title: 'Security Audit', status: 'In Progress', assignee: 'Scott V.', date: '2026-06-01', end_date: '2026-06-10', location: 'Chicago, IL' }
-  ];
+  const mockRecords = React.useMemo(() => {
+    const fallback = [
+      { id: '1', _record_key: `${moduleSettings.recordKeyPrefix || 'REQ'}-001`, title: 'Website Redesign', status: 'In Progress', assignee: 'Scott V.', date: '2026-05-29', end_date: '2026-06-15', location: 'San Francisco, CA' },
+      { id: '2', _record_key: `${moduleSettings.recordKeyPrefix || 'REQ'}-002`, title: 'Database Optimization', status: 'To Do', assignee: 'Jane D.', date: '2026-05-30', end_date: '2026-06-05', location: 'New York, NY' },
+      { id: '3', _record_key: `${moduleSettings.recordKeyPrefix || 'REQ'}-003`, title: 'API Integration', status: 'Done', assignee: 'Alex M.', date: '2026-05-28', end_date: '2026-05-28', location: 'Los Angeles, CA' },
+      { id: '4', _record_key: `${moduleSettings.recordKeyPrefix || 'REQ'}-004`, title: 'Security Audit', status: 'In Progress', assignee: 'Scott V.', date: '2026-06-01', end_date: '2026-06-10', location: 'Chicago, IL' }
+    ];
+    if (!previewRecords || previewRecords.length === 0) return fallback;
+    const statuses = ['To Do', 'In Progress', 'Done'];
+    const assignees = ['Scott V.', 'Jane D.', 'Alex M.', 'Sarah C.'];
+    const dates = ['2026-05-29', '2026-05-30', '2026-05-28', '2026-06-01'];
+    const locations = ['San Francisco, CA', 'New York, NY', 'Los Angeles, CA', 'Chicago, IL'];
+    return previewRecords.slice(0, 8).map((r: any, idx: number) => ({
+      ...r,
+      id: r.id || String(idx + 1),
+      _record_key: r._record_key || `${moduleSettings.recordKeyPrefix || 'KEY'}-${1001 + idx}${moduleSettings.recordKeySuffix || ''}`,
+      title: getRecordTitle(r),
+      status: r.status && statuses.includes(r.status) ? r.status : statuses[idx % statuses.length],
+      assignee: r.assignee || assignees[idx % assignees.length],
+      date: r.date || (r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 10) : dates[idx % dates.length]),
+      end_date: r.end_date || '2026-06-15',
+      location: r.location || (interfaceSettings.master.mapAddressFieldId && r[interfaceSettings.master.mapAddressFieldId] ? String(r[interfaceSettings.master.mapAddressFieldId]) : locations[idx % locations.length])
+    }));
+  }, [previewRecords, moduleSettings.recordKeyPrefix, moduleSettings.recordKeySuffix, getRecordTitle, interfaceSettings.master.mapAddressFieldId]);
 
   const renderMasterKanbanPreview = () => {
     const statuses = ['To Do', 'In Progress', 'Done'];
@@ -5125,24 +5542,28 @@ export const ModuleEditor = () => {
   };
 
   const renderMasterSplitPreview = () => {
-    const mockList = [
-      { id: '1', key: `${moduleSettings.name ? moduleSettings.name.substring(0, 4).toUpperCase() : 'REC'}-101`, title: 'Design user dashboard & navigation', status: 'In Progress', assignee: 'Alex Rivera', time: '10m ago' },
-      { id: '2', key: `${moduleSettings.name ? moduleSettings.name.substring(0, 4).toUpperCase() : 'REC'}-102`, title: 'Refactor database indexing & cache', status: 'In Review', assignee: 'Sarah Chen', time: '1h ago' },
-      { id: '3', key: `${moduleSettings.name ? moduleSettings.name.substring(0, 4).toUpperCase() : 'REC'}-103`, title: 'Add real-time websocket presence sync', status: 'Done', assignee: 'Marcus Vance', time: '3h ago' },
-      { id: '4', key: `${moduleSettings.name ? moduleSettings.name.substring(0, 4).toUpperCase() : 'REC'}-104`, title: 'Implement automated regression test suite', status: 'Todo', assignee: 'Emily Watson', time: '1d ago' },
-    ];
+    const mockList = mockRecords.slice(0, 6).map((r: any, idx: number) => ({
+      id: r.id || String(idx + 1),
+      key: r._record_key || `${moduleSettings.recordKeyPrefix || 'REC'}-${1001 + idx}`,
+      title: getRecordTitle(r),
+      status: r.status || 'In Progress',
+      assignee: r.assignee || 'Alex Rivera',
+      time: idx === 0 ? '10m ago' : `${idx + 1}h ago`,
+      raw: r
+    }));
+    const activeItem = mockList[0];
 
     return (
       <div className="space-y-4">
         {/* Dual Pane Container */}
-        <div className="h-[560px] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden flex shadow-sm">
+        <div className="h-[580px] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden flex shadow-xs">
           {/* Left List Rail */}
-          <div className="w-80 border-r border-zinc-200 dark:border-zinc-800 flex flex-col bg-zinc-50/50 dark:bg-zinc-900/50">
+          <div className="w-72 border-r border-zinc-200 dark:border-zinc-800 flex flex-col bg-zinc-50/50 dark:bg-zinc-900/50 shrink-0">
             {/* Search Header */}
             <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">4 Records</span>
-                <span className="text-[9px] font-bold text-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded-md">Live Sync</span>
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{mockList.length} Records</span>
+                <span className="text-[9px] font-bold text-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded-md">Split View</span>
               </div>
               <div className="relative">
                 <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
@@ -5158,7 +5579,7 @@ export const ModuleEditor = () => {
                 <div
                   key={item.id}
                   className={cn(
-                    "p-3 rounded-none border transition-all cursor-pointer space-y-1.5",
+                    "p-3 rounded-xl border transition-all cursor-pointer space-y-1.5",
                     idx === 0
                       ? "bg-white dark:bg-zinc-800/90 border-indigo-500/40 shadow-xs border-l-4 border-l-indigo-600"
                       : "bg-white/60 dark:bg-zinc-900/40 border-zinc-200/70 dark:border-zinc-800/70 hover:bg-white dark:hover:bg-zinc-800"
@@ -5170,7 +5591,6 @@ export const ModuleEditor = () => {
                       "text-[9px] font-bold px-1.5 py-0.5 rounded",
                       item.status === 'Done' ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" :
                       item.status === 'In Progress' ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" :
-                      item.status === 'In Review' ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" :
                       "bg-zinc-100 dark:bg-zinc-800 text-zinc-500"
                     )}>
                       {item.status}
@@ -5189,39 +5609,64 @@ export const ModuleEditor = () => {
           </div>
 
           {/* Right Detail Pane */}
-          <div className="flex-1 flex flex-col bg-white dark:bg-zinc-900 overflow-hidden">
+          <div className="flex-1 flex flex-col bg-white dark:bg-zinc-900 overflow-hidden min-w-0">
             {/* Record Header */}
-            <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-              <div className="space-y-0.5">
+            <div className="px-5 py-3.5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+              <div className="space-y-0.5 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                    {moduleSettings.name ? moduleSettings.name.substring(0, 4).toUpperCase() : 'REC'}-101
+                    {activeItem?.key || 'KEY-1001'}
                   </span>
-                  <span className="text-[10px] font-bold bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-md">
-                    In Progress
+                  <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md">
+                    {activeItem?.status || 'In Progress'}
                   </span>
                 </div>
-                <h2 className="text-sm font-bold text-zinc-900 dark:text-white">Design user dashboard & navigation</h2>
+                <h2 className="text-sm font-bold text-zinc-900 dark:text-white truncate">{activeItem?.title || 'Sample Record'}</h2>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <div className="px-2.5 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-[10px] font-bold text-zinc-600 dark:text-zinc-400">
-                  Alex Rivera
+                  {activeItem?.assignee || 'Alex Rivera'}
                 </div>
               </div>
             </div>
 
-            {/* Content Preview */}
-            <div className="flex-1 p-6 overflow-y-auto space-y-4 custom-scrollbar bg-zinc-50/30 dark:bg-zinc-900/30">
-              <div className="grid grid-cols-2 gap-4">
-                {displayFields.slice(0, 6).map((field) => (
-                  <div key={field.id} className="p-3 bg-white dark:bg-zinc-800/50 border border-zinc-200/80 dark:border-zinc-800/80 rounded-xl space-y-1">
-                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">{field.name}</label>
-                    <div className="text-xs font-medium text-zinc-800 dark:text-zinc-200">
-                      {field.defaultValue || 'â€”'}
+            {/* Section Tabs bar */}
+            <div className="h-9 px-5 border-b border-zinc-200 dark:border-zinc-800 flex items-center gap-4 text-xs font-semibold text-zinc-500">
+              {tabs.filter(t => !t.parentId).map((t, i) => (
+                <span key={t.id} className={cn("h-full flex items-center relative", i === 0 && "text-indigo-600 dark:text-indigo-400 font-bold")}>
+                  {t.label}
+                  {i === 0 && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-indigo-600 rounded-t-full" />}
+                </span>
+              ))}
+            </div>
+
+            {/* Content Preview + Mini Context Rail */}
+            <div className="flex-1 flex overflow-hidden">
+              <div className="flex-1 p-5 overflow-y-auto custom-scrollbar bg-zinc-50/30 dark:bg-zinc-900/30">
+                <div className="grid grid-cols-12 gap-3">
+                  {displayFields.slice(0, 8).map((field) => (
+                    <div
+                      key={field.id}
+                      style={{ gridColumn: `span ${Math.max(4, Math.min(12, field.colSpan || 6))}` }}
+                      className="p-3 bg-white dark:bg-zinc-800/50 border border-zinc-200/80 dark:border-zinc-800/80 rounded-xl space-y-1"
+                    >
+                      <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block truncate">{field.label || field.name}</label>
+                      <div className="text-xs font-medium text-zinc-800 dark:text-zinc-200 truncate">
+                        {String(activeItem?.raw?.[field.id] || activeItem?.raw?.[field.name || ''] || field.defaultValue || 'Sample Value')}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
+
+              {interfaceSettings.detail?.contextRail?.enabled !== false && (
+                <div className="w-10 border-l border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/30 flex flex-col items-center py-2.5 gap-2 shrink-0">
+                  <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center"><Info size={13} /></div>
+                  <div className="w-7 h-7 rounded-lg text-zinc-400 flex items-center justify-center"><GitCommit size={13} /></div>
+                  <div className="w-7 h-7 rounded-lg text-zinc-400 flex items-center justify-center"><Activity size={13} /></div>
+                  <div className="w-7 h-7 rounded-lg text-zinc-400 flex items-center justify-center"><FileText size={13} /></div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -5266,21 +5711,21 @@ export const ModuleEditor = () => {
       if ((activeTab as string) === 'preview' && !isFieldVisible(block, {}, { user })) return false;
 
       if (isNested) return true;
+      if (block.parentId) return false;
       return block.tabId === targetTabId || (!block.tabId && targetTabId === tabs[0]?.id);
     });
-    
-    let items = [...filtered];
 
-    if ((activeTab as string) === 'preview') {
-      items = compactLayout(items);
-    }
+    const items = (activeTab as string) === 'preview' ? compactLayout(filtered) : filtered;
 
-    return items.map((item) => {
+    const renderedCards = items.map((item) => {
       if (React.isValidElement(item)) return item;
       const block = item as Field;
       const isGroup = isContainerField(block.type);
 
       if (isGroup) {
+        const availableFieldsToNest = layout.filter(
+          f => !f.parentId && f.id !== block.id && !isContainerField(f.type) && (f.tabId === targetTabId || (!f.tabId && targetTabId === tabs[0]?.id))
+        );
         return (
           <FieldGroup 
             key={block.id}
@@ -5298,13 +5743,18 @@ export const ModuleEditor = () => {
             onDrop={(e, dropParentId) => handleDropOnCanvas(e, dropParentId || block.id, targetTabId)}
             onDragOver={(e, dragParentId) => handleDragOver(e, dragParentId || block.id, targetTabId)}
             onDragStart={handleDragStart}
-            renderNested={(fields, pId) => renderFieldBlocks(fields as any, pId, targetTabId)}
+            renderNested={(nestedFields, pId) => renderFieldBlocks(nestedFields as any, pId, targetTabId)}
             viewportSize={viewportSize}
             onClone={cloneField}
             isDraggingOver={dragOverInfo?.active && dragOverInfo?.parentId === block.id}
             hoveredMapping={hoveredMapping}
             dragOverInfo={dragOverInfo}
             isDragging={!!activeDragItem}
+            availableFieldsToNest={availableFieldsToNest}
+            onMoveFieldToContainer={moveFieldToContainer}
+            onRequestAddSubfield={(cId, cLabel) => setSubfieldModalTarget({ containerId: cId, containerLabel: cLabel })}
+            onCreateFieldInContainer={createFieldInContainer}
+            onMoveToRoot={moveFieldToRoot}
           />
         );
       }
@@ -5313,16 +5763,34 @@ export const ModuleEditor = () => {
         return null;
       }
 
+      const currentSpan = block.colSpan || 6;
+      const cycleSpan = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const spans = [12, 8, 6, 4, 3];
+        const nextSpan = spans[(spans.indexOf(currentSpan) + 1) % spans.length] || 6;
+        updateField(block.id, { colSpan: nextSpan });
+      };
+      const spanLabel =
+        currentSpan === 12 ? 'Full' :
+        currentSpan === 8 ? '2/3' :
+        currentSpan === 6 ? '1/2' :
+        currentSpan === 4 ? '1/3' :
+        currentSpan === 3 ? '1/4' : `${currentSpan}/12`;
+
       return (
         <div
           key={block.id}
-          draggable={activeTab === 'builder'}
-          onDragStart={(e: any) => handleDragStart(e, { type: 'move', fieldId: block.id, parentId })}
-          onDragEnd={handleDragEnd}
-          style={{ 
-            gridColumn: viewportSize === 'mobile' ? 'span 1' : `${block.startCol || 1} / span ${block.colSpan || 12}`,
-            gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${calculateHeight(block)}`
+          data-grid={{
+            x: Math.max(0, (block.startCol || 1) - 1),
+            y: block.rowIndex || 0,
+            w: Math.max(1, Math.min(12, block.colSpan || 6)),
+            h: calculateHeight(block)
           }}
+          style={(activeTab as string) === 'preview' ? {
+            gridColumn: viewportSize === 'mobile' ? 'span 1' : `${block.startCol || 1} / span ${block.colSpan || 6}`,
+            gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${calculateHeight(block)}`,
+            minHeight: `${calculateHeight(block) * GRID_CONFIG.rowHeight}px`
+          } : undefined}
           onClick={(e) => {
             if (block.isDraggingPlaceholder) return;
             e.stopPropagation();
@@ -5334,15 +5802,15 @@ export const ModuleEditor = () => {
           }}
           id={`canvas-field-${block.id}`}
           className={cn(
-            "group/field relative p-4 rounded-2xl cursor-pointer transition-all border-2 h-full flex flex-col",
+            "group/field relative p-3.5 rounded-xl cursor-pointer transition-all border h-full flex flex-col",
             block.isDraggingPlaceholder
               ? "border-dashed border-indigo-500/40 bg-indigo-50/20 dark:bg-indigo-500/5 select-none pointer-events-none"
               : (selectedIds.includes(block.id) 
-                  ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-30" 
-                  : "bg-zinc-50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-800 hover:border-indigo-500/30 hover:z-40"),
-            block.hidden && activeTab === 'builder' && "opacity-40 border-dashed grayscale-[0.5] hover:opacity-100 hover:grayscale-0",
+                  ? "border-indigo-500 bg-indigo-50/20 dark:bg-indigo-500/5 ring-2 ring-indigo-500/20 z-30 shadow-sm" 
+                  : "bg-white dark:bg-zinc-900 border-zinc-200/80 dark:border-zinc-800/80 hover:border-indigo-500/40 hover:shadow-xs hover:z-40"),
+            block.hidden && activeTab === 'builder' && "opacity-45 border-dashed grayscale-[0.4] hover:opacity-100 hover:grayscale-0",
             activeDragItem?.fieldId === block.id && "opacity-20 z-50 cursor-grabbing",
-            hoveredMapping?.targetFieldId === block.id && "ring-8 ring-indigo-500/30 border-indigo-500 scale-[1.02] shadow-2xl z-30"
+            hoveredMapping?.targetFieldId === block.id && "ring-4 ring-indigo-500/30 border-indigo-500 scale-[1.01] shadow-xl z-30"
           )}
         >
           {block.isDraggingPlaceholder ? (() => {
@@ -5360,222 +5828,344 @@ export const ModuleEditor = () => {
             );
           })() : (
             <>
-              {/* Selection UI */}
-              {selectedIds.includes(block.id) && (
-                <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20">
-                  Selected
+              <div className="space-y-1.5 flex-1 overflow-y-auto scrollbar-hide flex flex-col justify-between">
+                {/* Field Header matching RecordDetailView.tsx label & quick builder controls */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <div 
+                      className={cn(
+                        "drag-handle text-zinc-400 hover:text-indigo-600 dark:text-zinc-500 dark:hover:text-indigo-400 cursor-grab active:cursor-grabbing p-0.5 -ml-1 rounded flex items-center shrink-0 transition-colors",
+                        parentId ? "nested-drag-handle" : "root-drag-handle"
+                      )}
+                      title="Drag to reposition"
+                    >
+                      <GripVertical size={13} />
+                    </div>
+                    {!(block.type === 'heading' || block.type === 'alert' || block.type === 'divider' || block.type === 'spacer') ? (
+                      <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-300 flex items-center gap-1.5 truncate cursor-pointer">
+                        {(() => {
+                          const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === block.type);
+                          const Icon = fieldDef?.icon;
+                          return Icon ? <Icon size={11} className="text-zinc-400 shrink-0" /> : null;
+                        })()}
+                        <span className="truncate">{block.label || block.name}</span>
+                        {block.required && <span className="text-rose-500 font-black">*</span>}
+                        {block.tooltip && <HelpCircle size={10} className="text-zinc-400 shrink-0" />}
+                      </label>
+                    ) : (
+                      <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest truncate">
+                        {block.type}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Right Status Badges & Quick Actions */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    {(() => {
+                      const mappingEntry = Object.entries(connectorMappings).find(([_, m]) => Object.values(m).includes(block.id));
+                      if (mappingEntry) {
+                        const [connId] = mappingEntry;
+                        const connector = connectorRegistry.find(c => c.id === connId);
+                        return (
+                          <div 
+                            className={cn(
+                              "flex items-center gap-1 px-1.5 py-0.5 rounded-md border transition-all",
+                              hoveredMapping?.targetFieldId === block.id 
+                                ? "bg-indigo-600 border-indigo-600 text-white" 
+                                : "bg-indigo-500/10 border-indigo-500/20 text-indigo-500"
+                            )}
+                            title={`Mapped to ${connector?.label || 'Nexus Connector'}`}
+                          >
+                            <Zap size={9} />
+                            <span className="text-[8px] font-black uppercase tracking-tighter">Mapped</span>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+                    {block.visibilityRule && (
+                      <div className="flex items-center gap-1 px-1.5 py-0.5 bg-amber-500/10 rounded-md border border-amber-500/20 text-amber-600 dark:text-amber-400" title="Conditional Visibility Logic Applied">
+                        <BrainCircuit size={9} />
+                        <span className="text-[8px] font-black uppercase tracking-tighter">Logic</span>
+                      </div>
+                    )}
+                    {block.hidden && (
+                      <div 
+                        className="flex items-center gap-1 px-1.5 py-0.5 bg-rose-500/10 rounded-md border border-rose-500/20 text-rose-500 cursor-pointer hover:bg-rose-500/20" 
+                        title="Hidden by Default (Click to show)"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateField(block.id, { hidden: false });
+                        }}
+                      >
+                        <EyeOff size={9} />
+                        <span className="text-[8px] font-black uppercase tracking-tighter">Hidden</span>
+                      </div>
+                    )}
+
+                    {/* 1-Click Width Cycle Pill */}
+                    <button
+                      type="button"
+                      onClick={cycleSpan}
+                      title="Click to cycle width (Full → 2/3 → 1/2 → 1/3 → 1/4)"
+                      className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 hover:bg-indigo-500/10 text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 border border-zinc-200/80 dark:border-zinc-700/80 text-[8px] font-black uppercase tracking-wider transition-colors"
+                    >
+                      {spanLabel}
+                    </button>
+
+                    {/* Hover Toolbar Actions */}
+                    <div className="hidden group-hover/field:flex items-center gap-0.5 pl-0.5">
+                      {parentId && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            moveFieldToRoot(block.id);
+                          }}
+                          className="p-1 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors"
+                          title="Move out of group to Root Canvas"
+                        >
+                          <ExternalLink size={11} />
+                        </button>
+                      )}
+                      {!block.hidden && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateField(block.id, { hidden: true });
+                          }}
+                          className="p-1 text-zinc-400 hover:text-amber-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors"
+                          title="Quick Hide Field"
+                        >
+                          <EyeOff size={11} />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          cloneField(block.id);
+                        }}
+                        className="p-1 text-zinc-400 hover:text-indigo-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors"
+                        title="Duplicate Field"
+                      >
+                        <Copy size={11} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteBlocks([block.id]);
+                        }}
+                        className="p-1 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded transition-colors"
+                        title="Delete Field"
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              )}
-              <div className="space-y-2 flex-1 overflow-y-auto scrollbar-hide">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <div 
-                  className={cn(
-                    "drag-handle text-zinc-400 hover:text-zinc-600 dark:text-zinc-550 dark:hover:text-zinc-300 cursor-grab active:cursor-grabbing p-0.5 rounded flex items-center shrink-0",
-                    parentId ? "nested-drag-handle" : "root-drag-handle"
+
+                {/* Realistic Workspace Input / Block Preview */}
+                <div className="min-h-[20px] flex-1 flex flex-col justify-center">
+                  {block.type === 'heading' ? (() => {
+                    const rawTag = block.options?.[0] || 'h2';
+                    const Tag = (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(rawTag) ? rawTag : 'h2') as React.ElementType;
+                    const size = Tag === 'h1' ? 'text-xl font-bold' :
+                                 Tag === 'h2' ? 'text-lg font-bold' :
+                                 Tag === 'h3' ? 'text-base font-bold' :
+                                 Tag === 'h4' ? 'text-sm font-bold' : 'text-base font-bold';
+                    return (
+                      <div className="pt-0.5">
+                        <Tag className={cn("text-zinc-900 dark:text-white tracking-tight", size)}>
+                          {block.label || 'Heading'}
+                        </Tag>
+                      </div>
+                    );
+                  })() : block.type === 'divider' ? (
+                    <div className="py-1">
+                      <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-1" />
+                    </div>
+                  ) : block.type === 'spacer' ? (
+                    <div className="py-1">
+                      <div className="h-5 border-x border-zinc-200 dark:border-zinc-800 border-dashed mx-auto w-px" />
+                    </div>
+                  ) : block.type === 'alert' ? (() => {
+                    const variant = block.options?.[0] || 'info';
+                    const alertStyle = variant === 'error' ? 'bg-rose-500/10 border-rose-500/20 text-rose-600' :
+                                  variant === 'warning' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' :
+                                  variant === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' :
+                                  'bg-indigo-500/10 border-indigo-500/20 text-indigo-600';
+                    const AlertIcon = variant === 'error' ? XCircle :
+                                 variant === 'warning' ? AlertTriangle :
+                                 variant === 'success' ? Check : Info;
+                    return (
+                      <div className={cn("px-3.5 py-2.5 rounded-xl border flex items-center gap-2.5", alertStyle)}>
+                        <AlertIcon size={15} className="shrink-0" />
+                        <span className="text-xs font-semibold">{block.label || 'Alert Notice'}</span>
+                      </div>
+                    );
+                  })() : block.type === 'html' ? (
+                    <div className="min-h-[84px] bg-zinc-950 rounded-xl p-3.5 font-mono text-[10px] text-emerald-500/80 leading-relaxed border border-white/5 overflow-hidden relative">
+                      <span className="block text-indigo-400">&lt;div class="custom-card"&gt;</span>
+                      <span className="block pl-3">&lt;h4&gt;{block.label}&lt;/h4&gt;</span>
+                      <span className="block text-indigo-400">&lt;/div&gt;</span>
+                    </div>
+                  ) : block.type === 'button' ? (
+                    <div>
+                      <button
+                        type="button"
+                        className={cn(
+                          "px-4 py-2 rounded-lg text-xs font-semibold transition-all",
+                          block.variant === 'secondary' ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white" :
+                          block.variant === 'outline' ? "border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-white" :
+                          block.variant === 'danger' ? "bg-rose-500 text-white" :
+                          "bg-indigo-600 text-white shadow-xs"
+                        )}
+                      >
+                        {block.label || 'Action Button'}
+                      </button>
+                    </div>
+                  ) : block.type === 'sub_module' ? (
+                    renderSubmoduleMock(block)
+                  ) : block.type === 'relationship_m2m' ? (
+                    renderRelationshipM2MMock(block)
+                  ) : block.type === 'rollup' ? (
+                    renderRollupMock(block)
+                  ) : block.type === 'connector' ? (
+                    <div className="p-3.5 bg-indigo-500/5 border border-indigo-500/20 rounded-xl flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-indigo-500 shrink-0">
+                          <Zap size={15} />
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-xs font-bold text-zinc-900 dark:text-white truncate">{block.label || 'Nexus Connector'}</h4>
+                          <p className="text-[10px] text-zinc-500 truncate">
+                            {block.connectorId ? `${Object.keys(connectorMappings[block.connectorId] || {}).length} streams mapped` : 'Setup required'}
+                          </p>
+                        </div>
+                      </div>
+                      <span className={cn("px-2 py-0.5 rounded-full text-[9px] font-bold uppercase", block.connectorId ? "bg-emerald-500/10 text-emerald-600" : "bg-rose-500/10 text-rose-500")}>
+                        {block.connectorId ? 'Active' : 'Configure'}
+                      </span>
+                    </div>
+                  ) : block.type === 'party' ? (
+                    <div className="h-9 w-full bg-zinc-50/70 dark:bg-zinc-950/60 border border-indigo-500/30 rounded-lg flex items-center justify-between px-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Building2 size={13} className="text-indigo-500 shrink-0" />
+                        <span className="text-xs text-zinc-400 truncate">
+                          {block.placeholder || `Search ${block.label} in Directory...`}
+                        </span>
+                      </div>
+                      <span className="px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold uppercase shrink-0">
+                        Directory
+                      </span>
+                    </div>
+                  ) : block.type === 'lookup' ? (
+                    <div className="h-9 w-full bg-zinc-50/70 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 rounded-lg flex items-center justify-between px-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Search size={13} className="text-zinc-400 shrink-0" />
+                        <span className="text-xs text-zinc-400 truncate">
+                          {block.placeholder || `Search ${block.label}...`}
+                        </span>
+                      </div>
+                      <ChevronDown size={13} className="text-zinc-400 shrink-0" />
+                    </div>
+                  ) : block.type === 'calculation' ? (
+                    <div className="h-9 bg-indigo-500/5 border border-indigo-500/15 rounded-lg flex items-center px-3">
+                      <Calculator size={12} className="text-indigo-500 mr-2 shrink-0" />
+                      <span className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 truncate flex-1">
+                        {block.calculationLogic || 'No formula defined'}
+                      </span>
+                    </div>
+                  ) : block.type === 'autonumber' ? (
+                    <div className="h-9 bg-zinc-100/80 dark:bg-zinc-800/60 rounded-lg flex items-center px-3 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold border border-indigo-500/10">
+                      {block.autonumberPrefix || ''}
+                      {(block.autonumberStart || 1).toString().padStart(block.autonumberDigits || 4, '0')}
+                      {block.autonumberSuffix || ''}
+                    </div>
+                  ) : (block.type === 'textarea' || block.type === 'longText' || block.type === 'richtext' || (block.type as string) === 'rich_text') ? (
+                    <div className="flex-1 min-h-[72px] w-full bg-zinc-50/70 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 rounded-lg p-2.5 text-xs text-zinc-400">
+                      {block.placeholder || `Enter ${block.label?.toLowerCase() || 'details'}...`}
+                    </div>
+                  ) : (block.type === 'select' || block.type === 'user' || (block.type as string) === 'status') ? (
+                    <div className="h-9 w-full bg-zinc-50/70 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 rounded-lg flex items-center justify-between px-3">
+                      <span className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
+                        {block.defaultValue || block.options?.[0] || block.placeholder || `Select ${block.label?.toLowerCase() || 'option'}...`}
+                      </span>
+                      <ChevronDown size={13} className="text-zinc-400 shrink-0" />
+                    </div>
+                  ) : (block.type === 'date' || (block.type as string) === 'datetime') ? (
+                    <div className="h-9 w-full bg-zinc-50/70 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 rounded-lg flex items-center justify-between px-3">
+                      <span className="text-xs text-zinc-400 truncate">{block.defaultValue || 'MM / DD / YYYY'}</span>
+                      <Calendar size={13} className="text-zinc-400 shrink-0" />
+                    </div>
+                  ) : block.type === 'time' ? (
+                    <div className="h-9 w-full bg-zinc-50/70 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 rounded-lg flex items-center justify-between px-3">
+                      <span className="text-xs text-zinc-400 truncate">{block.defaultValue || '09:00 AM'}</span>
+                      <Clock size={13} className="text-zinc-400 shrink-0" />
+                    </div>
+                  ) : (block.type === 'boolean' || block.type === 'toggle' || block.type === 'checkbox') ? (
+                    <div className="flex items-center gap-2.5 h-9">
+                      <div className="w-8 h-4.5 bg-indigo-600 rounded-full relative flex items-center p-0.5">
+                        <div className="w-3.5 h-3.5 bg-white rounded-full shadow-xs ml-auto" />
+                      </div>
+                      <span className="text-xs text-zinc-600 dark:text-zinc-400 font-medium">{block.placeholder || 'Enabled'}</span>
+                    </div>
+                  ) : block.type === 'currency' ? (
+                    <div className="h-9 w-full bg-zinc-50/70 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 rounded-lg flex items-center px-3 gap-1.5">
+                      <span className="text-xs font-bold text-zinc-400">{block.currencySymbol || '$'}</span>
+                      <span className="text-xs text-zinc-400 truncate">{block.defaultValue || block.placeholder || '0.00'}</span>
+                    </div>
+                  ) : (
+                    <div className="h-9 w-full bg-zinc-50/70 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 rounded-lg flex items-center px-3">
+                      <span className="text-xs text-zinc-400 truncate">
+                        {block.defaultValue || block.placeholder || `Enter ${block.label?.toLowerCase() || 'value'}...`}
+                      </span>
+                    </div>
                   )}
-                  title="Drag to move"
-                  onPointerDown={(e: any) => {
-                    e.stopPropagation();
-                    handleUnifiedPointerDrag(block.id, parentId)(e);
-                  }}
-                >
-                  <GripVertical size={12} />
+
+                  {block.helperText && !(block.type === 'heading' || block.type === 'alert' || block.type === 'divider' || block.type === 'spacer') && (
+                    <p className="text-[10px] text-zinc-400 truncate mt-1">{block.helperText}</p>
+                  )}
                 </div>
-                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 truncate">
-                  {(() => {
-                    const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === block.type);
-                    const Icon = fieldDef?.icon;
-                    return Icon ? <Icon size={10} className="text-zinc-400 shrink-0" /> : null;
-                  })()}
-                  <span className="truncate">{FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === block.type)?.label || block.type.replace('_', ' ')}</span>
-                  {block.required && <span className="text-rose-500">*</span>}
-                  {block.tooltip && <HelpCircle size={10} className="text-zinc-400 shrink-0" />}
-                </label>
               </div>
-              <div className="flex items-center gap-2">
-                {block.hidden && (
-                  <div 
-                    className="px-2 py-0.5 bg-rose-500/10 border border-rose-500/20 rounded-lg flex items-center gap-1 cursor-pointer hover:bg-rose-500/20"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      updateField(block.id, { hidden: false });
-                    }}
-                  >
-                    <EyeOff size={10} className="text-rose-500" />
-                    <span className="text-[8px] font-black text-rose-500 uppercase tracking-tighter">Hidden</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {!(block.type === 'heading' || block.type === 'alert' || block.type === 'divider' || block.type === 'spacer') && (
-              <p className="text-[11px] font-medium text-zinc-900 dark:text-zinc-300 mb-1">{block.label}</p>
-            )}
-
-            <div className="min-h-[20px]">
-              {block.type === 'heading' ? (() => {
-                const rawTag = block.options?.[0] || 'h2';
-                const Tag = (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(rawTag) ? rawTag : 'h2') as React.ElementType;
-                const size = Tag === 'h1' ? 'text-2xl font-bold' :
-                             Tag === 'h2' ? 'text-xl font-bold' :
-                             Tag === 'h3' ? 'text-lg font-bold' :
-                             Tag === 'h4' ? 'text-base font-bold' : 'text-xl font-bold';
-                return (
-                  <div className="pt-2">
-                    <Tag className={cn("text-zinc-900 dark:text-white tracking-tight", size)}>
-                      {block.label || 'Heading'}
-                    </Tag>
-                  </div>
-                );
-              })() : block.type === 'divider' ? (
-                <div className="py-2">
-                  <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-4" />
-                </div>
-              ) : block.type === 'spacer' ? (
-                <div className="py-2">
-                  <div className="h-8 border-x border-zinc-100 dark:border-zinc-800/50 border-dashed mx-auto w-px" />
-                </div>
-              ) : block.type === 'alert' ? (() => {
-                const variant = block.options?.[0] || 'info';
-                const alertStyle = variant === 'error' ? 'bg-rose-500/10 border-rose-500/20 text-rose-600' :
-                              variant === 'warning' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' :
-                              variant === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' :
-                              'bg-indigo-500/10 border-indigo-500/20 text-indigo-600';
-                const AlertIcon = variant === 'error' ? XCircle :
-                             variant === 'warning' ? AlertTriangle :
-                             variant === 'success' ? Check : Info;
-                return (
-                  <div className="pt-2">
-                    <div className={cn("p-4 rounded-2xl border flex items-center gap-3", alertStyle)}>
-                      <AlertIcon size={18} />
-                      <span className="text-xs font-bold uppercase tracking-widest">{block.label || 'Alert Notice'}</span>
-                    </div>
-                  </div>
-                );
-              })() : block.type === 'html' ? (
-                <div className="pt-2">
-                  <div className="min-h-[120px] bg-zinc-950 rounded-2xl p-5 font-mono text-[10px] text-emerald-500/80 leading-relaxed shadow-2xl border border-white/5 overflow-hidden group/html relative">
-                    <div className="absolute top-0 right-0 p-3 flex gap-2">
-                      <div className="w-2 h-2 rounded-full bg-rose-500/50" />
-                      <div className="w-2 h-2 rounded-full bg-amber-500/50" />
-                      <div className="w-2 h-2 rounded-full bg-emerald-500/50" />
-                    </div>
-                    <span className="block text-indigo-400">&lt;div class="custom-card"&gt;</span>
-                    <span className="block pl-4">&lt;h1&gt;{block.label}&lt;/h1&gt;</span>
-                    <span className="block pl-4 text-zinc-500">&lt;p&gt;Dynamic HTML content...&lt;/p&gt;</span>
-                    <span className="block text-indigo-400">&lt;/div&gt;</span>
-                  </div>
-                </div>
-              ) : block.type === 'icon' ? (
-                <div className="flex flex-col items-center justify-center gap-3 pt-4 pb-2">
-                  <div className="w-16 h-16 bg-indigo-500/10 rounded-3xl flex items-center justify-center text-indigo-600 border border-indigo-500/20 shadow-xl shadow-indigo-500/5">
-                    <DynamicIcon name={block.iconName || 'Smile'} size={32} />
-                  </div>
-                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Icon Preview</span>
-                </div>
-              ) : block.type === 'time' ? (
-                <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center justify-between px-4 shadow-sm dark:shadow-none">
-                  <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">00:00 AM</span>
-                  <Clock size={14} className="text-zinc-400 dark:text-zinc-600" />
-                </div>
-              ) : block.type === 'sub_module' ? (
-                renderSubmoduleMock(block)
-              ) : block.type === 'relationship_m2m' ? (
-                renderRelationshipM2MMock(block)
-              ) : block.type === 'rollup' ? (
-                renderRollupMock(block)
-              ) : block.type === 'party' ? (
-                <div className="pt-2">
-                  <div className="h-11 w-full bg-white dark:bg-zinc-950 border border-indigo-500/30 rounded-xl flex items-center justify-between px-4">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Building2 size={14} className="text-indigo-500 shrink-0" />
-                      <span className="text-xs text-zinc-400 font-medium italic select-none truncate">
-                        {block.placeholder || `Search ${block.label} in Directory...`}
-                      </span>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold uppercase shrink-0">
-                      Directory
-                    </span>
-                  </div>
-                </div>
-              ) : block.type === 'lookup' ? (
-                <div className="pt-2">
-                  <div className="h-11 w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-between px-4">
-                    <div className="flex items-center gap-2">
-                      <Search size={14} className="text-zinc-400" />
-                      <span className="text-xs text-zinc-400 font-medium italic select-none">
-                        {block.placeholder || `Search ${block.label}...`}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                /* All other basic input fields */
-                <div className="pt-2">
-                  <div className="h-11 w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-between px-4">
-                    <span className="text-xs text-zinc-400 font-medium italic select-none">
-                      {block.placeholder || `Enter ${block.label}...`}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Quick Action Buttons (Overlapping Border) */}
-          <button 
-            onClick={(e) => {
-              e.stopPropagation();
-              cloneField(block.id);
-            }}
-            className="absolute -top-3.5 right-6 w-7 h-7 bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-full flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity shadow-lg z-50 hover:scale-110 active:scale-95 border border-zinc-200 dark:border-zinc-700"
-            title="Duplicate Field"
-          >
-            <Copy size={12} />
-          </button>
-
-          <button 
-            onClick={(e) => {
-              e.stopPropagation();
-              setLayout(prev => removeFieldRecursive(prev, block.id));
-              if (selectedId === block.id) setSelectedId(null);
-            }}
-            className="absolute -top-3.5 -right-3.5 w-7 h-7 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity shadow-lg z-50 hover:scale-110 active:scale-95"
-            title="Delete Field"
-          >
-            <Trash2 size={14} />
-          </button>
-
-          {!block.hidden && (
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                updateField(block.id, { hidden: true });
-              }}
-              className="absolute -top-3.5 right-15 w-7 h-7 bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-full flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity shadow-lg z-50 hover:scale-110 active:scale-95 border border-zinc-200 dark:border-zinc-700"
-              title="Quick Hide Field"
-            >
-              <EyeOff size={12} />
-            </button>
-          )}
             </>
           )}
         </div>
       );
     });
+
+    if (isNested && (activeTab as string) !== 'preview') {
+      return (
+        <NestedRglContainer
+          parentId={parentId!}
+          fields={filtered}
+          viewportSize={viewportSize}
+          dragOverInfo={dragOverInfo}
+          resolveCollisionsInArray={resolveCollisionsInArray}
+          onLayoutChange={handleNestedRglLayoutChange}
+        >
+          {renderedCards}
+        </NestedRglContainer>
+      );
+    }
+
+    return renderedCards;
   };
 
   const HeaderModuleIcon = (LucideIcons as any)[moduleSettings.iconName] || Box;
 
   return (
     <div className="h-full flex flex-col bg-transparent text-zinc-900 dark:text-zinc-100 overflow-hidden">
-      {/* Top Page Title Header (Unified Builder style) */}
+      {/* Top Global Module Header (48px, stripped-back enterprise shell) */}
       <div className={cn(
-        "px-6 lg:px-12 py-5 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0 flex items-center justify-between z-30 relative transition-all duration-300",
-        isBuilderFullscreen && "py-2 px-4 lg:px-6 bg-white dark:bg-zinc-900 shadow-sm"
+        "h-12 px-4 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0 flex items-center justify-between z-30 relative transition-all duration-200",
+        isBuilderFullscreen && "shadow-xs"
       )}>
-        <div className="flex items-center gap-3">
+        {/* Left: Back + Icon + Name + Subtle Version */}
+        <div className="flex items-center gap-2 min-w-0">
           <button 
             onClick={() => {
               if (isDirty || canUndo) {
@@ -5589,54 +6179,49 @@ export const ModuleEditor = () => {
                 }
               }
             }}
-            className={cn(
-              "rounded-xl border border-zinc-200 dark:border-white/5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors bg-white/50 dark:bg-white/[0.01]",
-              isBuilderFullscreen ? "p-1.5" : "p-2.5"
-            )}
+            className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
             title={returnUrl ? "Back to Workspace" : "Back to Platform Modules"}
           >
             <ArrowLeft size={16} />
           </button>
-          <div>
-            <div className="flex items-center gap-2">
-              <HeaderModuleIcon className="text-indigo-500" size={isBuilderFullscreen ? 16 : 18} />
-              <input
-                type="text"
-                placeholder="Enter Module Name..."
-                value={moduleSettings.name}
-                onChange={(e) => setModuleSettings(prev => ({ ...prev, name: e.target.value }))}
-                className={cn(
-                  "font-black text-zinc-900 dark:text-white bg-transparent border-none outline-none focus:ring-1 focus:ring-indigo-500/20 rounded px-1 transition-all",
-                  isBuilderFullscreen ? "text-sm font-bold" : "text-lg"
-                )}
-              />
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border border-indigo-500/30 bg-indigo-500/10 text-indigo-500 ml-1">
-                {moduleSettings.category || 'Custom'}
-              </span>
-              <button
-                type="button"
-                onClick={() => setIsVersionHistoryOpen(true)}
-                className="flex items-center gap-1 font-mono text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-all cursor-pointer shadow-sm ml-1"
-                title="View Version History & Rollback"
-              >
-                <History size={11} />
-                <span>{schemaVersion.startsWith('v') ? schemaVersion : `v${schemaVersion}`}</span>
-              </button>
+
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+              <HeaderModuleIcon size={15} />
             </div>
-            {!isBuilderFullscreen && (
-              <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mt-0.5">Visual Module Builder</p>
+            <input
+              type="text"
+              placeholder="Untitled Module"
+              value={moduleSettings.name}
+              onChange={(e) => setModuleSettings(prev => ({ ...prev, name: e.target.value }))}
+              className="text-sm font-semibold text-zinc-900 dark:text-white bg-transparent border-none outline-none focus:ring-1 focus:ring-indigo-500/30 rounded-md px-1.5 py-0.5 transition-all min-w-[140px] max-w-[260px] truncate"
+            />
+            <button
+              type="button"
+              onClick={() => setIsVersionHistoryOpen(true)}
+              className="hidden sm:inline-flex items-center gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 px-2 py-1 rounded-md transition-colors shrink-0"
+              title="Version History & Rollback"
+            >
+              <span>{schemaVersion.startsWith('v') ? schemaVersion : `v${schemaVersion}`}</span>
+            </button>
+            {isDirty && (
+              <span className="hidden md:inline-flex items-center gap-1.5 text-[11px] text-zinc-400 dark:text-zinc-500 pl-1 shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                Unsaved
+              </span>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Undo / Redo Toolbar */}
-          <div className="flex items-center bg-zinc-100/80 dark:bg-white/[0.04] p-0.5 rounded-xl border border-zinc-200 dark:border-white/5">
+        {/* Right: Minimal Action Cluster */}
+        <div className="flex items-center gap-1.5">
+          {/* Undo / Redo */}
+          <div className="flex items-center">
             <button 
               type="button"
               onClick={undo}
               disabled={!canUndo}
-              className="rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors hover:bg-white dark:hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none p-1.5"
+              className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors disabled:opacity-30 disabled:pointer-events-none"
               title="Undo (Ctrl+Z)"
             >
               <Undo2 size={16} />
@@ -5645,119 +6230,169 @@ export const ModuleEditor = () => {
               type="button"
               onClick={redo}
               disabled={!canRedo}
-              className="rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors hover:bg-white dark:hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none p-1.5"
+              className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors disabled:opacity-30 disabled:pointer-events-none"
               title="Redo (Ctrl+Y)"
             >
               <Redo2 size={16} />
             </button>
           </div>
 
-          <button 
-            onClick={() => setIsCommandPaletteOpen(true)}
-            className="rounded-xl border border-zinc-200 dark:border-white/5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors bg-white/50 dark:bg-white/[0.01] p-1.5"
-            title="Open Command Palette (Ctrl+K)"
-          >
-            <Command size={16} />
-          </button>
+          <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 mx-1" />
 
+          {/* Preview */}
           <button 
-            type="button"
-            onClick={() => setIsVersionHistoryOpen(true)}
+            onClick={() => {
+              if (activeTab === 'preview') {
+                setActiveTab(previewReturnTab as any);
+              } else {
+                const returnTarget = (['builder', 'forms', 'details', 'workflow', 'validations', 'connectors', 'automation', 'security', 'deployment'].includes(activeTab) ? activeTab : 'builder') as any;
+                setPreviewReturnTab(returnTarget);
+                if (activeTab === 'forms') {
+                  setPreviewView('form');
+                  setPreviewFormId(selectedFormId || forms[0]?.id || '');
+                } else if (previewView === 'form' && !previewFormId) {
+                  setPreviewFormId(selectedFormId || forms[0]?.id || '');
+                }
+                setActiveTab('preview');
+              }
+            }}
             className={cn(
-              "flex items-center gap-1.5 border rounded-xl font-bold transition-all uppercase tracking-wider bg-white/50 dark:bg-white/[0.01] border-zinc-200 dark:border-white/5 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white",
-              isBuilderFullscreen ? "px-2.5 py-1.5 text-[11px]" : "px-3 py-2 text-xs"
-            )}
-            title="Version History, Snapshots & Rollback"
-          >
-            <History size={14} className="text-indigo-500" />
-            <span className="font-mono">{schemaVersion.startsWith('v') ? schemaVersion : `v${schemaVersion}`}</span>
-            <span>History</span>
-          </button>
-
-          <button 
-            onClick={() => setActiveTab(activeTab === 'preview' ? 'builder' : 'preview')}
-            className={cn(
-              "flex items-center gap-2 border rounded-xl font-bold transition-all uppercase tracking-wider",
-              isBuilderFullscreen ? "px-2.5 py-1.5 text-[11px]" : "px-3.5 py-2 text-xs",
+              "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
               activeTab === 'preview' 
-                ? "bg-indigo-600 border-indigo-500 text-white" 
-                : "bg-white/50 dark:bg-white/[0.01] border-zinc-200 dark:border-white/5 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
+                ? "bg-indigo-600 text-white" 
+                : "text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800"
             )}
+            title={activeTab === 'preview' ? 'Exit Preview' : 'Preview Module'}
           >
             <Eye size={15} />
-            <span>{activeTab === 'preview' ? 'Exit Preview' : 'Preview'}</span>
+            <span className="hidden sm:inline">{activeTab === 'preview' ? 'Exit Preview' : 'Preview'}</span>
           </button>
 
+          {/* AI Copilot */}
           <button 
             onClick={() => setIsAICopilotOpen(!isAICopilotOpen)}
             className={cn(
-              "flex items-center gap-1.5 border rounded-xl font-bold transition-all uppercase tracking-wider relative",
-              isBuilderFullscreen ? "px-2.5 py-1.5 text-[11px]" : "px-3 py-2 text-xs",
+              "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
               isAICopilotOpen 
-                ? "bg-gradient-to-r from-indigo-600 to-purple-600 border-indigo-500 text-white shadow-md shadow-indigo-500/20"
-                : "bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400 hover:border-indigo-500/40"
+                ? "bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400" 
+                : "text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800"
             )}
-            title="In-Canvas AI Architect Copilot"
+            title="AI Assistant"
           >
-            <Sparkles size={14} className={isAICopilotOpen ? "animate-spin" : ""} />
-            <span>AI Copilot</span>
+            <Sparkles size={15} className="text-indigo-500" />
+            <span className="hidden md:inline">AI Assistant</span>
           </button>
 
-          <button 
-            onClick={() => setIsPublicPublishModalOpen(true)}
-            className={cn(
-              "flex items-center gap-1.5 border rounded-xl font-bold transition-all uppercase tracking-wider bg-white/50 dark:bg-white/[0.01] border-zinc-200 dark:border-white/5 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white",
-              isBuilderFullscreen ? "px-2.5 py-1.5 text-[11px]" : "px-3 py-2 text-xs"
-            )}
-            title="Public Intake Form & Embed Snippets"
-          >
-            <Globe size={14} />
-            <span>Public Form</span>
-          </button>
-
-          <button 
-            onClick={() => setIsSchemaDiffModalOpen(true)}
-            className={cn(
-              "flex items-center gap-1.5 border rounded-xl font-bold transition-all uppercase tracking-wider relative",
-              isBuilderFullscreen ? "px-2.5 py-1.5 text-[11px]" : "px-3.5 py-2 text-xs",
-              pendingSchemaChangesCount > 0
-                ? "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 shadow-sm"
-                : "bg-white/50 dark:bg-white/[0.01] border-zinc-200 dark:border-white/5 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
-            )}
-            title="Review Schema Diff & Safe DDL Deployment Pipeline"
-          >
-            <Database size={14} />
-            <span>Deploy</span>
-            {pendingSchemaChangesCount > 0 && (
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-            )}
-          </button>
-
+          {/* Primary Save */}
           <button 
             onClick={handleSave}
             disabled={isSaving || isLoading}
-            className={cn(
-              "flex items-center gap-2 bg-indigo-600 rounded-xl font-bold text-white hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 uppercase tracking-wider disabled:opacity-50",
-              isBuilderFullscreen ? "px-3 py-1.5 text-[11px]" : "px-4 py-2 text-xs"
-            )}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition-colors shadow-xs disabled:opacity-50 ml-1"
           >
-            <Save size={15} />
+            <Save size={14} />
             <span>{isSaving ? 'Saving...' : 'Save'}</span>
           </button>
 
-          {id !== 'new' && (
-            <button 
-              onClick={() => window.open(`/workspace/modules/${id}`, '_blank')}
+          {/* Overflow / More Menu (Deploy, Public Form, Launch, History, Command Palette) */}
+          <div className="relative" ref={headerMoreRef}>
+            <button
+              type="button"
+              onClick={() => setIsHeaderMoreOpen((v) => !v)}
               className={cn(
-                "flex items-center gap-2 bg-white/50 dark:bg-white/[0.01] border border-zinc-200 dark:border-white/5 rounded-xl font-bold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-all shadow-sm uppercase tracking-wider",
-                isBuilderFullscreen ? "px-3 py-1.5 text-[11px]" : "px-4 py-2 text-xs"
+                "relative p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors",
+                isHeaderMoreOpen && "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white"
               )}
-              title="View in Workspace"
+              title="More actions (Deploy, Public Form, Launch, History)"
             >
-              <ExternalLink size={15} />
-              <span>Launch</span>
+              <MoreHorizontal size={17} />
+              {pendingSchemaChangesCount > 0 && (
+                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-white dark:ring-zinc-900" />
+              )}
             </button>
-          )}
+
+            {isHeaderMoreOpen && (
+              <div className="absolute right-0 mt-1.5 w-56 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg py-1.5 z-50">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsHeaderMoreOpen(false);
+                    setIsSchemaDiffModalOpen(true);
+                  }}
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  <span className="flex items-center gap-2.5">
+                    <Database size={14} className={pendingSchemaChangesCount > 0 ? "text-amber-500" : "text-zinc-400"} />
+                    Deploy Schema
+                  </span>
+                  {pendingSchemaChangesCount > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                      {pendingSchemaChangesCount}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsHeaderMoreOpen(false);
+                    setIsPublicPublishModalOpen(true);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  <Globe size={14} className="text-zinc-400" />
+                  Public Form & Embed
+                </button>
+
+                {id !== 'new' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsHeaderMoreOpen(false);
+                      window.open(`/workspace/modules/${id}`, '_blank');
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                  >
+                    <ExternalLink size={14} className="text-zinc-400" />
+                    Launch in Workspace
+                  </button>
+                )}
+
+                <div className="my-1 border-t border-zinc-100 dark:border-zinc-800" />
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsHeaderMoreOpen(false);
+                    setIsVersionHistoryOpen(true);
+                  }}
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  <span className="flex items-center gap-2.5">
+                    <History size={14} className="text-zinc-400" />
+                    Version History
+                  </span>
+                  <span className="text-[11px] text-zinc-400 font-mono">
+                    {schemaVersion.startsWith('v') ? schemaVersion : `v${schemaVersion}`}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsHeaderMoreOpen(false);
+                    setIsCommandPaletteOpen(true);
+                  }}
+                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  <span className="flex items-center gap-2.5">
+                    <Command size={14} className="text-zinc-400" />
+                    Command Palette
+                  </span>
+                  <span className="text-[10px] text-zinc-400 font-mono">⌘K</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -5768,10 +6403,10 @@ export const ModuleEditor = () => {
             { id: 'details', label: 'Setup', icon: Settings2 },
             { id: 'builder', label: 'Interface', icon: Layout },
             { id: 'forms', label: 'Forms', icon: FileText },
-            { id: 'workflow', label: 'Workflow', icon: GitCommit },
+            { id: 'workflow', label: 'Workflow', icon: WorkflowIcon },
             { id: 'validations', label: 'Rules', icon: ShieldCheck },
-            { id: 'connectors', label: 'Integrations', icon: Zap },
-            { id: 'automation', label: 'Automations', icon: BrainCircuit },
+            { id: 'connectors', label: 'Integrations', icon: Plug },
+            { id: 'automation', label: 'Automations', icon: Zap },
             { id: 'security', label: 'Security', icon: Lock },
             { id: 'deployment', label: 'Deployment', icon: Rocket }
           ].map((t) => (
@@ -5791,18 +6426,44 @@ export const ModuleEditor = () => {
 
         {/* Left Sidebar - Discovery Panel (When in Interface Builder) */}
         {activeTab === 'builder' && (
-          <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col overflow-hidden">
-            <div className="h-[52px] px-4 border-b border-zinc-100 dark:border-zinc-900 bg-zinc-50/50 dark:bg-transparent flex items-center">
-              <div className="relative w-full">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+          <motion.aside
+            initial={false}
+            animate={{
+              width: leftPanelCollapsed ? 0 : leftPanelWidth,
+              opacity: leftPanelCollapsed ? 0 : 1,
+            }}
+            transition={resizingPanel === 'left' ? { duration: 0 } : { duration: 0.2, ease: 'easeOut' }}
+            className={cn(
+              "relative flex-shrink-0 bg-white dark:bg-zinc-900 flex flex-col overflow-hidden",
+              !leftPanelCollapsed && "border-r border-zinc-200 dark:border-zinc-800"
+            )}
+          >
+            {!leftPanelCollapsed && (
+              <div
+                onMouseDown={(e) => startPanelResize('left', e)}
+                className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-500/40 active:bg-indigo-500/60 transition-colors z-30"
+                title="Drag to resize blocks panel"
+              />
+            )}
+            <div className="h-11 px-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center gap-1.5 shrink-0">
+              <div className="relative flex-1 min-w-0">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
                 <input 
                   type="text" 
                   value={sidebarSearch}
                   onChange={(e) => setSidebarSearch(e.target.value)}
                   placeholder="Search blocks..."
-                  className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-9 pr-4 py-1.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 transition-all"
+                  className="w-full h-8 bg-zinc-100/80 dark:bg-zinc-800/80 border border-transparent rounded-lg pl-8 pr-2.5 text-xs text-zinc-900 dark:text-white focus:bg-white dark:focus:bg-zinc-900 focus:outline-none focus:border-indigo-500 transition-colors"
                 />
               </div>
+              <button
+                type="button"
+                onClick={() => setLeftPanelCollapsed(true)}
+                className="p-1.5 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+                title="Collapse blocks panel"
+              >
+                <ChevronLeft size={14} />
+              </button>
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-6 custom-scrollbar">
@@ -5857,6 +6518,7 @@ export const ModuleEditor = () => {
                     { id: 'createdBy', label: 'Created By', type: 'user' },
                     { id: 'updatedAt', label: 'Updated Date', type: 'date' },
                     { id: 'status', label: 'Status', type: 'select' },
+                    { id: 'nextStep', label: 'Next Step (Workflow)', type: 'text' },
                     { id: 'assigneeId', label: 'Assignee', type: 'user' },
                     { id: 'participantIds', label: 'Participants', type: 'multi-user' }
                   ].filter(sf => 
@@ -6109,7 +6771,26 @@ export const ModuleEditor = () => {
                   );
                 })()
               ) : (
-                  FIELD_CATEGORIES.map((category) => {
+                <>
+                  {selectedField && isContainerField(selectedField.type) && (
+                    <div className="p-2.5 bg-indigo-500/10 border border-indigo-500/20 rounded-xl flex items-center justify-between gap-2 animate-in fade-in duration-200">
+                      <div className="min-w-0">
+                        <span className="text-[8px] font-black uppercase tracking-widest text-indigo-500 block">Adding Into Container</span>
+                        <span className="text-[11px] font-bold text-indigo-900 dark:text-indigo-200 truncate block">
+                          {selectedField.label || selectedField.name}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedId(null)}
+                        className="p-1 rounded-lg hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 transition-colors shrink-0"
+                        title="Target root canvas instead"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  )}
+                  {FIELD_CATEGORIES.map((category) => {
                   const filteredFields = category.fields.filter(f => 
                     f.label?.toLowerCase().includes(sidebarSearch.toLowerCase())
                   );
@@ -6130,6 +6811,10 @@ export const ModuleEditor = () => {
                             onDragStart={(e) => handleDragStart(e, { type: 'field', fieldType: field.id })}
                             onDragEnd={handleDragEnd}
                             onClick={() => {
+                              if (selectedField && isContainerField(selectedField.type) && !isContainerField(field.id as any)) {
+                                createFieldInContainer(selectedField.id, field.id as FieldType);
+                                return;
+                              }
                               const newField = createField(field.id as any);
                               if (newField) {
                                 const activeTabFields = layout.filter(f => !f.parentId && (f.tabId === currentTabId || (!f.tabId && currentTabId === tabs[0]?.id)));
@@ -6145,7 +6830,7 @@ export const ModuleEditor = () => {
                               }
                             }}
                             className="group cursor-pointer active:scale-95 transition-all space-y-2 select-none"
-                            title={`Click to add or drag into canvas`}
+                            title={selectedField && isContainerField(selectedField.type) ? `Click to add inside ${selectedField.label}` : `Click to add or drag into canvas`}
                           >
                             <BlockThumbnail type={field.id} />
                             <div className="flex items-center justify-between gap-1 px-1">
@@ -6160,20 +6845,32 @@ export const ModuleEditor = () => {
                       </div>
                     </div>
                   );
-                })
+                })}
+                </>
               )}
             </div>
-          </aside>
+          </motion.aside>
         )}
 
         {/* Canvas / Preview */}
         <main className="flex-1 relative flex flex-col overflow-hidden bg-transparent">
           {/* Canvas Utility Sub-Header Toolbar (when in Interface builder) */}
           {activeTab === 'builder' && (
-            <div className="h-[52px] border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between px-6 z-20 shrink-0">
-              <div className="flex items-center gap-4">
+            <div className="h-11 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between px-4 z-20 shrink-0">
+              <div className="flex items-center gap-3">
+                {leftPanelCollapsed && (
+                  <button
+                    type="button"
+                    onClick={() => setLeftPanelCollapsed(false)}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                    title="Expand blocks panel"
+                  >
+                    <ChevronRight size={14} />
+                    <span className="hidden sm:inline">Blocks</span>
+                  </button>
+                )}
                 {/* Master / Detail Switch */}
-                <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900/60 p-1 rounded-xl border border-zinc-200 dark:border-zinc-800 backdrop-blur-md">
+                <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg">
                   <button
                     type="button"
                     onClick={() => {
@@ -6183,10 +6880,10 @@ export const ModuleEditor = () => {
                       }
                     }}
                     className={cn(
-                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors uppercase tracking-wider focus:outline-none focus:ring-0 border",
+                      "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
                       activeViewMode === 'master'
-                        ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs border-zinc-200/50 dark:border-zinc-700/50"
-                        : "border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                        ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs"
+                        : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
                     )}
                   >
                     <TableProperties size={13} className={activeViewMode === 'master' ? "text-indigo-600 dark:text-indigo-400" : ""} />
@@ -6196,10 +6893,10 @@ export const ModuleEditor = () => {
                     type="button"
                     onClick={() => setActiveViewMode('detail')}
                     className={cn(
-                      "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors uppercase tracking-wider focus:outline-none focus:ring-0 border",
+                      "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
                       activeViewMode === 'detail'
-                        ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs border-zinc-200/50 dark:border-zinc-700/50"
-                        : "border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                        ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs"
+                        : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
                     )}
                   >
                     <Layout size={13} className={activeViewMode === 'detail' ? "text-indigo-600 dark:text-indigo-400" : ""} />
@@ -6207,9 +6904,10 @@ export const ModuleEditor = () => {
                   </button>
                 </div>
 
-                {/* Layout Selector & Layout Settings Button */}
-                <div className="flex items-center gap-2 pl-4 border-l border-zinc-200 dark:border-zinc-800">
-                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Layout</span>
+                <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800" />
+
+                {/* Layout Selector + Compact Gear Settings */}
+                <div className="flex items-center gap-1">
                   <select
                     value={
                       activeViewMode === 'master'
@@ -6233,7 +6931,8 @@ export const ModuleEditor = () => {
                       });
                       toast.success(`Layout preset set to ${val.toUpperCase()}`);
                     }}
-                    className="bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-1.5 text-[10px] font-bold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors uppercase tracking-wider focus:outline-none cursor-pointer"
+                    className="bg-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg px-2 py-1 text-xs font-medium text-zinc-700 dark:text-zinc-200 transition-colors focus:outline-none cursor-pointer"
+                    title="Select view layout"
                   >
                     {activeViewMode === 'master' ? (
                       <>
@@ -6260,7 +6959,6 @@ export const ModuleEditor = () => {
                     )}
                   </select>
 
-                  {/* Settings Button beside Layout dropdown */}
                   <button
                     type="button"
                     onClick={(e) => {
@@ -6272,24 +6970,13 @@ export const ModuleEditor = () => {
                       }
                     }}
                     className={cn(
-                      "px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 border shadow-xs cursor-pointer focus:outline-none focus:ring-0",
+                      "p-1.5 rounded-lg transition-colors cursor-pointer",
                       (activeViewMode === 'master' ? selectedId === '__table_settings' : selectedId === '__detail_settings')
-                        ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white shadow-xs border-zinc-200/50 dark:border-zinc-700/50"
-                        : "bg-zinc-100 dark:bg-zinc-900 text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 border-zinc-200 dark:border-zinc-800"
+                        ? "bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400"
+                        : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                     )}
-                    title="Configure layout settings"
-                  >
-                    <Settings 
-                      size={12} 
-                      className={cn(
-                        "transition-transform duration-300", 
-                        (activeViewMode === 'master' ? selectedId === '__table_settings' : selectedId === '__detail_settings')
-                          ? "text-indigo-600 dark:text-indigo-400 rotate-90"
-                          : "text-zinc-400 dark:text-zinc-500"
-                      )} 
-                    />
-                    <span>
-                      {activeViewMode === 'master' ? (
+                    title={
+                      activeViewMode === 'master' ? (
                         interfaceSettings.master.layoutType === 'split' ? 'Split Settings' :
                         interfaceSettings.master.layoutType === 'kanban' ? 'Kanban Settings' :
                         interfaceSettings.master.layoutType === 'calendar' ? 'Calendar Settings' :
@@ -6303,18 +6990,90 @@ export const ModuleEditor = () => {
                       ) : (
                         interfaceSettings.detail.layoutType === 'tabs' || !interfaceSettings.detail.layoutType ? 'Tabs Settings' :
                         interfaceSettings.detail.layoutType === 'split' ? 'Split Settings' :
-                        interfaceSettings.detail.layoutType === 'sidebar' ? 'Single Page' :
+                        interfaceSettings.detail.layoutType === 'sidebar' ? 'Single Page Settings' :
                         interfaceSettings.detail.layoutType === 'process' ? 'Wizard Settings' :
                         'Accordion Settings'
-                      )}
-                    </span>
+                      )
+                    }
+                  >
+                    <Settings size={14} />
                   </button>
+
+                  {/* Grouped Page Regions Menu (Header & Context Rail) in Detail Mode */}
+                  {activeViewMode === 'detail' && (
+                    <div className="relative" ref={pageRegionsRef}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsPageRegionsOpen((v) => !v);
+                        }}
+                        className={cn(
+                          "flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer",
+                          (selectedId === 'page-header' || selectedId === '__context_rail_settings' || isPageRegionsOpen)
+                            ? "bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400"
+                            : "text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                        )}
+                        title="Configure Header and Context Rail"
+                      >
+                        <span>Page</span>
+                        <ChevronDown size={12} className="text-zinc-400" />
+                      </button>
+
+                      {isPageRegionsOpen && (
+                        <div className="absolute left-0 mt-1.5 w-48 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg py-1 z-50">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedId('page-header');
+                              setIsPageRegionsOpen(false);
+                            }}
+                            className={cn(
+                              "w-full flex items-center justify-between px-3 py-2 text-xs font-medium transition-colors",
+                              selectedId === 'page-header'
+                                ? "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
+                                : "text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                            )}
+                          >
+                            <span className="flex items-center gap-2">
+                              <FileText size={13} className="text-zinc-400" />
+                              Record Header
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedId('__context_rail_settings');
+                              setIsPageRegionsOpen(false);
+                            }}
+                            className={cn(
+                              "w-full flex items-center justify-between px-3 py-2 text-xs font-medium transition-colors",
+                              selectedId === '__context_rail_settings'
+                                ? "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
+                                : "text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                            )}
+                          >
+                            <span className="flex items-center gap-2">
+                              <Sidebar size={13} className="text-zinc-400" />
+                              Context Rail
+                            </span>
+                            {interfaceSettings.detail?.contextRail?.enabled === false && (
+                              <span className="text-[10px] text-zinc-400">Off</span>
+                            )}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 {/* Device Viewport Toggles */}
-                <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-900/60 p-1 rounded-xl border border-zinc-200 dark:border-zinc-800 backdrop-blur-md">
+                <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg">
                   {([
                     { id: 'desktop', icon: Monitor, label: 'Desktop' },
                     { id: 'tablet', icon: Tablet, label: 'Tablet (768px)' },
@@ -6325,10 +7084,10 @@ export const ModuleEditor = () => {
                       type="button"
                       onClick={() => setViewportSize(v.id)}
                       className={cn(
-                        "p-1.5 rounded-lg transition-colors focus:outline-none focus:ring-0 border",
+                        "p-1.5 rounded-md transition-colors",
                         viewportSize === v.id 
-                          ? "bg-white dark:bg-zinc-800 text-indigo-600 shadow-xs border-zinc-200/50 dark:border-zinc-700/50" 
-                          : "border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-400"
+                          ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-xs" 
+                          : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300"
                       )}
                       title={v.label}
                     >
@@ -6336,6 +7095,17 @@ export const ModuleEditor = () => {
                     </button>
                   ))}
                 </div>
+                {rightPanelCollapsed && (
+                  <button
+                    type="button"
+                    onClick={() => setRightPanelCollapsed(false)}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                    title="Expand properties panel"
+                  >
+                    <ChevronLeft size={14} />
+                    <span className="hidden sm:inline">Properties</span>
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -6359,50 +7129,186 @@ export const ModuleEditor = () => {
           >
           {activeTab === 'builder' ? (
             activeViewMode === 'master' ? (
-              <div className="flex-1 flex flex-col overflow-hidden bg-zinc-100/60 dark:bg-black p-6 md:p-8 custom-scrollbar overflow-y-auto min-h-full">
-                <div className="max-w-6xl mx-auto w-full space-y-6">
+              <div className="flex-1 flex flex-col overflow-hidden bg-zinc-100/60 dark:bg-black bg-[radial-gradient(#d4d4d8_1px,transparent_1px)] dark:bg-[radial-gradient(#27272a_1px,transparent_1px)] [background-size:24px_24px] p-6 md:p-8 custom-scrollbar overflow-y-auto min-h-full">
+                <div className="max-w-6xl mx-auto w-full space-y-4">
                   
-                  {/* Master View In-Canvas Title Header matching ModuleView.tsx */}
-                  <div className="border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 z-20 relative select-none rounded-2xl shadow-xs">
-                    <div className="flex items-center gap-3.5 min-w-0">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-xs shrink-0">
-                        <DynamicIcon name={moduleSettings.iconName || 'Box'} size={20} />
+                  {/* Master View Tier 1 Context Action Bar & Tier 2 Workbench Toolbar matching ModuleView.tsx */}
+                  <div className="border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 rounded-2xl shadow-xs overflow-hidden select-none z-20 relative">
+                    {/* Tier 1: h-10 Context Action Bar */}
+                    <div className="h-10 px-4 border-b border-zinc-200/80 dark:border-zinc-800/80 flex items-center justify-between gap-3 bg-white dark:bg-zinc-900">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-6 h-6 rounded-md flex items-center justify-center bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shrink-0">
+                          <DynamicIcon name={moduleSettings.iconName || 'Box'} size={13} />
+                        </div>
+                        <span className="text-[11px] font-medium text-zinc-400 hidden sm:inline">Workspace</span>
+                        <span className="text-zinc-300 dark:text-zinc-700 hidden sm:inline">/</span>
+                        <h2 className="text-xs font-bold text-zinc-900 dark:text-white tracking-tight truncate">
+                          {moduleSettings.name || 'Module Records'}
+                        </h2>
+                        <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 border border-zinc-200/80 dark:border-zinc-700/80">
+                          {previewRecords.length}
+                        </span>
                       </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <h2 className="text-base font-bold text-zinc-900 dark:text-white tracking-tight truncate leading-none">
-                            {moduleSettings.name || 'Module Records'}
-                          </h2>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 border border-zinc-200 dark:border-zinc-700">
-                            {activeColumns.length > 0 ? `${activeColumns.length} Columns` : 'Table View'}
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* View Switcher Pill */}
+                        <div className="flex items-center gap-1 h-7 px-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-700/80 text-[10px] font-bold text-zinc-700 dark:text-zinc-200">
+                          <TableProperties size={11} className="text-indigo-500" />
+                          <select
+                            value={interfaceSettings.master.layoutType || 'table'}
+                            onChange={(e) => {
+                              const val = e.target.value as any;
+                              setInterfaceSettings(prev => ({
+                                ...prev,
+                                master: { ...prev.master, layoutType: val }
+                              }));
+                            }}
+                            className="bg-transparent focus:outline-none cursor-pointer uppercase tracking-wider text-[10px] font-bold"
+                          >
+                            {[
+                              { id: 'table', label: 'Table' },
+                              { id: 'split', label: 'Split' },
+                              { id: 'kanban', label: 'Kanban' },
+                              { id: 'calendar', label: 'Calendar' },
+                              { id: 'analytics', label: 'Analytics' },
+                              { id: 'pipeline', label: 'Pipeline' },
+                              { id: 'timeline', label: 'Timeline' },
+                              { id: 'gantt', label: 'Gantt' },
+                              { id: 'cards', label: 'Cards' },
+                              { id: 'portfolio', label: 'Portfolio' },
+                              { id: 'map', label: 'Map' }
+                            ].filter(v => (interfaceSettings.master?.toolbar?.enabledViews || []).includes(v.id) || v.id === (interfaceSettings.master.layoutType || 'table')).map(v => (
+                              <option key={v.id} value={v.id} className="bg-white dark:bg-zinc-900">{v.label}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Configure Toolbar & View Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedId('__table_settings');
+                          }}
+                          className={cn(
+                            "h-7 px-2 rounded-lg border text-[10px] font-bold flex items-center gap-1 transition-colors",
+                            selectedId === '__table_settings'
+                              ? "bg-indigo-600 border-indigo-600 text-white"
+                              : "bg-zinc-50 dark:bg-zinc-800/80 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:border-indigo-500/40"
+                          )}
+                          title="Configure Master Toolbar & View Settings"
+                        >
+                          <Settings2 size={11} />
+                          <span className="hidden md:inline">Configure</span>
+                        </button>
+
+                        {/* Custom Quick Actions */}
+                        {(interfaceSettings.actions || []).slice(0, 2).map((act) => (
+                          <button
+                            key={act.id}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedId('__table_settings');
+                            }}
+                            className="h-7 px-2.5 bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg text-[10px] font-semibold text-zinc-700 dark:text-zinc-200 hover:border-indigo-500/40 flex items-center gap-1 transition-colors"
+                            title="Quick Action (Click to edit in Table Settings)"
+                          >
+                            <DynamicIcon name={act.icon || 'Zap'} size={11} className="text-indigo-500" />
+                            <span>{act.label}</span>
+                          </button>
+                        ))}
+
+                        {/* Action Trigger Forms */}
+                        {forms.filter(f => f.usage === 'action_trigger').slice(0, 1).map(f => (
+                          <button
+                            key={f.id}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveTab('forms');
+                              setSelectedFormId(f.id);
+                            }}
+                            className="h-7 px-2.5 bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg text-[10px] font-semibold text-zinc-700 dark:text-zinc-200 hover:border-indigo-500/40 hidden sm:flex items-center gap-1"
+                            title="Action Trigger Form"
+                          >
+                            <FileText size={11} className="text-indigo-500" />
+                            <span>{f.settings?.workspaceButtonLabel || f.name}</span>
+                          </button>
+                        ))}
+
+                        {/* Split Create Button */}
+                        <div className="flex items-center h-7 rounded-lg bg-indigo-600 text-white text-[11px] font-semibold shadow-2xs overflow-hidden">
+                          <span className="px-2.5 flex items-center gap-1">
+                            <Plus size={12} />
+                            <span>{forms.find(f => f.usage === 'workspace_create')?.settings?.workspaceButtonLabel || 'Create'}</span>
+                          </span>
+                          <span className="h-full px-1 border-l border-indigo-500 flex items-center">
+                            <ChevronDown size={10} />
                           </span>
                         </div>
-                        <p className="text-xs text-zinc-400 font-medium mt-1 truncate">
-                          {moduleSettings.description || 'Master workspace table overview'}
-                        </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2.5 shrink-0">
-                      <div className="relative">
-                        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-                        <input 
-                          type="text" 
-                          placeholder="Filter records..." 
-                          disabled
-                          className="bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-zinc-400 w-36 sm:w-44 pointer-events-none"
-                        />
+                    {/* Tier 2: TableFilterBar Workbench Toolbar */}
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedId('__table_settings');
+                      }}
+                      className="px-4 py-2 bg-zinc-50/60 dark:bg-zinc-950/40 flex flex-wrap items-center justify-between gap-2 cursor-pointer hover:bg-indigo-500/[0.02] transition-colors"
+                      title="Click to configure Workbench Toolbar features in Inspector"
+                    >
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {interfaceSettings.master?.toolbar?.enableSavedViews !== false && (
+                          <div className="h-7 px-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 text-[10px] font-semibold text-zinc-600 dark:text-zinc-300 flex items-center gap-1.5">
+                            <Bookmark size={11} className="text-indigo-500" />
+                            <span>All Records</span>
+                            <ChevronDown size={10} className="text-zinc-400" />
+                          </div>
+                        )}
+                        <div className="h-7 px-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 text-[10px] font-semibold text-zinc-600 dark:text-zinc-300 flex items-center gap-1.5">
+                          <Filter size={11} className="text-zinc-400" />
+                          <span>Filters</span>
+                        </div>
+                        {interfaceSettings.master?.toolbar?.enableGrouping !== false && (
+                          <div className="h-7 px-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 text-[10px] font-semibold text-zinc-600 dark:text-zinc-300 flex items-center gap-1.5">
+                            <Layers size={11} className="text-zinc-400" />
+                            <span>Group By</span>
+                          </div>
+                        )}
+                        {interfaceSettings.master?.toolbar?.enableAskAurora !== false && (
+                          <div className="h-7 px-2.5 rounded-lg bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+                            <Sparkles size={11} />
+                            <span>Ask Aurora</span>
+                          </div>
+                        )}
                       </div>
-                      <button className="px-3.5 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs shadow-indigo-500/20 cursor-default">
-                        <Plus size={13} />
-                        <span>New Record</span>
-                      </button>
+
+                      <div className="flex items-center gap-1.5">
+                        <div className="h-7 px-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 text-[10px] text-zinc-400 flex items-center gap-1.5 w-36 sm:w-44">
+                          <Search size={11} />
+                          <span className="truncate">Search records...</span>
+                        </div>
+                        {interfaceSettings.master?.toolbar?.enableChartToggle !== false && (
+                          <div className="h-7 px-2 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 text-[10px] font-semibold text-zinc-500 flex items-center gap-1" title="Chart Visualizer Toggle">
+                            <BarChart3 size={11} />
+                            <span className="hidden sm:inline">Chart</span>
+                          </div>
+                        )}
+                        {interfaceSettings.master?.toolbar?.enableSpreadsheetMode && (
+                          <div className="h-7 px-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1" title="Spreadsheet Edit Mode Enabled">
+                            <TableProperties size={11} />
+                            <span className="hidden sm:inline">Edit Mode</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 
                   {(!interfaceSettings.master.layoutType || interfaceSettings.master.layoutType === 'table') ? (
-                    <div className="space-y-6">
-                      <div className="space-y-6" onDragOver={(e) => e.preventDefault()} onDrop={handleTableDrop}>
+                    <div className="space-y-4">
+                      <div className="space-y-4" onDragOver={(e) => e.preventDefault()} onDrop={handleTableDrop}>
                       <div 
                         className={cn(
                           "rounded-2xl relative overflow-hidden bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-xs",
@@ -6426,7 +7332,14 @@ export const ModuleEditor = () => {
                               <table className="w-full text-left table-fixed">
                                 <thead>
                                   <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/40 dark:bg-zinc-900/30">
-                                    {/* Lead Key Column (Fixed, always first) */}
+                                    {/* Bulk Selection Checkbox Column matching ModuleView.tsx */}
+                                    {interfaceSettings.master?.toolbar?.enableBulkActions !== false && (
+                                      <th className="w-10 px-3 py-2.5 text-center border-r border-zinc-100 dark:border-zinc-800/50 select-none">
+                                        <div className="w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 mx-auto" />
+                                      </th>
+                                    )}
+
+                                    {/* Lead Key Column (Fixed, always first data column) */}
                                     <th 
                                       onClick={(e) => {
                                         e.stopPropagation();
@@ -6436,7 +7349,7 @@ export const ModuleEditor = () => {
                                       onDragLeave={handleColumnDragLeave}
                                       style={{ width: `${interfaceSettings.master.columns?.find((c: any) => c.fieldId === '_record_key')?.width || 120}px` }}
                                       className={cn(
-                                        "text-[10px] font-bold uppercase tracking-wider cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/30 transition-colors select-none border-r border-zinc-100 dark:border-zinc-800/50 relative",
+                                        "text-[10px] font-bold uppercase tracking-wider cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/30 transition-colors select-none border-r border-zinc-100 dark:border-zinc-800/50 relative group/key",
                                         interfaceSettings.master.density === 'compact' ? 'px-4 py-2' : 
                                         interfaceSettings.master.density === 'spacious' ? 'px-6 py-4' : 'px-5 py-3',
                                         selectedId === '_record_key' 
@@ -6444,7 +7357,7 @@ export const ModuleEditor = () => {
                                           : "text-zinc-400"
                                       )}
                                     >
-                                      {interfaceSettings.master.columns?.find((c: any) => c.fieldId === '_record_key')?.label || 'Key'}
+                                      <span>{interfaceSettings.master.columns?.find((c: any) => c.fieldId === '_record_key')?.label || 'Key'}</span>
                                       
                                       {/* Drop Indicator lines for Key column right drop */}
                                       {tableDropIndicator && tableDropIndicator.hoveredIndex === -1 && (
@@ -6452,11 +7365,11 @@ export const ModuleEditor = () => {
                                       )}
                                     </th>
 
-                                    {/* Draggable Column Headers */}
+                                    {/* Draggable & Resizable Column Headers */}
                                     {activeColumns.map((col, idx) => {
                                       const isSelected = selectedId === col.id;
-                                      const width = col.columnWidth || (['createdAt', 'createdBy', 'updatedAt', 'status', 'assigneeId', 'participantIds'].includes(col.id) ? 120 : 200);
-                                      const isSystem = ['createdAt', 'createdBy', 'updatedAt', 'status', 'assigneeId', 'participantIds'].includes(col.id);
+                                      const width = col.width || col.columnWidth || (['createdAt', 'createdBy', 'updatedAt', 'status', 'nextStep', 'assigneeId', 'participantIds'].includes(col.id) ? 140 : 200);
+                                      const isSystem = ['createdAt', 'createdBy', 'updatedAt', 'status', 'nextStep', 'assigneeId', 'participantIds'].includes(col.id);
 
                                       return (
                                         <th 
@@ -6483,8 +7396,11 @@ export const ModuleEditor = () => {
                                         >
                                           <div className="flex items-center justify-between gap-1">
                                             <div className="flex items-center gap-1.5 min-w-0">
-                                              <GripVertical size={11} className="text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                                              <GripVertical size={11} className="text-zinc-400 opacity-40 group-hover:opacity-100 transition-opacity shrink-0" />
                                               <span className="truncate">{col.label || col.name}</span>
+                                              {col.inlineEdit && (
+                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" title="Inline Editable" />
+                                              )}
                                             </div>
                                             
                                             {/* Remove Header Button */}
@@ -6513,6 +7429,54 @@ export const ModuleEditor = () => {
                                             </button>
                                           </div>
 
+                                          {/* Direct Column-Edge Drag Resize Handle */}
+                                          <div
+                                            draggable={false}
+                                            onMouseDown={(e) => {
+                                              e.stopPropagation();
+                                              e.preventDefault();
+                                              const startX = e.clientX;
+                                              const startW = width;
+                                              const onMove = (moveEvt: MouseEvent) => {
+                                                const nextW = Math.max(80, Math.min(500, Math.round((startW + (moveEvt.clientX - startX)) / 10) * 10));
+                                                if (!isSystem) {
+                                                  updateField(col.id, { columnWidth: nextW });
+                                                }
+                                                setInterfaceSettings(prev => {
+                                                  const cols = prev.master.columns || [];
+                                                  const exists = cols.some(c => c.fieldId === col.id);
+                                                  if (!exists) {
+                                                    return {
+                                                      ...prev,
+                                                      master: {
+                                                        ...prev.master,
+                                                        columns: [
+                                                          ...cols,
+                                                          { fieldId: col.id, visible: true, inlineEdit: !!col.inlineEdit, width: nextW }
+                                                        ]
+                                                      }
+                                                    };
+                                                  }
+                                                  return {
+                                                    ...prev,
+                                                    master: {
+                                                      ...prev.master,
+                                                      columns: cols.map(c => c.fieldId === col.id ? { ...c, width: nextW } : c)
+                                                    }
+                                                  };
+                                                });
+                                              };
+                                              const onUp = () => {
+                                                window.removeEventListener('mousemove', onMove);
+                                                window.removeEventListener('mouseup', onUp);
+                                              };
+                                              window.addEventListener('mousemove', onMove);
+                                              window.addEventListener('mouseup', onUp);
+                                            }}
+                                            className="absolute top-0 bottom-0 right-0 w-1.5 cursor-col-resize hover:bg-indigo-500/60 transition-colors z-20"
+                                            title="Drag to resize column width"
+                                          />
+
                                           {/* Drop Indicator lines */}
                                           {tableDropIndicator && tableDropIndicator.hoveredIndex === idx && (
                                             <div 
@@ -6525,79 +7489,104 @@ export const ModuleEditor = () => {
                                         </th>
                                       );
                                     })}
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50 select-none">
-                                {/* Renders dummy/mock rows */}
-                                {previewRecords.slice(0, 4).map((row: any, rIdx: number) => (
-                                  <tr key={rIdx} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20 transition-colors">
-                                    {/* Lead ID column */}
-                                    <td className={cn(
-                                      "font-medium text-zinc-600 dark:text-zinc-400 font-mono",
-                                      interfaceSettings.master.density === 'compact' ? 'px-4 py-2 text-[10px]' : 
-                                      interfaceSettings.master.density === 'spacious' ? 'px-6 py-4 text-sm' : 'px-5 py-3 text-xs'
-                                    )}>
-                                      {moduleSettings.recordKeyPrefix || 'KEY'}-{1001 + rIdx}
-                                    </td>
-                                    
-                                    {/* Active columns data cells */}
-                                    {activeColumns.map((col) => {
-                                      const width = col.columnWidth || (['createdAt', 'createdBy', 'updatedAt', 'status', 'assigneeId', 'participantIds'].includes(col.id) ? 120 : 200);
-                                      let cellValue = row[col.id] || row[col.name] || '-';
-                                      
-                                      // Custom user / multi-user display
-                                      if (col.type === 'multi-user' || col.id === 'participantIds') {
-                                        cellValue = (
-                                          <div className="flex items-center -space-x-1.5 overflow-hidden">
-                                            <div className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-950 flex items-center justify-center text-[9px] font-bold text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 ring-2 ring-white dark:ring-zinc-900">
-                                              AM
-                                            </div>
-                                            <div className="w-5 h-5 rounded-full bg-purple-100 dark:bg-purple-950 flex items-center justify-center text-[9px] font-bold text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-800 ring-2 ring-white dark:ring-zinc-900">
-                                              JD
-                                            </div>
-                                          </div>
-                                        );
-                                      } else if (col.type === 'user' || col.id === 'createdBy' || col.id === 'assigneeId') {
-                                        cellValue = (
-                                          <div className="flex items-center gap-1.5">
-                                            <div className="w-5 h-5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-[9px] font-bold border border-indigo-500/20">
-                                              AM
-                                            </div>
-                                            <span className="text-zinc-700 dark:text-zinc-300 truncate text-xs font-medium">Alex Morgan</span>
-                                          </div>
-                                        );
-                                      } else if (col.type === 'date' || col.id === 'createdAt' || col.id === 'updatedAt') {
-                                        cellValue = new Date().toLocaleDateString();
-                                      } else if (col.id === 'status' || col.type === 'status') {
-                                        cellValue = (
-                                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold border border-emerald-500/20">
-                                            Active
-                                          </span>
-                                        );
-                                      } else if (typeof cellValue === 'object') {
-                                        cellValue = 'Data';
-                                      }
 
-                                      return (
-                                        <td 
-                                          key={col.id} 
-                                          style={{ width: `${width}px` }}
-                                          className={cn(
-                                            "text-zinc-600 dark:text-zinc-400 truncate border-l border-zinc-100 dark:border-zinc-800/50",
-                                            interfaceSettings.master.density === 'compact' ? 'px-3 py-2 text-[11px]' : 
-                                            interfaceSettings.master.density === 'spacious' ? 'px-6 py-4 text-sm' : 'px-4 py-3 text-xs'
-                                          )}
-                                        >
-                                          {cellValue}
-                                        </td>
-                                      );
-                                    })}
+                                    {/* Sticky Actions Column matching ModuleView.tsx */}
+                                    <th className="w-20 px-3 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider text-zinc-400 border-l border-zinc-100 dark:border-zinc-800/50 select-none">
+                                      Actions
+                                    </th>
                                   </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
+                                </thead>
+                                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50 select-none">
+                                  {/* Renders preview records */}
+                                  {previewRecords.slice(0, 5).map((row: any, rIdx: number) => (
+                                    <tr key={rIdx} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20 transition-colors">
+                                      {interfaceSettings.master?.toolbar?.enableBulkActions !== false && (
+                                        <td className="w-10 px-3 text-center border-r border-zinc-100 dark:border-zinc-800/50">
+                                          <div className="w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 mx-auto" />
+                                        </td>
+                                      )}
+
+                                      {/* Lead ID column */}
+                                      <td className={cn(
+                                        "font-semibold text-indigo-600 dark:text-indigo-400 font-mono",
+                                        interfaceSettings.master.density === 'compact' ? 'px-4 py-2 text-[10px]' : 
+                                        interfaceSettings.master.density === 'spacious' ? 'px-6 py-4 text-sm' : 'px-5 py-3 text-xs'
+                                      )}>
+                                        {row._record_key || `${moduleSettings.recordKeyPrefix || 'KEY'}-${1001 + rIdx}${moduleSettings.recordKeySuffix || ''}`}
+                                      </td>
+                                      
+                                      {/* Active columns data cells */}
+                                      {activeColumns.map((col) => {
+                                        const width = col.width || col.columnWidth || (['createdAt', 'createdBy', 'updatedAt', 'status', 'nextStep', 'assigneeId', 'participantIds'].includes(col.id) ? 140 : 200);
+                                        let cellValue = row[col.id] || row[col.name] || '-';
+                                        
+                                        if (col.type === 'multi-user' || col.id === 'participantIds') {
+                                          cellValue = (
+                                            <div className="flex items-center -space-x-1.5 overflow-hidden">
+                                              <div className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-950 flex items-center justify-center text-[9px] font-bold text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 ring-2 ring-white dark:ring-zinc-900">
+                                                AM
+                                              </div>
+                                              <div className="w-5 h-5 rounded-full bg-purple-100 dark:bg-purple-950 flex items-center justify-center text-[9px] font-bold text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-800 ring-2 ring-white dark:ring-zinc-900">
+                                                JD
+                                              </div>
+                                            </div>
+                                          );
+                                        } else if (col.type === 'user' || col.id === 'createdBy' || col.id === 'assigneeId') {
+                                          cellValue = (
+                                            <div className="flex items-center gap-1.5">
+                                              <div className="w-5 h-5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-[9px] font-bold border border-indigo-500/20">
+                                                AM
+                                              </div>
+                                              <span className="text-zinc-700 dark:text-zinc-300 truncate text-xs font-medium">Alex Morgan</span>
+                                            </div>
+                                          );
+                                        } else if (col.type === 'date' || col.id === 'createdAt' || col.id === 'updatedAt') {
+                                          cellValue = new Date().toLocaleDateString();
+                                        } else if (col.id === 'status' || col.type === 'status') {
+                                          cellValue = (
+                                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold border border-emerald-500/20">
+                                              {(workflow?.nodes?.[0] as any)?.data?.label || (workflow?.nodes?.[0] as any)?.label || 'In Progress'}
+                                            </span>
+                                          );
+                                        } else if (col.id === 'nextStep') {
+                                          cellValue = (
+                                            <span className="px-2 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[10px] font-semibold border border-indigo-500/20 inline-flex items-center gap-1">
+                                              <span>{(workflow?.nodes?.[1] as any)?.data?.label || (workflow?.nodes?.[1] as any)?.label || 'Advance Stage'}</span>
+                                              <ArrowRight size={9} />
+                                            </span>
+                                          );
+                                        } else if (typeof cellValue === 'object') {
+                                          cellValue = 'Data';
+                                        }
+
+                                        return (
+                                          <td 
+                                            key={col.id} 
+                                            style={{ width: `${width}px` }}
+                                            className={cn(
+                                              "text-zinc-600 dark:text-zinc-400 truncate border-l border-zinc-100 dark:border-zinc-800/50",
+                                              interfaceSettings.master.density === 'compact' ? 'px-3 py-2 text-[11px]' : 
+                                              interfaceSettings.master.density === 'spacious' ? 'px-6 py-4 text-sm' : 'px-4 py-3 text-xs'
+                                            )}
+                                          >
+                                            {cellValue}
+                                          </td>
+                                        );
+                                      })}
+
+                                      {/* Row Actions cell */}
+                                      <td className="w-20 px-3 text-right border-l border-zinc-100 dark:border-zinc-800/50">
+                                        <div className="inline-flex items-center gap-1 text-zinc-400">
+                                          <Eye size={12} />
+                                          <Trash2 size={12} />
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -6607,15 +7596,42 @@ export const ModuleEditor = () => {
             ) : (
               <div 
                 ref={scrollContainerRef}
-                className="w-full flex-1 overflow-y-auto custom-scrollbar relative p-6 md:p-8 bg-zinc-100/60 dark:bg-black flex justify-center items-start min-h-full"
+                className="w-full flex-1 overflow-y-auto custom-scrollbar relative p-6 md:p-8 bg-zinc-100/60 dark:bg-black bg-[radial-gradient(#d4d4d8_1px,transparent_1px)] dark:bg-[radial-gradient(#27272a_1px,transparent_1px)] [background-size:24px_24px] flex justify-center items-start min-h-full"
               >
+                <div
+                  className={cn(
+                    "w-full mx-auto space-y-3 transition-all duration-300",
+                    viewportSize === 'desktop' && "max-w-6xl",
+                    viewportSize === 'tablet' && "w-[768px] max-w-full p-5 bg-zinc-200/50 dark:bg-zinc-900/60 rounded-[2.5rem] border-2 border-zinc-300/80 dark:border-zinc-700/80 shadow-2xl ring-1 ring-black/5",
+                    viewportSize === 'mobile' && "w-[390px] max-w-full p-3.5 bg-zinc-200/80 dark:bg-zinc-900/80 rounded-[3rem] border-[6px] border-zinc-300 dark:border-zinc-700 shadow-2xl ring-1 ring-black/10"
+                  )}
+                >
+                  {viewportSize === 'tablet' && (
+                    <div className="flex items-center justify-between px-3.5 py-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-xl text-[10px] font-mono text-zinc-500 border border-zinc-200 dark:border-zinc-700/80">
+                      <div className="flex items-center gap-1.5">
+                        <Tablet size={12} className="text-indigo-500" />
+                        <span className="font-bold text-zinc-700 dark:text-zinc-300">Tablet Canvas (768px)</span>
+                      </div>
+                      <span className="text-[9px] text-zinc-400">Adaptive touch & column layout</span>
+                    </div>
+                  )}
+                  {viewportSize === 'mobile' && (
+                    <div className="flex flex-col items-center gap-1 pb-1">
+                      <div className="w-16 h-1 rounded-full bg-zinc-400 dark:bg-zinc-600 mb-0.5" />
+                      <div className="w-full flex items-center justify-between px-3 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-[10px] font-mono text-zinc-500 border border-zinc-200 dark:border-zinc-700/80">
+                        <div className="flex items-center gap-1.5">
+                          <Smartphone size={11} className="text-indigo-500" />
+                          <span className="font-bold text-zinc-700 dark:text-zinc-300">Mobile Canvas (390px)</span>
+                        </div>
+                        <span className="text-[9px] text-zinc-400">Single-column stack</span>
+                      </div>
+                    </div>
+                  )}
+
                 <div 
                   ref={canvasContainerRef}
                   className={cn(
-                    "rounded-2xl shadow-xs overflow-hidden relative flex flex-col transition-[max-width,width] duration-300 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900",
-                    viewportSize === 'desktop' ? "w-full max-w-6xl" :
-                    viewportSize === 'tablet' ? "w-[768px]" :
-                    "w-[390px]"
+                    "w-full rounded-2xl shadow-xs overflow-hidden relative flex flex-col transition-all duration-300 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900"
                   )}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
@@ -6625,96 +7641,153 @@ export const ModuleEditor = () => {
                   <ConnectionLine hoveredMapping={hoveredMapping} containerRef={canvasContainerRef} />
 
                   {/* Standardized Full-Width Sticky PageHeader matching RecordDetailView.tsx */}
-                  <div className="w-full px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 z-20 select-none">
-                    {/* Left: Back + Icon + Title + Metadata */}
-                    <div className="flex items-center gap-3.5 min-w-0">
-                      <div className="h-8 w-8 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-400 rounded-lg flex items-center justify-center shrink-0">
-                        <ArrowLeft size={15} />
+                  <div className="w-full px-6 py-3.5 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 z-20 select-none">
+                    {/* Left: Back + Stepper + Icon + Title + Subtitle Metadata */}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex items-center gap-1 shrink-0">
+                        <div className="h-8 w-8 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-400 rounded-lg flex items-center justify-center">
+                          <ArrowLeft size={14} />
+                        </div>
+                        <div className="hidden sm:flex items-center bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/80 rounded-lg h-8 px-1.5 gap-1 text-[10px] font-mono text-zinc-400">
+                          <ChevronLeft size={12} />
+                          <span>1/{previewRecords.length || 25}</span>
+                          <ChevronRight size={12} />
+                        </div>
                       </div>
 
                       <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shrink-0">
-                        <DynamicIcon name={moduleSettings.iconName || 'Box'} size={20} />
+                        <DynamicIcon name={moduleSettings.iconName || 'Box'} size={18} />
                       </div>
 
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
+                          <span className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 font-mono text-[10px] font-bold text-indigo-600 dark:text-indigo-400 shrink-0">
+                            {moduleSettings.recordKeyPrefix || 'KEY'}-1001{moduleSettings.recordKeySuffix || ''}
+                          </span>
                           <h1 
                             onClick={(e) => {
                               e.stopPropagation();
                               setSelectedId('page-header');
                             }}
                             className={cn(
-                              "text-base font-bold leading-none truncate cursor-pointer rounded px-1.5 py-0.5 -mx-1.5 transition-all",
+                              "text-base font-bold leading-none truncate cursor-pointer rounded px-1.5 py-0.5 -mx-1 transition-all flex items-center gap-1.5",
                               selectedId === 'page-header' 
                                 ? "text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 ring-2 ring-indigo-500/30" 
                                 : "text-zinc-950 dark:text-white hover:text-indigo-600 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                             )}
-                            title="Click to configure header title"
+                            title="Click to configure Record Title & Subtitle fields"
                           >
-                            {moduleSettings.titleFieldId 
-                              ? (layout.find(f => f.id === moduleSettings.titleFieldId)?.label || 'Sample Record Title') 
-                              : (moduleSettings.name ? `${moduleSettings.name} Record` : 'Sample Record Title')}
+                            <span>
+                              {(() => {
+                                const sampleRec = previewRecords[0];
+                                if (moduleSettings.titleFieldId) {
+                                  const tf = allFields.find(f => f.id === moduleSettings.titleFieldId);
+                                  if (tf) {
+                                    const sampleVal = sampleRec?.[tf.id] || sampleRec?.[tf.name || ''];
+                                    return sampleVal ? `${sampleVal}` : `${tf.label} (Title Field)`;
+                                  }
+                                }
+                                return sampleRec ? getRecordTitle(sampleRec) : (moduleSettings.name ? `${moduleSettings.name} Record` : 'Sample Record Title');
+                              })()}
+                            </span>
+                            <Settings2 size={12} className={cn("transition-opacity shrink-0", selectedId === 'page-header' ? "text-indigo-500 opacity-100" : "text-zinc-400 opacity-60")} />
                           </h1>
-                          <Settings2 size={12} className={cn("transition-opacity shrink-0", selectedId === 'page-header' ? "text-indigo-500 opacity-100" : "text-zinc-400 opacity-0 group-hover:opacity-100")} />
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+                        <div 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedId('page-header');
+                          }}
+                          className="flex flex-wrap items-center gap-1.5 mt-1 text-[11px] text-zinc-500 dark:text-zinc-400 cursor-pointer hover:text-indigo-500 transition-colors"
+                          title="Click to configure Subtitle Metadata fields"
+                        >
                           <span className="font-semibold text-zinc-700 dark:text-zinc-300">
                             {moduleSettings.name || 'Module'}
                           </span>
-                          <span className="text-zinc-300 dark:text-zinc-600">â€¢</span>
-                          <span className="font-mono font-medium text-zinc-600 dark:text-zinc-400">
-                            {moduleSettings.recordKeyPrefix || 'KEY'}-1001
-                          </span>
-                          <span className="text-zinc-300 dark:text-zinc-600">â€¢</span>
-                          <span className="text-zinc-400 dark:text-zinc-500">Created Today</span>
+                          {(moduleSettings.subtitleFieldIds || []).map((subId) => {
+                            const subField = allFields.find(f => f.id === subId) || METADATA_FIELDS.find(f => f.id === subId);
+                            if (!subField) return null;
+                            const sampleVal = previewRecords[0]?.[subField.id] || previewRecords[0]?.[(subField as any).name || ''];
+                            return (
+                              <React.Fragment key={subId}>
+                                <span className="text-zinc-300 dark:text-zinc-600">&bull;</span>
+                                <span className="px-1.5 py-0.2 rounded bg-indigo-500/5 border border-indigo-500/15 text-indigo-600 dark:text-indigo-400 font-medium text-[10px]">
+                                  {subField.label}: {sampleVal && typeof sampleVal !== 'object' ? String(sampleVal) : 'Sample'}
+                                </span>
+                              </React.Fragment>
+                            );
+                          })}
+                          {(moduleSettings.subtitleFieldIds || []).length === 0 && (
+                            <>
+                              <span className="text-zinc-300 dark:text-zinc-600">&bull;</span>
+                              <span className="text-zinc-400 dark:text-zinc-500 italic text-[10px]">+ Click to add subtitle fields</span>
+                            </>
+                          )}
+                          <span className="text-zinc-300 dark:text-zinc-600">&bull;</span>
+                          <span className="text-zinc-400 dark:text-zinc-500">Updated Just Now</span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Right: Actions Cluster matching RecordDetailView.tsx */}
+                    {/* Right: Presence Stack + Quick Actions Cluster matching RecordDetailView.tsx */}
                     <div className="flex items-center gap-2 flex-wrap md:flex-nowrap shrink-0">
-                      <div className="h-8 px-2.5 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-700/80 text-zinc-700 dark:text-zinc-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-2xs">
-                        <Zap size={12} className="text-amber-500" />
-                        <span>Quick Action</span>
+                      {/* Mock Presence Stack */}
+                      <div className="hidden lg:flex items-center -space-x-1.5 mr-1">
+                        <div className="w-6 h-6 rounded-full bg-indigo-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-zinc-900" title="Active Collaborator">
+                          SV
+                        </div>
+                        <div className="w-6 h-6 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-zinc-900" title="Active Collaborator">
+                          AM
+                        </div>
                       </div>
 
-                      <div className="h-8 px-2.5 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-700/80 text-zinc-700 dark:text-zinc-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-2xs">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                        <span>In Progress</span>
+                      {(interfaceSettings.actions || []).slice(0, 2).map((act) => (
+                        <div
+                          key={act.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedId('__table_settings');
+                          }}
+                          className="h-7 px-2.5 bg-zinc-100 dark:bg-zinc-800 hover:border-indigo-500/40 border border-zinc-200/80 dark:border-zinc-700/80 text-zinc-700 dark:text-zinc-200 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                          title="Custom Quick Action"
+                        >
+                          <DynamicIcon name={act.icon || 'Zap'} size={11} className="text-indigo-500" />
+                          <span>{act.label}</span>
+                        </div>
+                      ))}
+
+                      <div className="h-7 px-2.5 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-700/80 text-zinc-700 dark:text-zinc-200 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 shadow-2xs">
+                        <Zap size={11} className="text-amber-500" />
+                        <span>Automations</span>
                       </div>
 
-                      <div className="h-8 px-2.5 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-700/80 text-zinc-700 dark:text-zinc-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-2xs">
-                        <Users size={12} className="text-indigo-500" />
-                        <span>Assignee</span>
+                      <div className="h-7 px-2.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 rounded-lg text-[11px] font-semibold flex items-center gap-1.5">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span>{(workflow?.nodes?.[0] as any)?.data?.label || (workflow?.nodes?.[0] as any)?.label || 'In Progress'}</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Dynamic horizontal section tabs bar inside the builder canvas card */}
+                  {/* Workspace-Accurate h-10 Underline Section Tab Bar ( matching RecordDetailView.tsx ) */}
                   {activeTab === 'builder' && (interfaceSettings.detail?.layoutType === 'tabs' || !interfaceSettings.detail?.layoutType) && (
-                    <div className="px-8 py-3 bg-zinc-50/50 dark:bg-zinc-900/50 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-4 select-none">
+                    <div className="px-6 h-10 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-4 select-none shrink-0">
                       {isLoading ? (
-                        <>
-                          <div className="flex-grow flex items-center gap-2 overflow-hidden animate-pulse">
-                            {[1, 2, 3].map((i) => (
-                              <div key={i} className="h-7.5 w-20 bg-zinc-200 dark:bg-zinc-800 rounded-xl flex-shrink-0" />
-                            ))}
-                          </div>
-                          <div className="w-8 h-8 bg-zinc-200 dark:bg-zinc-800 rounded-xl flex-shrink-0 animate-pulse" />
-                        </>
+                        <div className="flex-grow flex items-center gap-2 overflow-hidden animate-pulse">
+                          {[1, 2, 3].map((i) => (
+                            <div key={i} className="h-6 w-20 bg-zinc-200 dark:bg-zinc-800 rounded-lg flex-shrink-0" />
+                          ))}
+                        </div>
                       ) : (
                         <>
-                          <div className="flex-1 flex items-center gap-2 overflow-hidden relative">
+                          <div className="flex-1 flex items-center gap-1 overflow-hidden relative h-full">
                             {showCanvasLeftScroll && (
                               <button 
                                 type="button"
                                 onClick={() => canvasTabContainerRef.current?.scrollBy({ left: -200, behavior: 'smooth' })}
-                                className="absolute left-0 top-0 bottom-0 w-10 bg-gradient-to-r from-zinc-50 dark:from-zinc-900 via-zinc-50/80 dark:via-zinc-900/80 to-transparent z-20 flex items-center group/scroll"
+                                className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-white dark:from-zinc-900 to-transparent z-20 flex items-center"
                               >
-                                <div className="w-6 h-6 rounded-full bg-white dark:bg-zinc-800 shadow-md flex items-center justify-center ml-1 text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
-                                  <ChevronLeft size={14} />
-                                </div>
+                                <ChevronLeft size={14} className="text-zinc-500" />
                               </button>
                             )}
 
@@ -6726,7 +7799,7 @@ export const ModuleEditor = () => {
                                   canvasTabContainerRef.current.scrollLeft += e.deltaY;
                                 }
                               }}
-                              className="flex-grow overflow-x-auto scrollbar-hide py-1"
+                              className="flex-grow overflow-x-auto scrollbar-hide h-full flex items-center"
                             >
                               <Reorder.Group 
                                 axis="x" 
@@ -6742,25 +7815,26 @@ export const ModuleEditor = () => {
                                   newFullTabs.push(...orphans);
                                   setTabs(newFullTabs);
                                 }}
-                                className="flex items-center gap-1.5"
+                                className="flex items-center gap-1 h-full"
                               >
                                 {tabs.filter(t => !t.parentId).map((tab) => {
                                   const subtabs = tabs.filter(sub => sub.parentId === tab.id);
                                   const isParent = subtabs.length > 0;
                                   const isParentActive = isParent && subtabs.some(sub => sub.id === currentTabId);
                                   const isActive = currentTabId === tab.id || isParentActive;
+                                  const tabFieldCount = layout.filter(f => !f.parentId && (f.tabId === tab.id || (!f.tabId && tab.id === tabs[0]?.id))).length;
 
                                   return (
                                     <Reorder.Item 
                                       key={tab.id} 
                                       value={tab}
                                       dragListener={isEditingTab !== tab.id}
-                                      className="group relative flex-shrink-0"
+                                      className="group relative flex-shrink-0 h-full flex items-center"
                                     >
                                       {isEditingTab === tab.id ? (
                                         <input
                                           autoFocus
-                                          className="px-3 py-1.5 bg-white dark:bg-zinc-900 border border-indigo-500 rounded-lg text-xs font-bold focus:outline-none min-w-[100px] shadow-lg text-zinc-900 dark:text-white"
+                                          className="px-2.5 py-1 bg-white dark:bg-zinc-900 border border-indigo-500 rounded-md text-xs font-bold focus:outline-none min-w-[90px] text-zinc-900 dark:text-white"
                                           value={tab.label}
                                           onChange={(e) => {
                                             const newTabs = tabs.map(t => t.id === tab.id ? { ...t, label: e.target.value } : t);
@@ -6771,7 +7845,7 @@ export const ModuleEditor = () => {
                                         />
                                       ) : (
                                         <div 
-                                          className="relative"
+                                          className="relative h-full flex items-center"
                                           onMouseEnter={(e) => {
                                             setHoveredTabId(tab.id);
                                             const rect = e.currentTarget.getBoundingClientRect();
@@ -6784,60 +7858,64 @@ export const ModuleEditor = () => {
                                             }
                                           }}
                                         >
-                                          <div className="flex items-center">
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              if (isParent) {
+                                                setCurrentTabId(subtabs[0].id);
+                                                setSelectedId(subtabs[0].id);
+                                              } else {
+                                                setCurrentTabId(tab.id);
+                                                setSelectedId(tab.id);
+                                              }
+                                            }}
+                                            onDoubleClick={() => setIsEditingTab(tab.id)}
+                                            className={cn(
+                                              "relative h-full px-3 text-xs font-semibold transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-grab active:cursor-grabbing",
+                                              isActive
+                                                ? "text-indigo-600 dark:text-indigo-400 font-bold"
+                                                : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
+                                            )}
+                                            title="Click to select tab, double-click to rename, drag to reorder"
+                                          >
+                                            {interfaceSettings.detail?.showTabIcons && (
+                                              <DynamicIcon name={tab.iconName || (isParent ? 'Folder' : 'Layout')} size={13} className="shrink-0" />
+                                            )}
+                                            <span>{tab.label}</span>
+                                            <span className={cn(
+                                              "text-[9px] px-1.5 py-0.2 rounded-full font-bold",
+                                              isActive ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"
+                                            )}>
+                                              {tabFieldCount}
+                                            </span>
+                                            {tab.visibilityRule && (
+                                              <span title="Conditional Tab Visibility Rule" className="inline-flex">
+                                                <BrainCircuit size={10} className="text-amber-500 shrink-0" />
+                                              </span>
+                                            )}
+                                            {isParent && <ChevronDown size={11} className={cn("ml-0.5 transition-transform", hoveredTabId === tab.id ? "rotate-180" : "")} />}
+                                            {isActive && (
+                                              <div className="absolute bottom-0 left-2 right-2 h-[2px] bg-indigo-600 dark:bg-indigo-400 rounded-t-full" />
+                                            )}
+                                          </button>
+                                          {tabs.length > 1 && (
                                             <button
                                               onClick={(e) => {
                                                 e.stopPropagation();
-                                                if (isParent) {
-                                                  setCurrentTabId(subtabs[0].id);
-                                                  setSelectedId(subtabs[0].id);
-                                                } else {
-                                                  setCurrentTabId(tab.id);
-                                                  setSelectedId(tab.id);
+                                                const newTabs = tabs.filter(t => t.id !== tab.id).map(t => t.parentId === tab.id ? { ...t, parentId: undefined } : t);
+                                                setTabs(newTabs);
+                                                if (currentTabId === tab.id || (isParent && subtabs.some(sub => sub.id === currentTabId))) {
+                                                  const selectable = newTabs.find(t => !newTabs.some(sub => sub.parentId === t.id));
+                                                  setCurrentTabId(selectable ? selectable.id : newTabs[0]?.id || '');
                                                 }
+                                                setLayout(layout.filter(field => field.tabId !== tab.id && (!isParent || !subtabs.some(sub => sub.id === field.tabId))));
                                               }}
-                                              onDoubleClick={() => setIsEditingTab(tab.id)}
-                                              className={cn(
-                                                "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border whitespace-nowrap",
-                                                isActive
-                                                  ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-500/20"
-                                                  : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                                              )}
+                                              className="w-4 h-4 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-xs -ml-1 mr-1 z-20"
+                                              title="Delete Section Tab"
                                             >
-                                              {interfaceSettings.detail?.showTabIcons && (
-                                                <DynamicIcon name={tab.iconName || (isParent ? 'Folder' : 'Layout')} size={12} className="shrink-0" />
-                                              )}
-                                              <span>{tab.label}</span>
-                                              {isParent && <ChevronDown size={10} className={cn("ml-1 transition-transform", hoveredTabId === tab.id ? "rotate-180" : "")} />}
-                                              {(isActive || currentTabId === tab.id) && (
-                                                <Settings2 
-                                                  size={11} 
-                                                  className="opacity-60 hover:opacity-100 transition-opacity" 
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setSelectedId(tab.id);
-                                                  }}
-                                                />
-                                              )}
+                                              <X size={8} />
                                             </button>
-                                            {tabs.length > 1 && (
-                                              <button
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  const newTabs = tabs.filter(t => t.id !== tab.id).map(t => t.parentId === tab.id ? { ...t, parentId: undefined } : t);
-                                                  setTabs(newTabs);
-                                                  if (currentTabId === tab.id || (isParent && subtabs.some(sub => sub.id === currentTabId))) {
-                                                    const selectable = newTabs.find(t => !newTabs.some(sub => sub.parentId === t.id));
-                                                    setCurrentTabId(selectable ? selectable.id : newTabs[0]?.id || '');
-                                                  }
-                                                  setLayout(layout.filter(field => field.tabId !== tab.id && (!isParent || !subtabs.some(sub => sub.id === field.tabId))));
-                                                }}
-                                                className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg z-20"
-                                              >
-                                                <X size={8} />
-                                              </button>
-                                            )}
-                                          </div>
+                                          )}
 
                                           {isParent && hoveredTabId === tab.id && hoveredTabRect && createPortal(
                                             <div 
@@ -6847,9 +7925,7 @@ export const ModuleEditor = () => {
                                                 left: `${hoveredTabRect.left}px`,
                                               }}
                                               className="w-56 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-2xl p-2 z-[9999] flex flex-col gap-0.5"
-                                              onMouseEnter={() => {
-                                                setHoveredTabId(tab.id);
-                                              }}
+                                              onMouseEnter={() => setHoveredTabId(tab.id)}
                                               onMouseLeave={() => {
                                                 if (!isDraggingSubtab) {
                                                   setHoveredTabId(null);
@@ -6903,17 +7979,7 @@ export const ModuleEditor = () => {
                                                         )}
                                                         <span>{sub.label}</span>
                                                       </div>
-                                                      <div className="flex items-center gap-1.5">
-                                                        <Settings2 
-                                                          size={10} 
-                                                          className="opacity-0 group-hover/sub:opacity-100 text-zinc-400 hover:text-indigo-600 transition-opacity cursor-pointer"
-                                                          onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setSelectedId(sub.id);
-                                                          }}
-                                                        />
-                                                        {currentTabId === sub.id && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600 dark:bg-indigo-400" />}
-                                                      </div>
+                                                      {currentTabId === sub.id && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600 dark:bg-indigo-400" />}
                                                     </button>
                                                   </Reorder.Item>
                                                 ))}
@@ -6933,11 +7999,9 @@ export const ModuleEditor = () => {
                               <button 
                                 type="button"
                                 onClick={() => canvasTabContainerRef.current?.scrollBy({ left: 200, behavior: 'smooth' })}
-                                className="absolute right-10 top-0 bottom-0 w-10 bg-gradient-to-l from-zinc-50 dark:from-zinc-900 via-zinc-50/80 dark:via-zinc-900/80 to-transparent z-20 flex items-center justify-end group/scroll"
+                                className="absolute right-8 top-0 bottom-0 w-8 bg-gradient-to-l from-white dark:from-zinc-900 to-transparent z-20 flex items-center justify-end"
                               >
-                                <div className="w-6 h-6 rounded-full bg-white dark:bg-zinc-800 shadow-md flex items-center justify-center mr-1 text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
-                                  <ChevronRight size={14} />
-                                </div>
+                                <ChevronRight size={14} className="text-zinc-500" />
                               </button>
                             )}
                             
@@ -6950,11 +8014,32 @@ export const ModuleEditor = () => {
                                 setIsEditingTab(newId);
                                 setSelectedId(newId);
                               }}
-                              className="p-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-400 hover:text-indigo-600 hover:border-indigo-500/50 transition-all flex-shrink-0 shadow-sm"
+                              className="h-7 px-2 bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-500 hover:text-indigo-600 hover:border-indigo-500/40 transition-all flex items-center gap-1 text-[10px] font-bold flex-shrink-0 ml-1"
                               title="Add Section Tab"
                             >
-                              <Plus size={14} />
+                              <Plus size={12} />
+                              <span className="hidden sm:inline">Section</span>
                             </button>
+                          </div>
+
+                          {/* Right side of Tab Bar: Action Trigger & Edit Forms matching RecordDetailView.tsx */}
+                          <div className="hidden md:flex items-center gap-1.5 shrink-0">
+                            {forms.filter(f => f.usage === 'action_trigger' || f.usage === 'workspace_edit').slice(0, 3).map(f => (
+                              <button
+                                key={f.id}
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveTab('forms');
+                                  setSelectedFormId(f.id);
+                                }}
+                                className="h-7 px-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200/80 dark:border-zinc-700/80 text-[10px] font-semibold text-zinc-600 dark:text-zinc-300 hover:border-indigo-500/40 hover:text-indigo-600 flex items-center gap-1 transition-colors"
+                                title={`Form button (${f.usage}) - click to edit in Form Builder`}
+                              >
+                                <FileText size={11} className="text-indigo-500" />
+                                <span>{f.settings?.workspaceButtonLabel || f.name}</span>
+                              </button>
+                            ))}
                           </div>
                         </>
                       )}
@@ -7222,65 +8307,90 @@ export const ModuleEditor = () => {
 
                     {activeTab === 'builder' && interfaceSettings.detail?.layoutType === 'accordion' ? (() => {
                       const accordionTabs = tabs.filter(t => !tabs.some(sub => sub.parentId === t.id));
+                      const displayLayout = previewLayout || layout;
                       return (
-                        <div className="flex-1 p-8 pb-32 space-y-6 select-none">
+                        <div className="flex-1 p-6 pb-32 space-y-5 select-none min-w-0">
                           {accordionTabs.map((tab) => {
                             const isCollapsed = collapsedGroups[tab.id] ?? false;
                             const parentTab = tab.parentId ? tabs.find(t => t.id === tab.parentId) : null;
-                            const displayLabel = parentTab ? `${parentTab.label} â€º ${tab.label}` : tab.label;
+                            const displayLabel = parentTab ? `${parentTab.label} › ${tab.label}` : tab.label;
+                            const tabFields = displayLayout.filter(f => !f.parentId && (f.tabId === tab.id || (!f.tabId && tab.id === tabs[0]?.id)));
                             return (
                               <div 
                                 key={tab.id} 
-                                className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[24px] shadow-sm overflow-hidden transition-all"
+                                className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xs overflow-hidden transition-all"
                               >
                                 <div 
                                   onClick={() => setCollapsedGroups(prev => ({ ...prev, [tab.id]: !isCollapsed }))}
-                                  className="p-5 bg-zinc-50/50 dark:bg-zinc-900/30 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between cursor-pointer select-none"
+                                  className="px-5 py-3.5 bg-zinc-50/70 dark:bg-zinc-900/50 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between cursor-pointer select-none"
                                 >
-                                  <div className="flex items-center gap-3">
+                                  <div className="flex items-center gap-2.5">
                                     {interfaceSettings.detail?.showTabIcons ? (
-                                      <DynamicIcon name={tab.iconName || 'Layout'} size={12} className="text-indigo-500 shrink-0" />
+                                      <DynamicIcon name={tab.iconName || 'Layout'} size={13} className="text-indigo-500 shrink-0" />
                                     ) : (
-                                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                                      <span className="w-2 h-2 rounded-full bg-indigo-500" />
                                     )}
-                                    <h3 className="text-[10px] font-black uppercase tracking-wider text-zinc-900 dark:text-white">{displayLabel}</h3>
+                                    <h3 className="text-xs font-bold text-zinc-900 dark:text-white">{displayLabel}</h3>
+                                    <span className="px-1.5 py-0.2 rounded-full bg-zinc-200/70 dark:bg-zinc-800 text-[9px] font-bold text-zinc-500">
+                                      {tabFields.length}
+                                    </span>
                                   </div>
-                                <LucideIcons.ChevronDown size={14} className={cn("text-zinc-400 transition-transform duration-200", isCollapsed && "rotate-180")} />
-                              </div>
-                              
-                              {!isCollapsed && (
-                                <div 
-                                  onDragOver={(e) => handleDragOver(e, undefined, tab.id)}
-                                  onDrop={(e) => handleDropOnCanvas(e, undefined, tab.id)}
-                                  className={cn(
-                                    "p-6 min-h-[150px] relative transition-all duration-300 grid grid-cols-1 md:grid-cols-12",
-                                    isArchitectThinking && "opacity-40 grayscale-[0.5] scale-[0.99] pointer-events-none"
-                                  )}
-                                  style={{ 
-                                    gap: `${GRID_CONFIG.gap}px`,
-                                    gridAutoRows: `${GRID_CONFIG.rowHeight}px`
-                                  }}
-                                >
-                                  {activeDragItem && (
-                                    <div className="absolute inset-0 pointer-events-none z-0 grid grid-cols-12 opacity-50" style={{ gap: `${GRID_CONFIG.gap}px`, padding: '24px' }}>
-                                      {Array.from({ length: 12 }).map((_, i) => (
-                                        <div key={i} className="h-full border-x border-dashed border-indigo-500/10 bg-indigo-500/[0.01] rounded-xl" />
-                                      ))}
-                                    </div>
-                                  )}
-                                  {isLoading ? (
-                                    <div className="col-span-12 h-20 bg-zinc-50 dark:bg-zinc-900/50 animate-pulse rounded-xl" />
-                                  ) : (
-                                    renderFieldBlocks(previewLayout || layout, undefined, tab.id)
-                                  )}
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedId(tab.id);
+                                      }}
+                                      className="p-1 text-zinc-400 hover:text-indigo-600 rounded transition-colors"
+                                      title="Section Settings"
+                                    >
+                                      <Settings2 size={12} />
+                                    </button>
+                                    <LucideIcons.ChevronDown size={14} className={cn("text-zinc-400 transition-transform duration-200", isCollapsed && "rotate-180")} />
+                                  </div>
                                 </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })() : (
+                              
+                                {!isCollapsed && (
+                                  <div 
+                                    id={`section-grid-${tab.id}`}
+                                    onDragOver={(e) => handleDragOver(e, undefined, tab.id)}
+                                    onDrop={(e) => handleDropOnCanvas(e, undefined, tab.id)}
+                                    onDragLeave={handleDragLeave}
+                                    className={cn(
+                                      "p-5 min-h-[140px] relative transition-all duration-300",
+                                      isArchitectThinking && "opacity-40 grayscale-[0.5] scale-[0.99] pointer-events-none"
+                                    )}
+                                  >
+                                    {isLoading ? (
+                                      <div className="h-20 bg-zinc-50 dark:bg-zinc-900/50 animate-pulse rounded-xl" />
+                                    ) : (
+                                      <>
+                                        <SectionRglContainer
+                                          sectionTabId={tab.id}
+                                          fields={tabFields}
+                                          viewportSize={viewportSize}
+                                          dragOverInfo={dragOverInfo}
+                                          resolveCollisionsInArray={resolveCollisionsInArray}
+                                          onLayoutChange={handleRglLayoutChange}
+                                        >
+                                          {renderFieldBlocks(tabFields, undefined, tab.id)}
+                                        </SectionRglContainer>
+                                        {tabFields.length === 0 && !dragOverInfo && (
+                                          <div className="inset-0 flex flex-col items-center justify-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50/30 dark:bg-zinc-950/20 py-8">
+                                            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Drop fields here to add to {tab.label}</p>
+                                          </div>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })() : (
                       <div 
                         id="main-grid-container"
                         ref={rglContainerRef}
@@ -7288,1566 +8398,333 @@ export const ModuleEditor = () => {
                         onDragLeave={handleDragLeave}
                         onDrop={handleDropOnCanvas}
                         className={cn(
-                          "flex-1 min-w-0 p-8 pb-32 min-h-[800px] relative z-10 transition-all duration-300",
-                          interfaceSettings.detail?.layoutType === 'sidebar' && "flex flex-col gap-8",
+                          "flex-1 min-w-0 p-6 pb-32 min-h-[720px] relative z-10 transition-all duration-300 bg-zinc-50/30 dark:bg-zinc-950/20",
+                          interfaceSettings.detail?.layoutType === 'sidebar' && "flex flex-col gap-6",
                           isArchitectThinking && "opacity-40 grayscale-[0.5] scale-[0.99] pointer-events-none"
                         )}
-                        style={{ 
-                          padding: `${GRID_CONFIG.padding}px`,
-                          paddingBottom: '160px'
-                        }}
                       >
-                      {activeDragItem && interfaceSettings.detail?.layoutType !== 'sidebar' && (
-                        <div className="absolute inset-0 pointer-events-none z-0 grid grid-cols-12 opacity-50" style={{ gap: `${GRID_CONFIG.gap}px`, padding: `${GRID_CONFIG.padding}px` }}>
-                          {Array.from({ length: 12 }).map((_, i) => (
-                            <div key={i} className="h-full border-x border-dashed border-indigo-500/10 bg-indigo-500/[0.01] rounded-xl" />
-                          ))}
-                        </div>
-                      )}
-                      <AnimatePresence>
-                        {isLoading ? (
-                          <motion.div
-                            key="skeleton-grid"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="col-span-12 grid grid-cols-12 gap-5 animate-pulse"
-                          >
-                            {/* Large Card Skeleton (Group) - Approx 300px (6 units) */}
-                            <div className="col-span-12 h-[300px] bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800 rounded-3xl p-6 space-y-6">
-                              <div className="h-6 w-48 bg-zinc-200 dark:bg-zinc-800 rounded-lg" />
-                              <div className="grid grid-cols-2 gap-x-8 gap-y-10">
-                                {[1, 2, 3, 4, 5, 6].map(i => (
-                                  <div key={i} className="space-y-3">
-                                    <div className="h-3 w-20 bg-zinc-200 dark:bg-zinc-800 rounded" />
-                                    <div className="h-[44px] w-full bg-white dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-xl" />
+                        <AnimatePresence>
+                          {isLoading ? (
+                            <motion.div
+                              key="skeleton-grid"
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              className="col-span-12 grid grid-cols-12 gap-5 animate-pulse"
+                            >
+                              <div className="col-span-12 h-[240px] bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800 rounded-2xl p-6 space-y-6" />
+                              {[1, 2].map(row => (
+                                <div key={row} className="col-span-6 h-[90px] bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800 rounded-2xl p-5" />
+                              ))}
+                            </motion.div>
+                          ) : interfaceSettings.detail?.layoutType === 'sidebar' ? (() => {
+                            const displayLayout = previewLayout || layout;
+                            const displayTabs = tabs.filter(t => !tabs.some(sub => sub.parentId === t.id));
+                            return displayTabs.map((tab) => {
+                              const tabFields = displayLayout.filter(f => !f.parentId && (f.tabId === tab.id || (!f.tabId && tab.id === tabs[0]?.id)));
+                              const parentTab = tab.parentId ? tabs.find(t => t.id === tab.parentId) : null;
+                              const displayLabel = parentTab ? `${parentTab.label} › ${tab.label}` : tab.label;
+
+                              return (
+                                <div 
+                                  key={tab.id}
+                                  className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-xs space-y-5 relative group/section w-full"
+                                >
+                                  <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800 select-none">
+                                    <div className="flex items-center gap-2.5">
+                                      {interfaceSettings.detail?.showTabIcons ? (
+                                        <DynamicIcon name={tab.iconName || 'Layout'} size={14} className="text-indigo-500 shrink-0" />
+                                      ) : (
+                                        <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                                      )}
+                                      <h3 className="text-xs font-bold text-zinc-900 dark:text-white">{displayLabel}</h3>
+                                      <span className="px-1.5 py-0.2 rounded-full bg-zinc-100 dark:bg-zinc-800 text-[9px] font-bold text-zinc-500">
+                                        {tabFields.length}
+                                      </span>
+                                    </div>
+                                    <button
+                                      onClick={() => setSelectedId(tab.id)}
+                                      className="p-1.5 bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 border border-zinc-200/60 dark:border-zinc-700 rounded-lg text-zinc-400 hover:text-indigo-600 transition-all opacity-0 group-hover/section:opacity-100"
+                                      title="Section Settings"
+                                    >
+                                      <Settings size={12} />
+                                    </button>
                                   </div>
-                                ))}
-                              </div>
-                            </div>
 
-                            {/* Row of standard field skeletons - 100px (2 units) */}
-                            {[1, 2].map(row => (
-                              <div key={row} className="col-span-6 h-[100px] bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800 rounded-3xl p-6 space-y-3">
-                                <div className="h-3 w-24 bg-zinc-200 dark:bg-zinc-800 rounded" />
-                                <div className="h-[44px] w-full bg-white dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-xl" />
-                              </div>
-                            ))}
-
-                            {/* Another Group or Text Area skeleton */}
-                            <div className="col-span-12 h-[200px] bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800 rounded-3xl p-6 space-y-6">
-                              <div className="h-6 w-32 bg-zinc-200 dark:bg-zinc-800 rounded-lg" />
-                              <div className="h-[100px] w-full bg-white dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-xl" />
-                            </div>
-                          </motion.div>
-                        ) : interfaceSettings.detail?.layoutType === 'sidebar' ? (() => {
-                          const displayLayout = previewLayout || layout;
-                          const renderFieldBlocks = (fields: Field[], parentId?: string, tabId?: string): React.ReactNode => {
-                            const isNested = !!parentId;
-                            const filtered = fields.filter(block => {
+                                  <div 
+                                    id={`section-grid-${tab.id}`}
+                                    className="relative min-h-[120px] w-full"
+                                    onDragOver={(e) => handleDragOver(e, undefined, tab.id)}
+                                    onDrop={(e) => handleDropOnCanvas(e, undefined, tab.id)}
+                                    onDragLeave={handleDragLeave}
+                                  >
+                                    <SectionRglContainer
+                                      sectionTabId={tab.id}
+                                      fields={tabFields}
+                                      viewportSize={viewportSize}
+                                      dragOverInfo={dragOverInfo}
+                                      resolveCollisionsInArray={resolveCollisionsInArray}
+                                      onLayoutChange={handleRglLayoutChange}
+                                    >
+                                      {renderFieldBlocks(tabFields, undefined, tab.id)}
+                                    </SectionRglContainer>
+                                    
+                                    {tabFields.length === 0 && !dragOverInfo && (
+                                      <div className="inset-0 flex flex-col items-center justify-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50/20 dark:bg-zinc-950/10 py-8">
+                                        <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Drop fields here to add to {tab.label}</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            });
+                          })() : (() => {
+                            const displayLayout = previewLayout || layout;
+                            const activeTabFields = displayLayout.filter(block => {
                               const type = block.type?.toLowerCase();
                               if (!showSystemFields && (type === 'connector' || type === 'automation' || type === 'nexus_connector')) return false;
-
                               if ((activeTab as string) === 'preview' && !isFieldVisible(block, {}, { user })) return false;
-
-                              if (isNested) return true;
-                              return block.tabId === tabId || (!block.tabId && tabId === tabs[0]?.id);
-                            });
-                            
-                            let items = [...filtered];
-
-                            if ((activeTab as string) === 'preview') {
-                              items = compactLayout(items);
-                            }
-
-                            return items.map((item) => {
-                              if (React.isValidElement(item)) return item;
-                              const block = item as Field;
-                              const isGroup = isContainerField(block.type);
-
-                              if (isGroup) {
-                                return (
-                                  <FieldGroup 
-                                    key={block.id}
-                                    block={block}
-                                    selectedIds={selectedIds}
-                                    onSelect={(id, e) => {
-                                      if (e?.shiftKey || e?.metaKey || e?.ctrlKey) {
-                                        setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-                                      } else {
-                                        setSelectedIds([id]);
-                                      }
-                                    }}
-                                    onUpdate={updateField}
-                                    onDelete={(id) => deleteBlocks([id])}
-                                    onDrop={(e, dropParentId) => handleDropOnCanvas(e, dropParentId || block.id, tabId)}
-                                    onDragOver={(e, dragParentId) => handleDragOver(e, dragParentId || block.id, tabId)}
-                                    onDragStart={(e: any) => handleUnifiedPointerDrag(block.id, parentId)(e)}
-                                    renderNested={(nestedFields, pId) => renderFieldBlocks(nestedFields as any, pId, tabId)}
-                                    viewportSize={viewportSize}
-                                    onClone={cloneField}
-                                    isDraggingOver={dragOverInfo?.active && dragOverInfo?.parentId === block.id}
-                                    hoveredMapping={hoveredMapping}
-                                    dragOverInfo={dragOverInfo}
-                                    isDragging={!!activeDragItem}
-                                  />
-                                );
-                              }
-
-                              if (block.id === 'placeholder' || block.id === '__drop_zone_indicator__') {
-                                return null;
-                              }
-                              return (
-                                <div
-                                  key={block.id}
-                                  id={`canvas-field-${block.id}`}
-                                  style={{ 
-                                    gridColumn: viewportSize === 'mobile' ? 'span 1' : `${block.startCol || 1} / span ${block.colSpan || 12}`,
-                                    gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${calculateHeight(block)}`
-                                  }}
-                                  onClick={(e) => {
-                                    if (block.isDraggingPlaceholder) return;
-                                    e.stopPropagation();
-                                    if (e.shiftKey || e.metaKey || e.ctrlKey) {
-                                      setSelectedIds(prev => prev.includes(block.id) ? prev.filter(id => id !== block.id) : [...prev, block.id]);
-                                    } else {
-                                      setSelectedIds([block.id]);
-                                    }
-                                  }}
-                                  className={cn(
-                                    "group/field relative p-4 rounded-2xl cursor-pointer transition-all border-2 h-full flex flex-col",
-                                    block.isDraggingPlaceholder
-                                      ? "border-dashed border-indigo-500/40 bg-indigo-55/20 dark:bg-indigo-500/5 select-none pointer-events-none"
-                                      : (selectedIds.includes(block.id) 
-                                          ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-30" 
-                                          : "bg-zinc-50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-800 hover:border-indigo-500/30 hover:z-40"),
-                                    block.hidden && activeTab === 'builder' && "opacity-40 border-dashed grayscale-[0.5] hover:opacity-100 hover:grayscale-0",
-                                    activeDragItem?.fieldId === block.id && "opacity-20 z-50 cursor-grabbing",
-                                    hoveredMapping?.targetFieldId === block.id && "ring-8 ring-indigo-500/30 border-indigo-500 scale-[1.02] shadow-2xl z-30"
-                                  )}
-                                >
-                                  {block.isDraggingPlaceholder ? (() => {
-                                    const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === block.type);
-                                    const Icon = fieldDef?.icon;
-                                    return (
-                                      <div className="flex-grow flex flex-col justify-center items-center h-full min-h-[60px] py-2 relative overflow-hidden">
-                                        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-transparent pointer-events-none" />
-                                        <div className="flex items-center gap-2 text-indigo-500/60 dark:text-indigo-400/60 z-10">
-                                          {Icon && <Icon size={14} className="animate-pulse shrink-0" />}
-                                          <span className="text-[10px] font-black uppercase tracking-wider truncate">{block.label || fieldDef?.label || block.type}</span>
-                                        </div>
-                                        <span className="text-[8px] font-bold text-indigo-400/40 uppercase tracking-widest mt-1 z-10">Moving Here</span>
-                                      </div>
-                                    );
-                                  })() : (
-                                    <>
-                                      {/* Selection UI */}
-                                      {selectedIds.includes(block.id) && (
-                                        <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20">
-                                          Selected
-                                        </div>
-                                      )}
-                                      <div className="space-y-2 flex-1 overflow-y-auto scrollbar-hide">
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-1.5 min-w-0">
-                                        <div className="drag-handle text-zinc-400 hover:text-zinc-600 dark:text-zinc-550 dark:hover:text-zinc-300 cursor-grab active:cursor-grabbing p-0.5 rounded flex items-center shrink-0" title="Drag to move">
-                                          <GripVertical size={12} />
-                                        </div>
-                                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 truncate">
-                                          {(() => {
-                                            const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === block.type);
-                                            const Icon = fieldDef?.icon;
-                                            return Icon ? <Icon size={10} className="text-zinc-400 shrink-0" /> : null;
-                                          })()}
-                                          <span className="truncate">{FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === block.type)?.label || block.type.replace('_', ' ')}</span>
-                                          {block.required && <span className="text-rose-500">*</span>}
-                                          {block.tooltip && <HelpCircle size={10} className="text-zinc-400 shrink-0" />}
-                                        </label>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        {block.hidden && (
-                                          <div 
-                                            className="px-2 py-0.5 bg-rose-500/10 border border-rose-500/20 rounded-lg flex items-center gap-1 cursor-pointer hover:bg-rose-500/20"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              updateField(block.id, { hidden: false });
-                                            }}
-                                          >
-                                            <EyeOff size={10} className="text-rose-500" />
-                                            <span className="text-[8px] font-black text-rose-500 uppercase tracking-tighter">Hidden</span>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-
-                                    {!(block.type === 'heading' || block.type === 'alert' || block.type === 'divider' || block.type === 'spacer') && (
-                                      <p className="text-[11px] font-medium text-zinc-900 dark:text-zinc-300 mb-1">{block.label}</p>
-                                    )}
-
-                                    <div className="min-h-[20px]">
-                                      {block.type === 'heading' ? (() => {
-                                        const rawTag = block.options?.[0] || 'h2';
-                                        const Tag = (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(rawTag) ? rawTag : 'h2') as React.ElementType;
-                                        const size = Tag === 'h1' ? 'text-2xl font-bold' :
-                                                     Tag === 'h2' ? 'text-xl font-bold' :
-                                                     Tag === 'h3' ? 'text-lg font-bold' :
-                                                     Tag === 'h4' ? 'text-base font-bold' : 'text-xl font-bold';
-                                        return (
-                                          <div className="pt-2">
-                                            <Tag className={cn("text-zinc-900 dark:text-white tracking-tight", size)}>
-                                              {block.label || 'Heading'}
-                                            </Tag>
-                                          </div>
-                                        );
-                                      })() : block.type === 'divider' ? (
-                                        <div className="py-2">
-                                          <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-4" />
-                                        </div>
-                                      ) : block.type === 'spacer' ? (
-                                        <div className="py-2">
-                                          <div className="h-8 border-x border-zinc-100 dark:border-zinc-800/50 border-dashed mx-auto w-px" />
-                                        </div>
-                                      ) : block.type === 'alert' ? (() => {
-                                        const variant = block.options?.[0] || 'info';
-                                        const alertStyle = variant === 'error' ? 'bg-rose-500/10 border-rose-500/20 text-rose-600' :
-                                                      variant === 'warning' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' :
-                                                      variant === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' :
-                                                      'bg-indigo-500/10 border-indigo-500/20 text-indigo-600';
-                                        const AlertIcon = variant === 'error' ? XCircle :
-                                                     variant === 'warning' ? AlertTriangle :
-                                                     variant === 'success' ? Check : Info;
-                                        return (
-                                          <div className="pt-2">
-                                            <div className={cn("p-4 rounded-2xl border flex items-center gap-3", alertStyle)}>
-                                              <AlertIcon size={18} />
-                                              <span className="text-xs font-bold uppercase tracking-widest">{block.label || 'Alert Notice'}</span>
-                                            </div>
-                                          </div>
-                                        );
-                                      })() : block.type === 'html' ? (
-                                        <div className="pt-2">
-                                          <div className="min-h-[120px] bg-zinc-950 rounded-2xl p-5 font-mono text-[10px] text-emerald-500/80 leading-relaxed shadow-2xl border border-white/5 overflow-hidden group/html relative">
-                                            <div className="absolute top-0 right-0 p-3 flex gap-2">
-                                              <div className="w-2 h-2 rounded-full bg-rose-500/50" />
-                                              <div className="w-2 h-2 rounded-full bg-amber-500/50" />
-                                              <div className="w-2 h-2 rounded-full bg-emerald-500/50" />
-                                            </div>
-                                            <span className="block text-indigo-400">&lt;div class="custom-card"&gt;</span>
-                                            <span className="block pl-4">&lt;h1&gt;{block.label}&lt;/h1&gt;</span>
-                                            <span className="block pl-4 text-zinc-500">&lt;p&gt;Dynamic HTML content...&lt;/p&gt;</span>
-                                            <span className="block text-indigo-400">&lt;/div&gt;</span>
-                                          </div>
-                                        </div>
-                                      ) : block.type === 'icon' ? (
-                                        <div className="flex flex-col items-center justify-center gap-3 pt-4 pb-2">
-                                          <div className="w-16 h-16 bg-indigo-500/10 rounded-3xl flex items-center justify-center text-indigo-600 border border-indigo-500/20 shadow-xl shadow-indigo-500/5">
-                                            <DynamicIcon name={block.iconName || 'Smile'} size={32} />
-                                          </div>
-                                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Icon Preview</span>
-                                        </div>
-                                      ) : block.type === 'time' ? (
-                                        <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center justify-between px-4 shadow-sm dark:shadow-none">
-                                          <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">00:00 AM</span>
-                                          <Clock size={14} className="text-zinc-400 dark:text-zinc-600" />
-                                        </div>
-                                      ) : block.type === 'sub_module' ? (
-                                        renderSubmoduleMock(block)
-                                      ) : block.type === 'relationship_m2m' ? (
-                                        renderRelationshipM2MMock(block)
-                                      ) : block.type === 'rollup' ? (
-                                        renderRollupMock(block)
-                                      ) : block.type === 'party' ? (
-                <div className="pt-2">
-                  <div className="h-11 w-full bg-white dark:bg-zinc-950 border border-indigo-500/30 rounded-xl flex items-center justify-between px-4">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Building2 size={14} className="text-indigo-500 shrink-0" />
-                      <span className="text-xs text-zinc-400 font-medium italic select-none truncate">
-                        {block.placeholder || `Search ${block.label} in Directory...`}
-                      </span>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold uppercase shrink-0">
-                      Directory
-                    </span>
-                  </div>
-                </div>
-              ) : block.type === 'lookup' ? (
-                                        <div className="pt-2">
-                                          <div className="h-11 w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-between px-4">
-                                            <div className="flex items-center gap-2">
-                                              <Search size={14} className="text-zinc-400" />
-                                              <span className="text-xs text-zinc-400 font-medium italic select-none">
-                                                {block.placeholder || `Search ${block.label}...`}
-                                              </span>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      ) : (
-                                        /* All other basic input fields */
-                                        <div className="pt-2">
-                                          <div className="h-11 w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-between px-4">
-                                            <span className="text-xs text-zinc-400 font-medium italic select-none">
-                                              {block.placeholder || `Enter ${block.label}...`}
-                                            </span>
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-
-                                  {/* Quick Action Buttons (Overlapping Border) */}
-                                  <button 
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      cloneField(block.id);
-                                    }}
-                                    className="absolute -top-3.5 right-6 w-7 h-7 bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-full flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity shadow-lg z-50 hover:scale-110 active:scale-95 border border-zinc-200 dark:border-zinc-700"
-                                    title="Duplicate Field"
-                                  >
-                                    <Copy size={12} />
-                                  </button>
-
-                                  <button 
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setLayout(prev => removeFieldRecursive(prev, block.id));
-                                      if (selectedId === block.id) setSelectedId(null);
-                                    }}
-                                    className="absolute -top-3.5 -right-3.5 w-7 h-7 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity shadow-lg z-50 hover:scale-110 active:scale-95"
-                                    title="Delete Field"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-
-                                  {!block.hidden && (
-                                    <button 
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        updateField(block.id, { hidden: true });
-                                      }}
-                                      className="absolute -top-3.5 right-15 w-7 h-7 bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-full flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity shadow-lg z-50 hover:scale-110 active:scale-95 border border-zinc-200 dark:border-zinc-700"
-                                      title="Quick Hide Field"
-                                    >
-                                      <EyeOff size={12} />
-                                    </button>
-                                  )}
-                                    </>
-                                  )}
-                                </div>
-                              );
-                            });
-                          };
-
-                          const displayTabs = tabs.filter(t => !tabs.some(sub => sub.parentId === t.id));
-                          return displayTabs.map((tab) => {
-                            const tabFields = displayLayout.filter(f => !f.parentId && (f.tabId === tab.id || (!f.tabId && tab.id === tabs[0]?.id)));
-                            const parentTab = tab.parentId ? tabs.find(t => t.id === tab.parentId) : null;
-                            const displayLabel = parentTab ? `${parentTab.label} â€º ${tab.label}` : tab.label;
-
-                            return (
-                              <div 
-                                key={tab.id}
-                                className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[32px] p-8 shadow-sm space-y-6 relative group/section w-full"
-                              >
-                                <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800 select-none">
-                                  <div className="flex items-center gap-3">
-                                    {interfaceSettings.detail?.showTabIcons ? (
-                                      <DynamicIcon name={tab.iconName || 'Layout'} size={14} className="text-indigo-500 shrink-0" />
-                                    ) : (
-                                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
-                                    )}
-                                    <h3 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-white">{displayLabel}</h3>
-                                  </div>
-                                  <button
-                                    onClick={() => setSelectedId(tab.id)}
-                                    className="p-2 bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 border border-zinc-100 dark:border-zinc-700 rounded-xl text-zinc-400 hover:text-indigo-600 transition-all opacity-0 group-hover/section:opacity-100"
-                                    title="Section Settings"
-                                  >
-                                    <Settings size={12} />
-                                  </button>
-                                </div>
-
-                                <div 
-                                  id={`section-grid-${tab.id}`}
-                                  className={cn(
-                                    "grid items-start content-start transition-all duration-300 relative min-h-[120px] w-full",
-                                    "grid-cols-1",
-                                    viewportSize !== 'mobile' && "md:grid-cols-12"
-                                  )}
-                                  style={{ 
-                                    gap: `${GRID_CONFIG.gap}px`,
-                                    gridAutoRows: `${GRID_CONFIG.rowHeight}px`
-                                  }}
-                                  onDragOver={(e) => handleDragOver(e, undefined, tab.id)}
-                                  onDrop={(e) => handleDropOnCanvas(e, undefined, tab.id)}
-                                  onDragLeave={handleDragLeave}
-                                >
-                                  {activeDragItem && (
-                                    <div className="absolute inset-0 pointer-events-none z-0 grid grid-cols-12 opacity-50" style={{ gap: `${GRID_CONFIG.gap}px`, padding: '0px' }}>
-                                      {Array.from({ length: 12 }).map((_, i) => (
-                                        <div key={i} className="h-full border-x border-dashed border-indigo-500/10 bg-indigo-500/[0.01] rounded-xl" />
-                                      ))}
-                                    </div>
-                                  )}
-                                  {renderFieldBlocks(displayLayout, undefined, tab.id)}
-                                  
-                                  {tabFields.length === 0 && !dragOverInfo && (
-                                    <div className="absolute inset-0 flex flex-col items-center justify-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl bg-zinc-50/20 dark:bg-zinc-950/10 py-8">
-                                      <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Drop fields here to add to {tab.label}</p>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          });
-                        })() : (() => {
-                          const displayLayout = previewLayout || layout;
-                          const renderFieldBlocks = (fields: Field[], parentId?: string): React.ReactNode => {
-                            const isNested = !!parentId;
-                             const filtered = fields.filter(block => {
-                               // System fields filter (connectors, etc)
-                               const type = block.type?.toLowerCase();
-                               if (!showSystemFields && (type === 'connector' || type === 'automation' || type === 'nexus_connector')) return false;
-
-                               if ((activeTab as string) === 'preview' && !isFieldVisible(block, {}, { user })) return false;
-
-                               if (isNested) return true;
-                               return block.tabId === currentTabId || (!block.tabId && currentTabId === tabs[0]?.id);
-                             });
-                            
-                            const items = (activeTab as string) === 'preview' ? compactLayout(filtered) : filtered;
-
-                            const renderedCards = items.map((item) => {
-                              if (React.isValidElement(item)) return item;
-                              const block = item as Field;
-                              const isGroup = isContainerField(block.type);
-
-                                if (isGroup) {
-                                return (
-                                  <FieldGroup 
-                                    key={block.id}
-                                    block={block}
-                                    selectedIds={selectedIds}
-                                    onSelect={(id, e) => {
-                                      if (e?.shiftKey || e?.metaKey || e?.ctrlKey) {
-                                        setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-                                      } else {
-                                        setSelectedIds([id]);
-                                      }
-                                    }}
-                                    onUpdate={updateField}
-                                    onDelete={(id) => deleteBlocks([id])}
-                                    onDrop={(e, dropParentId) => handleDropOnCanvas(e, dropParentId || block.id)}
-                                    onDragOver={(e, dragParentId) => handleDragOver(e, dragParentId || block.id)}
-                                    onDragStart={(e: any) => handleUnifiedPointerDrag(block.id, parentId)(e)}
-                                    renderNested={(nestedFields, pId) => renderFieldBlocks(nestedFields as any, pId)}
-                                    viewportSize={viewportSize}
-                                    onClone={cloneField}
-                                    isDraggingOver={dragOverInfo?.active && dragOverInfo?.parentId === block.id}
-                                    hoveredMapping={hoveredMapping}
-                                    dragOverInfo={dragOverInfo}
-                                    isDragging={!!activeDragItem}
-                                  />
-                                );
-                              }
-                              if (block.id === 'placeholder' || block.id === '__drop_zone_indicator__') {
-                                return null;
-                              }
-                              return (
-                                <div
-                                  key={block.id}
-                                  data-grid={{
-                                    x: Math.max(0, (block.startCol || 1) - 1),
-                                    y: block.rowIndex || 0,
-                                    w: Math.max(1, Math.min(12, block.colSpan || 6)),
-                                    h: calculateHeight(block)
-                                  }}
-                                  style={isNested ? { 
-                                    gridColumn: viewportSize === 'mobile' ? 'span 1' : `${block.startCol || 1} / span ${block.colSpan || 12}`,
-                                    gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${calculateHeight(block)}`,
-                                    minHeight: `${calculateHeight(block) * GRID_CONFIG.rowHeight}px`
-                                  } : (!rglMounted || (activeTab as string) === 'preview' ? {
-                                    gridColumn: viewportSize === 'mobile' ? 'span 1' : `${block.startCol || 1} / span ${block.colSpan || 6}`,
-                                    gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${calculateHeight(block)}`,
-                                    minHeight: `${calculateHeight(block) * GRID_CONFIG.rowHeight}px`
-                                  } : undefined)}
-                                  onClick={(e) => {
-                                    if (block.isDraggingPlaceholder) return;
-                                    e.stopPropagation();
-                                    if (e.shiftKey || e.metaKey || e.ctrlKey) {
-                                      setSelectedIds(prev => prev.includes(block.id) ? prev.filter(id => id !== block.id) : [...prev, block.id]);
-                                    } else {
-                                      setSelectedIds([block.id]);
-                                    }
-                                  }}
-                                  id={`canvas-field-${block.id}`}
-                                  className={cn(
-                                    "group/field relative p-4 rounded-2xl cursor-pointer transition-all border-2 h-full flex flex-col",
-                                    block.isDraggingPlaceholder
-                                      ? "border-dashed border-indigo-500/40 bg-indigo-55/20 dark:bg-indigo-500/5 select-none pointer-events-none"
-                                      : (selectedIds.includes(block.id) 
-                                          ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/5 ring-4 ring-indigo-500/10 z-30" 
-                                          : "bg-zinc-50 dark:bg-zinc-900/50 border-zinc-100 dark:border-zinc-800 hover:border-indigo-500/30 hover:z-40"),
-                                    block.hidden && activeTab === 'builder' && "opacity-40 border-dashed grayscale-[0.5] hover:opacity-100 hover:grayscale-0",
-                                    activeDragItem?.fieldId === block.id && "opacity-20 z-50 cursor-grabbing",
-                                    hoveredMapping?.targetFieldId === block.id && "ring-8 ring-indigo-500/30 border-indigo-500 scale-[1.02] shadow-2xl z-30"
-                                  )}
-                                >
-                                  {block.isDraggingPlaceholder ? (() => {
-                                    const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === block.type);
-                                    const Icon = fieldDef?.icon;
-                                    return (
-                                      <div className="flex-grow flex flex-col justify-center items-center h-full min-h-[60px] py-2 relative overflow-hidden">
-                                        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-transparent pointer-events-none" />
-                                        <div className="flex items-center gap-2 text-indigo-500/60 dark:text-indigo-400/60 z-10">
-                                          {Icon && <Icon size={14} className="animate-pulse shrink-0" />}
-                                          <span className="text-[10px] font-black uppercase tracking-wider truncate">{block.label || fieldDef?.label || block.type}</span>
-                                        </div>
-                                        <span className="text-[8px] font-bold text-indigo-400/40 uppercase tracking-widest mt-1 z-10">Moving Here</span>
-                                      </div>
-                                    );
-                                  })() : (
-                                    <>
-                                      {/* Selection UI */}
-                                      {selectedIds.includes(block.id) && (
-                                        <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-20">
-                                          Selected
-                                        </div>
-                                      )}
-                                      <div className="space-y-2 flex-1 overflow-y-auto scrollbar-hide">
-                                        <div className="flex items-center justify-between">
-                                          <div className="flex items-center gap-1.5 min-w-0">
-                                            <div 
-                                              className={cn(
-                                                "drag-handle text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 cursor-grab active:cursor-grabbing p-0.5 rounded flex items-center shrink-0",
-                                                parentId ? "nested-drag-handle" : "root-drag-handle"
-                                              )}
-                                              title="Drag to reorder"
-                                              onPointerDown={(e: any) => {
-                                                e.stopPropagation();
-                                                handleUnifiedPointerDrag(block.id, parentId)(e);
-                                              }}
-                                            >
-                                              <GripVertical size={12} />
-                                            </div>
-                                            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5 truncate">
-                                              {(() => {
-                                                const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === block.type);
-                                                const Icon = fieldDef?.icon;
-                                                return Icon ? <Icon size={10} className="text-zinc-400 shrink-0" /> : null;
-                                              })()}
-                                              <span className="truncate">{FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === block.type)?.label || block.type.replace('_', ' ')}</span>
-                                              {block.required && <span className="text-rose-500">*</span>}
-                                              {block.tooltip && <HelpCircle size={10} className="text-zinc-400 shrink-0" />}
-                                            </label>
-                                          </div>
-                                          <div className="flex items-center gap-2">
-                                            {(() => {
-                                              const mappingEntry = Object.entries(connectorMappings).find(([_, m]) => Object.values(m).includes(block.id));
-                                              if (mappingEntry) {
-                                                const [connId] = mappingEntry;
-                                                const connector = connectorRegistry.find(c => c.id === connId);
-                                                return (
-                                                  <div 
-                                                    className={cn(
-                                                      "flex items-center gap-1.5 px-2 py-0.5 rounded-full border transition-all duration-500",
-                                                      hoveredMapping?.targetFieldId === block.id 
-                                                        ? "bg-indigo-600 border-indigo-600 shadow-lg shadow-indigo-500/30 scale-110" 
-                                                        : "bg-indigo-500/10 border-indigo-500/20 shadow-sm shadow-indigo-500/5"
-                                                    )}
-                                                    title={`Mapped to ${connector?.label || 'Nexus Connector'}`}
-                                                  >
-                                                    <Zap size={10} className={cn(hoveredMapping?.targetFieldId === block.id ? "text-white animate-pulse" : "text-indigo-500")} />
-                                                    <span className={cn(
-                                                      "text-[8px] font-black uppercase tracking-tighter",
-                                                      hoveredMapping?.targetFieldId === block.id ? "text-white" : "text-indigo-500"
-                                                    )}>Mapped</span>
-                                                  </div>
-                                                );
-                                              }
-                                              return null;
-                                            })()}
-                                            {block.visibilityRule && (
-                                              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-100 dark:bg-white/5 rounded-full border border-zinc-200 dark:border-white/10 shadow-sm" title={block.visibilityRule.action === 'hide' ? "Conditional Hide Logic Applied" : "Conditional Show Logic Applied"}>
-                                                <BrainCircuit size={10} className={cn(block.visibilityRule.action === 'hide' ? "text-rose-500" : "text-indigo-500")} />
-                                                <span className="text-[8px] font-black text-zinc-500 uppercase tracking-tighter">Logic</span>
-                                              </div>
-                                            )}
-                                            {block.hidden && (
-                                              <div 
-                                                className="flex items-center gap-1.5 px-2 py-0.5 bg-rose-500/10 rounded-full border border-rose-500/20 shadow-sm cursor-pointer hover:bg-rose-500/20 transition-all" 
-                                                title="Hidden by Default (Click to show)"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  updateField(block.id, { hidden: false });
-                                                }}
-                                              >
-                                                <EyeOff size={10} className="text-rose-500" />
-                                                <span className="text-[8px] font-black text-rose-500 uppercase tracking-tighter">Hidden</span>
-                                              </div>
-                                            )}
-                                          </div>
-                                        </div>
-
-                                    {!(block.type === 'heading' || block.type === 'alert' || block.type === 'divider' || block.type === 'spacer') && (
-                                      <p className="text-[11px] font-medium text-zinc-900 dark:text-zinc-300 mb-1">{block.label}</p>
-                                    )}
-
-                                  <div className="min-h-[20px]">
-                                    {block.type === 'heading' ? (() => {
-                                      const rawTag = block.options?.[0] || 'h2';
-                                      const Tag = (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(rawTag) ? rawTag : 'h2') as React.ElementType;
-                                      const size = Tag === 'h1' ? 'text-2xl font-bold' :
-                                                   Tag === 'h2' ? 'text-xl font-bold' :
-                                                   Tag === 'h3' ? 'text-lg font-bold' :
-                                                   Tag === 'h4' ? 'text-base font-bold' : 'text-xl font-bold';
-                                      return (
-                                        <div className="pt-2">
-                                          <Tag className={cn("text-zinc-900 dark:text-white tracking-tight", size)}>
-                                            {block.label || 'Heading'}
-                                          </Tag>
-                                        </div>
-                                      );
-                                    })() : block.type === 'divider' ? (
-                                      <div className="py-2">
-                                        <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-4" />
-                                      </div>
-                                    ) : block.type === 'spacer' ? (
-                                      <div className="py-2">
-                                        <div className="h-8 border-x border-zinc-100 dark:border-zinc-800/50 border-dashed mx-auto w-px" />
-                                      </div>
-                                    ) : block.type === 'alert' ? (() => {
-                                      const variant = block.options?.[0] || 'info';
-                                      const alertStyle = variant === 'error' ? 'bg-rose-500/10 border-rose-500/20 text-rose-600' :
-                                                    variant === 'warning' ? 'bg-amber-500/10 border-amber-500/20 text-amber-600' :
-                                                    variant === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' :
-                                                    'bg-indigo-500/10 border-indigo-500/20 text-indigo-600';
-                                      const AlertIcon = variant === 'error' ? XCircle :
-                                                   variant === 'warning' ? AlertTriangle :
-                                                   variant === 'success' ? Check : Info;
-                                      return (
-                                        <div className="pt-2">
-                                          <div className={cn("p-4 rounded-2xl border flex items-center gap-3", alertStyle)}>
-                                            <AlertIcon size={18} />
-                                            <span className="text-xs font-bold uppercase tracking-widest">{block.label || 'Alert Notice'}</span>
-                                          </div>
-                                        </div>
-                                      );
-                                    })() : block.type === 'html' ? (
-                                      <div className="pt-2">
-                                        <div 
-                                          className="text-sm text-zinc-500 leading-relaxed prose dark:prose-invert max-w-none" 
-                                          dangerouslySetInnerHTML={{ __html: sanitizeHtml(block.label || 'HTML content...') }} 
-                                        />
-                                      </div>
-                                    ) : block.type === 'button' ? (
-                                      <div className="pt-2">
-                                        <button
-                                          type="button"
-                                          className={cn(
-                                            "px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-widest transition-all",
-                                            block.variant === 'secondary' ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white" :
-                                            block.variant === 'outline' ? "border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-white" :
-                                            block.variant === 'danger' ? "bg-rose-500 text-white" :
-                                            "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
-                                          )}
-                                        >
-                                          {block.label || 'Action Button'}
-                                        </button>
-                                      </div>
-                                    ) : block.type === 'radio' || block.type === 'checkboxGroup' ? (
-                                      <div className="space-y-3 pt-2">
-                                        {(block.options || ['Option 1', 'Option 2']).map((opt, i) => (
-                                          <div key={i} className="flex items-center gap-3">
-                                            <div className={cn(
-                                              "w-5 h-5 border-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950",
-                                              block.type === 'radio' ? "rounded-full" : "rounded-lg"
-                                            )} />
-                                            <span className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">{opt}</span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    ) : block.type === 'toggle' ? (
-                                      <div className="flex items-center gap-3 pt-2">
-                                        <div className="w-10 h-5 bg-zinc-200 dark:bg-zinc-800 rounded-full relative">
-                                          <div className="absolute left-1 top-1 w-3 h-3 bg-white rounded-full shadow-sm" />
-                                        </div>
-                                        <span className="text-xs text-zinc-500 dark:text-zinc-400">On / Off</span>
-                                      </div>
-                                    ) : block.type === 'slider' ? (
-                                      <div className="space-y-4 pt-4">
-                                        <div className="relative h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
-                                          <div className="absolute left-0 top-0 h-full w-1/3 bg-indigo-500" />
-                                        </div>
-                                        <div className="flex justify-between">
-                                          <span className="text-[10px] font-bold text-zinc-400">0</span>
-                                          <span className="text-[10px] font-bold text-indigo-500">33</span>
-                                          <span className="text-[10px] font-bold text-zinc-400">100</span>
-                                        </div>
-                                      </div>
-                                    ) : block.type === 'rating' ? (
-                                      <div className="flex items-center gap-1.5 pt-2">
-                                        {[1, 2, 3, 4, 5].map(i => (
-                                          <Star key={i} size={18} className={cn(i <= 3 ? "text-amber-400 fill-amber-400" : "text-zinc-200 dark:text-zinc-800")} />
-                                        ))}
-                                        <span className="ml-2 text-xs font-bold text-zinc-400">3.0</span>
-                                      </div>
-                                    ) : block.type === 'colorpicker' ? (
-                                      <div className="flex items-center gap-3 pt-2">
-                                        <div className="w-10 h-10 rounded-2xl bg-indigo-500 shadow-lg shadow-indigo-500/20 border border-white/20" />
-                                        <div className="flex-1 h-10 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center px-4 font-mono text-xs text-zinc-500">
-                                          #6366F1
-                                        </div>
-                                      </div>
-                                    ) : block.type === 'tag' ? (
-                                      <div className="flex flex-wrap gap-2 pt-2">
-                                        {['Innovation', 'Strategy', 'Design'].map((tag, i) => (
-                                          <div key={i} className="px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[10px] font-bold text-indigo-500 uppercase tracking-widest">
-                                            {tag}
-                                          </div>
-                                        ))}
-                                        <div className="px-3 py-1 border border-dashed border-zinc-300 dark:border-zinc-700 rounded-full text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                                          + Add
-                                        </div>
-                                      </div>
-                                    ) : block.type === 'autonumber' ? (
-                                      <div className="pt-2">
-                                        <div className="h-10 bg-zinc-100 dark:bg-zinc-800 rounded-xl flex items-center px-4 font-mono text-xs text-indigo-500 font-black border border-indigo-500/10">
-                                          {block.autonumberPrefix || ''}
-                                          {(block.autonumberStart || 1).toString().padStart(block.autonumberDigits || 0, '0')}
-                                          {block.autonumberSuffix || ''}
-                                        </div>
-                                        <p className="text-[9px] text-zinc-400 mt-2 italic px-1">Value generated on record creation</p>
-                                      </div>
-                                    ) : block.type === 'connector' ? (
-                                      <div className="pt-2">
-                                        <div className="p-6 bg-indigo-500/5 border border-indigo-500/20 rounded-[2.5rem] flex flex-col gap-6 group/connector transition-all hover:bg-indigo-500-[0.07] relative overflow-hidden shadow-sm">
-                                          {/* Background Glow */}
-                                          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl -mr-16 -mt-16 group-hover/connector:scale-150 transition-transform duration-1000" />
-                                          
-                                          <div className="flex items-center justify-between relative z-10">
-                                            <div className="flex items-center gap-4">
-                                              {(() => {
-                                                const conn = activeConnectors.find(c => c.connectorId === block.connectorId) || 
-                                                             connectorRegistry.find(c => c.id === block.connectorId);
-                                                const iconName = block.icon || conn?.icon || conn?.connector?.icon || 'Zap';
-                                                return (
-                                                  <button 
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      updateField(block.id, { isCollapsed: !block.isCollapsed });
-                                                    }}
-                                                    className="w-14 h-14 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl flex items-center justify-center text-indigo-500 shadow-xl shadow-indigo-500/10 hover:scale-110 transition-transform duration-500 group-hover/connector:rotate-12"
-                                                  >
-                                                    {block.isCollapsed ? <ChevronDown size={24} /> : <DynamicIcon name={iconName} size={28} />}
-                                                  </button>
-                                                );
-                                              })()}
-                                              <div className="text-left">
-                                                <h4 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-tight">{block.label || 'Nexus Connector'}</h4>
-                                                <div className="flex items-center gap-2 mt-0.5">
-                                                  <div className={cn("w-1.5 h-1.5 rounded-full animate-pulse", block.connectorId ? "bg-emerald-500" : "bg-rose-500")} />
-                                                  <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
-                                                    {!block.connectorId ? 'Needs Configuration' : block.isCollapsed ? 'Collapsed' : 'Capability Active'}
-                                                  </p>
-                                                </div>
-                                              </div>
-                                            </div>
-                                            
-                                            <div className="flex gap-2">
-                                              {!block.connectorId && (
-                                                <div className="px-3 py-1.5 bg-rose-500/10 border border-rose-500/20 rounded-xl mr-2">
-                                                  <span className="text-[8px] font-black text-rose-500 uppercase tracking-widest">Setup Needed</span>
-                                                </div>
-                                              )}
-                                              {!block.isCollapsed && block.connectorId && (
-                                                <>
-                                                  <button 
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      setSelectedId(block.id);
-                                                      setRightSidebarTab('inspector');
-                                                    }}
-                                                    className="w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20"
-                                                    title="Configure Mapping"
-                                                  >
-                                                    <ArrowRightLeft size={16} />
-                                                  </button>
-                                                  <button 
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      const conn = activeConnectors.find(c => c.connectorId === block.connectorId) || connectorRegistry.find(c => c.id === block.connectorId);
-                                                      if (conn) {
-                                                        setConfigConnector(conn);
-                                                        setConfigDrawerOpen(true);
-                                                      }
-                                                    }}
-                                                    className="w-10 h-10 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-center text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-all"
-                                                    title="Secrets & Config"
-                                                  >
-                                                    <Settings2 size={16} />
-                                                  </button>
-                                                </>
-                                              )}
-                                              <button 
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  updateField(block.id, { isCollapsed: !block.isCollapsed });
-                                                }}
-                                                className="w-10 h-10 bg-zinc-100 dark:bg-zinc-800 rounded-xl flex items-center justify-center text-zinc-500 hover:text-indigo-500 transition-all"
-                                              >
-                                                {block.isCollapsed ? <Maximize2 size={16} /> : <ChevronUp size={16} />}
-                                              </button>
-                                            </div>
-                                          </div>
-
-                                          <AnimatePresence>
-                                            {!block.isCollapsed && (
-                                              <motion.div
-                                                initial={{ height: 0, opacity: 0 }}
-                                                animate={{ height: 'auto', opacity: 1 }}
-                                                exit={{ height: 0, opacity: 0 }}
-                                                transition={{ duration: 0.3, ease: "easeInOut" }}
-                                                className="overflow-hidden"
-                                              >
-                                                <div className="space-y-6 pt-4">
-                                                  {!block.connectorId ? (
-                                                    <div className="py-10 flex flex-col items-center justify-center gap-6 border-2 border-dashed border-rose-500/20 rounded-[2.5rem] bg-rose-500/[0.02] transition-all hover:bg-rose-500/[0.05]">
-                                                      <div className="relative">
-                                                        <div className="absolute inset-0 bg-rose-500/20 blur-2xl rounded-full" />
-                                                        <div className="w-20 h-20 bg-white dark:bg-zinc-900 rounded-[2rem] flex items-center justify-center text-rose-500 shadow-2xl relative z-10 border border-rose-500/20">
-                                                          <Zap size={40} className="animate-pulse" />
-                                                        </div>
-                                                      </div>
-                                                      <div className="text-center space-y-2">
-                                                        <h5 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-tight">Integration Setup Required</h5>
-                                                        <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest max-w-[200px] leading-relaxed">Choose a Nexus capability to activate this block's logic and data streams.</p>
-                                                      </div>
-                                                      <button 
-                                                        onClick={(e) => {
-                                                          e.stopPropagation();
-                                                          setSelectedId(block.id);
-                                                          setShowConnectorModal(true);
-                                                        }}
-                                                        className="px-8 py-3 bg-rose-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-xl shadow-rose-500/20 hover:bg-rose-500 hover:scale-105 active:scale-95 transition-all"
-                                                      >
-                                                        Configure Capability
-                                                      </button>
-                                                    </div>
-                                                  ) : (
-                                                    <>
-                                                      <div className="h-px bg-zinc-100 dark:bg-white/5 w-full" />
-                                                      <div className="space-y-3 relative z-10">
-                                                        <div className="flex items-center justify-between px-1 border-t border-indigo-500/10 pt-4 mt-2">
-                                                          <p className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Active Data Streams</p>
-                                                          <p className="text-[9px] font-bold text-indigo-500 uppercase">{Object.keys(connectorMappings[block.connectorId] || {}).length} Mapped</p>
-                                                        </div>
-                                                        
-                                                        <div className="grid grid-cols-1 gap-2">
-                                                          {(() => {
-                                                            const registryEntry = activeConnectors.find(c => c.connectorId === block.connectorId) || connectorRegistry.find(c => c.id === block.connectorId);
-                                                            const outputs = registryEntry?.ioSchema?.outputs || registryEntry?.connector?.ioSchema?.outputs || [];
-                                                            const mappings = connectorMappings[block.connectorId] || {};
-                                                            const activeMappings = outputs.filter((o: any) => mappings[o.name]);
-                                                            
-                                                            if (activeMappings.length === 0) {
-                                                              return (
-                                                                <div className="py-4 text-center border border-dashed border-indigo-500/20 rounded-2xl">
-                                                                  <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest italic">No Data Links Established</p>
-                                                                </div>
-                                                              );
-                                                            }
-
-                                                            return activeMappings.map((output: any) => {
-                                                              const targetId = mappings[output.name];
-                                                              const targetField = layout.find(f => f.id === targetId);
-                                                              
-                                                              return (
-                                                                <motion.div 
-                                                                  key={output.name}
-                                                                  id={`output-${block.connectorId}-${output.name}`}
-                                                                  onHoverStart={() => setHoveredMapping({ 
-                                                                    connectorId: block.connectorId, 
-                                                                    sourceOutput: output.name, 
-                                                                    targetFieldId: targetId 
-                                                                  })}
-                                                                  onHoverEnd={() => setHoveredMapping(null)}
-                                                                  className={cn(
-                                                                    "flex items-center justify-between p-3 bg-white/50 dark:bg-zinc-900/50 border rounded-2xl group/mapping transition-all cursor-help",
-                                                                    hoveredMapping?.sourceOutput === output.name 
-                                                                      ? "border-indigo-500 bg-white dark:bg-zinc-900 shadow-lg shadow-indigo-500/10" 
-                                                                      : "border-zinc-200/50 dark:border-white/5"
-                                                                  )}
-                                                                >
-                                                                  <div className="flex items-center gap-2">
-                                                                    <div className={cn(
-                                                                      "w-6 h-6 rounded-lg flex items-center justify-center transition-colors",
-                                                                      hoveredMapping?.sourceOutput === output.name ? "bg-indigo-600 text-white" : "bg-indigo-500/10 text-indigo-500"
-                                                                    )}>
-                                                                      <DynamicIcon name={registryEntry?.icon || registryEntry?.connector?.icon || 'Zap'} size={12} className={cn(hoveredMapping?.sourceOutput === output.name && "animate-pulse")} />
-                                                                    </div>
-                                                                    <span className="text-[10px] font-bold text-zinc-700 dark:text-zinc-300">{output.label || output.name}</span>
-                                                                  </div>
-                                                                  <div className="flex items-center gap-2">
-                                                                    <ArrowRight size={10} className={cn("transition-transform", hoveredMapping?.sourceOutput === output.name ? "translate-x-1 text-indigo-500" : "text-zinc-300")} />
-                                                                    <div className={cn(
-                                                                      "px-2 py-1 rounded-lg border transition-all",
-                                                                      hoveredMapping?.sourceOutput === output.name ? "bg-indigo-600 border-indigo-600" : "bg-indigo-500/10 border-indigo-500/10"
-                                                                    )}>
-                                                                      <span className={cn(
-                                                                        "text-[9px] font-black uppercase tracking-tight",
-                                                                        hoveredMapping?.sourceOutput === output.name ? "text-white" : "text-indigo-600 dark:text-indigo-400"
-                                                                      )}>
-                                                                        {targetField?.label || 'Target Field'}
-                                                                      </span>
-                                                                    </div>
-                                                                  </div>
-                                                                </motion.div>
-                                                              );
-                                                            });
-                                                          })()}
-                                                        </div>
-                                                      </div>
-                                                    </>
-                                                    )
-                                                  }
-                                                </div>
-                                              </motion.div>
-                                            )}
-                                          </AnimatePresence>
-                                        </div>
-                                      </div>
-
-                                    ) : block.type === 'buttonGroup' ? (
-                                      <div className="pt-2 flex">
-                                        {['Primary', 'Secondary', 'Tertiary'].map((btn, i) => (
-                                          <div key={i} className={cn(
-                                            "flex-1 h-10 flex items-center justify-center text-[10px] font-bold uppercase tracking-widest border border-zinc-200 dark:border-zinc-800",
-                                            i === 0 ? "rounded-l-xl bg-indigo-600 text-white border-indigo-600" :
-                                            i === 2 ? "rounded-r-xl bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400" :
-                                            "bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border-x-0"
-                                          )}>
-                                            {btn}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    ) : block.type === 'signature' ? (
-                                      <div className="h-32 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl flex flex-col items-center justify-center gap-3 group/signature overflow-hidden relative">
-                                        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'linear-gradient(zinc-200 1px, transparent 1px)', backgroundSize: '100% 24px' }} />
-                                        <PenTool size={24} className="text-zinc-300 group-hover/signature:text-indigo-500 transition-colors" />
-                                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Sign here</span>
-                                        <div className="absolute bottom-4 right-4 flex gap-2">
-                                          <div className="w-6 h-6 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center"><X size={12} className="text-zinc-400" /></div>
-                                          <div className="w-6 h-6 rounded-lg bg-indigo-600 flex items-center justify-center"><CheckSquare size={12} className="text-white" /></div>
-                                        </div>
-                                      </div>
-                                    ) : block.type === 'qr_scanner' ? (
-                                      <div className="h-40 bg-black rounded-2xl flex flex-col items-center justify-center gap-4 relative overflow-hidden group/scanner">
-                                        <div className="absolute inset-0 border-2 border-indigo-500/20 animate-pulse" />
-                                        <div className="w-48 h-48 border-2 border-indigo-500 rounded-3xl flex items-center justify-center relative">
-                                          <div className="absolute inset-0 bg-indigo-500/10" />
-                                          <div className="w-full h-0.5 bg-indigo-500 absolute top-1/2 -translate-y-1/2 shadow-[0_0_15px_rgba(99,102,241,0.8)]" />
-                                          <QrCode size={48} className="text-indigo-500/50" />
-                                        </div>
-                                        <span className="text-[10px] font-bold text-white uppercase tracking-widest z-10 bg-black/50 px-4 py-2 rounded-full backdrop-blur-md">Scanning Active</span>
-                                      </div>
-                                    ) : block.type === 'payment' ? (
-                                      <div className="p-5 bg-zinc-900 rounded-3xl space-y-6 shadow-2xl border border-white/10">
-                                        <div className="flex justify-between items-start">
-                                          <div className="space-y-1">
-                                            <span className="block text-[8px] font-bold text-zinc-500 uppercase tracking-widest">Total Amount</span>
-                                            <span className="block text-xl font-black text-white">$1,250.00</span>
-                                          </div>
-                                          <CreditCard size={24} className="text-indigo-500" />
-                                        </div>
-                                        <div className="space-y-3">
-                                          <div className="h-10 bg-zinc-800 rounded-xl flex items-center px-4 justify-between">
-                                            <span className="text-[10px] text-zinc-500 font-mono">â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ 4242</span>
-                                            <div className="w-8 h-5 bg-zinc-700 rounded" />
-                                          </div>
-                                          <div className="h-11 bg-indigo-600 rounded-xl flex items-center justify-center text-[10px] font-black text-white uppercase tracking-widest shadow-lg shadow-indigo-500/20">
-                                            Pay Now
-                                          </div>
-                                        </div>
-                                      </div>
-                                    ) : block.type === 'richtext' ? (
-                                      <div className="min-h-[160px] bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl flex flex-col overflow-hidden shadow-sm">
-                                        <div className="h-10 border-b border-zinc-100 dark:border-zinc-900 flex items-center px-4 gap-4 bg-zinc-50/50 dark:bg-transparent">
-                                          <div className="flex gap-2">
-                                            <div className="w-6 h-6 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-[10px] font-black">B</div>
-                                            <div className="w-6 h-6 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-[10px] italic font-serif">I</div>
-                                            <div className="w-6 h-6 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-[10px] underline">U</div>
-                                          </div>
-                                          <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800" />
-                                          <AlignLeft size={14} className="text-zinc-400" />
-                                          <ListPlus size={14} className="text-zinc-400" />
-                                        </div>
-                                        <div className="flex-1 p-5 space-y-3">
-                                          <div className="h-2 w-full bg-zinc-100 dark:bg-zinc-900 rounded-full" />
-                                          <div className="h-2 w-3/4 bg-zinc-100 dark:bg-zinc-900 rounded-full" />
-                                          <div className="h-2 w-5/6 bg-zinc-100 dark:bg-zinc-900 rounded-full" />
-                                        </div>
-                                      </div>
-
-                                    ) : block.type === 'icon' ? (
-                                      <div className="flex flex-col items-center justify-center gap-3 pt-4 pb-2">
-                                        <div className="w-16 h-16 bg-indigo-500/10 rounded-3xl flex items-center justify-center text-indigo-600 border border-indigo-500/20 shadow-xl shadow-indigo-500/5">
-                                          <DynamicIcon name={block.iconName || 'Smile'} size={32} />
-                                        </div>
-                                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Icon Preview</span>
-                                      </div>
-                                    ) : block.type === 'video' ? (
-                                      <div className="aspect-video w-full bg-black rounded-3xl overflow-hidden relative group/video shadow-2xl">
-                                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
-                                        <div className="absolute inset-0 flex items-center justify-center">
-                                          <div className="w-16 h-16 bg-white/20 backdrop-blur-xl rounded-full flex items-center justify-center group-hover/video:scale-110 transition-transform">
-                                            <div className="w-0 h-0 border-t-[8px] border-t-transparent border-l-[12px] border-l-white border-b-[8px] border-b-transparent ml-1.5" />
-                                          </div>
-                                        </div>
-                                        <div className="absolute bottom-6 left-6 right-6 space-y-3">
-                                          <div className="h-1 w-full bg-white/20 rounded-full overflow-hidden">
-                                            <div className="h-full w-1/3 bg-indigo-500" />
-                                          </div>
-                                          <div className="flex justify-between items-center">
-                                            <span className="text-[10px] font-mono text-white/60">01:42 / 04:20</span>
-                                            <div className="flex gap-4">
-                                              <Settings2 size={14} className="text-white/60" />
-                                              <Maximize2 size={14} className="text-white/60" />
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    ) : block.type === 'audio' ? (
-                                      <div className="p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl flex items-center gap-4 shadow-sm">
-                                        <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
-                                          <Music size={18} />
-                                        </div>
-                                        <div className="flex-1 space-y-2">
-                                          <div className="flex justify-between items-end">
-                                            <span className="text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-tight">Audio_Track_01.mp3</span>
-                                            <span className="text-[8px] font-mono text-zinc-400">2:45</span>
-                                          </div>
-                                          <div className="h-1.5 w-full bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden relative">
-                                            <div className="absolute left-0 top-0 h-full w-1/2 bg-indigo-500" />
-                                          </div>
-                                        </div>
-                                      </div>
-                                    ) : block.type === 'progress' ? (
-                                      <div className="space-y-4 pt-4">
-                                        <div className="flex justify-between items-end">
-                                          <div className="space-y-1">
-                                            <span className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{block.label}</span>
-                                            <span className="block text-lg font-black text-zinc-900 dark:text-white">65%</span>
-                                          </div>
-                                          <Activity size={20} className="text-emerald-500 mb-1" />
-                                        </div>
-                                        <div className="h-3 w-full bg-zinc-100 dark:bg-zinc-900 rounded-full overflow-hidden shadow-inner p-0.5">
-                                          <motion.div 
-                                            initial={{ width: 0 }}
-                                            animate={{ width: '65%' }}
-                                            className="h-full bg-gradient-to-r from-indigo-500 to-emerald-500 rounded-full" 
-                                          />
-                                        </div>
-                                      </div>
-                                    ) : block.type === 'map' ? (
-                                      <div className="h-64 bg-zinc-200 dark:bg-zinc-800 rounded-3xl overflow-hidden relative group/map shadow-2xl border border-zinc-200 dark:border-zinc-800">
-                                        <div className="absolute inset-0 opacity-40 dark:opacity-20" style={{ backgroundImage: 'radial-gradient(circle, #6366f1 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
-                                        <div className="absolute inset-0 flex items-center justify-center">
-                                          <div className="relative">
-                                            <div className="w-12 h-12 bg-rose-500/20 rounded-full animate-ping absolute -inset-0" />
-                                            <div className="w-12 h-12 bg-white dark:bg-zinc-900 rounded-full flex items-center justify-center shadow-2xl relative z-10 border-2 border-rose-500">
-                                              <MapPin size={24} className="text-rose-500" />
-                                            </div>
-                                          </div>
-                                        </div>
-                                        <div className="absolute bottom-6 left-6 right-6 p-4 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl flex items-center justify-between">
-                                          <div className="space-y-0.5">
-                                            <span className="block text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-tight">Selected Location</span>
-                                            <span className="block text-[9px] text-zinc-500">San Francisco, CA 94103</span>
-                                          </div>
-                                          <button className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-[10px] font-bold uppercase tracking-widest">Get Directions</button>
-                                        </div>
-                                      </div>
-                                    ) : block.type === 'canvas' ? (
-                                      <div className="h-48 bg-white dark:bg-zinc-950 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl flex flex-col items-center justify-center gap-4 group/canvas relative overflow-hidden">
-                                        <Brush size={32} className="text-zinc-200 dark:text-zinc-800 transition-colors group-hover/canvas:text-indigo-500" />
-                                        <div className="text-center space-y-1">
-                                          <span className="block text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Drawing Canvas</span>
-                                          <span className="block text-[9px] text-zinc-500 italic">Click to start drawing...</span>
-                                        </div>
-                                        <div className="absolute bottom-4 left-4 flex gap-2">
-                                          {[ '#ef4444', '#f59e0b', '#10b981', '#6366f1' ].map(c => (
-                                            <div key={c} className="w-4 h-4 rounded-full shadow-sm border border-white/10" style={{ backgroundColor: c }} />
-                                          ))}
-                                        </div>
-                                      </div>
-                                    ) : block.type === 'chat' ? (
-                                      <div className="h-80 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-3xl flex flex-col overflow-hidden shadow-2xl">
-                                        <div className="h-[52px] border-b border-zinc-100 dark:border-zinc-900 flex items-center px-5 justify-between bg-white dark:bg-zinc-950">
-                                          <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-lg shadow-indigo-500/20">A</div>
-                                            <div>
-                                              <span className="block text-[11px] font-bold text-zinc-900 dark:text-white uppercase tracking-tight">Project Aurora</span>
-                                              <span className="block text-[9px] text-emerald-500 font-medium">3 Online Now</span>
-                                            </div>
-                                          </div>
-                                          <Settings2 size={14} className="text-zinc-400" />
-                                        </div>
-                                        <div className="flex-1 p-5 space-y-6 overflow-y-auto custom-scrollbar">
-                                          <div className="flex gap-3">
-                                            <div className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-800 flex-shrink-0" />
-                                            <div className="p-3 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-2xl rounded-tl-none shadow-sm space-y-1 max-w-[80%]">
-                                              <span className="block text-[8px] font-bold text-indigo-500 uppercase tracking-widest">Sarah Miller</span>
-                                              <p className="text-xs text-zinc-600 dark:text-zinc-400">Hey team, I've just updated the branding settings. What do you think?</p>
-                                            </div>
-                                          </div>
-                                          <div className="flex gap-3 flex-row-reverse">
-                                            <div className="w-8 h-8 rounded-full bg-indigo-600 flex-shrink-0 shadow-lg shadow-indigo-500/20" />
-                                            <div className="p-3 bg-indigo-600 text-white rounded-2xl rounded-tr-none shadow-xl shadow-indigo-500/10 space-y-1 max-w-[80%]">
-                                              <p className="text-xs">Looks stunning! The glassmorphism effects are really starting to pop.</p>
-                                            </div>
-                                          </div>
-                                        </div>
-                                        <div className="p-4 bg-white dark:bg-zinc-950 border-t border-zinc-100 dark:border-zinc-900">
-                                          <div className="h-11 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl flex items-center px-4 gap-3">
-                                            <Smile size={18} className="text-zinc-400" />
-                                            <span className="text-xs text-zinc-400 italic flex-1">Type a message...</span>
-                                            <div className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg"><ArrowUp size={14} /></div>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    ) : block.type === 'card' ? (
-                                      <div className="p-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] shadow-2xl relative overflow-hidden group/card">
-                                        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl -mr-16 -mt-16 group-hover/card:scale-150 transition-transform duration-700" />
-                                        <div className="space-y-6 relative z-10">
-                                          <div className="flex items-center gap-4">
-                                            <div className="w-12 h-12 bg-indigo-500/10 rounded-2xl flex items-center justify-center text-indigo-600 border border-indigo-500/20">
-                                              <Box size={24} />
-                                            </div>
-                                            <div className="space-y-1">
-                                              <h4 className="text-lg font-black text-zinc-900 dark:text-white tracking-tight leading-none">{block.label}</h4>
-                                              <p className="text-xs text-zinc-500 font-medium opacity-60">Container ID: {block.id}</p>
-                                            </div>
-                                          </div>
-                                          <div className="h-px bg-zinc-100 dark:bg-zinc-800" />
-                                          <div className="min-h-[100px] border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl flex flex-col items-center justify-center gap-2 bg-zinc-50/50 dark:bg-zinc-950/50">
-                                            <div className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center"><Plus size={14} className="text-zinc-300" /></div>
-                                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Drop elements here</span>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    ) : block.type === 'accordion' ? (
-                                      <div className="space-y-3 pt-2">
-                                        {[1, 2, 3].map(i => (
-                                          <div key={i} className={cn(
-                                            "border rounded-2xl overflow-hidden transition-all",
-                                            i === 1 ? "bg-white dark:bg-zinc-900 border-indigo-500/30 shadow-lg shadow-indigo-500/5" : "bg-white dark:bg-zinc-950 border-zinc-100 dark:border-zinc-800"
-                                          )}>
-                                            <div className="h-12 flex items-center px-5 justify-between">
-                                              <div className="flex items-center gap-3">
-                                                <div className={cn("w-1.5 h-1.5 rounded-full", i === 1 ? "bg-indigo-500" : "bg-zinc-300 dark:bg-zinc-700")} />
-                                                <span className={cn("text-xs font-bold uppercase tracking-tight", i === 1 ? "text-zinc-900 dark:text-white" : "text-zinc-400")}>Section {i} Title</span>
-                                              </div>
-                                              <div className={cn("w-2 h-2 border-b-2 border-r-2 transition-transform duration-300", i === 1 ? "border-indigo-500 rotate-[225deg] mt-1" : "border-zinc-300 rotate-45 mb-1")} />
-                                            </div>
-                                            {i === 1 && (
-                                              <div className="p-5 pt-0 space-y-3">
-                                                <div className="h-2 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full opacity-60" />
-                                                <div className="h-2 w-3/4 bg-zinc-100 dark:bg-zinc-800 rounded-full opacity-60" />
-                                              </div>
-                                            )}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    ) : block.type === 'tabs_nested' ? (
-                                      <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-sm">
-                                        <div className="h-[52px] border-b border-zinc-100 dark:border-zinc-900 flex items-center px-2 bg-zinc-50/50 dark:bg-zinc-900/30">
-                                          {['Overview', 'History', 'Documents'].map((tab, i) => (
-                                            <div key={i} className={cn(
-                                              "h-10 px-6 flex items-center text-[10px] font-black uppercase tracking-widest cursor-default transition-all",
-                                              i === 0 ? "bg-white dark:bg-zinc-900 text-indigo-600 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800" : "text-zinc-400"
-                                            )}>{tab}</div>
-                                          ))}
-                                        </div>
-                                        <div className="p-8 min-h-[200px] flex flex-col items-center justify-center gap-4">
-                                          <div className="w-12 h-12 bg-zinc-50 dark:bg-zinc-900 rounded-2xl flex items-center justify-center border border-dashed border-zinc-200 dark:border-zinc-800">
-                                            <Plus size={18} className="text-zinc-300" />
-                                          </div>
-                                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Tab Content Area</span>
-                                        </div>
-                                      </div>
-                                    ) : block.type === 'stepper' ? (
-                                      <div className="pt-6 px-8 pb-10">
-                                        <div className="flex items-center justify-between relative">
-                                          {/* Connecting Line Background */}
-                                          <div className="absolute top-5 left-8 right-8 h-0.5 bg-zinc-100 dark:bg-zinc-800" />
-                                          
-                                          {[1, 2, 3].map((step, i) => (
-                                            <div key={step} className="flex flex-col items-center gap-3 relative z-10">
-                                              <div className={cn(
-                                                "w-10 h-10 rounded-full flex items-center justify-center text-[10px] font-black transition-all duration-500",
-                                                i === 0 ? "bg-indigo-600 text-white shadow-xl shadow-indigo-500/40 ring-4 ring-indigo-500/10" : 
-                                                i === 1 ? "bg-white dark:bg-zinc-900 border-2 border-indigo-500 text-indigo-500" :
-                                                "bg-white dark:bg-zinc-950 border-2 border-zinc-100 dark:border-zinc-800 text-zinc-300"
-                                              )}>
-                                                {step}
-                                              </div>
-                                              
-                                              {/* Active Line Fill (placed relative to the step) */}
-                                              {i === 0 && (
-                                                <div className="absolute top-5 left-10 w-[calc(100%+32px)] h-0.5 bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
-                                              )}
-
-                                              <span className={cn(
-                                                "absolute -bottom-8 text-[9px] font-bold uppercase tracking-[0.2em] whitespace-nowrap transition-colors duration-500",
-                                                i === 0 ? "text-indigo-500" : "text-zinc-400"
-                                              )}>
-                                                Step {step}
-                                              </span>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    ) : block.type === 'timeline' ? (
-                                      <div className="space-y-8 pt-4 pl-4 relative">
-                                        <div className="absolute left-6 top-6 bottom-6 w-0.5 bg-zinc-100 dark:bg-zinc-900" />
-                                        {[
-                                          { t: '10:30 AM', e: 'Module Created', d: 'Initial schema generated by Shadow Architect', a: true },
-                                          { t: '11:15 AM', e: 'Fields Added', d: '14 new input components configured', a: false },
-                                          { t: '12:00 PM', e: 'Logic Applied', d: 'Validation rules and visibility conditions set', a: false }
-                                        ].map((item, i) => (
-                                          <div key={i} className="flex gap-8 relative z-10 group/item">
-                                            <div className={cn(
-                                              "w-4 h-4 rounded-full mt-1 border-4 shadow-lg transition-transform group-hover/item:scale-125",
-                                              item.a ? "bg-indigo-600 border-indigo-100 dark:border-indigo-900" : "bg-white dark:bg-zinc-800 border-zinc-100 dark:border-zinc-900"
-                                            )} />
-                                            <div className="space-y-1">
-                                              <span className="block text-[10px] font-black text-indigo-500 uppercase tracking-widest">{item.t}</span>
-                                              <h5 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">{item.e}</h5>
-                                              <p className="text-[10px] text-zinc-500 max-w-xs">{item.d}</p>
-                                            </div>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    ) : block.type === 'datatable' ? (() => {
-                                      const d = block.density || 'standard';
-                                      const headerHeight = d === 'compact' ? 'h-10' : d === 'spacious' ? 'h-16' : 'h-14';
-                                      const rowHeight = d === 'compact' ? 'h-10' : d === 'spacious' ? 'h-16' : 'h-14';
-                                      const padding = d === 'compact' ? 'px-4' : d === 'spacious' ? 'px-8' : 'px-6';
-                                      const avatarSize = d === 'compact' ? 'w-6 h-6' : d === 'spacious' ? 'w-9 h-9' : 'w-8 h-8';
-                                      return (
-                                        <div className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-3xl overflow-hidden shadow-2xl transition-all duration-300">
-                                          <div className={cn("bg-zinc-50 dark:bg-zinc-900/50 border-b border-zinc-100 dark:border-zinc-900 flex items-center gap-8 transition-all duration-300", headerHeight, padding)}>
-                                            {['Name', 'Category', 'Status', 'Date Modified'].map((col, i) => (
-                                              <div key={i} className={cn("flex-1 text-[9px] font-black text-zinc-400 uppercase tracking-widest", i > 1 && "hidden md:block")}>{col}</div>
-                                            ))}
-                                          </div>
-                                          <div className="divide-y divide-zinc-50 dark:divide-zinc-900">
-                                            {[1, 2, 3, 4].map(row => (
-                                              <div key={row} className={cn("flex items-center gap-8 hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30 transition-all duration-300", rowHeight, padding)}>
-                                                <div className="flex-1 flex items-center gap-3">
-                                                  <div className={cn("rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-600 font-bold text-[10px] transition-all duration-300", avatarSize)}>R{row}</div>
-                                                  <div className="h-2 w-24 bg-zinc-100 dark:bg-zinc-800 rounded-full" />
-                                                </div>
-                                                <div className="flex-1 hidden md:block"><div className="h-2 w-16 bg-zinc-50 dark:bg-zinc-800 rounded-full opacity-60" /></div>
-                                                <div className="flex-1 hidden md:block">
-                                                  <div className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full w-fit">
-                                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                                  </div>
-                                                </div>
-                                                <div className="flex-1 hidden md:block"><div className="h-2 w-20 bg-zinc-50 dark:bg-zinc-800 rounded-full opacity-60" /></div>
-                                              </div>
-                                            ))}
-                                          </div>
-                                          <div className="h-12 border-t border-zinc-100 dark:border-zinc-900 flex items-center px-6 justify-between bg-zinc-50/30">
-                                            <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">Showing 4 of 24 records</span>
-                                            <div className="flex gap-2">
-                                              <div className="w-6 h-6 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center"><ArrowRightLeft size={10} className="text-zinc-400 rotate-90" /></div>
-                                              <div className="w-6 h-6 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-[10px] font-bold">1</div>
-                                              <div className="w-6 h-6 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-[10px] font-bold text-zinc-400">2</div>
-                                              <div className="w-6 h-6 rounded bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center"><ArrowRightLeft size={10} className="text-zinc-400 -rotate-90" /></div>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      );
-                                    })()
-                                    : block.type === 'duallist' ? (
-                                      <div className="flex gap-4 items-center">
-                                        <div className="flex-1 bg-white dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-zinc-800/80 rounded-xl overflow-hidden shadow-xs">
-                                          <div className="h-9 bg-zinc-50/80 dark:bg-zinc-800/40 border-b border-zinc-200/60 dark:border-zinc-800/60 flex items-center px-3.5">
-                                            <span className="text-[8px] font-bold text-zinc-500 uppercase tracking-wider">Available Options</span>
-                                          </div>
-                                          <div className="p-2 space-y-1">
-                                            {[1, 2, 3].map(i => (
-                                              <div key={i} className="h-7 flex items-center px-3 gap-2.5 bg-zinc-50/50 dark:bg-zinc-800/30 rounded-lg border border-zinc-100 dark:border-zinc-800/60">
-                                                <div className="w-1.5 h-1.5 rounded-full bg-zinc-300 dark:bg-zinc-600" />
-                                                <div className="h-1.5 w-16 bg-zinc-200 dark:bg-zinc-700 rounded-full" />
-                                              </div>
-                                            ))}
-                                          </div>
-                                        </div>
-                                        <div className="flex flex-col gap-2">
-                                          <div className="w-7 h-7 bg-indigo-500/10 text-indigo-500 rounded-lg flex items-center justify-center border border-indigo-500/20"><ChevronRight size={12} /></div>
-                                          <div className="w-7 h-7 bg-zinc-100 dark:bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-400"><ChevronLeft size={12} /></div>
-                                        </div>
-                                        <div className="flex-1 bg-white dark:bg-zinc-900/50 border border-indigo-500/30 dark:border-indigo-500/30 rounded-xl overflow-hidden shadow-xs">
-                                          <div className="h-9 bg-indigo-500/5 dark:bg-indigo-500/10 border-b border-indigo-500/20 flex items-center px-3.5">
-                                            <span className="text-[8px] font-bold text-indigo-500 uppercase tracking-wider">Selected Options</span>
-                                          </div>
-                                          <div className="p-2 space-y-1">
-                                            <div className="h-7 flex items-center px-3 gap-2.5 bg-indigo-50/80 dark:bg-indigo-500/15 rounded-lg border border-indigo-500/20">
-                                              <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                                              <div className="h-1.5 w-20 bg-indigo-500/30 rounded-full" />
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    ) : block.type === 'treeview' ? (
-                                      <div className="p-6 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-3xl shadow-sm">
-                                        <div className="space-y-4">
-                                          {[1, 2].map(root => (
-                                            <div key={root} className="space-y-3">
-                                              <div className="flex items-center gap-3">
-                                                <div className={cn("w-2 h-2 border-b-2 border-r-2 border-zinc-400 rotate-45 mb-1", root === 1 && "rotate-[225deg] border-indigo-500 mt-1")} />
-                                                <Folder size={14} className={cn(root === 1 ? "text-indigo-500" : "text-zinc-400")} />
-                                                <span className={cn("text-xs font-bold uppercase tracking-tight", root === 1 ? "text-zinc-900 dark:text-white" : "text-zinc-400")}>Root Directory {root}</span>
-                                              </div>
-                                              {root === 1 && (
-                                                <div className="pl-9 space-y-4 relative">
-                                                  <div className="absolute left-3.5 top-0 bottom-4 w-px bg-zinc-100 dark:bg-zinc-900" />
-                                                  {[1, 2].map(child => (
-                                                    <div key={child} className="flex items-center gap-3 relative">
-                                                      <div className="absolute -left-5.5 top-1/2 w-4 h-px bg-zinc-100 dark:bg-zinc-900" />
-                                                      <FileText size={12} className="text-zinc-300" />
-                                                      <div className="h-1.5 w-24 bg-zinc-100 dark:bg-zinc-800 rounded-full" />
-                                                    </div>
-                                                  ))}
-                                                </div>
-                                              )}
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    ) : block.type === 'calculation' ? (
-                                      <div className="h-10 bg-indigo-500/5 border border-indigo-500/10 rounded-xl flex items-center px-4 shadow-sm">
-                                        <Calculator size={12} className="text-indigo-500 mr-2 shrink-0" />
-                                        <span className="text-[10px] font-mono text-indigo-600 dark:text-indigo-400 truncate flex-1">
-                                          {block.calculationLogic || 'No formula defined'}
-                                        </span>
-                                      </div>
-                                    ) : block.type === 'date' ? (
-                                      <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center justify-between px-4 shadow-sm dark:shadow-none">
-                                        <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">MM / DD / YYYY</span>
-                                        <Calendar size={14} className="text-zinc-400 dark:text-zinc-600" />
-                                      </div>
-                                    ) : block.type === 'time' ? (
-                                      <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center justify-between px-4 shadow-sm dark:shadow-none">
-                                        <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">00:00 AM</span>
-                                        <Clock size={14} className="text-zinc-400 dark:text-zinc-600" />
-                                      </div>
-                                    ) : block.type === 'sub_module' ? (
-                                      renderSubmoduleMock(block)
-                                    ) : block.type === 'relationship_m2m' ? (
-                                      renderRelationshipM2MMock(block)
-                                    ) : block.type === 'rollup' ? (
-                                      renderRollupMock(block)
-                                    ) : block.type === 'party' ? (
-                <div className="pt-2">
-                  <div className="h-11 w-full bg-white dark:bg-zinc-950 border border-indigo-500/30 rounded-xl flex items-center justify-between px-4">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Building2 size={14} className="text-indigo-500 shrink-0" />
-                      <span className="text-xs text-zinc-400 font-medium italic select-none truncate">
-                        {block.placeholder || `Search ${block.label} in Directory...`}
-                      </span>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold uppercase shrink-0">
-                      Directory
-                    </span>
-                  </div>
-                </div>
-              ) : block.type === 'lookup' ? (
-                                      <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center px-4 gap-2 shadow-sm dark:shadow-none">
-                                        <Search size={14} className="text-zinc-400 dark:text-zinc-600" />
-                                        <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">{block.placeholder || `Search ${block.label?.toLowerCase() || 'records'}...`}</span>
-                                      </div>
-                                    ) : (block.type === 'select' || block.type === 'user') ? (
-                                      <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center justify-between px-4 shadow-sm dark:shadow-none">
-                                        <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">{block.placeholder || `Select ${block.label?.toLowerCase() || 'option'}...`}</span>
-                                        <ChevronDown size={14} className="text-zinc-400 dark:text-zinc-600" />
-                                      </div>
-                                    ) : (
-                                      <div className="h-10 bg-white dark:bg-zinc-950/50 border border-zinc-200 dark:border-zinc-800/50 rounded-xl flex items-center px-4 shadow-sm dark:shadow-none">
-                                        <span className="text-xs text-zinc-400 dark:text-zinc-600 italic truncate">{block.placeholder || `Enter ${block.label?.toLowerCase() || 'value'}...`}</span>
-                                      </div>
-                                    )}
-                                    {block.helperText && !(block.type === 'heading' || block.type === 'alert' || block.type === 'divider' || block.type === 'spacer') && (
-                                     <p className="text-[9px] text-zinc-500 italic mt-0.5 px-1 absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{block.helperText}</p>
-                                   )}
-                                  </div>
-                                 </div>
-
-                                  {/* Quick Action Buttons (Overlapping Border) */}
-                                  <button 
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      cloneField(block.id);
-                                    }}
-                                    className="absolute -top-3.5 right-6 w-7 h-7 bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-full flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity shadow-lg z-50 hover:scale-110 active:scale-95 border border-zinc-200 dark:border-zinc-700"
-                                    title="Duplicate Field"
-                                  >
-                                    <Copy size={12} />
-                                  </button>
-
-                                  <button 
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setLayout(prev => removeFieldRecursive(prev, block.id));
-                                      if (selectedId === block.id) setSelectedId(null);
-                                    }}
-                                    className="absolute -top-3.5 -right-3.5 w-7 h-7 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity shadow-lg z-50 hover:scale-110 active:scale-95"
-                                    title="Delete Field"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-
-                                  {!block.hidden && (
-                                    <button 
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        updateField(block.id, { hidden: true });
-                                      }}
-                                      className="absolute -top-3.5 right-15 w-7 h-7 bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 rounded-full flex items-center justify-center opacity-0 group-hover/field:opacity-100 transition-opacity shadow-lg z-50 hover:scale-110 active:scale-95 border border-zinc-200 dark:border-zinc-700"
-                                      title="Quick Hide Field"
-                                    >
-                                      <EyeOff size={12} />
-                                    </button>
-                                  )}
-                                    </>
-                                  )}
-                                </div>
-                              );
+                              if (block.parentId) return false;
+                              return block.tabId === currentTabId || (!block.tabId && currentTabId === tabs[0]?.id);
                             });
 
-                            if (isNested && (activeTab as string) !== 'preview') {
+                            if ((activeTab as string) !== 'preview') {
                               return (
-                                <NestedRglContainer
-                                  key={`${parentId}-${filtered.map(f => f.id).join('_')}`}
-                                  parentId={parentId!}
-                                  fields={filtered}
+                                <SectionRglContainer
+                                  sectionTabId={currentTabId}
+                                  fields={activeTabFields}
                                   viewportSize={viewportSize}
                                   dragOverInfo={dragOverInfo}
                                   resolveCollisionsInArray={resolveCollisionsInArray}
-                                  onLayoutChange={handleNestedRglLayoutChange}
+                                  onLayoutChange={handleRglLayoutChange}
                                 >
-                                  {renderedCards}
-                                </NestedRglContainer>
+                                  {renderFieldBlocks(activeTabFields, undefined, currentTabId)}
+                                </SectionRglContainer>
                               );
                             }
 
-                            return renderedCards;
-                          };
-
-                          const activeTabFields = displayLayout.filter(block => {
-                            const type = block.type?.toLowerCase();
-                            if (!showSystemFields && (type === 'connector' || type === 'automation' || type === 'nexus_connector')) return false;
-                            if ((activeTab as string) === 'preview' && !isFieldVisible(block, {}, { user })) return false;
-                            if (block.parentId) return false;
-                            return block.tabId === currentTabId || (!block.tabId && currentTabId === tabs[0]?.id);
-                          });
-
-                          const currentRglLayout = (() => {
-                            let activeFields = activeTabFields;
-                            if (dragOverInfo?.active && !dragOverInfo.parentId) {
-                              const placeholderField: Field = {
-                                id: '__cross_drop_placeholder__',
-                                name: '__cross_drop_placeholder__',
-                                type: 'text',
-                                label: 'Drop Zone',
-                                startCol: dragOverInfo.col || 1,
-                                rowIndex: typeof dragOverInfo.index === 'number' ? dragOverInfo.index : 0,
-                                colSpan: dragOverInfo.span || 6
-                              };
-                              activeFields = resolveCollisionsInArray(placeholderField, [...activeTabFields, placeholderField]);
-                            }
-                            return activeFields.map((f) => ({
-                              i: f.id,
-                              x: Math.max(0, Math.min(11, (f.startCol ? f.startCol - 1 : 0))),
-                              y: f.rowIndex || 0,
-                              w: Math.max(1, Math.min(12, f.colSpan || 6)),
-                              h: calculateHeight(f),
-                              minW: isContainerField(f.type) ? 4 : 2,
-                              minH: 1
-                            }));
-                          })();
-
-                          if (rglMounted && (activeTab as string) !== 'preview') {
                             return (
-                              <div className="w-full col-span-12">
-                                <ReactGridLayout
-                                  key={`root-grid-${activeTabFields.map(f => `${f.id}_h${calculateHeight(f)}_c${f.fields?.length || 0}_sub${f.fields?.map((sf: any) => `${sf.id}_h${calculateHeight(sf)}_c${sf.fields?.length || 0}`).join('-') || ''}`).join('_')}`}
-                                  className={cn("layout", dragOverInfo?.active && dragOverInfo?.parentId && "is-dragging-cross-container")}
-                                  layout={currentRglLayout}
-                                  width={rglContainerWidth || 1100}
-                                  onLayoutChange={handleRglLayoutChange}
-                                  gridConfig={{
-                                    cols: viewportSize === 'mobile' ? 1 : 12,
-                                    rowHeight: GRID_CONFIG.rowHeight,
-                                    margin: [GRID_CONFIG.gap, GRID_CONFIG.gap]
-                                  }}
-                                  dragConfig={{
-                                    enabled: true,
-                                    handle: ".root-drag-handle"
-                                  }}
-                                  resizeConfig={{
-                                    enabled: true
-                                  }}
-                                >
-                                  {renderFieldBlocks(activeTabFields)}
-                                  {dragOverInfo?.active && !dragOverInfo.parentId && (
-                                    <div
-                                      key="__cross_drop_placeholder__"
-                                      className="react-grid-placeholder"
-                                      style={{ pointerEvents: 'none' }}
-                                    />
-                                  )}
-                                </ReactGridLayout>
+                              <div 
+                                className="w-full col-span-12 grid grid-cols-1 md:grid-cols-12"
+                                style={{ 
+                                  gap: `${GRID_CONFIG.gap}px`,
+                                  gridAutoRows: `${GRID_CONFIG.rowHeight}px`
+                                }}
+                              >
+                                {renderFieldBlocks(activeTabFields, undefined, currentTabId)}
                               </div>
                             );
-                          }
+                          })()}
+                        </AnimatePresence>
 
-                          return (
-                            <div 
-                              className="w-full col-span-12 grid grid-cols-1 md:grid-cols-12"
-                              style={{ 
-                                gap: `${GRID_CONFIG.gap}px`,
-                                gridAutoRows: `${GRID_CONFIG.rowHeight}px`
-                              }}
+                        {/* Bottom Spacer for Scrolling Room */}
+                        <div className="col-span-full h-24 pointer-events-none" />
+
+                        {interfaceSettings.detail?.layoutType !== 'sidebar' && layout.filter(block => !block.parentId && (block.tabId === currentTabId || (!block.tabId && currentTabId === tabs[0]?.id))).length === 0 && !dragOverInfo && !isLoading && (
+                          <div className="absolute inset-6 bottom-24 flex flex-col items-center justify-center border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl bg-white/80 dark:bg-zinc-900/50">
+                            <GridIcon size={40} className="mb-3 text-zinc-300 dark:text-zinc-700" />
+                            <p className="font-semibold text-xs text-zinc-500 mb-4">Drag fields from the left palette or click any block to add</p>
+                            <button 
+                              onClick={() => setSelectedId(currentTabId)}
+                              className="flex items-center gap-2 px-4 py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-xl text-[10px] font-bold uppercase tracking-wider hover:bg-indigo-600 hover:text-white transition-all border border-zinc-200 dark:border-zinc-700"
                             >
-                              {renderFieldBlocks(activeTabFields)}
-                            </div>
-                          );
-                        })()}
-
-                    </AnimatePresence>
-
-                    {/* Bottom Spacer for Scrolling Room */}
-                    <div className="col-span-full h-32 pointer-events-none" />
-
-                    {interfaceSettings.detail?.layoutType !== 'sidebar' && layout.filter(block => block.tabId === currentTabId || (!block.tabId && currentTabId === tabs[0]?.id)).length === 0 && !dragOverInfo && !isLoading && (
-                      <div className="absolute inset-8 bottom-32 flex flex-col items-center justify-center border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-[32px] bg-white dark:bg-zinc-950/50">
-                        <GridIcon size={48} className="mb-4 text-zinc-200 dark:text-zinc-800" />
-                        <p className="font-medium text-sm text-zinc-500 mb-6">Drag fields from the sidebar to start building</p>
-                        <button 
-                          onClick={() => setSelectedId(currentTabId)}
-                          className="flex items-center gap-2 px-6 py-3 bg-zinc-100 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 rounded-2xl text-[10px] font-bold uppercase tracking-widest hover:bg-indigo-500 hover:text-white transition-all shadow-sm border border-zinc-200 dark:border-zinc-800"
-                        >
-                          <Settings size={14} />
-                          Configure Tab Settings
-                        </button>
+                              <Settings size={13} />
+                              Configure Section Settings
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
-                    )
-                  }
+
+                    {/* Embedded Collapsible Workspace RecordContextRail Preview (matching RecordContextRail.tsx) */}
+                    {activeTab === 'builder' && viewportSize === 'desktop' && interfaceSettings.detail?.contextRail?.enabled !== false && (() => {
+                      const railCfg = interfaceSettings.detail?.contextRail || {
+                        enabled: true,
+                        defaultCollapsed: false,
+                        defaultTab: 'overview',
+                        enabledTabs: ['overview', 'workflow', 'activity', 'notes', 'files', 'tasks', 'time'],
+                        pinnedFieldIds: []
+                      };
+                      const allRailTabs = [
+                        { id: 'overview', label: 'Overview', icon: Info },
+                        { id: 'workflow', label: 'Workflow', icon: GitCommit },
+                        { id: 'activity', label: 'Activity', icon: Activity },
+                        { id: 'notes', label: 'Notes', icon: FileText, count: 2 },
+                        { id: 'files', label: 'Files', icon: Folder, count: 3 },
+                        { id: 'tasks', label: 'Tasks', icon: CheckSquare, count: 1 },
+                        { id: 'time', label: 'Time', icon: Clock }
+                      ];
+                      const visibleRailTabs = allRailTabs.filter(t => t.id === 'overview' || (railCfg.enabledTabs || []).includes(t.id));
+                      const activeRailTabId = visibleRailTabs.some(t => t.id === canvasRailTab) ? canvasRailTab : 'overview';
+                      const pinnedFields = (railCfg.pinnedFieldIds || [])
+                        .map(fid => allFields.find(f => f.id === fid))
+                        .filter(Boolean) as Field[];
+
+                      return (
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedId('__context_rail_settings');
+                          }}
+                          className={cn(
+                            "flex shrink-0 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 select-none cursor-pointer transition-all relative",
+                            selectedId === '__context_rail_settings' && "ring-2 ring-inset ring-indigo-500/40"
+                          )}
+                          title="Click to configure Context Rail in Inspector"
+                        >
+                          {!canvasRailCollapsed && (
+                            <div className="w-64 flex flex-col border-r border-zinc-100 dark:border-zinc-800/80">
+                              {/* Rail Header */}
+                              <div className="h-10 px-3.5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                                <span className="text-[11px] font-bold text-zinc-900 dark:text-white capitalize">{activeRailTabId}</span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedId('__context_rail_settings');
+                                  }}
+                                  className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-indigo-600"
+                                  title="Configure Context Rail"
+                                >
+                                  <Settings2 size={12} />
+                                </button>
+                              </div>
+
+                              {/* Rail Body Content */}
+                              <div className="p-3.5 space-y-3 overflow-y-auto flex-1 text-xs">
+                                {activeRailTabId === 'overview' ? (
+                                  <>
+                                    {/* Workflow Status Card */}
+                                    <div className="p-3 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/30 space-y-2">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Status & Stage</span>
+                                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[9px] font-bold border border-emerald-500/20">
+                                          {(workflow?.nodes?.[0] as any)?.data?.label || (workflow?.nodes?.[0] as any)?.label || 'In Progress'}
+                                        </span>
+                                      </div>
+                                      {workflow?.nodes && workflow.nodes.length > 1 && (
+                                        <div className="pt-1 border-t border-zinc-200/50 dark:border-zinc-800/60 flex items-center justify-between text-[10px] text-zinc-500">
+                                          <span>Next Transition:</span>
+                                          <span className="font-semibold text-indigo-600 dark:text-indigo-400">{(workflow.nodes[1] as any)?.data?.label || (workflow.nodes[1] as any)?.label || 'Complete'} →</span>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Pinned Key Properties Card */}
+                                    <div className="p-3 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/30 space-y-2">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Key Properties</span>
+                                        <span className="text-[9px] font-semibold text-indigo-500">{pinnedFields.length} pinned</span>
+                                      </div>
+                                      {pinnedFields.length > 0 ? (
+                                        <div className="space-y-1.5 pt-1">
+                                          {pinnedFields.map(pf => (
+                                            <div key={pf.id} className="flex items-center justify-between gap-2 text-[11px]">
+                                              <span className="text-zinc-500 truncate">{pf.label}</span>
+                                              <span className="font-semibold text-zinc-800 dark:text-zinc-200 truncate">
+                                                {String(previewRecords[0]?.[pf.id] || previewRecords[0]?.[pf.name || ''] || pf.defaultValue || 'Sample')}
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <p className="text-[10px] text-zinc-400 italic">Click to pin key fields to Overview</p>
+                                      )}
+                                    </div>
+
+                                    {/* People Card */}
+                                    <div className="p-3 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/30 space-y-2.5">
+                                      <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 block">People</span>
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-zinc-500">Assignee</span>
+                                        <div className="flex items-center gap-1.5">
+                                          <div className="w-4 h-4 rounded-full bg-indigo-500/15 text-indigo-600 text-[8px] font-bold flex items-center justify-center">AM</div>
+                                          <span className="font-medium text-zinc-700 dark:text-zinc-300">Alex Morgan</span>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-zinc-500">Participants</span>
+                                        <div className="flex items-center -space-x-1">
+                                          <div className="w-4 h-4 rounded-full bg-indigo-500 text-white text-[7px] font-bold flex items-center justify-center ring-1 ring-white dark:ring-zinc-900">SV</div>
+                                          <div className="w-4 h-4 rounded-full bg-purple-500 text-white text-[7px] font-bold flex items-center justify-center ring-1 ring-white dark:ring-zinc-900">JD</div>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Dates & Audit Card */}
+                                    <div className="p-3 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/30 space-y-1.5 text-[10px] text-zinc-500">
+                                      <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 block mb-1">Audit Trail</span>
+                                      <div className="flex justify-between">
+                                        <span>Created</span>
+                                        <span className="font-medium text-zinc-700 dark:text-zinc-300">Today, 09:41 AM</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span>Updated</span>
+                                        <span className="font-medium text-zinc-700 dark:text-zinc-300">Just now</span>
+                                      </div>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="py-12 text-center space-y-2">
+                                    <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 capitalize">{activeRailTabId} Panel</p>
+                                    <p className="text-[10px] text-zinc-400 px-4">Live {activeRailTabId} stream renders here in the workspace.</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 44px Vertical Icon Strip matching RecordContextRail.tsx */}
+                          <div className="w-11 flex flex-col items-center py-2.5 gap-1.5 bg-zinc-50/60 dark:bg-zinc-950/40">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCanvasRailCollapsed(prev => !prev);
+                              }}
+                              className="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200/60 dark:hover:bg-zinc-800 transition-colors mb-1"
+                              title={canvasRailCollapsed ? "Expand Context Rail" : "Collapse Context Rail"}
+                            >
+                              {canvasRailCollapsed ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
+                            </button>
+
+                            {visibleRailTabs.map((rt) => {
+                              const RIcon = rt.icon;
+                              const isTabActive = !canvasRailCollapsed && activeRailTabId === rt.id;
+                              return (
+                                <button
+                                  key={rt.id}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCanvasRailTab(rt.id);
+                                    if (canvasRailCollapsed) setCanvasRailCollapsed(false);
+                                    setSelectedId('__context_rail_settings');
+                                  }}
+                                  className={cn(
+                                    "w-8 h-8 rounded-xl flex items-center justify-center relative transition-all",
+                                    isTabActive
+                                      ? "bg-indigo-600 text-white shadow-xs"
+                                      : "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/60"
+                                  )}
+                                  title={`${rt.label} Tab`}
+                                >
+                                  <RIcon size={14} />
+                                  {rt.count && (
+                                    <span className={cn(
+                                      "absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full text-[8px] font-bold flex items-center justify-center",
+                                      isTabActive ? "bg-white text-indigo-600" : "bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300"
+                                    )}>
+                                      {rt.count}
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {activeTab === 'builder' && interfaceSettings.detail?.layoutType === 'process' && (() => {
@@ -8893,75 +8770,106 @@ export const ModuleEditor = () => {
                     );
                   })()}
                 </div>
+                </div>
               </div>
             )
           ) : activeTab === 'preview' ? (
-            <div className="w-full px-8 pb-20">
-              <div 
-                className="rounded-[32px] shadow-2xl overflow-hidden min-h-[600px] relative"
-              >
-                {/* Absolute Background Layer */}
-                <div className="absolute inset-0 bg-white dark:bg-zinc-950 rounded-[32px] -z-10 pointer-events-none" />
-                
-                {/* Absolute Border Overlay Layer */}
-                <div className="absolute inset-0 rounded-[32px] border border-zinc-200 dark:border-zinc-800 pointer-events-none z-30" />
-                {/* Preview Toolbar */}
-                <div className="h-16 border-b border-zinc-100 dark:border-zinc-900 bg-zinc-50/50 dark:bg-transparent px-8 flex items-center justify-between gap-4 overflow-x-auto no-scrollbar">
-                  <div className="flex items-center gap-3 shrink-0">
-                    <div className="flex items-center bg-zinc-100/80 dark:bg-zinc-900 p-1 rounded-xl border border-zinc-200 dark:border-zinc-800">
+            <div className="flex-1 flex flex-col h-full overflow-hidden">
+              {/* Unified Preview Sub-Bar (44px, Google-clean) */}
+              <div className="h-11 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 flex items-center justify-between gap-3 shrink-0 overflow-x-auto no-scrollbar">
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg">
+                    <button 
+                      type="button"
+                      onClick={() => setPreviewView('table')}
+                      className={cn(
+                        "px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer",
+                        previewView === 'table' ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                      )}
+                    >
+                      List
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => previewSelectedId && setPreviewView('detail')}
+                      className={cn(
+                        "px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer",
+                        previewView === 'detail' ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                      )}
+                      disabled={!previewSelectedId}
+                    >
+                      Detail
+                    </button>
+                    {forms.length > 0 && (
                       <button 
-                        onClick={() => setPreviewView('table')}
-                        className={cn(
-                          "px-3.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
-                          previewView === 'table' ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
-                        )}
-                      >
-                        List
-                      </button>
-                      <button 
-                        onClick={() => previewSelectedId && setPreviewView('detail')}
-                        className={cn(
-                          "px-3.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
-                          previewView === 'detail' ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
-                        )}
-                        disabled={!previewSelectedId}
-                      >
-                        Detail
-                      </button>
-                    </div>
-
-                    {/* Role Simulation Switcher */}
-                    <div className="flex items-center gap-2 bg-zinc-100/80 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 px-3 py-1.5 rounded-xl shadow-sm">
-                      <ShieldCheck size={14} className="text-indigo-600 dark:text-indigo-400 shrink-0" />
-                      <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400 shrink-0">Role:</span>
-                      <select
-                        value={previewRole}
-                        onChange={(e) => {
-                          setPreviewRole(e.target.value);
-                          const label = e.target.options[e.target.selectedIndex].text;
-                          toast.info(`Simulating view as: ${label}`);
+                        type="button"
+                        onClick={() => {
+                          setPreviewView('form');
+                          if (!previewFormId) setPreviewFormId(selectedFormId || forms[0]?.id || '');
                         }}
-                        className="bg-transparent text-xs font-bold text-zinc-800 dark:text-zinc-200 outline-none cursor-pointer pr-1"
+                        className={cn(
+                          "px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer",
+                          previewView === 'form' ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                        )}
                       >
-                        <option value="admin" className="bg-white dark:bg-zinc-900">Administrator</option>
-                        <option value="manager" className="bg-white dark:bg-zinc-900">Department Manager</option>
-                        <option value="staff" className="bg-white dark:bg-zinc-900">Standard Staff</option>
-                        <option value="guest" className="bg-white dark:bg-zinc-900">External Guest</option>
-                      </select>
-                    </div>
+                        Form
+                      </button>
+                    )}
                   </div>
 
-                  <div className="flex items-center gap-3 shrink-0">
-                    {/* Mock Data Generator & Quick Randomize */}
-                    <div className="flex items-center gap-1.5">
+                  {previewView === 'form' && forms.length > 0 && (
+                    <>
+                      <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800" />
+                      <select
+                        value={previewFormId || selectedFormId || forms[0]?.id || ''}
+                        onChange={(e) => setPreviewFormId(e.target.value)}
+                        className="px-2 py-1 text-xs font-medium bg-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-700 dark:text-zinc-200 focus:outline-none cursor-pointer transition-colors"
+                        title="Select form to preview"
+                      >
+                        {forms.map((f: any) => (
+                          <option key={f.id} value={f.id}>
+                            {f.name}
+                          </option>
+                        ))}
+                      </select>
+                    </>
+                  )}
+
+                  {previewView !== 'form' && (
+                    <>
+                      <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800" />
+                      <div className="flex items-center gap-1.5">
+                        <ShieldCheck size={14} className="text-indigo-600 dark:text-indigo-400 shrink-0" />
+                        <select
+                          value={previewRole}
+                          onChange={(e) => {
+                            setPreviewRole(e.target.value);
+                            const label = e.target.options[e.target.selectedIndex].text;
+                            toast.info(`Simulating view as: ${label}`);
+                          }}
+                          className="px-2 py-1 text-xs font-medium bg-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-700 dark:text-zinc-200 outline-none cursor-pointer"
+                        >
+                          <option value="admin">Administrator</option>
+                          <option value="manager">Department Manager</option>
+                          <option value="staff">Standard Staff</option>
+                          <option value="guest">External Guest</option>
+                        </select>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {previewView !== 'form' && (
+                    <>
                       <button
                         type="button"
                         onClick={() => setIsMockDataModalOpen(true)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-sm"
+                        className="flex items-center gap-1.5 px-2.5 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-300 rounded-lg text-xs font-medium transition-colors cursor-pointer"
                         title="Configure mock testing dataset"
                       >
-                        <Sparkles size={12} />
-                        <span>Mock Sandbox ({previewRecords.length})</span>
+                        <Sparkles size={13} className="text-indigo-500" />
+                        <span>Sandbox ({previewRecords.length})</span>
                       </button>
                       <button
                         type="button"
@@ -8971,64 +8879,127 @@ export const ModuleEditor = () => {
                           setUseRealData(false);
                           toast.success("Randomized mock records");
                         }}
-                        className="p-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
-                        title="Quick Randomize Records"
+                        className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                        title="Randomize mock records"
                       >
-                        <RefreshCw size={12} />
+                        <RefreshCw size={13} />
                       </button>
-                    </div>
 
-                    {/* Database Mode Sliding Toggle Switch */}
-                    <div className="flex items-center gap-2.5 bg-zinc-100/80 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 px-3 py-1.5 rounded-xl select-none shadow-sm">
-                      <span className={cn(
-                        "text-[9px] font-black uppercase tracking-widest transition-colors",
-                        !useRealData ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-400 dark:text-zinc-500"
-                      )}>
-                        Mock
-                      </span>
+                      {/* Mock / Live DB Toggle */}
+                      <div className="flex items-center gap-2 px-2 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800/80 text-[11px] font-medium select-none">
+                        <span className={!useRealData ? "text-zinc-900 dark:text-white" : "text-zinc-400"}>Mock</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setUseRealData(prev => !prev);
+                            toast.info(!useRealData ? "Switched to Live Database Mode" : "Switched to Mock Data Mode");
+                          }}
+                          className={cn(
+                            "relative w-7 h-4 rounded-full transition-colors flex items-center p-0.5 cursor-pointer",
+                            useRealData ? "bg-indigo-600" : "bg-zinc-300 dark:bg-zinc-600"
+                          )}
+                        >
+                          <motion.div
+                            className="w-3 h-3 bg-white rounded-full shadow-xs"
+                            layout
+                            transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                            animate={{ x: useRealData ? 12 : 0 }}
+                          />
+                        </button>
+                        <span className={useRealData ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-400"}>Live</span>
+                      </div>
+
+                      <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800" />
+                    </>
+                  )}
+
+                  {/* Device Viewport Toggles */}
+                  <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg">
+                    {([
+                      { id: 'desktop', icon: Monitor, label: 'Desktop' },
+                      { id: 'tablet', icon: Tablet, label: 'Tablet (768px)' },
+                      { id: 'mobile', icon: Smartphone, label: 'Mobile (390px)' }
+                    ] as const).map((v) => (
                       <button
-                        onClick={() => {
-                          setUseRealData(prev => !prev);
-                          toast.info(!useRealData ? "Switched to Live Database Mode" : "Switched to Mock Data Mode");
-                        }}
+                        key={v.id}
+                        type="button"
+                        onClick={() => setViewportSize(v.id)}
                         className={cn(
-                          "relative w-8 h-4 rounded-full transition-all duration-300 flex items-center p-0.5",
-                          useRealData ? "bg-indigo-600" : "bg-zinc-300 dark:bg-zinc-700"
+                          "p-1.5 rounded-md transition-colors cursor-pointer",
+                          viewportSize === v.id 
+                            ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-xs" 
+                            : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300"
                         )}
+                        title={v.label}
                       >
-                        <motion.div
-                          className="w-3 h-3 bg-white rounded-full shadow-md animate-in fade-in zoom-in duration-300"
-                          layout
-                          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                          animate={{ x: useRealData ? 16 : 0 }}
-                        />
+                        <v.icon size={14} />
                       </button>
-                      <span className={cn(
-                        "text-[9px] font-black uppercase tracking-widest transition-colors flex items-center gap-1",
-                        useRealData ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-400 dark:text-zinc-500"
-                      )}>
-                        <span>Live DB</span>
-                        {useRealData && (
-                          isFetchingRealRecords ? (
-                            <span className="w-2 h-2 border-t-2 border-indigo-500 rounded-full animate-spin shrink-0 ml-0.5" />
-                          ) : (
-                            <span className="relative flex h-1.5 w-1.5">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-                            </span>
-                          )
-                        )}
-                      </span>
-                    </div>
-
-                    <div className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                      <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Sandbox Active</span>
-                    </div>
+                    ))}
                   </div>
                 </div>
+              </div>
 
-                <div className="p-8">
+              {/* Unified Preview Canvas with Tablet & Mobile Bezel */}
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-8 bg-zinc-100/70 dark:bg-zinc-950 bg-[radial-gradient(#d4d4d8_1px,transparent_1px)] dark:bg-[radial-gradient(#27272a_1px,transparent_1px)] [background-size:24px_24px] flex justify-center items-start">
+                <div
+                  className={cn(
+                    "w-full mx-auto space-y-3 transition-all duration-300",
+                    viewportSize === 'desktop' && (previewView === 'form' ? "max-w-3xl" : "max-w-6xl"),
+                    viewportSize === 'tablet' && "w-[768px] max-w-full p-5 bg-zinc-200/50 dark:bg-zinc-900/60 rounded-[2.5rem] border-2 border-zinc-300/80 dark:border-zinc-700/80 shadow-2xl ring-1 ring-black/5",
+                    viewportSize === 'mobile' && "w-[390px] max-w-full p-3.5 bg-zinc-200/80 dark:bg-zinc-900/80 rounded-[3rem] border-[6px] border-zinc-300 dark:border-zinc-700 shadow-2xl ring-1 ring-black/10"
+                  )}
+                >
+                  {viewportSize === 'tablet' && (
+                    <div className="flex items-center justify-between px-3.5 py-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-xl text-[10px] font-mono text-zinc-500 border border-zinc-200 dark:border-zinc-700/80">
+                      <div className="flex items-center gap-1.5">
+                        <Tablet size={12} className="text-indigo-500" />
+                        <span className="font-bold text-zinc-700 dark:text-zinc-300">Tablet Preview (768px)</span>
+                      </div>
+                      <span className="text-[9px] text-zinc-400">Interactive live testing</span>
+                    </div>
+                  )}
+                  {viewportSize === 'mobile' && (
+                    <div className="flex flex-col items-center gap-1 pb-1">
+                      <div className="w-16 h-1 rounded-full bg-zinc-400 dark:bg-zinc-600 mb-0.5" />
+                      <div className="w-full flex items-center justify-between px-3 py-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg text-[10px] font-mono text-zinc-500 border border-zinc-200 dark:border-zinc-700/80">
+                        <div className="flex items-center gap-1.5">
+                          <Smartphone size={11} className="text-indigo-500" />
+                          <span className="font-bold text-zinc-700 dark:text-zinc-300">Mobile Preview (390px)</span>
+                        </div>
+                        <span className="text-[9px] text-zinc-400">Interactive live testing</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {previewView === 'form' ? (
+                    (() => {
+                      const targetForm = forms.find((f: any) => f.id === (previewFormId || selectedFormId)) || forms[0];
+                      if (!targetForm) {
+                        return (
+                          <div className="p-12 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 text-center text-xs text-zinc-500">
+                            No forms configured for this module yet.
+                          </div>
+                        );
+                      }
+                      return (
+                        <FormRenderer
+                          form={targetForm}
+                          moduleLayout={layout}
+                          workflow={workflow}
+                          isPreviewMode={true}
+                          viewport={viewportSize}
+                          context={{
+                            user: user || {
+                              id: 'usr_preview',
+                              name: 'Preview User',
+                              email: 'user@aurora.io',
+                            },
+                          }}
+                        />
+                      );
+                    })()
+                  ) : (
+                    <div className="rounded-2xl shadow-xs overflow-hidden min-h-[600px] bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-6">
                   {previewView === 'detail' ? (
                     <div className="space-y-8 max-w-none mx-auto py-12">
                       <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-6">
@@ -9341,7 +9312,6 @@ export const ModuleEditor = () => {
                       </div>
                     </div>
                   )}
-                </div>
 
                   {/* Creation Modal Overlay */}
                   <AnimatePresence>
@@ -9611,359 +9581,583 @@ export const ModuleEditor = () => {
                       </motion.div>
                     )}
                   </AnimatePresence>
+                    </div>
+                  )}
                 </div>
               </div>
+            </div>
           ) : activeTab === 'details' ? (
             <div className="flex h-full w-full overflow-hidden">
-              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 space-y-2 flex flex-col">
-                <div className="mb-6 px-2">
-                  <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Configuration</h3>
+              {/* Compact Left Navigation */}
+              <aside className="w-56 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3 space-y-1 flex flex-col">
+                <div className="px-2.5 py-2">
+                  <h3 className="text-xs font-semibold text-zinc-400 dark:text-zinc-500">Module setup</h3>
                 </div>
                 {[
-                  { id: 'general', label: 'General Properties', icon: Settings2 },
+                  { id: 'general', label: 'General', icon: Settings2 },
                   { id: 'schema', label: 'Schema', icon: Database },
-                  { id: 'scheduling', label: 'Scheduling & Bookings', icon: Calendar },
-                  { id: 'localization', label: 'Localization', icon: Globe },
-                  { id: 'dependencies', label: 'Dependencies', icon: MapPin },
-                  { id: 'assets', label: 'Assets', icon: Image }
+                  { id: 'scheduling', label: 'Scheduling', icon: Calendar },
+                  { id: 'dependencies', label: 'Dependencies', icon: GitCommit }
                 ].map(tab => (
                   <button
                     key={tab.id}
+                    type="button"
                     onClick={() => setDetailsTab(tab.id as any)}
                     className={cn(
-                      "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-left",
+                      "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left",
                       detailsTab === tab.id
-                        ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shadow-sm"
-                        : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                        ? "bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400"
+                        : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/70 hover:text-zinc-900 dark:hover:text-zinc-200"
                     )}
                   >
-                    <tab.icon size={14} />
+                    <tab.icon size={15} />
                     {tab.label}
                   </button>
                 ))}
               </aside>
 
-              {/* Details Content */}
-              <div className="flex-1 flex flex-col overflow-hidden bg-transparent">
+              {/* Setup Content */}
+              <div className="flex-1 flex flex-col overflow-hidden bg-zinc-50/50 dark:bg-zinc-950/30">
                 {detailsTab === 'general' && (
-                <div className="flex-1 overflow-y-auto p-6 lg:p-8 custom-scrollbar">
-                  <div className="max-w-5xl mx-auto space-y-6 pb-16">
-                  <div className="space-y-1">
-                    <h2 className="text-xl font-bold text-zinc-950 dark:text-white tracking-tight">Module Setup</h2>
-                    <p className="text-zinc-500 text-xs">Configure the core properties and identity of this module.</p>
-                  </div>
-                  
-                  <div className="grid gap-5">
-                    {/* Unified Module Configuration Panel */}
-                    <section className="p-6 bg-white/50 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-3xl space-y-6 shadow-sm backdrop-blur-xl">
-                      
-                      {/* Header & Module Type Selector */}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-150 dark:border-zinc-800/80 pb-4">
-                        <div>
-                          <h3 className="text-xs font-bold text-zinc-950 dark:text-white uppercase tracking-wider">Module Configuration</h3>
-                          <p className="text-[10px] text-zinc-400">Core identity, keying rules, and metadata</p>
-                        </div>
-                        
-                        {/* Compact Module Type Selector */}
-                        <div className="flex items-center gap-1 p-1 bg-white/80 dark:bg-white/[0.03] border border-zinc-200 dark:border-white/10 rounded-xl shrink-0 self-start sm:self-auto overflow-x-auto no-scrollbar">
-                          {(['RECORD', 'WORK_ITEM', 'REGISTRY', 'LOG', 'FINANCIAL'] as ModuleType[]).map((type) => (
-                            <button
-                              key={type}
-                              onClick={() => setModuleSettings(prev => ({ ...prev, type }))}
-                              className={cn(
-                                "px-2.5 py-1 rounded-lg text-[9px] font-bold transition-all uppercase tracking-wider whitespace-nowrap",
-                                moduleSettings.type === type
-                                  ? "bg-indigo-600 text-white shadow-sm"
-                                  : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-white/5"
-                              )}
-                            >
-                              {type.replace('_', ' ')}
-                            </button>
-                          ))}
-                        </div>
+                  <div className="flex-1 overflow-y-auto p-6 lg:p-8 custom-scrollbar">
+                    <div className="w-full space-y-6 pb-16">
+                      <div>
+                        <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">General</h2>
+                        <p className="text-xs text-zinc-500 mt-0.5">Core identity, record numbering, and display settings for this module.</p>
                       </div>
 
-                      {/* Main Form Layout Grid */}
-                      <div className="space-y-4">
-                        {/* Row 1: Identity (3 equal columns) */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Module Name</label>
-                            <input 
-                              type="text" 
-                              value={moduleSettings.name}
-                              onChange={(e) => {
-                                const newName = e.target.value;
-                                setModuleSettings(prev => ({ ...prev, name: newName }));
-                                setBreadcrumbOverride(id, newName);
-                              }}
-                              className="w-full h-[38px] bg-white/80 dark:bg-white/[0.03] border border-zinc-200 dark:border-white/10 rounded-xl px-3.5 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-indigo-500/80 focus:ring-2 focus:ring-indigo-500/20 transition-all hover:border-zinc-300 dark:hover:border-white/20"
-                              placeholder="e.g. Grant Applications"
-                            />
+                      {/* Top Row: Identity & Record Numbering (2 columns on wide screens) */}
+                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-stretch">
+                        {/* Card 1: Module Identity */}
+                        <section className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 space-y-5">
+                          <div className="flex flex-col gap-3 pb-4 border-b border-zinc-100 dark:border-zinc-800">
+                            <div className="flex items-center justify-between gap-2">
+                              <div>
+                                <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Identity</h3>
+                                <p className="text-xs text-zinc-500">Name, classification, and lifecycle status</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg self-start overflow-x-auto no-scrollbar">
+                              {(['RECORD', 'WORK_ITEM', 'REGISTRY', 'LOG', 'FINANCIAL'] as ModuleType[]).map((type) => (
+                                <button
+                                  key={type}
+                                  type="button"
+                                  onClick={() => setModuleSettings(prev => ({ ...prev, type }))}
+                                  className={cn(
+                                    "px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap",
+                                    moduleSettings.type === type
+                                      ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs"
+                                      : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
+                                  )}
+                                >
+                                  {type.replace('_', ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())}
+                                </button>
+                              ))}
+                            </div>
                           </div>
 
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-1.5 sm:col-span-2">
+                              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 block">Module name</label>
+                              <input 
+                                type="text" 
+                                value={moduleSettings.name}
+                                onChange={(e) => {
+                                  const newName = e.target.value;
+                                  setModuleSettings(prev => ({ ...prev, name: newName }));
+                                  setBreadcrumbOverride(id, newName);
+                                }}
+                                className="w-full h-9 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15 transition-all"
+                                placeholder="e.g. Grant Applications"
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 block">Category</label>
+                              <div className="relative">
+                                <select 
+                                  value={moduleSettings.category}
+                                  onChange={(e) => setModuleSettings(prev => ({ ...prev, category: e.target.value }))}
+                                  className="w-full h-9 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 appearance-none"
+                                >
+                                  {MODULE_CATEGORIES.map(cat => (
+                                    <option key={cat} value={cat}>{cat}</option>
+                                  ))}
+                                </select>
+                                <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                              </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 block">Status</label>
+                              <div className="relative">
+                                <select 
+                                  value={moduleSettings.status || 'ACTIVE'}
+                                  onChange={(e) => setModuleSettings(prev => ({ ...prev, status: e.target.value as any }))}
+                                  className="w-full h-9 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 appearance-none"
+                                >
+                                  <option value="ACTIVE">Active</option>
+                                  <option value="DRAFT">Draft</option>
+                                  <option value="ARCHIVED">Archived</option>
+                                </select>
+                                <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                              </div>
+                            </div>
+
+                            <div>
+                              <IconPicker 
+                                label="Icon"
+                                value={moduleSettings.iconName || 'Box'}
+                                onChange={(iconName) => setModuleSettings(prev => ({ ...prev, iconName }))}
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 block">Description</label>
+                              <textarea 
+                                value={moduleSettings.description}
+                                onChange={(e) => setModuleSettings(prev => ({ ...prev, description: e.target.value }))}
+                                className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15 transition-all min-h-[68px] resize-none"
+                                placeholder="Brief description of what this module tracks..."
+                              />
+                            </div>
+                          </div>
+                        </section>
+
+                        {/* Card 2: Record Numbering */}
+                        <section className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 space-y-5">
+                        <div className="pb-3 border-b border-zinc-100 dark:border-zinc-800">
+                          <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Record numbering</h3>
+                          <p className="text-xs text-zinc-500">Auto-generated internal keys and optional customer-facing reference numbers</p>
+                        </div>
+
+                        {/* Internal Key */}
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Internal record key</span>
+                            <code className="text-xs font-mono px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
+                              {moduleSettings.recordKeyPrefix || 'REC'}-{moduleSettings.nextKeyNumber ?? 1}{moduleSettings.recordKeySuffix || ''}
+                            </code>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-[11px] text-zinc-500 block">Prefix</label>
+                              <input 
+                                type="text" 
+                                value={moduleSettings.recordKeyPrefix || ''}
+                                onChange={(e) => setModuleSettings(prev => ({ ...prev, recordKeyPrefix: e.target.value.toUpperCase() }))}
+                                className="w-full h-9 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-indigo-500"
+                                placeholder="e.g. TKT"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[11px] text-zinc-500 block">Next number</label>
+                              <input 
+                                type="number" 
+                                min={1}
+                                value={moduleSettings.nextKeyNumber ?? 1}
+                                onChange={(e) => setModuleSettings(prev => ({ ...prev, nextKeyNumber: Math.max(1, Number(e.target.value) || 1) }))}
+                                className="w-full h-9 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[11px] text-zinc-500 block">Suffix (optional)</label>
+                              <input 
+                                type="text" 
+                                value={moduleSettings.recordKeySuffix || ''}
+                                onChange={(e) => setModuleSettings(prev => ({ ...prev, recordKeySuffix: e.target.value.toUpperCase() }))}
+                                className="w-full h-9 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-indigo-500"
+                                placeholder="e.g. A"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Customer Reference */}
+                        <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Customer reference</span>
+                            <code className="text-xs font-mono px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
+                              {moduleSettings.customerRefPrefix ? `${moduleSettings.customerRefPrefix}-` : ''}{moduleSettings.customerRefNextNumber ?? 10001}{moduleSettings.customerRefSuffix || ''}
+                            </code>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-[11px] text-zinc-500 block">Prefix</label>
+                              <input 
+                                type="text" 
+                                value={moduleSettings.customerRefPrefix || ''}
+                                onChange={(e) => setModuleSettings(prev => ({ ...prev, customerRefPrefix: e.target.value.toUpperCase() }))}
+                                className="w-full h-9 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-indigo-500"
+                                placeholder="e.g. REF"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[11px] text-zinc-500 block">Next number</label>
+                              <input 
+                                type="number" 
+                                min={1}
+                                value={moduleSettings.customerRefNextNumber ?? 10001}
+                                onChange={(e) => setModuleSettings(prev => ({ ...prev, customerRefNextNumber: Math.max(1, Number(e.target.value) || 1) }))}
+                                className="w-full h-9 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[11px] text-zinc-500 block">Suffix (optional)</label>
+                              <input 
+                                type="text" 
+                                value={moduleSettings.customerRefSuffix || ''}
+                                onChange={(e) => setModuleSettings(prev => ({ ...prev, customerRefSuffix: e.target.value.toUpperCase() }))}
+                                className="w-full h-9 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-indigo-500"
+                                placeholder="Optional"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </section>
+                      </div>
+
+                      {/* Card 3: Record Display */}
+                      <section className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 space-y-4">
+                        <div className="pb-3 border-b border-zinc-100 dark:border-zinc-800">
+                          <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Record display</h3>
+                          <p className="text-xs text-zinc-500">Fields used to title records in lists, search results, and linked relations</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="space-y-1.5">
-                            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Category</label>
+                            <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 block">Primary title field</label>
                             <div className="relative">
-                              <select 
-                                value={moduleSettings.category}
-                                onChange={(e) => setModuleSettings(prev => ({ ...prev, category: e.target.value }))}
-                                className="w-full h-[38px] bg-white/80 dark:bg-white/[0.03] border border-zinc-200 dark:border-white/10 rounded-xl px-3.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500/80 focus:ring-2 focus:ring-indigo-500/20 transition-all appearance-none hover:border-zinc-300 dark:hover:border-white/20"
+                              <select
+                                value={moduleSettings.titleFieldId || ''}
+                                onChange={(e) => setModuleSettings(prev => ({ ...prev, titleFieldId: e.target.value }))}
+                                className="w-full h-9 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 appearance-none"
                               >
-                                {MODULE_CATEGORIES.map(cat => (
-                                  <option key={cat} value={cat} className="bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white">{cat}</option>
+                                <option value="">Auto (first text field or record key)</option>
+                                {displayFields.map((f: any) => (
+                                  <option key={f.id} value={f.id}>{f.label || f.id}</option>
                                 ))}
                               </select>
-                              <ChevronDown size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                              <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
                             </div>
                           </div>
 
-                          <IconPicker 
-                            label="Module Icon"
-                            value={moduleSettings.iconName || 'Box'}
-                            onChange={(iconName) => setModuleSettings(prev => ({ ...prev, iconName }))}
-                          />
-                        </div>
-
-                        {/* Row 2: Record Keying & Format Preview (3 equal columns) */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <div className="space-y-1.5">
-                            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Key Prefix</label>
-                            <input 
-                              type="text" 
-                              value={moduleSettings.recordKeyPrefix || ''}
-                              onChange={(e) => setModuleSettings(prev => ({ ...prev, recordKeyPrefix: e.target.value.toUpperCase() }))}
-                              className="w-full h-[38px] bg-white/80 dark:bg-white/[0.03] border border-zinc-200 dark:border-white/10 rounded-xl px-3.5 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-indigo-500/80 focus:ring-2 focus:ring-indigo-500/20 transition-all hover:border-zinc-300 dark:hover:border-white/20"
-                              placeholder="e.g. TKT"
-                            />
-                          </div>
-                          
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Key Suffix</label>
-                            <input 
-                              type="text" 
-                              value={moduleSettings.recordKeySuffix || ''}
-                              onChange={(e) => setModuleSettings(prev => ({ ...prev, recordKeySuffix: e.target.value.toUpperCase() }))}
-                              className="w-full h-[38px] bg-white/80 dark:bg-white/[0.03] border border-zinc-200 dark:border-white/10 rounded-xl px-3.5 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-indigo-500/80 focus:ring-2 focus:ring-indigo-500/20 transition-all hover:border-zinc-300 dark:hover:border-white/20"
-                              placeholder="e.g. A"
-                            />
-                          </div>
-
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Record Format Preview</label>
-                            <div className="h-[38px] bg-white/40 dark:bg-white/[0.02] border border-zinc-200 dark:border-white/5 rounded-xl flex items-center justify-between px-3.5">
-                              <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Format</span>
-                              <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300 font-mono">{moduleSettings.recordKeyPrefix || 'PREFIX'}-1001{moduleSettings.recordKeySuffix || ''}</span>
-                            </div>
+                            <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 block">
+                              Subtitle fields ({(moduleSettings.subtitleFieldIds || []).length}/3)
+                            </label>
+                            {displayFields.length === 0 ? (
+                              <p className="text-xs text-zinc-400 py-2">Add fields in the Interface tab to select subtitles.</p>
+                            ) : (
+                              <div className="flex flex-wrap gap-1.5">
+                                {displayFields.slice(0, 12).map((f: any) => {
+                                  const selected = (moduleSettings.subtitleFieldIds || []).includes(f.id);
+                                  return (
+                                    <button
+                                      key={f.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setModuleSettings(prev => {
+                                          const current = prev.subtitleFieldIds || [];
+                                          if (current.includes(f.id)) {
+                                            return { ...prev, subtitleFieldIds: current.filter(x => x !== f.id) };
+                                          }
+                                          if (current.length >= 3) {
+                                            toast.info('You can select up to 3 subtitle fields');
+                                            return prev;
+                                          }
+                                          return { ...prev, subtitleFieldIds: [...current, f.id] };
+                                        });
+                                      }}
+                                      className={cn(
+                                        "px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors",
+                                        selected
+                                          ? "bg-indigo-50 dark:bg-indigo-500/15 border-indigo-500/40 text-indigo-600 dark:text-indigo-400"
+                                          : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300"
+                                      )}
+                                    >
+                                      {f.label || f.id}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         </div>
-
-                        {/* Row 3: Description (Full Width) */}
-                        <div className="space-y-1.5 pt-1">
-                          <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Description</label>
-                          <textarea 
-                            value={moduleSettings.description}
-                            onChange={(e) => setModuleSettings(prev => ({ ...prev, description: e.target.value }))}
-                            className="w-full bg-white/80 dark:bg-white/[0.03] border border-zinc-200 dark:border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-indigo-500/80 focus:ring-2 focus:ring-indigo-500/20 transition-all min-h-[68px] resize-none hover:border-zinc-300 dark:hover:border-white/20"
-                            placeholder="Brief description of what this module does..."
-                          />
-                        </div>
-                      </div>
-                    </section>
+                      </section>
+                    </div>
                   </div>
-                </div>
-              </div>
                 )}
-                {detailsTab === 'schema' && (
-                  <div className="h-full w-full">
-<div className="flex h-full w-full">
-              {/* Schema Sidebar */}
-              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 space-y-2">
-                <div className="mb-6 px-2">
-                  <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Data Model</h3>
-                </div>
-                <button className="w-full flex items-center gap-3 px-4 py-2.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl text-xs font-bold transition-all text-left">
-                  <Table size={14} />
-                  Field Overview
-                </button>
-                <button className="w-full flex items-center gap-3 px-4 py-2.5 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl text-xs font-bold transition-all text-left">
-                  <GitCommit size={14} />
-                  Relationships
-                </button>
-                <button className="w-full flex items-center gap-3 px-4 py-2.5 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl text-xs font-bold transition-all text-left">
-                  <Database size={14} />
-                  Indices & Keys
-                </button>
-                <button className="w-full flex items-center gap-3 px-4 py-2.5 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl text-xs font-bold transition-all text-left">
-                  <UploadCloud size={14} />
-                  Data Import/Export
-                </button>
-              </aside>
 
-              {/* Schema Content */}
-              <div className="flex-1 overflow-y-auto bg-transparent p-12 custom-scrollbar">
-                <div className="max-w-none mx-auto space-y-8 pb-20">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Data Schema</h2>
-                      <p className="text-zinc-500 text-sm">Review and manage the underlying data structure of this module.</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-bold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-all uppercase tracking-widest">
-                        <FileJson size={14} />
-                        Export JSON
-                      </button>
-                    </div>
-                  </div>
+                {detailsTab === 'schema' && (() => {
+                  const relationFields = allFields.filter((f: any) =>
+                    ['relation', 'lookup', 'rollup', 'linked_records', 'submodule', 'sub_module', 'module_link'].includes(f.type) ||
+                    Boolean(f.targetModuleId || f.linkedModuleId || f.relationModuleId)
+                  );
 
-                  {/* Schema Table */}
-                  <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-xl shadow-indigo-500/5">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-zinc-100 dark:border-zinc-800/50">
-                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Field Label</th>
-                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Technical ID</th>
-                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Data Type</th>
-                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Validation</th>
-                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Properties</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50">
-                        {layout.map((field) => (
-                          <tr key={field.id} className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
-                            <td className="px-6 py-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 dark:text-zinc-400 group-hover:bg-indigo-500/10 group-hover:text-indigo-500 transition-colors">
-                                  {(() => {
+                  const handleExportSchemaJson = () => {
+                    const schemaPayload = {
+                      module: {
+                        id,
+                        name: moduleSettings.name,
+                        category: moduleSettings.category,
+                        type: moduleSettings.type,
+                        version: schemaVersion,
+                      },
+                      fields: displayFields.map((f: any) => ({
+                        id: f.id,
+                        label: f.label,
+                        type: f.type,
+                        required: Boolean(f.required),
+                        options: f.options,
+                        targetModuleId: f.targetModuleId || f.linkedModuleId || f.relationModuleId,
+                      })),
+                    };
+                    const blob = new Blob([JSON.stringify(schemaPayload, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${(moduleSettings.name || 'module').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-schema.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    toast.success('Schema JSON exported');
+                  };
+
+                  return (
+                    <div className="flex-1 overflow-y-auto p-6 lg:p-8 custom-scrollbar">
+                      <div className="w-full space-y-5 pb-16">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div>
+                            <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">Schema</h2>
+                            <p className="text-xs text-zinc-500 mt-0.5">
+                              {displayFields.length} {displayFields.length === 1 ? 'field' : 'fields'} · {relationFields.length} {relationFields.length === 1 ? 'relationship' : 'relationships'}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg">
+                              <button
+                                type="button"
+                                onClick={() => setSchemaSubTab('fields')}
+                                className={cn(
+                                  "px-3 py-1 rounded-md text-xs font-medium transition-colors",
+                                  schemaSubTab === 'fields'
+                                    ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs"
+                                    : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
+                                )}
+                              >
+                                Fields ({displayFields.length})
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSchemaSubTab('relationships')}
+                                className={cn(
+                                  "px-3 py-1 rounded-md text-xs font-medium transition-colors",
+                                  schemaSubTab === 'relationships'
+                                    ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs"
+                                    : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
+                                )}
+                              >
+                                Relationships ({relationFields.length})
+                              </button>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={handleExportSchemaJson}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                            >
+                              <FileJson size={14} className="text-zinc-400" />
+                              Export JSON
+                            </button>
+                          </div>
+                        </div>
+
+                        {schemaSubTab === 'fields' ? (
+                          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
+                            {displayFields.length === 0 ? (
+                              <div className="p-10 text-center text-xs text-zinc-500">
+                                No data fields yet. Add fields in the <strong>Interface</strong> tab.
+                              </div>
+                            ) : (
+                              <table className="w-full text-left border-collapse">
+                                <thead>
+                                  <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40">
+                                    <th className="px-4 py-3 text-xs font-medium text-zinc-500">Field</th>
+                                    <th className="px-4 py-3 text-xs font-medium text-zinc-500">Technical ID</th>
+                                    <th className="px-4 py-3 text-xs font-medium text-zinc-500">Type</th>
+                                    <th className="px-4 py-3 text-xs font-medium text-zinc-500">Validation</th>
+                                    <th className="px-4 py-3 text-xs font-medium text-zinc-500">Logic</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                                  {displayFields.map((field: any) => {
                                     const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === field.type);
                                     const Icon = fieldDef?.icon || GridIcon;
-                                    return <Icon size={14} />;
-                                  })()}
-                                </div>
-                                <span className="text-xs font-bold text-zinc-900 dark:text-white">{field.label}</span>
+                                    return (
+                                      <tr key={field.id} className="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/30 transition-colors">
+                                        <td className="px-4 py-3">
+                                          <div className="flex items-center gap-2.5">
+                                            <div className="w-7 h-7 rounded-md bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 dark:text-zinc-400">
+                                              <Icon size={13} />
+                                            </div>
+                                            <span className="text-xs font-medium text-zinc-900 dark:text-white">{field.label || field.id}</span>
+                                          </div>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                          <code className="px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded text-[11px] text-zinc-500 font-mono">{field.id}</code>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                          <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded text-[11px] font-medium">
+                                            {field.type}
+                                          </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-xs text-zinc-500">
+                                          {field.required ? 'Required' : 'Optional'}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                          <div className="flex items-center gap-2">
+                                            {field.visibilityRule && <div title="Has visibility rules"><Eye size={13} className="text-indigo-500" /></div>}
+                                            {field.calculationLogic && <div title="Calculated field"><Calculator size={13} className="text-emerald-500" /></div>}
+                                            {field.options && <div title={`${field.options.length} options`}><ListPlus size={13} className="text-amber-500" /></div>}
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
+                            {relationFields.length === 0 ? (
+                              <div className="p-10 text-center text-xs text-zinc-500">
+                                No relationship, lookup, or rollup fields configured on this module.
                               </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <code className="px-2 py-1 bg-zinc-100 dark:bg-zinc-800 rounded text-[10px] text-zinc-500 font-mono">{field.id}</code>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className="px-2 py-1 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-md text-[9px] font-black uppercase tracking-widest">
-                                {field.type.toUpperCase()}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 text-xs text-zinc-500">
-                              {field.required ? 'Required' : 'Optional'}
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex items-center gap-2">
-                                {field.visibilityRule && <div title="Has Visibility Rules"><Eye size={12} className="text-indigo-500" /></div>}
-                                {field.calculationLogic && <div title="Calculated Field"><Calculator size={12} className="text-emerald-500" /></div>}
-                                {field.options && <div title={`Has ${field.options.length} options`}><ListPlus size={12} className="text-amber-500" /></div>}
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </div>
-                  </div>
-                )}
+                            ) : (
+                              <table className="w-full text-left border-collapse">
+                                <thead>
+                                  <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40">
+                                    <th className="px-4 py-3 text-xs font-medium text-zinc-500">Field</th>
+                                    <th className="px-4 py-3 text-xs font-medium text-zinc-500">Kind</th>
+                                    <th className="px-4 py-3 text-xs font-medium text-zinc-500">Target Module</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                                  {relationFields.map((field: any) => {
+                                    const targetId = field.targetModuleId || field.linkedModuleId || field.relationModuleId;
+                                    const targetMod = modules.find((m: any) => m.id === targetId);
+                                    return (
+                                      <tr key={field.id} className="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/30 transition-colors">
+                                        <td className="px-4 py-3 text-xs font-medium text-zinc-900 dark:text-white">{field.label || field.id}</td>
+                                        <td className="px-4 py-3">
+                                          <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded text-[11px] font-medium">
+                                            {field.type}
+                                          </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-xs text-zinc-600 dark:text-zinc-300">
+                                          {targetMod?.name || targetId || '—'}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {detailsTab === 'scheduling' && (
                   <div className="flex-1 overflow-y-auto p-6 lg:p-8 custom-scrollbar">
-                    <div className="max-w-5xl mx-auto space-y-6 pb-16">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2.5">
-                          <h2 className="text-xl font-bold text-zinc-950 dark:text-white tracking-tight">Scheduling & Bookings</h2>
-                          <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
-                            Unified Platform Engine
-                          </span>
-                        </div>
-                        <p className="text-zinc-500 text-xs">Configure how records in this module participate in centralized resource pools, atomic slot reservation holds, and calendar bookings.</p>
+                    <div className="w-full space-y-6 pb-16">
+                      <div>
+                        <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">Scheduling & Bookings</h2>
+                        <p className="text-xs text-zinc-500 mt-0.5">Configure how records participate in centralized resource pools, slot reservations, and calendar bookings.</p>
                       </div>
 
                       {/* Scheduling Role Selector Cards */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         {[
                           {
                             id: 'NONE',
-                            title: 'Standard Data',
+                            title: 'Standard data',
                             subtitle: 'Disabled',
                             desc: 'General-purpose records without scheduling ledger awareness.',
                             icon: Database,
                             color: 'text-zinc-500',
-                            border: 'border-zinc-200 dark:border-zinc-800'
                           },
                           {
                             id: 'RESOURCE_POOL',
-                            title: 'Bookable Resource',
-                            subtitle: 'Inventory Asset',
-                            desc: 'Records represent rooms, rental properties, vehicles, or staff members that can be booked.',
+                            title: 'Bookable resource',
+                            subtitle: 'Inventory asset',
+                            desc: 'Rooms, properties, vehicles, or staff that can be booked.',
                             icon: Users,
                             color: 'text-emerald-500',
-                            border: 'border-emerald-500/30'
                           },
                           {
                             id: 'BOOKING_EVENT',
-                            title: 'Reservation Event',
-                            subtitle: 'Booking Transaction',
-                            desc: 'Records represent booked appointments, stays, or service calls mapped to time slots & resources.',
+                            title: 'Reservation event',
+                            subtitle: 'Booking transaction',
+                            desc: 'Appointments, stays, or service calls mapped to slots & resources.',
                             icon: Calendar,
                             color: 'text-indigo-500',
-                            border: 'border-indigo-500/30'
                           }
                         ].map((role) => (
-                          <div
+                          <button
                             key={role.id}
+                            type="button"
                             onClick={() => setModuleSettings(prev => ({ ...prev, schedulingRole: role.id as any }))}
                             className={cn(
-                              "p-5 rounded-3xl border text-left cursor-pointer transition-all relative overflow-hidden flex flex-col justify-between group",
+                              "p-4 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between",
                               moduleSettings.schedulingRole === role.id
-                                ? "bg-white dark:bg-zinc-900 border-indigo-500 shadow-md ring-2 ring-indigo-500/20"
-                                : "bg-white/60 dark:bg-zinc-900/60 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
+                                ? "bg-white dark:bg-zinc-900 border-indigo-500 ring-2 ring-indigo-500/15"
+                                : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
                             )}
                           >
-                            <div className="space-y-3">
+                            <div className="space-y-2.5">
                               <div className="flex items-center justify-between">
-                                <div className={cn("w-9 h-9 rounded-2xl flex items-center justify-center bg-zinc-100 dark:bg-zinc-800", role.color)}>
-                                  <role.icon size={18} />
+                                <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center bg-zinc-100 dark:bg-zinc-800", role.color)}>
+                                  <role.icon size={16} />
                                 </div>
                                 {moduleSettings.schedulingRole === role.id && (
-                                  <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-pulse" />
+                                  <span className="w-2 h-2 rounded-full bg-indigo-600" />
                                 )}
                               </div>
                               <div>
-                                <div className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">{role.subtitle}</div>
-                                <h4 className="text-sm font-bold text-zinc-900 dark:text-white mt-0.5">{role.title}</h4>
+                                <div className="text-[11px] font-medium text-zinc-400">{role.subtitle}</div>
+                                <h4 className="text-xs font-semibold text-zinc-900 dark:text-white mt-0.5">{role.title}</h4>
                                 <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">{role.desc}</p>
                               </div>
                             </div>
-                          </div>
+                          </button>
                         ))}
                       </div>
 
                       {/* Resource Pool Configuration Panel */}
                       {moduleSettings.schedulingRole === 'RESOURCE_POOL' && (
-                        <section className="p-6 bg-white/70 dark:bg-zinc-900/70 border border-emerald-500/20 rounded-3xl space-y-6 shadow-sm backdrop-blur-xl animate-in fade-in duration-200">
-                          <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4">
+                        <section className="p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-5">
+                          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
                             <div>
-                              <h3 className="text-xs font-bold text-zinc-950 dark:text-white uppercase tracking-wider">Bookable Resource Pool Settings</h3>
-                              <p className="text-[10px] text-zinc-400">Configure how records in this module are classified in the central resource ledger</p>
+                              <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Bookable resource pool</h3>
+                              <p className="text-xs text-zinc-500">Configure how records are classified in the central resource ledger</p>
                             </div>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                              Active Resource Pool
+                            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                              Active pool
                             </span>
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div className="space-y-1.5">
-                              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Resource Category</label>
+                              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 block">Resource category</label>
                               <select
                                 value={moduleSettings.schedulingResourceType || 'ROOM'}
                                 onChange={(e) => setModuleSettings(prev => ({ ...prev, schedulingResourceType: e.target.value }))}
-                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold text-zinc-900 dark:text-white focus:outline-none"
+                                className="w-full h-9 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
                               >
                                 <option value="ROOM">Space / Meeting Room / Property</option>
                                 <option value="VEHICLE">Fleet Vehicle / Service Van</option>
@@ -9973,34 +10167,27 @@ export const ModuleEditor = () => {
                             </div>
 
                             <div className="space-y-1.5">
-                              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Default Slot Duration (Minutes)</label>
+                              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 block">Default slot (minutes)</label>
                               <input
                                 type="number"
                                 min={15}
                                 step={15}
                                 value={moduleSettings.schedulingDurationMinutes || 60}
                                 onChange={(e) => setModuleSettings(prev => ({ ...prev, schedulingDurationMinutes: Number(e.target.value) }))}
-                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold text-zinc-900 dark:text-white focus:outline-none"
+                                className="w-full h-9 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
                               />
                             </div>
 
                             <div className="space-y-1.5">
-                              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Turnover Buffer / Cleaning (Minutes)</label>
+                              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 block">Turnover buffer (minutes)</label>
                               <input
                                 type="number"
                                 min={0}
                                 step={15}
                                 value={moduleSettings.schedulingBufferMinutes || 30}
                                 onChange={(e) => setModuleSettings(prev => ({ ...prev, schedulingBufferMinutes: Number(e.target.value) }))}
-                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold text-zinc-900 dark:text-white focus:outline-none"
+                                className="w-full h-9 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
                               />
-                            </div>
-                          </div>
-
-                          <div className="p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/10 flex items-start gap-3">
-                            <Sparkles size={16} className="text-emerald-500 shrink-0 mt-0.5" />
-                            <div className="text-[11px] text-emerald-800 dark:text-emerald-300 leading-relaxed">
-                              Records created in this module will automatically be selectable as targets in <strong>Platform Bookings</strong>, the <strong>Worksuite Calendar App</strong>, and embeddable booking widgets across Workspace pages and Sites.
                             </div>
                           </div>
                         </section>
@@ -10008,40 +10195,39 @@ export const ModuleEditor = () => {
 
                       {/* Booking Event Configuration Panel */}
                       {moduleSettings.schedulingRole === 'BOOKING_EVENT' && (
-                        <section className="p-6 bg-white/70 dark:bg-zinc-900/70 border border-indigo-500/20 rounded-3xl space-y-6 shadow-sm backdrop-blur-xl animate-in fade-in duration-200">
-                          <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4">
+                        <section className="p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl space-y-5">
+                          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
                             <div>
-                              <h3 className="text-xs font-bold text-zinc-950 dark:text-white uppercase tracking-wider">Booking Event Schema Mapping</h3>
-                              <p className="text-[10px] text-zinc-400">Map module fields to the unified Aurora reservation ledger schema</p>
+                              <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Booking event mapping</h3>
+                              <p className="text-xs text-zinc-500">Map module fields to the Aurora reservation ledger</p>
                             </div>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
-                              Active Event Mapping
+                            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                              Active mapping
                             </span>
                           </div>
 
-                          {/* Archetype Selector */}
-                          <div className="space-y-1.5">
-                            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Booking Archetype</label>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                          <div className="space-y-2">
+                            <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 block">Booking archetype</label>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                               {[
-                                { id: 'APPOINTMENT', label: '1:1 Appointment', desc: 'Consultations, client meetings' },
-                                { id: 'RENTAL', label: 'Stays & Rentals', desc: 'Multi-night stays, turnover buffer' },
-                                { id: 'FIELD_SERVICE', label: 'Field Service', desc: 'Technician dispatch, travel buffer' },
-                                { id: 'CAPACITY', label: 'Capacity / Pass', desc: 'Events, classes, multi-ticket' }
+                                { id: 'APPOINTMENT', label: '1:1 Appointment', desc: 'Consultations, meetings' },
+                                { id: 'RENTAL', label: 'Stays & Rentals', desc: 'Multi-night, turnover' },
+                                { id: 'FIELD_SERVICE', label: 'Field Service', desc: 'Dispatch, travel buffer' },
+                                { id: 'CAPACITY', label: 'Capacity / Pass', desc: 'Events, classes' }
                               ].map((arch) => (
                                 <button
                                   key={arch.id}
                                   type="button"
                                   onClick={() => setModuleSettings(prev => ({ ...prev, schedulingArchetype: arch.id as any }))}
                                   className={cn(
-                                    "p-3 rounded-2xl border text-left transition-all cursor-pointer",
+                                    "p-2.5 rounded-lg border text-left transition-colors cursor-pointer",
                                     moduleSettings.schedulingArchetype === arch.id
-                                      ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
-                                      : "bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300"
+                                      ? "bg-indigo-600 text-white border-indigo-600"
+                                      : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300"
                                   )}
                                 >
-                                  <div className="text-[11px] font-bold">{arch.label}</div>
-                                  <div className={cn("text-[9px] mt-0.5", moduleSettings.schedulingArchetype === arch.id ? "text-indigo-100" : "text-zinc-400")}>
+                                  <div className="text-xs font-medium">{arch.label}</div>
+                                  <div className={cn("text-[10px] mt-0.5", moduleSettings.schedulingArchetype === arch.id ? "text-indigo-100" : "text-zinc-400")}>
                                     {arch.desc}
                                   </div>
                                 </button>
@@ -10049,16 +10235,15 @@ export const ModuleEditor = () => {
                             </div>
                           </div>
 
-                          {/* Field Mapping Grid */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-1">
                             <div className="space-y-1.5">
-                              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Start Date / Time Field</label>
+                              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 block">Start date / time</label>
                               <select
                                 value={moduleSettings.schedulingStartDateFieldId || ''}
                                 onChange={(e) => setModuleSettings(prev => ({ ...prev, schedulingStartDateFieldId: e.target.value }))}
-                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold text-zinc-900 dark:text-white focus:outline-none"
+                                className="w-full h-9 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
                               >
-                                <option value="">Select Date Field...</option>
+                                <option value="">Select date field...</option>
                                 <option value="createdAt">Created Date (System)</option>
                                 {displayFields.filter((f: any) => f.type === 'date').map((f: any) => (
                                   <option key={f.id} value={f.id}>{f.label || f.name}</option>
@@ -10067,13 +10252,13 @@ export const ModuleEditor = () => {
                             </div>
 
                             <div className="space-y-1.5">
-                              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">End Date / Check-out Field</label>
+                              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 block">End date / check-out</label>
                               <select
                                 value={moduleSettings.schedulingEndDateFieldId || ''}
                                 onChange={(e) => setModuleSettings(prev => ({ ...prev, schedulingEndDateFieldId: e.target.value }))}
-                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold text-zinc-900 dark:text-white focus:outline-none"
+                                className="w-full h-9 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
                               >
-                                <option value="">None / Single Slot Duration</option>
+                                <option value="">None / Single slot</option>
                                 {displayFields.filter((f: any) => f.type === 'date').map((f: any) => (
                                   <option key={f.id} value={f.id}>{f.label || f.name}</option>
                                 ))}
@@ -10081,13 +10266,13 @@ export const ModuleEditor = () => {
                             </div>
 
                             <div className="space-y-1.5">
-                              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Assigned Resource Field</label>
+                              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 block">Assigned resource</label>
                               <select
                                 value={moduleSettings.schedulingResourceRefFieldId || ''}
                                 onChange={(e) => setModuleSettings(prev => ({ ...prev, schedulingResourceRefFieldId: e.target.value }))}
-                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold text-zinc-900 dark:text-white focus:outline-none"
+                                className="w-full h-9 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
                               >
-                                <option value="">Select Resource Field...</option>
+                                <option value="">Select resource field...</option>
                                 {displayFields.map((f: any) => (
                                   <option key={f.id} value={f.id}>{f.label || f.name}</option>
                                 ))}
@@ -10095,13 +10280,13 @@ export const ModuleEditor = () => {
                             </div>
 
                             <div className="space-y-1.5">
-                              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Customer / Guest Field</label>
+                              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 block">Customer / guest</label>
                               <select
                                 value={moduleSettings.schedulingCustomerRefFieldId || ''}
                                 onChange={(e) => setModuleSettings(prev => ({ ...prev, schedulingCustomerRefFieldId: e.target.value }))}
-                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold text-zinc-900 dark:text-white focus:outline-none"
+                                className="w-full h-9 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
                               >
-                                <option value="">Select Contact Field...</option>
+                                <option value="">Select contact field...</option>
                                 {displayFields.map((f: any) => (
                                   <option key={f.id} value={f.id}>{f.label || f.name}</option>
                                 ))}
@@ -10109,13 +10294,13 @@ export const ModuleEditor = () => {
                             </div>
 
                             <div className="space-y-1.5">
-                              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Booking Status Field</label>
+                              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 block">Booking status</label>
                               <select
                                 value={moduleSettings.schedulingStatusFieldId || ''}
                                 onChange={(e) => setModuleSettings(prev => ({ ...prev, schedulingStatusFieldId: e.target.value }))}
-                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold text-zinc-900 dark:text-white focus:outline-none"
+                                className="w-full h-9 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
                               >
-                                <option value="">Default (Status: Confirmed)</option>
+                                <option value="">Default (Confirmed)</option>
                                 {displayFields.map((f: any) => (
                                   <option key={f.id} value={f.id}>{f.label || f.name}</option>
                                 ))}
@@ -10123,11 +10308,11 @@ export const ModuleEditor = () => {
                             </div>
 
                             <div className="space-y-1.5">
-                              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-1 block">Total Amount / Rate Field</label>
+                              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 block">Amount / rate</label>
                               <select
                                 value={moduleSettings.schedulingPriceFieldId || ''}
                                 onChange={(e) => setModuleSettings(prev => ({ ...prev, schedulingPriceFieldId: e.target.value }))}
-                                className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs font-bold text-zinc-900 dark:text-white focus:outline-none"
+                                className="w-full h-9 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500"
                               >
                                 <option value="">None / Free</option>
                                 {displayFields.filter((f: any) => ['number', 'currency'].includes(f.type)).map((f: any) => (
@@ -10140,14 +10325,14 @@ export const ModuleEditor = () => {
                       )}
 
                       {/* Hub Links */}
-                      <div className="flex flex-col sm:flex-row items-center justify-between p-4 rounded-2xl bg-zinc-100 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60 gap-3">
+                      <div className="flex flex-col sm:flex-row items-center justify-between p-4 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 gap-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-xl bg-indigo-600/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
-                            <Clock size={16} />
+                          <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                            <Clock size={15} />
                           </div>
                           <div>
-                            <div className="text-xs font-bold text-zinc-900 dark:text-white">Central Scheduling & Calendar Suite</div>
-                            <div className="text-[10px] text-zinc-500">Configure global blackout dates, resource rosters, and view all operational bookings.</div>
+                            <div className="text-xs font-semibold text-zinc-900 dark:text-white">Central Scheduling & Calendar</div>
+                            <div className="text-[11px] text-zinc-500">Manage global blackout dates, resource rosters, and operational bookings.</div>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
@@ -10155,7 +10340,7 @@ export const ModuleEditor = () => {
                             href="/workspace/settings/platform-modules/scheduling"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="px-3 py-1.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 flex items-center gap-1.5"
+                            className="px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 flex items-center gap-1.5"
                           >
                             <Settings2 size={13} />
                             Platform Hub
@@ -10164,7 +10349,7 @@ export const ModuleEditor = () => {
                             href="/workspace/apps/calendar"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs"
+                            className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium flex items-center gap-1.5"
                           >
                             <Calendar size={13} />
                             Calendar App
@@ -10174,204 +10359,137 @@ export const ModuleEditor = () => {
                     </div>
                   </div>
                 )}
-                {detailsTab === 'localization' && (
-                  <div className="h-full w-full">
-<div className="flex h-full w-full bg-transparent">
-              {/* Languages Sidebar */}
-              <aside className="w-72 border-r border-zinc-100 dark:border-zinc-900 flex flex-col bg-zinc-50/50 dark:bg-transparent">
-                <div className="p-8 pb-4">
-                  <h3 className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-6">Target Languages</h3>
-                  <div className="space-y-2">
-                    {[
-                      { id: 'en', label: 'English (US)', flag: 'ðŸ‡ºðŸ‡¸', status: 'Source' },
-                      { id: 'es', label: 'Spanish', flag: 'ðŸ‡ªðŸ‡¸', status: '85%' },
-                      { id: 'fr', label: 'French', flag: 'ðŸ‡«ðŸ‡·', status: '12%' },
-                      { id: 'de', label: 'German', flag: 'ðŸ‡©ðŸ‡ª', status: 'Empty' }
-                    ].map((lang) => (
-                      <button 
-                        key={lang.id}
-                        className={cn(
-                          "w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold transition-all text-left",
-                          lang.id === 'es' ? "bg-white dark:bg-zinc-900 shadow-xl shadow-indigo-500/5 border border-zinc-100 dark:border-zinc-800 text-zinc-900 dark:text-white" : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900"
-                        )}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span>{lang.flag}</span>
-                          {lang.label}
+
+                {detailsTab === 'dependencies' && (() => {
+                  const linkedFields = allFields.filter((f: any) =>
+                    ['relation', 'lookup', 'rollup', 'linked_records', 'submodule', 'sub_module', 'module_link'].includes(f.type) ||
+                    Boolean(f.targetModuleId || f.linkedModuleId || f.relationModuleId)
+                  );
+                  const linkedModuleIds = Array.from(new Set(
+                    linkedFields
+                      .map((f: any) => f.targetModuleId || f.linkedModuleId || f.relationModuleId)
+                      .filter(Boolean)
+                  ));
+
+                  return (
+                    <div className="flex-1 overflow-y-auto p-6 lg:p-8 custom-scrollbar">
+                      <div className="w-full space-y-6 pb-16">
+                        <div>
+                          <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">Dependencies</h2>
+                          <p className="text-xs text-zinc-500 mt-0.5">Live map of related modules, active connectors, and automations wired to this module.</p>
                         </div>
-                        <span className="text-[9px] font-black text-zinc-400">{lang.status}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="mt-auto p-8 pt-0">
-                  <button className="w-full py-3 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-bold uppercase tracking-widest text-zinc-400 hover:border-indigo-500/50 hover:text-indigo-600 transition-all flex items-center justify-center gap-2">
-                    <Plus size={12} />
-                    Add Language
-                  </button>
-                </div>
-              </aside>
 
-              {/* Translation Content */}
-              <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
-                <div className="max-w-none mx-auto space-y-12">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Localization Workbench</h2>
-                      <p className="text-zinc-500 text-sm">Translate your module's interface to reach a global audience.</p>
-                    </div>
-                    <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-indigo-500/20">
-                      <Sparkles size={12} />
-                      AI Translate
-                    </button>
-                  </div>
-
-                  <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-xl shadow-indigo-500/5">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-zinc-100 dark:border-zinc-800/50">
-                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Resource Key</th>
-                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Source (EN)</th>
-                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Spanish (ES)</th>
-                          <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50">
-                        {layout.map((field) => (
-                          <React.Fragment key={field.id}>
-                            <tr className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
-                              <td className="px-6 py-4">
-                                <code className="text-[9px] font-mono text-zinc-400">{field.id}.label</code>
-                              </td>
-                              <td className="px-6 py-4 text-xs text-zinc-900 dark:text-white font-medium">{field.label}</td>
-                              <td className="px-6 py-4">
-                                <input 
-                                  type="text" 
-                                  className="w-full bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-indigo-500"
-                                  placeholder="Traducir..."
-                                />
-                              </td>
-                              <td className="px-6 py-4">
-                                <div className="w-2 h-2 rounded-full bg-amber-500" />
-                              </td>
-                            </tr>
-                            {field.helperText && (
-                              <tr className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30 transition-colors border-t border-zinc-50 dark:border-zinc-900/50">
-                                <td className="px-6 py-4">
-                                  <code className="text-[9px] font-mono text-zinc-400">{field.id}.helper</code>
-                                </td>
-                                <td className="px-6 py-4 text-[10px] text-zinc-500 italic">{field.helperText}</td>
-                                <td className="px-6 py-4">
-                                  <input 
-                                    type="text" 
-                                    className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-indigo-500"
-                                    placeholder="Traducir ayuda..."
-                                  />
-                                </td>
-                                <td className="px-6 py-4">
-                                  <div className="w-2 h-2 rounded-full bg-zinc-200 dark:bg-zinc-800" />
-                                </td>
-                              </tr>
-                            )}
-                          </React.Fragment>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </div>
-                  </div>
-                )}
-                {detailsTab === 'dependencies' && (
-                  <div className="h-full w-full">
-<div className="h-full w-full bg-zinc-900 relative overflow-hidden flex items-center justify-center">
-              {/* Dependency Grid Background */}
-              <div className="absolute inset-0 opacity-[0.05] pointer-events-none" 
-                style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '40px 40px' }} 
-              />
-              
-              {/* Visual Map Content */}
-              <div className="relative z-10 space-y-12 flex flex-col items-center">
-                <div className="flex items-center gap-32">
-                  <div className="w-48 p-6 bg-zinc-800/50 border border-zinc-700 rounded-3xl backdrop-blur-xl space-y-4 text-center">
-                    <div className="w-12 h-12 bg-emerald-500/20 rounded-2xl flex items-center justify-center mx-auto text-emerald-400">
-                      <Database size={24} />
-                    </div>
-                    <span className="block text-[10px] font-black text-white uppercase tracking-widest">Inventory Module</span>
-                  </div>
-                  
-                  <div className="w-64 p-8 bg-indigo-600 rounded-[2.5rem] shadow-2xl shadow-indigo-500/40 text-center space-y-4 ring-8 ring-indigo-500/10">
-                    <div className="w-16 h-16 bg-white/20 rounded-3xl flex items-center justify-center mx-auto text-white">
-                      <Box size={32} />
-                    </div>
-                    <span className="block text-xs font-black text-white uppercase tracking-[0.2em]">{moduleSettings.name}</span>
-                  </div>
-
-                  <div className="w-48 p-6 bg-zinc-800/50 border border-zinc-700 rounded-3xl backdrop-blur-xl space-y-4 text-center">
-                    <div className="w-12 h-12 bg-rose-500/20 rounded-2xl flex items-center justify-center mx-auto text-rose-400">
-                      <CreditCard size={24} />
-                    </div>
-                    <span className="block text-[10px] font-black text-white uppercase tracking-widest">Finance Module</span>
-                  </div>
-                </div>
-
-                <div className="max-w-md p-6 bg-zinc-950/50 border border-zinc-800 rounded-3xl text-center space-y-2">
-                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Architect Insight</p>
-                  <p className="text-xs text-zinc-500 leading-relaxed">
-                    This module currently has 2 inbound lookups and 1 outbound data push. 
-                    Changes to the "Unit Price" field will impact the Finance reconciliation workflow.
-                  </p>
-                </div>
-              </div>
-              
-              {/* Animated Connection Lines (Simplified CSS) */}
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="w-[800px] h-px bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent animate-pulse" />
-              </div>
-            </div>
-                  </div>
-                )}
-                {detailsTab === 'assets' && (
-                  <div className="h-full w-full">
-<div className="flex-1 overflow-y-auto p-12 bg-transparent custom-scrollbar">
-              <div className="max-w-none mx-auto space-y-12">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Asset Library</h2>
-                    <p className="text-zinc-500 text-sm">Manage images, custom icons, and brand assets used within this module.</p>
-                  </div>
-                  <button className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-indigo-500/20">
-                    <Upload size={14} />
-                    Upload Assets
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-4 gap-6">
-                  {[
-                    { name: 'Company Logo', type: 'PNG', size: '124 KB', icon: Image },
-                    { name: 'Header Illustration', type: 'SVG', size: '45 KB', icon: Palette },
-                    { name: 'Icon Set', type: 'ZIP', size: '2.1 MB', icon: Folder },
-                    { name: 'Custom Font', type: 'TTF', size: '890 KB', icon: Type }
-                  ].map((asset, i) => (
-                    <div key={i} className="group relative bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 transition-all hover:shadow-2xl hover:shadow-indigo-500/10 overflow-hidden">
-                      <div className="aspect-square bg-white dark:bg-zinc-950 rounded-2xl border border-zinc-100 dark:border-zinc-800 flex items-center justify-center text-zinc-300 group-hover:text-indigo-500 transition-colors mb-4">
-                        <asset.icon size={32} />
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-xs font-bold text-zinc-900 dark:text-white truncate">{asset.name}</p>
-                        <div className="flex items-center justify-between">
-                          <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">{asset.type}</span>
-                          <span className="text-[9px] font-bold text-zinc-500">{asset.size}</span>
+                        {/* Summary Strip */}
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
+                            <div className="text-xs text-zinc-500">Linked modules</div>
+                            <div className="text-xl font-semibold text-zinc-900 dark:text-white mt-1">{linkedModuleIds.length}</div>
+                          </div>
+                          <div className="p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
+                            <div className="text-xs text-zinc-500">Active connectors</div>
+                            <div className="text-xl font-semibold text-zinc-900 dark:text-white mt-1">{activeConnectors.length}</div>
+                          </div>
+                          <div className="p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
+                            <div className="text-xs text-zinc-500">Automations</div>
+                            <div className="text-xl font-semibold text-zinc-900 dark:text-white mt-1">{localAutomations.length}</div>
+                          </div>
                         </div>
+
+                        {/* Linked Modules */}
+                        <section className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
+                          <div className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                            <h3 className="text-xs font-semibold text-zinc-900 dark:text-white">Module relationships</h3>
+                            <span className="text-[11px] text-zinc-400">{linkedFields.length} fields</span>
+                          </div>
+                          {linkedFields.length === 0 ? (
+                            <div className="p-6 text-center text-xs text-zinc-500">
+                              No cross-module relation, lookup, or rollup fields configured yet.
+                            </div>
+                          ) : (
+                            <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                              {linkedFields.map((f: any) => {
+                                const targetId = f.targetModuleId || f.linkedModuleId || f.relationModuleId;
+                                const targetMod = modules.find((m: any) => m.id === targetId);
+                                return (
+                                  <div key={f.id} className="px-4 py-3 flex items-center justify-between text-xs">
+                                    <div className="flex items-center gap-2.5">
+                                      <GitCommit size={14} className="text-indigo-500" />
+                                      <span className="font-medium text-zinc-900 dark:text-white">{f.label || f.id}</span>
+                                      <span className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[10px] text-zinc-500">{f.type}</span>
+                                    </div>
+                                    <span className="text-zinc-500">{targetMod?.name || targetId || 'Unassigned'}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </section>
+
+                        {/* Active Connectors */}
+                        <section className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
+                          <div className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                            <h3 className="text-xs font-semibold text-zinc-900 dark:text-white">Integrations & connectors</h3>
+                            <button
+                              type="button"
+                              onClick={() => setActiveTab('connectors')}
+                              className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+                            >
+                              Manage
+                            </button>
+                          </div>
+                          {activeConnectors.length === 0 ? (
+                            <div className="p-6 text-center text-xs text-zinc-500">
+                              No connectors attached to this module.
+                            </div>
+                          ) : (
+                            <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                              {activeConnectors.map((c: any) => (
+                                <div key={c.id} className="px-4 py-3 flex items-center justify-between text-xs">
+                                  <div className="flex items-center gap-2.5">
+                                    <Zap size={14} className="text-amber-500" />
+                                    <span className="font-medium text-zinc-900 dark:text-white">{c.name || c.connectorId || c.id}</span>
+                                  </div>
+                                  <span className="text-zinc-500">{c.type || 'Connector'}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </section>
+
+                        {/* Automations */}
+                        <section className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
+                          <div className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                            <h3 className="text-xs font-semibold text-zinc-900 dark:text-white">Automations</h3>
+                            <button
+                              type="button"
+                              onClick={() => setActiveTab('automation')}
+                              className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+                            >
+                              Manage
+                            </button>
+                          </div>
+                          {localAutomations.length === 0 ? (
+                            <div className="p-6 text-center text-xs text-zinc-500">
+                              No automations configured for this module.
+                            </div>
+                          ) : (
+                            <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                              {localAutomations.map((a: any) => (
+                                <div key={a.id} className="px-4 py-3 flex items-center justify-between text-xs">
+                                  <div className="flex items-center gap-2.5">
+                                    <BrainCircuit size={14} className="text-emerald-500" />
+                                    <span className="font-medium text-zinc-900 dark:text-white">{a.name || 'Untitled automation'}</span>
+                                  </div>
+                                  <span className="text-[11px] text-zinc-500">{a.enabled !== false ? 'Enabled' : 'Paused'}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </section>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             </div>
           ) : activeTab === 'validations' ? (
@@ -10379,6 +10497,7 @@ export const ModuleEditor = () => {
               validationRules={validationRules}
               setValidationRules={setValidationRules}
               fields={flattenFields(layout)}
+              showAiAssist={false}
             />
           ) : activeTab === 'connectors' ? (
             <ConnectorsTab 
@@ -10396,6 +10515,7 @@ export const ModuleEditor = () => {
               setTabs={setTabs}
               handleForgeConnector={handleForgeConnector}
               handleCreateCustomConnector={handleCreateCustomConnector}
+              showAiAssist={false}
             />
           ) : activeTab === 'automation' ? (
             <AutomationBuilder
@@ -10844,41 +10964,43 @@ export const ModuleEditor = () => {
           ) : null}
           </div>
         </main>
-        {/* Right Sidebar - Dual Mode */}
+        {/* Right Sidebar - Properties */}
         {activeTab === 'builder' && (
-          <aside className="w-85 flex-shrink-0 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col overflow-hidden">
-            {/* Mode Switcher */}
-            <div className="h-[52px] border-b border-zinc-200 dark:border-zinc-800 flex items-center p-1 bg-zinc-50/50 dark:bg-transparent">
-              <div className="flex-1 grid grid-cols-2 gap-1 h-full">
-                <button 
-                  onClick={() => setRightSidebarTab('inspector')}
-                  className={cn(
-                    "flex items-center justify-center gap-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all",
-                    rightSidebarTab === 'inspector' 
-                      ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-sm border border-zinc-200 dark:border-zinc-800" 
-                      : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
-                  )}
-                >
-                  <Settings2 size={12} />
-                  Inspector
-                </button>
-                <button 
-                  onClick={() => setRightSidebarTab('architect')}
-                  className={cn(
-                    "flex items-center justify-center gap-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all",
-                    rightSidebarTab === 'architect' 
-                      ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-sm border border-zinc-200 dark:border-zinc-800" 
-                      : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
-                  )}
-                >
-                  <Sparkles size={12} />
-                  Architect
-                </button>
+          <motion.aside
+            initial={false}
+            animate={{
+              width: rightPanelCollapsed ? 0 : rightPanelWidth,
+              opacity: rightPanelCollapsed ? 0 : 1,
+            }}
+            transition={resizingPanel === 'right' ? { duration: 0 } : { duration: 0.2, ease: 'easeOut' }}
+            className={cn(
+              "relative flex-shrink-0 bg-white dark:bg-zinc-900 flex flex-col overflow-hidden",
+              !rightPanelCollapsed && "border-l border-zinc-200 dark:border-zinc-800"
+            )}
+          >
+            {!rightPanelCollapsed && (
+              <div
+                onMouseDown={(e) => startPanelResize('right', e)}
+                className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-500/40 active:bg-indigo-500/60 transition-colors z-30"
+                title="Drag to resize properties panel"
+              />
+            )}
+            <div className="h-11 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between px-3.5 shrink-0">
+              <div className="flex items-center gap-2">
+                <Settings2 size={14} className="text-indigo-600 dark:text-indigo-400" />
+                <span className="text-xs font-semibold text-zinc-900 dark:text-white">Properties</span>
               </div>
+              <button
+                type="button"
+                onClick={() => setRightPanelCollapsed(true)}
+                className="p-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                title="Collapse properties panel"
+              >
+                <ChevronRight size={14} />
+              </button>
             </div>
 
             <div className="flex-1 overflow-y-auto">
-              {rightSidebarTab === 'inspector' ? (
                 <AnimatePresence mode="wait">
                   {selectedIds.length > 1 ? (
                     <motion.div 
@@ -11321,6 +11443,264 @@ export const ModuleEditor = () => {
                               {m.label}
                             </button>
                           ))}
+                        </div>
+                      </div>
+
+                      {/* Context Rail Quick Launch */}
+                      <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                        <div className="flex items-center justify-between px-1">
+                          <div>
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block">Record Context Rail</label>
+                            <span className="text-[9px] text-zinc-400 block mt-0.5">Configure the right-hand workspace activity & workflow sidebar.</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedId('__context_rail_settings')}
+                            className="px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold uppercase tracking-widest hover:bg-indigo-500/20 transition-all"
+                          >
+                            Configure Rail
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ) : selectedId === '__context_rail_settings' ? (
+                    <motion.div
+                      key="context-rail-settings-inspector"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 20 }}
+                      className="p-4 space-y-6"
+                    >
+                      {/* Header */}
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-1 h-4 bg-indigo-500 rounded-full shadow-[0_0_8px_rgba(99,102,241,0.5)]" />
+                          <h3 className="text-[10px] font-black text-zinc-900 dark:text-white uppercase tracking-widest">
+                            Context Rail Settings
+                          </h3>
+                        </div>
+                        <button
+                          onClick={() => setSelectedId(null)}
+                          className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-lg text-zinc-500 transition-colors"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+
+                      <div className="p-3.5 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl">
+                        <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium leading-relaxed">
+                          Configure the Record Context Rail displayed on the right side of the workspace Record Detail View.
+                        </p>
+                      </div>
+
+                      {/* Enable Context Rail */}
+                      <div className="flex items-center justify-between px-1">
+                        <div>
+                          <label className="text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-widest block">Enable Context Rail</label>
+                          <span className="text-[9px] text-zinc-400 block mt-0.5">Show the right-hand contextual rail on records.</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setInterfaceSettings(prev => ({
+                            ...prev,
+                            detail: {
+                              ...prev.detail,
+                              contextRail: {
+                                ...prev.detail.contextRail,
+                                enabled: prev.detail.contextRail?.enabled === false ? true : false
+                              }
+                            }
+                          }))}
+                          className={cn(
+                            "w-10 h-6 rounded-full p-0.5 transition-all shrink-0 relative flex items-center",
+                            interfaceSettings.detail.contextRail?.enabled !== false ? "bg-indigo-600 justify-end" : "bg-zinc-200 dark:bg-zinc-800 justify-start"
+                          )}
+                        >
+                          <motion.div
+                            layout
+                            className="w-5 h-5 bg-white rounded-full shadow-sm"
+                            transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                          />
+                        </button>
+                      </div>
+
+                      {/* Default State (Expanded / Collapsed) */}
+                      <div className="space-y-2.5 pt-4 border-t border-zinc-100 dark:border-zinc-900">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1 block">Default Rail State</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {([
+                            { value: false, label: 'Expanded (320px)' },
+                            { value: true, label: 'Collapsed (48px)' }
+                          ] as const).map(opt => (
+                            <button
+                              key={String(opt.value)}
+                              type="button"
+                              onClick={() => {
+                                setCanvasRailCollapsed(opt.value);
+                                setInterfaceSettings(prev => ({
+                                  ...prev,
+                                  detail: {
+                                    ...prev.detail,
+                                    contextRail: {
+                                      ...prev.detail.contextRail,
+                                      defaultCollapsed: opt.value
+                                    }
+                                  }
+                                }));
+                              }}
+                              className={cn(
+                                "px-3 py-2.5 rounded-xl border text-[9px] font-bold uppercase tracking-widest transition-all",
+                                Boolean(interfaceSettings.detail.contextRail?.defaultCollapsed) === opt.value
+                                  ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                                  : "bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900/50"
+                              )}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Default Active Tab */}
+                      <div className="space-y-2.5 pt-4 border-t border-zinc-100 dark:border-zinc-900">
+                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1 block">Default Active Tab</label>
+                        <select
+                          value={interfaceSettings.detail.contextRail?.defaultTab || 'overview'}
+                          onChange={(e) => {
+                            const val = e.target.value as any;
+                            setCanvasRailTab(val);
+                            setInterfaceSettings(prev => ({
+                              ...prev,
+                              detail: {
+                                ...prev.detail,
+                                contextRail: {
+                                  ...prev.detail.contextRail,
+                                  defaultTab: val
+                                }
+                              }
+                            }));
+                          }}
+                          className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2.5 text-xs font-semibold text-zinc-700 dark:text-zinc-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                        >
+                          <option value="overview">Overview & Metadata</option>
+                          <option value="workflow">Workflow & Process</option>
+                          <option value="activity">Activity Feed</option>
+                          <option value="notes">Notes & Comments</option>
+                          <option value="files">Files & Attachments</option>
+                          <option value="tasks">Linked Tasks</option>
+                          <option value="time">Time Logs</option>
+                        </select>
+                      </div>
+
+                      {/* Enabled Context Rail Tabs */}
+                      <div className="space-y-2.5 pt-4 border-t border-zinc-100 dark:border-zinc-900">
+                        <div className="px-1">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block">Enabled Rail Tabs</label>
+                          <span className="text-[9px] text-zinc-400 block mt-0.5">Choose which tabs are available in the Context Rail.</span>
+                        </div>
+                        <div className="space-y-1.5 bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-2.5">
+                          {[
+                            { id: 'overview', label: 'Overview & Metadata', locked: true },
+                            { id: 'workflow', label: 'Workflow & Stage Progression' },
+                            { id: 'activity', label: 'Activity & Audit Stream' },
+                            { id: 'notes', label: 'Notes & Collaborator Mentions' },
+                            { id: 'files', label: 'Files & Documents' },
+                            { id: 'tasks', label: 'Linked Tasks' },
+                            { id: 'time', label: 'Time Tracking Logs' }
+                          ].map(t => {
+                            const currentTabs = interfaceSettings.detail.contextRail?.enabledTabs || ['overview', 'workflow', 'activity', 'notes', 'files', 'tasks', 'time'];
+                            const isChecked = t.locked || currentTabs.includes(t.id);
+                            return (
+                              <label
+                                key={t.id}
+                                className={cn(
+                                  "flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-medium transition-colors",
+                                  t.locked ? "opacity-75 cursor-not-allowed" : "hover:bg-zinc-100 dark:hover:bg-zinc-800/60 cursor-pointer"
+                                )}
+                              >
+                                <span className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">{t.label}</span>
+                                <input
+                                  type="checkbox"
+                                  disabled={t.locked}
+                                  checked={isChecked}
+                                  onChange={() => {
+                                    if (t.locked) return;
+                                    setInterfaceSettings(prev => {
+                                      const prevTabs = prev.detail.contextRail?.enabledTabs || ['overview', 'workflow', 'activity', 'notes', 'files', 'tasks', 'time'];
+                                      const nextTabs = prevTabs.includes(t.id)
+                                        ? prevTabs.filter(x => x !== t.id)
+                                        : [...prevTabs, t.id];
+                                      return {
+                                        ...prev,
+                                        detail: {
+                                          ...prev.detail,
+                                          contextRail: {
+                                            ...prev.detail.contextRail,
+                                            enabledTabs: nextTabs
+                                          }
+                                        }
+                                      };
+                                    });
+                                  }}
+                                  className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                                />
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Pinned Overview Properties */}
+                      <div className="space-y-2.5 pt-4 border-t border-zinc-100 dark:border-zinc-900">
+                        <div className="flex items-center justify-between px-1">
+                          <div>
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block">Pinned Overview Properties</label>
+                            <span className="text-[9px] text-zinc-400 block mt-0.5">Pin up to 6 key fields to the Context Rail Overview tab.</span>
+                          </div>
+                          <span className="text-[9px] font-bold text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded-full">
+                            {(interfaceSettings.detail.contextRail?.pinnedFieldIds || []).length}/6
+                          </span>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto custom-scrollbar space-y-1 bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-2">
+                          {displayFields
+                            .filter((f: any) => !['heading', 'divider', 'spacer', 'alert', 'group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'html', 'button', 'sub_module'].includes(f.type))
+                            .map((f: any) => {
+                              const pinned = interfaceSettings.detail.contextRail?.pinnedFieldIds || [];
+                              const isChecked = pinned.includes(f.id);
+                              return (
+                                <label
+                                  key={f.id}
+                                  className="flex items-center justify-between px-2.5 py-1.5 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800/60 cursor-pointer transition-colors"
+                                >
+                                  <span className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300 truncate pr-2">
+                                    {f.label || f.name}
+                                  </span>
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => {
+                                      setInterfaceSettings(prev => {
+                                        const cur = prev.detail.contextRail?.pinnedFieldIds || [];
+                                        const next = cur.includes(f.id)
+                                          ? cur.filter(id => id !== f.id)
+                                          : [...cur, f.id].slice(0, 6);
+                                        return {
+                                          ...prev,
+                                          detail: {
+                                            ...prev.detail,
+                                            contextRail: {
+                                              ...prev.detail.contextRail,
+                                              pinnedFieldIds: next
+                                            }
+                                          }
+                                        };
+                                      });
+                                    }}
+                                    className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 w-4 h-4 shrink-0"
+                                  />
+                                </label>
+                              );
+                            })}
                         </div>
                       </div>
                     </motion.div>
@@ -12040,33 +12420,269 @@ export const ModuleEditor = () => {
                         </div>
                       )}
 
+                      {/* Workbench Toolbar Features */}
+                      <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                        <div className="px-1">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest font-black block">Workbench Toolbar Features</label>
+                          <span className="text-[9px] text-zinc-400 block mt-0.5">Control which controls appear in the module workbench toolbar.</span>
+                        </div>
+                        <div className="space-y-1.5 bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-2.5">
+                          {([
+                            { key: 'enableSavedViews', label: 'Saved Views Dropdown' },
+                            { key: 'enableGrouping', label: 'Group By Control' },
+                            { key: 'enableAskAurora', label: 'Ask Aurora AI Filter' },
+                            { key: 'enableChartToggle', label: 'Chart Visualizer Toggle' },
+                            { key: 'enableSpreadsheetMode', label: 'Spreadsheet Inline Edit Mode' },
+                            { key: 'enableBulkActions', label: 'Bulk Selection & Actions' }
+                          ] as const).map(feat => {
+                            const isEnabled = (interfaceSettings.master.toolbar as any)?.[feat.key] !== false;
+                            return (
+                              <label
+                                key={feat.key}
+                                className="flex items-center justify-between px-2.5 py-1.5 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800/60 cursor-pointer transition-colors"
+                              >
+                                <span className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">{feat.label}</span>
+                                <input
+                                  type="checkbox"
+                                  checked={isEnabled}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    setInterfaceSettings(prev => ({
+                                      ...prev,
+                                      master: {
+                                        ...prev.master,
+                                        toolbar: {
+                                          ...prev.master.toolbar,
+                                          [feat.key]: checked
+                                        }
+                                      }
+                                    }));
+                                  }}
+                                  className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                                />
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Allowed Layout Views */}
+                      <div className="space-y-3 pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                        <div className="px-1">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest font-black block">Allowed Layout Views</label>
+                          <span className="text-[9px] text-zinc-400 block mt-0.5">Choose which layout views users can switch between in the workspace.</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5 bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-2.5">
+                          {[
+                            { id: 'table', label: 'Table' },
+                            { id: 'split', label: 'Split View' },
+                            { id: 'kanban', label: 'Kanban' },
+                            { id: 'calendar', label: 'Calendar' },
+                            { id: 'analytics', label: 'Analytics' },
+                            { id: 'pipeline', label: 'Pipeline' },
+                            { id: 'timeline', label: 'Timeline' },
+                            { id: 'gantt', label: 'Gantt' },
+                            { id: 'cards', label: 'Cards' },
+                            { id: 'portfolio', label: 'Portfolio' },
+                            { id: 'map', label: 'Map' }
+                          ].map(v => {
+                            const currentViews = interfaceSettings.master.toolbar?.enabledViews || ['table', 'split', 'kanban', 'calendar', 'analytics', 'pipeline', 'timeline', 'gantt', 'cards', 'portfolio', 'map'];
+                            const isDefaultLayout = (interfaceSettings.master.layoutType || 'table') === v.id;
+                            const isChecked = isDefaultLayout || currentViews.includes(v.id);
+                            return (
+                              <label
+                                key={v.id}
+                                className={cn(
+                                  "flex items-center justify-between px-2 py-1.5 rounded-lg text-[10px] font-semibold transition-colors",
+                                  isDefaultLayout ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 cursor-not-allowed" : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800/60 cursor-pointer"
+                                )}
+                              >
+                                <span className="truncate">{v.label}</span>
+                                <input
+                                  type="checkbox"
+                                  disabled={isDefaultLayout}
+                                  checked={isChecked}
+                                  onChange={() => {
+                                    if (isDefaultLayout) return;
+                                    setInterfaceSettings(prev => {
+                                      const prevViews = prev.master.toolbar?.enabledViews || ['table', 'split', 'kanban', 'calendar', 'analytics', 'pipeline', 'timeline', 'gantt', 'cards', 'portfolio', 'map'];
+                                      const nextViews = prevViews.includes(v.id)
+                                        ? prevViews.filter(x => x !== v.id)
+                                        : [...prevViews, v.id];
+                                      return {
+                                        ...prev,
+                                        master: {
+                                          ...prev.master,
+                                          toolbar: {
+                                            ...prev.master.toolbar,
+                                            enabledViews: nextViews
+                                          }
+                                        }
+                                      };
+                                    });
+                                  }}
+                                  className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5 shrink-0"
+                                />
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+
                       {/* Quick Actions Panel */}
                       <div className="space-y-4 pt-6 border-t border-zinc-100 dark:border-zinc-900">
-                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1 font-black">Quick Actions</label>
-                        <div className="space-y-2">
-                          {interfaceSettings.actions.map((act) => (
-                            <div key={act.id} className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 animate-in fade-in duration-200">
-                              <span className="text-xs font-bold text-zinc-700 dark:text-zinc-300">{act.label}</span>
-                              <button 
-                                onClick={() => setInterfaceSettings(prev => ({
-                                  ...prev,
-                                  actions: prev.actions.filter(a => a.id !== act.id)
-                                }))}
-                                className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-rose-500 rounded transition-colors"
-                              >
-                                <Trash2 size={12} />
-                              </button>
+                        <div className="flex items-center justify-between px-1">
+                          <div>
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest font-black block">Quick Actions</label>
+                            <span className="text-[9px] text-zinc-400 block mt-0.5">Custom action buttons in Master & Detail headers.</span>
+                          </div>
+                        </div>
+                        <div className="space-y-2.5">
+                          {(interfaceSettings.actions || []).map((act, idx) => (
+                            <div key={act.id} className="p-3 bg-zinc-50 dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 space-y-2.5 animate-in fade-in duration-200">
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={act.label}
+                                  onChange={(e) => {
+                                    const newLabel = e.target.value;
+                                    setInterfaceSettings(prev => ({
+                                      ...prev,
+                                      actions: (prev.actions || []).map(a => a.id === act.id ? { ...a, label: newLabel } : a)
+                                    }));
+                                  }}
+                                  placeholder="Action Label"
+                                  className="flex-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-bold text-zinc-800 dark:text-zinc-200 focus:outline-none focus:border-indigo-500"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={idx === 0}
+                                  onClick={() => {
+                                    setInterfaceSettings(prev => {
+                                      const arr = [...(prev.actions || [])];
+                                      if (idx > 0) {
+                                        [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+                                      }
+                                      return { ...prev, actions: arr };
+                                    });
+                                  }}
+                                  className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded disabled:opacity-30 transition-colors"
+                                  title="Move Up"
+                                >
+                                  <ChevronUp size={12} />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === (interfaceSettings.actions || []).length - 1}
+                                  onClick={() => {
+                                    setInterfaceSettings(prev => {
+                                      const arr = [...(prev.actions || [])];
+                                      if (idx < arr.length - 1) {
+                                        [arr[idx + 1], arr[idx]] = [arr[idx], arr[idx + 1]];
+                                      }
+                                      return { ...prev, actions: arr };
+                                    });
+                                  }}
+                                  className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded disabled:opacity-30 transition-colors"
+                                  title="Move Down"
+                                >
+                                  <ChevronDown size={12} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setInterfaceSettings(prev => ({
+                                    ...prev,
+                                    actions: (prev.actions || []).filter(a => a.id !== act.id)
+                                  }))}
+                                  className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-rose-500 rounded transition-colors"
+                                  title="Delete Action"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest block mb-1">Icon</label>
+                                  <select
+                                    value={act.icon || 'Zap'}
+                                    onChange={(e) => {
+                                      const newIcon = e.target.value;
+                                      setInterfaceSettings(prev => ({
+                                        ...prev,
+                                        actions: (prev.actions || []).map(a => a.id === act.id ? { ...a, icon: newIcon } : a)
+                                      }));
+                                    }}
+                                    className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-[10px] font-semibold text-zinc-700 dark:text-zinc-300 focus:outline-none focus:border-indigo-500"
+                                  >
+                                    <option value="Zap">Zap (Automation)</option>
+                                    <option value="FileText">FileText (Document)</option>
+                                    <option value="Play">Play (Run)</option>
+                                    <option value="Send">Send (Dispatch)</option>
+                                    <option value="CheckCircle2">Check (Approve)</option>
+                                    <option value="Download">Download (Export)</option>
+                                    <option value="Sparkles">Sparkles (AI)</option>
+                                    <option value="ExternalLink">External Link</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest block mb-1">Action Type</label>
+                                  <select
+                                    value={act.actionType || 'custom'}
+                                    onChange={(e) => {
+                                      const newType = e.target.value as 'custom' | 'form' | 'export_pdf';
+                                      setInterfaceSettings(prev => ({
+                                        ...prev,
+                                        actions: (prev.actions || []).map(a => a.id === act.id ? { ...a, actionType: newType } : a)
+                                      }));
+                                    }}
+                                    className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1 text-[10px] font-semibold text-zinc-700 dark:text-zinc-300 focus:outline-none focus:border-indigo-500"
+                                  >
+                                    <option value="custom">Run Automation</option>
+                                    <option value="form">Open Module Form</option>
+                                    <option value="export_pdf">Export Record PDF</option>
+                                  </select>
+                                </div>
+                              </div>
+
+                              {act.actionType === 'form' && (
+                                <div>
+                                  <label className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest block mb-1">Target Form</label>
+                                  <select
+                                    value={act.targetFormId || ''}
+                                    onChange={(e) => {
+                                      const targetFormId = e.target.value;
+                                      setInterfaceSettings(prev => ({
+                                        ...prev,
+                                        actions: (prev.actions || []).map(a => a.id === act.id ? { ...a, targetFormId } : a)
+                                      }));
+                                    }}
+                                    className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2 py-1.5 text-[10px] font-semibold text-zinc-700 dark:text-zinc-300 focus:outline-none focus:border-indigo-500"
+                                  >
+                                    <option value="">-- Select Module Form --</option>
+                                    {(forms || []).map((f: any) => (
+                                      <option key={f.id} value={f.id}>{f.title || f.name || f.id}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )}
                             </div>
                           ))}
                           <button
+                            type="button"
                             onClick={() => {
-                              const label = prompt("Enter action label:");
-                              if (label) {
-                                setInterfaceSettings(prev => ({
-                                  ...prev,
-                                  actions: [...prev.actions, { id: `act-${Date.now()}`, label, icon: 'FileText' }]
-                                }));
-                              }
+                              setInterfaceSettings(prev => ({
+                                ...prev,
+                                actions: [
+                                  ...(prev.actions || []),
+                                  {
+                                    id: `act-${Date.now()}`,
+                                    label: 'New Action',
+                                    icon: 'Zap',
+                                    actionType: 'custom'
+                                  }
+                                ]
+                              }));
                             }}
                             className="w-full py-2.5 border border-dashed border-zinc-200 dark:border-zinc-800 hover:border-indigo-500 rounded-xl text-[9px] font-bold uppercase tracking-widest text-zinc-400 hover:text-indigo-500 transition-colors flex items-center justify-center gap-1.5"
                           >
@@ -12189,8 +12805,8 @@ export const ModuleEditor = () => {
                         </div>
                       )}
 
-                      {/* Inline Edit Toggle (only for Assignee) */}
-                      {selectedSystemField.id === 'assigneeId' && (
+                      {/* Inline Edit Toggle (for Assignee, Participants, Status) */}
+                      {['assigneeId', 'participantIds', 'status'].includes(selectedSystemField.id) && (
                         <div className="pt-4 border-t border-zinc-100 dark:border-zinc-900 flex items-center justify-between">
                           <div className="space-y-0.5">
                             <p className="text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Inline Edit</p>
@@ -12323,14 +12939,57 @@ export const ModuleEditor = () => {
 
                         {/* Column Label Override */}
                         <div className="space-y-2">
-                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Column Header Label</label>
+                          <div className="flex items-center justify-between px-1">
+                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Column Header Label</label>
+                            {interfaceSettings.master.columns?.find(c => c.fieldId === selectedField.id)?.label && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setInterfaceSettings(prev => ({
+                                    ...prev,
+                                    master: {
+                                      ...prev.master,
+                                      columns: (prev.master.columns || []).map(c => c.fieldId === selectedField.id ? { ...c, label: undefined } : c)
+                                    }
+                                  }));
+                                }}
+                                className="text-[9px] font-bold text-indigo-500 hover:underline"
+                              >
+                                Reset to Field Label
+                              </button>
+                            )}
+                          </div>
                           <input 
                             type="text" 
-                            value={selectedField.label}
-                            onChange={(e) => updateField(selectedField.id, { label: e.target.value })}
+                            value={interfaceSettings.master.columns?.find(c => c.fieldId === selectedField.id)?.label ?? selectedField.label}
+                            onChange={(e) => {
+                              const newLabel = e.target.value;
+                              setInterfaceSettings(prev => {
+                                const cols = prev.master.columns || [];
+                                if (cols.some(c => c.fieldId === selectedField.id)) {
+                                  return {
+                                    ...prev,
+                                    master: {
+                                      ...prev.master,
+                                      columns: cols.map(c => c.fieldId === selectedField.id ? { ...c, label: newLabel } : c)
+                                    }
+                                  };
+                                }
+                                return {
+                                  ...prev,
+                                  master: {
+                                    ...prev.master,
+                                    columns: [...cols, { fieldId: selectedField.id, visible: true, inlineEdit: !!selectedField.inlineEdit, width: selectedField.columnWidth || 200, label: newLabel }]
+                                  }
+                                };
+                              });
+                            }}
                             className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
-                            placeholder="e.g. Serial Number"
+                            placeholder={selectedField.label || "e.g. Serial Number"}
                           />
+                          <p className="text-[9px] text-zinc-400 px-1">
+                            Overrides the column header in Master Table without renaming the Detail form field ({selectedField.label}).
+                          </p>
                         </div>
 
                         {/* Inline Edit Toggle */}
@@ -12481,141 +13140,155 @@ export const ModuleEditor = () => {
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: 20 }}
-                        className="p-4 space-y-4"
+                        className="p-3.5 space-y-3.5"
                       >
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-1 h-4 bg-indigo-500 rounded-full" />
-                          <h3 className="text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-widest">
-                            {selectedField.type.replace('_', ' ')} Properties
-                          </h3>
-                        </div>
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-xs font-semibold text-zinc-900 dark:text-white capitalize">
+                          {selectedField.type.replace('_', ' ')} properties
+                        </h3>
                         <button 
                           onClick={() => setSelectedId(null)}
-                          className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-lg text-zinc-500 transition-colors"
+                          className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors"
+                          title="Close properties"
                         >
                           <X size={14} />
                         </button>
                       </div>
+
+                      {/* Segmented Properties Tabs */}
+                      <div className="grid grid-cols-2 gap-1 p-0.5 bg-zinc-100 dark:bg-zinc-800/80 rounded-lg">
+                        <button
+                          type="button"
+                          onClick={() => setFieldInspectorTab('layout')}
+                          className={cn(
+                            "py-1 rounded-md text-xs font-medium transition-colors",
+                            fieldInspectorTab === 'layout'
+                              ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs"
+                              : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+                          )}
+                        >
+                          Layout
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFieldInspectorTab('logic')}
+                          className={cn(
+                            "py-1 rounded-md text-xs font-medium transition-colors",
+                            fieldInspectorTab === 'logic'
+                              ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs"
+                              : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+                          )}
+                        >
+                          Logic & data
+                        </button>
+                      </div>
+
                     {/* Global Settings */}
-                    <div className="space-y-6">
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Field Label</label>
+                    <div className={cn("space-y-3", fieldInspectorTab !== 'layout' && "hidden")}>
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400 block">Label</label>
                         <input 
                           type="text" 
                           value={selectedField.label}
                           onChange={(e) => updateField(selectedField.id, { label: e.target.value })}
-                          className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
+                          className="w-full h-8 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 transition-colors"
                           placeholder="e.g. Customer Name"
                         />
                       </div>
 
                       {!['heading', 'divider', 'spacer', 'alert', 'connector', 'group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'html', 'button', 'sub_module'].includes(selectedField.type) && (
                         <>
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Helper Text</label>
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400 block">Helper text</label>
                             <input 
                               type="text" 
                               value={selectedField.helperText || ''}
                               onChange={(e) => updateField(selectedField.id, { helperText: e.target.value })}
-                              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
-                              placeholder="e.g. Enter your full legal name"
+                              className="w-full h-8 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 transition-colors"
+                              placeholder="Displayed below input"
                             />
                           </div>
 
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Placeholder</label>
-                            <input 
-                              type="text" 
-                              value={selectedField.placeholder || ''}
-                              onChange={(e) => updateField(selectedField.id, { placeholder: e.target.value })}
-                              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
-                              placeholder="e.g. John Doe"
-                            />
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400 block">Placeholder</label>
+                              <input 
+                                type="text" 
+                                value={selectedField.placeholder || ''}
+                                onChange={(e) => updateField(selectedField.id, { placeholder: e.target.value })}
+                                className="w-full h-8 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 transition-colors"
+                                placeholder="e.g. John Doe"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400 block">Default value</label>
+                              <input 
+                                type="text" 
+                                value={selectedField.defaultValue || ''}
+                                onChange={(e) => updateField(selectedField.id, { defaultValue: e.target.value })}
+                                className="w-full h-8 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 transition-colors"
+                                placeholder="e.g. N/A"
+                              />
+                            </div>
                           </div>
 
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Tooltip / Popover</label>
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400 block">Tooltip</label>
                             <textarea 
                               value={selectedField.tooltip || ''}
                               onChange={(e) => updateField(selectedField.id, { tooltip: e.target.value })}
-                              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all min-h-[80px]"
-                              placeholder="e.g. This name must match your government issued ID"
-                            />
-                          </div>
-
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">Default Value</label>
-                            <input 
-                              type="text" 
-                              value={selectedField.defaultValue || ''}
-                              onChange={(e) => updateField(selectedField.id, { defaultValue: e.target.value })}
-                              className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
-                              placeholder="e.g. N/A"
+                              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-zinc-900 transition-colors min-h-[52px] resize-none"
+                              placeholder="Optional info popover text"
                             />
                           </div>
                         </>
                       )}
 
-                      {!['heading', 'divider', 'spacer', 'alert', 'connector', 'group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'html', 'button', 'sub_module'].includes(selectedField.type) && (
-                        <div className="pt-2">
-                          <label className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-all">
-                            <div className="flex items-center gap-3">
-                              <div className={cn(
-                                "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
-                                selectedField.required ? "bg-indigo-500/10 text-indigo-500" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500"
-                              )}>
-                                <CheckSquare size={14} />
-                              </div>
+                      {(!['heading', 'divider', 'spacer', 'alert', 'connector', 'group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'html', 'button', 'sub_module'].includes(selectedField.type) || selectedField.type !== 'sub_module') && (
+                        <div className="pt-1 border-t border-zinc-100 dark:border-zinc-800 divide-y divide-zinc-100 dark:divide-zinc-800/70">
+                          {!['heading', 'divider', 'spacer', 'alert', 'connector', 'group', 'fieldGroup', 'repeatableGroup', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline', 'html', 'button', 'sub_module'].includes(selectedField.type) && (
+                            <div className="flex items-center justify-between py-2">
                               <div>
-                                <span className="block text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Required Field</span>
-                                <span className="block text-[9px] text-zinc-500">{selectedField.required ? 'Mandatory for submission' : 'Optional field'}</span>
+                                <span className="text-xs font-medium text-zinc-800 dark:text-zinc-200 block">Required</span>
+                                <span className="text-[10px] text-zinc-400 block">Mandatory for submission</span>
                               </div>
+                              <button 
+                                type="button"
+                                onClick={() => updateField(selectedField.id, { required: !selectedField.required })}
+                                className={cn(
+                                  "w-8 h-4.5 rounded-full relative transition-colors duration-200 cursor-pointer shrink-0",
+                                  selectedField.required ? "bg-indigo-600" : "bg-zinc-300 dark:bg-zinc-700"
+                                )}
+                              >
+                                <motion.div 
+                                  animate={{ x: selectedField.required ? 16 : 2 }}
+                                  className="absolute top-0.5 left-0 w-3.5 h-3.5 bg-white rounded-full shadow-xs"
+                                />
+                              </button>
                             </div>
-                            <button 
-                              onClick={() => updateField(selectedField.id, { required: !selectedField.required })}
-                              className={cn(
-                                "w-10 h-5 rounded-full relative transition-colors duration-300",
-                                selectedField.required ? "bg-indigo-600" : "bg-zinc-300 dark:bg-zinc-700"
-                              )}
-                            >
-                              <motion.div 
-                                animate={{ x: selectedField.required ? 22 : 2 }}
-                                className="absolute top-1 left-0 w-3 h-3 bg-white rounded-full shadow-sm"
-                              />
-                            </button>
-                          </label>
-                        </div>
-                      )}
+                          )}
 
-                      {selectedField.type !== 'sub_module' && (
-                        <div className="pt-2">
-                          <label className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-all">
-                            <div className="flex items-center gap-3">
-                              <div className={cn(
-                                "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
-                                selectedField.hidden ? "bg-rose-500/10 text-rose-500" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500"
-                              )}>
-                                <EyeOff size={14} />
-                              </div>
+                          {selectedField.type !== 'sub_module' && (
+                            <div className="flex items-center justify-between py-2">
                               <div>
-                                <span className="block text-[10px] font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Hidden by Default</span>
-                                <span className="block text-[9px] text-zinc-500">{selectedField.hidden ? 'Field is hidden from users' : 'Field is visible to users'}</span>
+                                <span className="text-xs font-medium text-zinc-800 dark:text-zinc-200 block">Hidden by default</span>
+                                <span className="text-[10px] text-zinc-400 block">Hide field unless shown by rules</span>
                               </div>
+                              <button 
+                                type="button"
+                                onClick={() => updateField(selectedField.id, { hidden: !selectedField.hidden })}
+                                className={cn(
+                                  "w-8 h-4.5 rounded-full relative transition-colors duration-200 cursor-pointer shrink-0",
+                                  selectedField.hidden ? "bg-rose-600" : "bg-zinc-300 dark:bg-zinc-700"
+                                )}
+                              >
+                                <motion.div 
+                                  animate={{ x: selectedField.hidden ? 16 : 2 }}
+                                  className="absolute top-0.5 left-0 w-3.5 h-3.5 bg-white rounded-full shadow-xs"
+                                />
+                              </button>
                             </div>
-                            <button 
-                              onClick={() => updateField(selectedField.id, { hidden: !selectedField.hidden })}
-                              className={cn(
-                                "w-10 h-5 rounded-full relative transition-colors duration-300",
-                                selectedField.hidden ? "bg-rose-600" : "bg-zinc-300 dark:bg-zinc-700"
-                              )}
-                            >
-                              <motion.div 
-                                animate={{ x: selectedField.hidden ? 22 : 2 }}
-                                className="absolute top-1 left-0 w-3 h-3 bg-white rounded-full shadow-sm"
-                              />
-                            </button>
-                          </label>
+                          )}
                         </div>
                       )}
 
@@ -12666,14 +13339,41 @@ export const ModuleEditor = () => {
                       })()}
 
                       {/* Grid Position Controls */}
-                      <div className="space-y-6 pt-6 border-t border-zinc-100 dark:border-zinc-900">
-                        <h4 className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">Grid Layout</h4>
+                      <div className={cn("space-y-6 pt-6 border-t border-zinc-100 dark:border-zinc-900", fieldInspectorTab !== 'layout' && "hidden")}>
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">Grid Layout</h4>
+                          <span className="text-[9px] font-mono text-zinc-400">12-Col Grid</span>
+                        </div>
                         
                         <div className="space-y-5">
                           <div className="space-y-2.5">
                             <div className="flex items-center justify-between px-1">
                               <label className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Column Span</label>
                               <span className="text-[10px] font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-md border border-indigo-500/20">{selectedField.colSpan || 12} Columns</span>
+                            </div>
+                            {/* 1-Click Width Presets */}
+                            <div className="grid grid-cols-5 gap-1">
+                              {[
+                                { label: '1/4', cols: 3 },
+                                { label: '1/3', cols: 4 },
+                                { label: '1/2', cols: 6 },
+                                { label: '2/3', cols: 8 },
+                                { label: 'Full', cols: 12 }
+                              ].map(preset => (
+                                <button
+                                  key={preset.cols}
+                                  type="button"
+                                  onClick={() => updateField(selectedField.id, { colSpan: preset.cols })}
+                                  className={cn(
+                                    "py-1.5 rounded-lg border text-[9px] font-bold uppercase tracking-wider transition-all",
+                                    (selectedField.colSpan || 12) === preset.cols
+                                      ? "bg-indigo-600 border-indigo-600 text-white shadow-sm"
+                                      : "bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+                                  )}
+                                >
+                                  {preset.label}
+                                </button>
+                              ))}
                             </div>
                             <div className="bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3.5 flex items-center">
                               <input 
@@ -12791,7 +13491,7 @@ export const ModuleEditor = () => {
                       </div>
 
                       {/* Advanced Settings */}
-                      <div className="space-y-6 pt-6 border-t border-zinc-100 dark:border-zinc-900">
+                      <div className={cn("space-y-6 pt-6 border-t border-zinc-100 dark:border-zinc-900", fieldInspectorTab !== 'logic' && "hidden")}>
                         <div className="flex items-center justify-between px-1">
                           <h4 className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">Advanced Settings</h4>
                         </div>
@@ -12816,7 +13516,7 @@ export const ModuleEditor = () => {
                     <div className="h-px bg-zinc-200 dark:bg-zinc-900" />
 
                     {/* Specific Settings */}
-                    <div className="space-y-6">
+                    <div className={cn("space-y-6", fieldInspectorTab !== 'logic' && "hidden")}>
                       {selectedField.type === 'date' && (
                         <div className="space-y-6">
                           <div className="space-y-2">
@@ -15592,104 +16292,30 @@ export const ModuleEditor = () => {
                   </motion.div>
                 )}
               </AnimatePresence>
-            ) : (
-              /* Shadow Architect Panel */
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex flex-col h-full overflow-hidden"
-              >
-                {/* Agent Status */}
-                <div className="p-3 px-4 border-b border-zinc-100 dark:border-zinc-900 bg-zinc-50/50 dark:bg-transparent">
-                  <div className="flex items-center gap-4">
-                    <div className="relative">
-                      <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                        <BrainCircuit size={20} className="text-white" />
-                      </div>
-                      <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-500 border-2 border-white dark:border-zinc-950 rounded-full" />
-                    </div>
-                    <div>
-                      <h4 className="text-[11px] font-bold text-zinc-900 dark:text-white uppercase tracking-widest">Shadow Architect</h4>
-                      <p className="text-[9px] text-zinc-500 font-medium">L4 Design Intelligence Active</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Suggestions Chips */}
-                <div className="px-6 py-4 flex gap-2 overflow-x-auto no-scrollbar border-b border-zinc-100 dark:border-zinc-900">
-                  {[
-                    { label: 'Optimize Layout', icon: Grid3X3, cmd: 'Optimize the current layout for better readability' },
-                    { label: 'Add Logic', icon: Calculator, cmd: 'Suggest some logic or calculations for this module' },
-                    { label: 'Styling Audit', icon: Palette, cmd: 'Perform a styling and alignment audit' }
-                  ].map((s, i) => (
-                    <button 
-                      key={i}
-                      onClick={() => handleArchitectCommand(s.cmd)}
-                      className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-full text-[9px] font-bold text-zinc-600 dark:text-zinc-400 hover:border-indigo-500/50 hover:text-indigo-600 transition-all uppercase tracking-widest"
-                    >
-                      <s.icon size={10} />
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Chat Area */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                  {architectMessages.map((msg, i) => (
-                    <div key={i} className={cn(
-                      "flex flex-col gap-2 max-w-[85%]",
-                      msg.role === 'user' ? "ml-auto items-end" : "items-start"
-                    )}>
-                      <div className={cn(
-                        "px-4 py-3 rounded-2xl text-[11px] leading-relaxed",
-                        msg.role === 'user' 
-                          ? "bg-indigo-600 text-white rounded-tr-none shadow-lg shadow-indigo-500/10" 
-                          : "bg-zinc-100 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 rounded-tl-none border border-zinc-200 dark:border-zinc-800"
-                      )}>
-                        {msg.content}
-                      </div>
-                    </div>
-                  ))}
-                  {isArchitectThinking && (
-                    <div className="flex items-center gap-2 text-zinc-400">
-                      <div className="flex gap-1">
-                        <div className="w-1 h-1 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                        <div className="w-1 h-1 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                        <div className="w-1 h-1 bg-indigo-500 rounded-full animate-bounce" />
-                      </div>
-                      <span className="text-[9px] font-bold uppercase tracking-widest">Architect is thinking...</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Input Area */}
-                <div className="p-6 border-t border-zinc-100 dark:border-zinc-900 bg-zinc-50/50 dark:bg-transparent">
-                  <div className="relative">
-                    <input 
-                      type="text" 
-                      value={architectInput}
-                      onChange={(e) => setArchitectInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          handleArchitectCommand(architectInput);
-                        }
-                      }}
-                      placeholder="Ask the architect..."
-                      className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-4 pr-10 py-3 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all shadow-sm"
-                    />
-                    <button 
-                      onClick={() => handleArchitectCommand(architectInput)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-all"
-                    >
-                      <ArrowUp size={14} />
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            )}
             </div>
-          </aside>
+          </motion.aside>
         )}
+
+        {/* Unified Docked AI Copilot Panel (across all Module Builder tabs) */}
+        <BuilderAICopilotDrawer
+          isOpen={isAICopilotOpen}
+          onClose={() => setIsAICopilotOpen(false)}
+          moduleId={routeId}
+          layout={layout}
+          tabs={tabs}
+          moduleName={moduleSettings.name}
+          activeTab={activeTab}
+          width={copilotWidth}
+          isResizing={resizingPanel === 'copilot'}
+          onStartResize={(e) => startPanelResize('copilot', e)}
+          onRefreshModule={() => refreshModules?.()}
+          onApplyChanges={(newLayout, description) => {
+            setLayout(newLayout as any);
+            if (description) {
+              toast.success(description);
+            }
+          }}
+        />
 
         {/* Condition Modal */}
         <ConditionModal 
@@ -15948,21 +16574,6 @@ export const ModuleEditor = () => {
             setSchemaVersion(versionTag.replace('v', ''));
             setPersistedLayout([...layout]);
             await handleSave();
-          }}
-        />
-
-        {/* In-Canvas AI Architect Copilot Drawer */}
-        <BuilderAICopilotDrawer
-          isOpen={isAICopilotOpen}
-          onClose={() => setIsAICopilotOpen(false)}
-          layout={layout}
-          tabs={tabs}
-          moduleName={moduleSettings.name}
-          onApplyChanges={(newLayout, description) => {
-            setLayout(newLayout as any);
-            if (description) {
-              toast.success(description);
-            }
           }}
         />
 
@@ -16769,6 +17380,20 @@ export const ModuleEditor = () => {
           }
         }}
       />
+
+      {subfieldModalTarget && (
+        <SubfieldTypeModal
+          isOpen={!!subfieldModalTarget}
+          containerLabel={subfieldModalTarget.containerLabel}
+          onClose={() => setSubfieldModalTarget(null)}
+          onSelectType={(fieldType) => {
+            if (subfieldModalTarget) {
+              createFieldInContainer(subfieldModalTarget.containerId, fieldType as any);
+              setSubfieldModalTarget(null);
+            }
+          }}
+        />
+      )}
 
       {showUnsavedConfirm && (
         <UnsavedChangesModal

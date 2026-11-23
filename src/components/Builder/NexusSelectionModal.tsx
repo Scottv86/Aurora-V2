@@ -1,8 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Search, Zap, Shield, Rocket, BrainCircuit, Wand2, Hammer, ArrowLeft, ArrowRight, Library } from 'lucide-react';
+import {
+  X,
+  Search,
+  Zap,
+  Shield,
+  Wand2,
+  Hammer,
+  ArrowLeft,
+  ArrowRight,
+  Loader2,
+  CheckCircle2
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { cn } from '../../lib/utils';
 import { DynamicIcon } from '../UI/DynamicIcon';
-import { AIForgeView } from './AIForgeView';
 import { ManualBuilderView } from './ManualBuilderView';
 
 interface NexusSelectionModalProps {
@@ -13,41 +25,69 @@ interface NexusSelectionModalProps {
   onSelect: (connector: any, strategy: 'auto' | 'manual', triggerType?: 'lookup' | 'rule') => void;
   onActivate: (connectorId: string) => Promise<any>;
   onCreateCustom: (connector: any) => Promise<any>;
-  onForge: (prompt: string) => Promise<any>;
+  onForge?: (prompt: string) => Promise<any>;
   selectedField?: any;
 }
 
-type ViewMode = 'selection' | 'library' | 'ai' | 'manual' | 'strategy' | 'trigger_type';
+type ViewMode = 'library' | 'manual' | 'trigger_type' | 'strategy';
 
 export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
   isOpen,
   onClose,
-  activeConnectors: _activeConnectors,
+  activeConnectors,
   registry,
   onSelect,
   onActivate,
   onCreateCustom,
-  onForge,
   selectedField
 }) => {
-  const [view, setView] = useState<ViewMode>('selection');
+  const [view, setView] = useState<ViewMode>('library');
   const [search, setSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [isProcessing, setIsProcessing] = useState(false);
   const [pendingConnector, setPendingConnector] = useState<any>(null);
   const [pendingTriggerType, setPendingTriggerType] = useState<'lookup' | 'rule'>('lookup');
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (isOpen) {
-      setView('selection');
+      setView('library');
       setSearch('');
+      setSelectedCategory('All');
       setIsProcessing(false);
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
-  const filteredRegistry = registry.filter(c => 
-    c.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const categories = useMemo(() => {
+    const cats = Array.from(
+      new Set(
+        (registry || [])
+          .map(c => c.category)
+          .filter((cat): cat is string => Boolean(cat))
+      )
+    );
+    return ['All', ...cats];
+  }, [registry]);
+
+  const filteredRegistry = useMemo(() => {
+    const q = search.toLowerCase();
+    return (registry || []).filter(c => {
+      const matchesSearch =
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.category || '').toLowerCase().includes(q) ||
+        (c.description || '').toLowerCase().includes(q);
+      const matchesCat = selectedCategory === 'All' || c.category === selectedCategory;
+      return matchesSearch && matchesCat;
+    });
+  }, [registry, search, selectedCategory]);
 
   const showStrategyOrTriggerType = (connector: any) => {
     setPendingConnector(connector);
@@ -58,18 +98,25 @@ export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
     }
   };
 
-  const handleForge = async (prompt: string) => {
+  const handleSelectConnector = async (conn: any) => {
+    const existingActive = (activeConnectors || []).find(
+      ac => ac.connectorId === conn.id && ac.isActive !== false
+    );
+    if (existingActive) {
+      showStrategyOrTriggerType(existingActive);
+      return;
+    }
+
     setIsProcessing(true);
     try {
-      const forged = await onForge(prompt);
-      if (forged) {
-        const created = await onCreateCustom(forged);
-        if (created) {
-          showStrategyOrTriggerType(created.activation);
-        }
+      const activated = await onActivate(conn.id);
+      if (activated) {
+        showStrategyOrTriggerType(activated);
+      } else {
+        toast.error(`Failed to activate ${conn.name}`);
       }
-    } catch (err) {
-      console.error("Forge failed:", err);
+    } catch (err: any) {
+      toast.error(err?.message || `Failed to activate ${conn.name}`);
     } finally {
       setIsProcessing(false);
     }
@@ -80,299 +127,320 @@ export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
     try {
       const created = await onCreateCustom(connector);
       if (created) {
-        showStrategyOrTriggerType(created.activation);
+        showStrategyOrTriggerType(created.activation || created);
+      } else {
+        toast.error('Failed to create custom integration');
       }
-    } catch (err) {
-      console.error("Manual save failed:", err);
+    } catch (err: any) {
+      console.error('Manual save failed:', err);
+      toast.error(err?.message || 'Failed to create custom integration');
     } finally {
       setIsProcessing(false);
     }
   };
 
+  const headerTitle =
+    view === 'library'
+      ? 'Connect Integration'
+      : view === 'manual'
+        ? 'Custom Endpoint Builder'
+        : view === 'trigger_type'
+          ? 'Trigger Method'
+          : 'Provisioning Strategy';
+
+  const headerSubtitle =
+    view === 'library'
+      ? 'Select an integration from the library or build a custom REST endpoint.'
+      : view === 'manual'
+        ? 'Define a custom HTTP endpoint and its input/output schema.'
+        : view === 'trigger_type'
+          ? 'Choose how this integration should be triggered in your module.'
+          : 'Choose how API response fields are mapped to your module.';
+
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
-          <motion.div 
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="absolute inset-0 bg-zinc-950/40 backdrop-blur-sm"
+            className="absolute inset-0 bg-zinc-950/40 backdrop-blur-xs"
           />
-          
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+
+          <motion.div
+            initial={{ opacity: 0, scale: 0.97, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="relative w-full max-w-5xl h-[85vh] bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col"
+            exit={{ opacity: 0, scale: 0.97, y: 12 }}
+            className="relative w-full max-w-4xl h-[78vh] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl overflow-hidden flex flex-col"
           >
             {/* Header */}
-            <div className="p-8 border-b border-zinc-100 dark:border-zinc-900 flex items-center justify-between bg-zinc-50/50 dark:bg-transparent z-20">
-              <div className="flex items-center gap-4">
-                {view !== 'selection' ? (
-                  <button 
+            <div className="px-5 py-3.5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-3 bg-white dark:bg-zinc-900 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                {view !== 'library' ? (
+                  <button
+                    type="button"
                     onClick={() => {
                       if (view === 'strategy' && !selectedField) {
                         setView('trigger_type');
                       } else {
-                        setView('selection');
+                        setView('library');
                       }
                     }}
-                    className="w-10 h-10 flex items-center justify-center rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-400 hover:text-indigo-600 transition-all"
+                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors cursor-pointer shrink-0"
+                    title="Back"
                   >
-                    <ArrowLeft size={20} />
+                    <ArrowLeft size={15} />
                   </button>
                 ) : (
-                  <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
-                    <Zap size={24} className="text-white" />
+                  <div className="w-8 h-8 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/60 rounded-lg flex items-center justify-center shrink-0">
+                    <Zap size={16} />
                   </div>
                 )}
-                <div>
-                  <h2 className="text-xl font-black text-zinc-900 dark:text-white uppercase tracking-tight">
-                    {view === 'selection' ? 'Connect Integration' : 
-                     view === 'library' ? 'Connector Library' : 
-                     view === 'ai' ? 'AI Forge' : 
-                     view === 'trigger_type' ? 'Trigger Method' :
-                     view === 'strategy' ? 'Provisioning Strategy' : 'Manual Builder'}
+                <div className="min-w-0">
+                  <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+                    {headerTitle}
                   </h2>
-                  <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
-                    {view === 'selection' ? 'Select your path to integration' : 
-                     view === 'trigger_type' ? 'How should this integration be triggered?' :
-                     view === 'strategy' ? 'How should we handle the API data?' : 'Define your custom API capability'}
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
+                    {headerSubtitle}
                   </p>
                 </div>
               </div>
-              <button 
+
+              <button
+                type="button"
                 onClick={onClose}
-                className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-400 transition-all"
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors cursor-pointer shrink-0"
+                title="Close"
               >
-                <X size={20} />
+                <X size={16} />
               </button>
             </div>
 
+            {/* Body */}
             <div className="flex-1 overflow-hidden relative">
               <AnimatePresence mode="wait">
-                {view === 'selection' ? (
-                  <motion.div 
-                    key="selection"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    className="h-full grid grid-cols-3 p-12 gap-6 content-center"
-                  >
-                    {/* Path A: Library */}
-                    <button 
-                      onClick={() => setView('library')}
-                      className="group relative flex flex-col items-center justify-center p-6 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] hover:border-indigo-500/50 transition-all overflow-hidden"
-                    >
-                      <div className="absolute inset-0 bg-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      <div className="w-16 h-16 bg-white dark:bg-zinc-800 rounded-2xl flex items-center justify-center text-zinc-400 group-hover:text-indigo-600 shadow-sm mb-4 transition-all group-hover:scale-110">
-                        <Library size={32} />
-                      </div>
-                      <h3 className="text-base font-black text-zinc-900 dark:text-white uppercase tracking-tight mb-1">Library</h3>
-                      <p className="text-[11px] text-zinc-500 text-center leading-relaxed">Browse and activate templates.</p>
-                      <div className="mt-6 px-4 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full text-[9px] font-black uppercase tracking-widest text-zinc-400 group-hover:text-indigo-600 transition-all">
-                         Browse Marketplace
-                      </div>
-                    </button>
-
-                    {/* Path B: AI Forge */}
-                    <button 
-                      onClick={() => setView('ai')}
-                      className="group relative flex flex-col items-center justify-center p-6 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] hover:border-indigo-500/50 transition-all overflow-hidden"
-                    >
-                      <div className="absolute inset-0 bg-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      <div className="w-16 h-16 bg-white dark:bg-zinc-800 rounded-2xl flex items-center justify-center text-zinc-400 group-hover:text-indigo-600 shadow-sm mb-4 transition-all group-hover:scale-110">
-                        <BrainCircuit size={32} />
-                      </div>
-                      <h3 className="text-base font-black text-zinc-900 dark:text-white uppercase tracking-tight mb-1">AI Forge</h3>
-                      <p className="text-[11px] text-zinc-500 text-center leading-relaxed">Architect-powered build.</p>
-                      <div className="mt-6 px-4 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full text-[9px] font-black uppercase tracking-widest text-zinc-400 group-hover:text-indigo-600 transition-all flex items-center gap-2">
-                         Ignite Forge <Wand2 size={12} />
-                      </div>
-                    </button>
-
-                    {/* Path C: Manual Builder */}
-                    <button 
-                      onClick={() => setView('manual')}
-                      className="group relative flex flex-col items-center justify-center p-6 bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] hover:border-indigo-500/50 transition-all overflow-hidden"
-                    >
-                      <div className="absolute inset-0 bg-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      <div className="w-16 h-16 bg-white dark:bg-zinc-800 rounded-2xl flex items-center justify-center text-zinc-400 group-hover:text-indigo-600 shadow-sm mb-4 transition-all group-hover:scale-110">
-                        <Hammer size={32} />
-                      </div>
-                      <h3 className="text-base font-black text-zinc-900 dark:text-white uppercase tracking-tight mb-1">Manual Build</h3>
-                      <p className="text-[11px] text-zinc-500 text-center leading-relaxed">Configure custom endpoints.</p>
-                      <div className="mt-6 px-4 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full text-[9px] font-black uppercase tracking-widest text-zinc-400 group-hover:text-indigo-600 transition-all">
-                         Launch Builder
-                      </div>
-                    </button>
-                  </motion.div>
-                ) : view === 'library' ? (
-                  <motion.div 
+                {view === 'library' ? (
+                  <motion.div
                     key="library"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
                     className="h-full flex flex-col"
                   >
-                    <div className="px-12 py-4 border-b border-zinc-100 dark:border-zinc-900 flex items-center justify-between">
-                       <div className="relative flex-1 max-w-sm">
-                          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-                          <input 
-                            type="text"
-                            placeholder="Search library..."
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl pl-9 pr-4 py-2 text-xs text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all"
-                          />
-                       </div>
+                    {/* Toolbar: Search, Category Pills & Custom Endpoint */}
+                    <div className="px-5 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/40 flex flex-wrap items-center justify-between gap-3 shrink-0">
+                      <div className="relative flex-1 min-w-[200px] max-w-xs">
+                        <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                        <input
+                          type="text"
+                          placeholder="Search integrations..."
+                          value={search}
+                          onChange={(e) => setSearch(e.target.value)}
+                          className="w-full h-8 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg pl-8 pr-3 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-indigo-500 transition-colors"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-1.5 overflow-x-auto">
+                        {categories.map(cat => (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => setSelectedCategory(cat)}
+                            className={cn(
+                              "px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer shrink-0",
+                              selectedCategory === cat
+                                ? "bg-indigo-600 text-white"
+                                : "bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                            )}
+                          >
+                            {cat}
+                          </button>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setView('manual')}
+                        className="h-8 px-3 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-indigo-400 text-xs font-medium text-zinc-700 dark:text-zinc-200 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                      >
+                        <Hammer size={13} className="text-indigo-600 dark:text-indigo-400" />
+                        <span>Custom Endpoint</span>
+                      </button>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-8 grid grid-cols-2 gap-4 items-start content-start custom-scrollbar">
-                       {filteredRegistry.map(conn => (
-                         <button
-                           key={conn.id}
-                           onClick={async () => {
-                             setIsProcessing(true);
-                             try {
-                               const activated = await onActivate(conn.id);
-                               if (activated) {
-                                 showStrategyOrTriggerType(activated);
-                               }
-                             } finally {
-                               setIsProcessing(false);
-                             }
-                           }}
-                           className="flex items-start gap-4 p-5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] hover:border-indigo-500/50 hover:shadow-xl transition-all text-left group"
-                         >
-                           <div className="w-12 h-12 bg-zinc-50 dark:bg-zinc-800 rounded-xl flex items-center justify-center text-zinc-400 group-hover:text-indigo-500 transition-all border border-zinc-100 dark:border-zinc-800 group-hover:scale-110">
-                             <DynamicIcon name={conn.icon} size={24} />
-                           </div>
-                           <div className="flex-1">
-                             <h4 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-tight">{conn.name}</h4>
-                             <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">{conn.category}</p>
-                             <div className="mt-4 flex items-center justify-between">
-                                <span className="text-[9px] text-zinc-400">Handshake Ready</span>
-                                <div className="text-indigo-500 group-hover:translate-x-1 transition-transform">
-                                   <ArrowRight size={14} />
-                                </div>
-                             </div>
-                           </div>
-                         </button>
-                       ))}
+
+                    {/* Grid */}
+                    <div className="flex-1 overflow-y-auto p-5 grid grid-cols-1 sm:grid-cols-2 gap-3 items-start content-start custom-scrollbar">
+                      {filteredRegistry.map(conn => {
+                        const isActive = Boolean(
+                          (activeConnectors || []).find(
+                            ac => ac.connectorId === conn.id && ac.isActive !== false
+                          )
+                        );
+                        return (
+                          <button
+                            key={conn.id}
+                            type="button"
+                            onClick={() => handleSelectConnector(conn)}
+                            className="flex items-start gap-3 p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:border-indigo-400 dark:hover:border-indigo-500/60 transition-colors text-left group cursor-pointer"
+                          >
+                            <div className="w-10 h-10 bg-zinc-100 dark:bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-500 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 border border-zinc-200/70 dark:border-zinc-700/70 shrink-0 transition-colors">
+                              <DynamicIcon name={conn.icon} size={18} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+                                  {conn.name}
+                                </h4>
+                                {isActive ? (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60 text-[10px] font-medium shrink-0">
+                                    <CheckCircle2 size={10} />
+                                    Active
+                                  </span>
+                                ) : (
+                                  <span className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 text-[10px] font-medium shrink-0">
+                                    {conn.category}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2 leading-relaxed">
+                                {conn.description || `${conn.category} integration`}
+                              </p>
+                              <div className="mt-2.5 flex items-center justify-between text-[11px] font-medium text-indigo-600 dark:text-indigo-400">
+                                <span>{isActive ? 'Select integration' : 'Activate & select'}</span>
+                                <ArrowRight size={13} className="group-hover:translate-x-0.5 transition-transform" />
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                      {filteredRegistry.length === 0 && (
+                        <div className="col-span-2 py-12 text-center">
+                          <p className="text-xs text-zinc-500">No integrations match your search.</p>
+                        </div>
+                      )}
                     </div>
-                  </motion.div>
-                ) : view === 'ai' ? (
-                  <motion.div 
-                    key="ai"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    className="h-full"
-                  >
-                    <AIForgeView onGenerate={handleForge} isGenerating={isProcessing} />
                   </motion.div>
                 ) : view === 'manual' ? (
-                  <motion.div 
+                  <motion.div
                     key="manual"
-                    initial={{ opacity: 0, x: 20 }}
+                    initial={{ opacity: 0, x: 16 }}
                     animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
+                    exit={{ opacity: 0, x: -16 }}
+                    transition={{ duration: 0.15 }}
                     className="h-full"
                   >
                     <ManualBuilderView onSave={handleManualSave} isSaving={isProcessing} />
                   </motion.div>
                 ) : view === 'trigger_type' ? (
-                  <motion.div 
+                  <motion.div
                     key="trigger_type"
-                    initial={{ opacity: 0, scale: 0.9 }}
+                    initial={{ opacity: 0, scale: 0.98 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    className="h-full flex items-center justify-center p-12 gap-8"
+                    exit={{ opacity: 0, scale: 0.98 }}
+                    transition={{ duration: 0.15 }}
+                    className="h-full flex items-center justify-center p-8 gap-5"
                   >
-                    <button 
+                    <button
+                      type="button"
                       onClick={() => {
                         setPendingTriggerType('lookup');
                         setView('strategy');
                       }}
-                      className="group flex-1 max-w-sm flex flex-col items-center p-8 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] hover:border-indigo-500/50 transition-all"
+                      className="group flex-1 max-w-sm flex flex-col items-center p-6 bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:border-indigo-400 dark:hover:border-indigo-500/60 transition-colors cursor-pointer text-center"
                     >
-                      <div className="w-16 h-16 bg-white dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-800 rounded-2xl flex items-center justify-center text-zinc-400 group-hover:text-indigo-600 mb-6 group-hover:scale-110 transition-transform">
-                        <Search size={32} />
+                      <div className="w-11 h-11 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-center text-zinc-500 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 mb-4 transition-colors">
+                        <Search size={20} />
                       </div>
-                      <h3 className="text-lg font-black text-zinc-900 dark:text-white uppercase tracking-tight mb-2">Lookup Field Trigger</h3>
-                      <p className="text-xs text-zinc-500 text-center leading-relaxed">
-                        Create a lookup field in the module. Triggers when a user searches or selects a value to populate other fields.
+                      <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-1.5">
+                        Lookup Field Trigger
+                      </h3>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                        Create a lookup field in the module that searches this API and populates mapped fields on selection.
                       </p>
-                      <div className="mt-8 px-6 py-2 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full text-[9px] font-black uppercase tracking-widest text-zinc-400 group-hover:text-indigo-600 transition-all">
-                        Interactive search
-                      </div>
+                      <span className="mt-5 px-3 py-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md text-[11px] font-medium text-zinc-600 dark:text-zinc-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                        Interactive Search
+                      </span>
                     </button>
 
-                    <button 
+                    <button
+                      type="button"
                       onClick={() => {
                         setPendingTriggerType('rule');
                         setView('strategy');
                       }}
-                      className="group flex-1 max-w-sm flex flex-col items-center p-8 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] hover:border-indigo-500/50 transition-all"
+                      className="group flex-1 max-w-sm flex flex-col items-center p-6 bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:border-indigo-400 dark:hover:border-indigo-500/60 transition-colors cursor-pointer text-center"
                     >
-                      <div className="w-16 h-16 bg-white dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-800 rounded-2xl flex items-center justify-center text-zinc-400 group-hover:text-indigo-600 mb-6 group-hover:scale-110 transition-transform">
-                        <Zap size={32} />
+                      <div className="w-11 h-11 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-center text-zinc-500 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 mb-4 transition-colors">
+                        <Zap size={20} />
                       </div>
-                      <h3 className="text-lg font-black text-zinc-900 dark:text-white uppercase tracking-tight mb-2">Conditional Trigger Rule</h3>
-                      <p className="text-xs text-zinc-500 text-center leading-relaxed">
-                        Trigger automatically on page load or on field changes, fetching data via API without an interactive lookup field.
+                      <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-1.5">
+                        Conditional Trigger Rule
+                      </h3>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                        Run automatically in the background when record fields change or match a condition.
                       </p>
-                      <div className="mt-8 px-6 py-2 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full text-[9px] font-black uppercase tracking-widest text-zinc-400 group-hover:text-indigo-600 transition-all">
-                        Background execution
-                      </div>
+                      <span className="mt-5 px-3 py-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md text-[11px] font-medium text-zinc-600 dark:text-zinc-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                        Background Execution
+                      </span>
                     </button>
                   </motion.div>
                 ) : (
-                  <motion.div 
+                  <motion.div
                     key="strategy"
-                    initial={{ opacity: 0, scale: 0.9 }}
+                    initial={{ opacity: 0, scale: 0.98 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    className="h-full flex items-center justify-center p-12 gap-8"
+                    exit={{ opacity: 0, scale: 0.98 }}
+                    transition={{ duration: 0.15 }}
+                    className="h-full flex items-center justify-center p-8 gap-5"
                   >
-                    <button 
+                    <button
+                      type="button"
                       onClick={() => {
                         onSelect(pendingConnector, 'auto', pendingTriggerType);
                         onClose();
                       }}
-                      className="group flex-1 max-w-sm flex flex-col items-center p-8 bg-indigo-600 rounded-[2.5rem] hover:bg-indigo-500 transition-all shadow-2xl shadow-indigo-500/20"
+                      className="group flex-1 max-w-sm flex flex-col items-center p-6 bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800/60 rounded-xl hover:border-indigo-500 transition-colors cursor-pointer text-center"
                     >
-                      <div className="w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center text-white mb-6 group-hover:scale-110 transition-transform">
-                        <Wand2 size={32} />
+                      <div className="w-11 h-11 bg-indigo-600 rounded-xl flex items-center justify-center text-white mb-4">
+                        <Wand2 size={20} />
                       </div>
-                      <h3 className="text-lg font-black text-white uppercase tracking-tight mb-2">Auto-Provision</h3>
-                      <p className="text-xs text-indigo-100 text-center leading-relaxed">
-                        The Architect will automatically create and map all module fields for this connector.
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Auto-Provision</h3>
+                        <span className="px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-[10px] font-semibold">
+                          Recommended
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                        Automatically create and map module fields matching this connector&apos;s output schema.
                       </p>
-                      <div className="mt-8 px-6 py-2 bg-white/10 rounded-full text-[9px] font-black uppercase tracking-widest text-white">
-                        Recommended for Speed
-                      </div>
+                      <span className="mt-5 px-3 py-1 bg-indigo-600 text-white rounded-md text-[11px] font-medium">
+                        Auto-Create &amp; Map
+                      </span>
                     </button>
 
-                    <button 
+                    <button
+                      type="button"
                       onClick={() => {
                         onSelect(pendingConnector, 'manual', pendingTriggerType);
                         onClose();
                       }}
-                      className="group flex-1 max-w-sm flex flex-col items-center p-8 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] hover:border-indigo-500/50 transition-all"
+                      className="group flex-1 max-w-sm flex flex-col items-center p-6 bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 rounded-xl hover:border-indigo-400 dark:hover:border-indigo-500/60 transition-colors cursor-pointer text-center"
                     >
-                      <div className="w-16 h-16 bg-white dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-800 rounded-2xl flex items-center justify-center text-zinc-400 group-hover:text-indigo-600 mb-6 group-hover:scale-110 transition-transform">
-                        <ArrowRight size={32} />
+                      <div className="w-11 h-11 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-center text-zinc-500 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 mb-4 transition-colors">
+                        <ArrowRight size={20} />
                       </div>
-                      <h3 className="text-lg font-black text-zinc-900 dark:text-white uppercase tracking-tight mb-2">Manual Map</h3>
-                      <p className="text-xs text-zinc-500 text-center leading-relaxed">
-                        Define your own field mappings. Select existing fields or create new ones one-by-one.
+                      <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-1.5">
+                        Manual Map
+                      </h3>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                        Map API outputs to existing module fields or create individual fields manually.
                       </p>
-                      <div className="mt-8 px-6 py-2 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full text-[9px] font-black uppercase tracking-widest text-zinc-400 group-hover:text-indigo-600 transition-all">
+                      <span className="mt-5 px-3 py-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md text-[11px] font-medium text-zinc-600 dark:text-zinc-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                         Full Control
-                      </div>
+                      </span>
                     </button>
                   </motion.div>
                 )}
@@ -381,21 +449,16 @@ export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
               {/* Processing Overlay */}
               <AnimatePresence>
                 {isProcessing && (
-                  <motion.div 
+                  <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="absolute inset-0 z-[100] bg-white/80 dark:bg-zinc-950/80 backdrop-blur-sm flex flex-col items-center justify-center gap-6"
+                    className="absolute inset-0 z-[100] bg-white/85 dark:bg-zinc-950/85 backdrop-blur-xs flex flex-col items-center justify-center gap-3"
                   >
-                    <div className="relative">
-                      <div className="w-16 h-16 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin" />
-                      <div className="absolute inset-0 flex items-center justify-center">
-                         <Zap size={24} className="text-indigo-500 animate-pulse" />
-                      </div>
-                    </div>
+                    <Loader2 size={24} className="text-indigo-600 animate-spin" />
                     <div className="text-center">
-                       <h3 className="text-sm font-black text-zinc-900 dark:text-white uppercase tracking-widest">Activating Connector</h3>
-                       <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-[0.2em] mt-1 animate-pulse">Establishing Nexus Handshake...</p>
+                      <h3 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Activating Integration</h3>
+                      <p className="text-[11px] text-zinc-500 mt-0.5">Configuring tenant connector...</p>
                     </div>
                   </motion.div>
                 )}
@@ -403,18 +466,18 @@ export const NexusSelectionModal: React.FC<NexusSelectionModalProps> = ({
             </div>
 
             {/* Footer */}
-            <div className="p-6 border-t border-zinc-100 dark:border-zinc-900 flex items-center justify-between bg-zinc-50/50 dark:bg-transparent">
-               <div className="flex items-center gap-6">
-                  <div className="flex items-center gap-2">
-                     <Shield size={14} className="text-emerald-500" />
-                     <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">End-to-End Encryption</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                     <Rocket size={14} className="text-indigo-500" />
-                     <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Zero-Latency Proxy</span>
-                  </div>
-               </div>
-               <p className="text-[9px] text-zinc-400 italic">Nexus v2.5.0 Active</p>
+            <div className="px-5 py-2.5 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/70 dark:bg-zinc-950/40 shrink-0">
+              <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+                <Shield size={13} className="text-emerald-500" />
+                <span>Tenant-isolated encrypted secrets proxy</span>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-xs font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 cursor-pointer"
+              >
+                Cancel
+              </button>
             </div>
           </motion.div>
         </div>

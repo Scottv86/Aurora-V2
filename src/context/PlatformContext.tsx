@@ -1288,6 +1288,7 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
 
   // Fetch essential modules and workspace metadata in parallel once tenant and token are available
   useEffect(() => {
+    if (authLoading) return;
     const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token || (typeof localStorage !== 'undefined' ? localStorage.getItem('aurora_token') : null);
     if (tenant?.id && token) {
       refreshModules();
@@ -1295,7 +1296,7 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
       refreshTeams();
       refreshBilling();
     }
-  }, [tenant?.id, supabaseUser, session?.access_token, refreshModules, refreshBilling, refreshMembers, refreshTeams]);
+  }, [tenant?.id, supabaseUser, session?.access_token, authLoading, refreshModules, refreshBilling, refreshMembers, refreshTeams]);
 
   const isDevUser = user?.licenceType === 'Developer' || user?.isSuperAdmin || user?.role === 'TENANT_ADMIN' || user?.role === 'admin' || user?.role === 'Admin' || false;
   const unreadCount = useMemo(() => (Array.isArray(notifications) ? notifications : []).filter(n => {
@@ -1387,12 +1388,13 @@ export const PlatformProvider = ({ children }: { children: ReactNode }) => {
   }, [tenant?.id, session?.access_token]);
 
   useEffect(() => {
+    if (authLoading) return;
     if (tenant?.id && (session?.access_token || localStorage.getItem('aurora_token') || (import.meta as any).env.VITE_DEV_TOKEN)) {
       refreshInboxUnreadCount();
       const interval = setInterval(refreshInboxUnreadCount, 60000);
       return () => clearInterval(interval);
     }
-  }, [tenant?.id, session?.access_token, refreshInboxUnreadCount]);
+  }, [tenant?.id, session?.access_token, authLoading, refreshInboxUnreadCount]);
 
   const contextValue = useMemo<PlatformContextType>(() => ({
     user, 

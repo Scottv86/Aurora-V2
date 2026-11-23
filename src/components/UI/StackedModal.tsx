@@ -75,13 +75,13 @@ const RecordModal = ({
     if (moduleData) {
       const allFields = flattenFields(moduleData.layout || []);
       const rules = moduleData.config?.validationRules || moduleData.validationRules || [];
-      const validationErrors = validateRecordRules(record, rules, allFields);
+      const validationErrors = validateRecordRules(record, rules, allFields, {}, undefined, {
+        isNewRecord: !record?.id,
+        userRole: (user as any)?.role
+      });
       if (validationErrors.length > 0) {
-        const hardErrors = validationErrors.filter(e => e.severity === 'error');
-        const bypassableWarnings = validationErrors.filter(e => {
-          const rule = rules.find((r: any) => r.id === e.ruleId);
-          return e.severity === 'warning' && rule?.bypassMode === 'confirm';
-        });
+        const hardErrors = validationErrors.filter(e => e.enforcement === 'block');
+        const bypassableWarnings = validationErrors.filter(e => e.enforcement === 'confirm');
 
         if (hardErrors.length > 0) {
           const toastErrors = hardErrors.filter(e => {

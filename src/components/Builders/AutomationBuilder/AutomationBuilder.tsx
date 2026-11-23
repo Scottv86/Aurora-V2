@@ -32,24 +32,38 @@ export const AutomationBuilder: React.FC<AutomationBuilderProps> = ({
 
   const effectiveModuleId = moduleId || (builderContext.hostType === 'module' ? builderContext.hostId : undefined);
 
-  return (
-    <div className="h-full w-full bg-zinc-950 flex flex-col overflow-hidden">
+  if (builderContext.mode === 'in_context') {
+    return (
+      <div className="h-full w-full overflow-hidden">
+        <AutomationsTab
+          moduleId={effectiveModuleId}
+          fields={fields}
+          automations={automations}
+          setAutomations={setAutomations}
+          deletedAutomationIds={deletedAutomationIds}
+          setDeletedAutomationIds={setDeletedAutomationIds}
+        />
+      </div>
+    );
+  }
 
-      <div className="px-6 py-3 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-amber-950/80 text-amber-400 border border-amber-800/50 rounded-lg">
-            <Zap size={18} />
+  return (
+    <div className="h-full w-full bg-white dark:bg-zinc-950 flex flex-col overflow-hidden">
+      <div className="h-12 px-5 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+            <Zap size={15} />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-white">Automation Rules & Trigger Studio</h3>
-            <p className="text-xs text-zinc-400">
-              {builderContext.mode === 'global' ? 'Tenant Global Automations' : `In-Context Automation for [${builderContext.hostType?.toUpperCase()}]`}
+            <h3 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Automation Rules</h3>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+              Tenant Global Automations
             </p>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-hidden">
         <AutomationsTab
           moduleId={effectiveModuleId}
           fields={fields}
