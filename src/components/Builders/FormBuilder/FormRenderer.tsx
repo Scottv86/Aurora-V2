@@ -60,6 +60,16 @@ export interface FormRendererContext {
   source?: string;
 }
 
+export interface FormRendererDesignMode {
+  enabled: boolean;
+  activeStepId?: string;
+  renderHeader?: () => React.ReactNode;
+  renderSubmitBar?: () => React.ReactNode;
+  renderEmptyCanvas?: () => React.ReactNode;
+  wrapGrid?: (gridNode: React.ReactNode) => React.ReactNode;
+  wrapField?: (fObj: FormFieldPlacement, renderedBody: React.ReactNode) => React.ReactNode;
+}
+
 export interface FormRendererProps {
   formId?: string;
   form?: any;
@@ -78,6 +88,7 @@ export interface FormRendererProps {
   isPreviewMode?: boolean;
   disableAutoBackendSubmit?: boolean;
   viewport?: 'desktop' | 'tablet' | 'mobile';
+  designMode?: FormRendererDesignMode;
 }
 
 export const FormRenderer: React.FC<FormRendererProps> = ({
@@ -98,7 +109,9 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
   isPreviewMode = false,
   disableAutoBackendSubmit = false,
   viewport = 'desktop',
+  designMode,
 }) => {
+  const isDesignMode = Boolean(designMode?.enabled);
   const [remoteForm, setRemoteForm] = useState<any | null>(null);
   const [remoteModule, setRemoteModule] = useState<any | null>(null);
   const [loadingForm, setLoadingForm] = useState<boolean>(Boolean(formId && !propForm));
@@ -280,14 +293,16 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
   };
 
   const visibleSteps = useMemo(() => {
-    if (!canonicalForm.isMultistep) return canonicalForm.steps;
+    if (!canonicalForm.isMultistep || isDesignMode) return canonicalForm.steps;
     return canonicalForm.steps.filter((s) => isFieldVisible(s, formValues));
-  }, [canonicalForm.isMultistep, canonicalForm.steps, formValues]);
+  }, [canonicalForm.isMultistep, canonicalForm.steps, formValues, isDesignMode]);
+
+  const effectiveActiveStepId = isDesignMode && designMode?.activeStepId ? designMode.activeStepId : activeStepId;
 
   const currentStepIndex = useMemo(() => {
-    const idx = visibleSteps.findIndex((s) => s.id === activeStepId);
+    const idx = visibleSteps.findIndex((s) => s.id === effectiveActiveStepId);
     return idx >= 0 ? idx : 0;
-  }, [visibleSteps, activeStepId]);
+  }, [visibleSteps, effectiveActiveStepId]);
 
   const currentStep = visibleSteps[currentStepIndex] || canonicalForm.steps[0];
 
@@ -756,16 +771,364 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
       ? Math.round(((currentStepIndex + 1) / visibleSteps.length) * 100)
       : 100;
 
+  const renderFieldsGrid = () => {
+    if (isDesignMode && activePlacements.length === 0 && designMode?.renderEmptyCanvas) {
+      return (
+        <div className="grid grid-cols-12 gap-4">
+          {designMode.renderEmptyCanvas()}
+        </div>
+      );
+    }
+
+    const gridNode = (
+      <div className={cn('grid grid-cols-12', isDesignMode ? 'gap-4' : 'gap-x-5 gap-y-4')}>
+        {activePlacements.map((fObj) => {
+          const isVisual =
+            String(fObj.id || '').startsWith('visual-') ||
+            ['heading', 'divider', 'spacer', 'html-text', 'alert'].includes(fObj.type || '');
+
+          if (!isDesignMode && fObj.hidden && !isPreviewMode) {
+            return null;
+          }
+
+          if (!isDesignMode && !isFieldVisible(fObj, formValues)) {
+            return null;
+          }
+
+          const baseField = isVisual
+            ? null
+            : getUnifiedFieldDefinition(
+                fObj.id,
+                resolvedLayout,
+                resolvedWorkflow,
+                canonicalForm.customFields
+              );
+
+          const fieldForInput = baseField
+            ? {
+                ...baseField,
+                label: fObj.labelOverride || baseField.label,
+                placeholder: fObj.placeholderOverride || baseField.placeholder,
+                helperText: fObj.helperTextOverride || baseField.helperText,
+                required: Boolean(fObj.required || baseField.required),
+                calculationLogic: fObj.calculationLogic || baseField.calculationLogic,
+              }
+            : {
+                id: fObj.id,
+                label: fObj.labelOverride || fObj.id,
+                type: (fObj.type || 'text') as any,
+                placeholder: fObj.placeholderOverride,
+                helperText: fObj.helperTextOverride,
+                required: Boolean(fObj.required),
+                calculationLogic: fObj.calculationLogic,
+              };
+
+          const colClass =
+            viewport === 'mobile'
+              ? 'col-span-12'
+              : viewport === 'tablet'
+              ? fObj.width === 'one-quarter' ||
+                fObj.width === '3' ||
+                fObj.width === 3 ||
+                fObj.width === 'one-third' ||
+                fObj.width === '4' ||
+                fObj.width === 4
+                ? 'col-span-12 sm:col-span-6'
+                : widthToGridClass(fObj.width)
+              : widthToGridClass(fObj.width);
+
+          if (isVisual) {
+            const visualBody = (
+              <>
+                {fObj.type === 'heading' && (
+                  <h4 className="font-bold text-zinc-900 dark:text-white text-sm pt-2 pb-1 border-b border-zinc-100 dark:border-zinc-800/80 mb-1">
+                    {fObj.labelOverride || 'Section Heading'}
+                  </h4>
+                )}
+                {fObj.type === 'divider' && (
+                  <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800 my-2" />
+                )}
+                {fObj.type === 'spacer' && (
+                  <div
+                    className={cn(
+                      isDesignMode &&
+                        'flex items-center justify-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg text-[9px] font-mono text-zinc-400 uppercase'
+                    )}
+                    style={{
+                      height:
+                        fObj.height === 'sm'
+                          ? 16
+                          : fObj.height === 'lg'
+                          ? 40
+                          : fObj.height === 'xl'
+                          ? 64
+                          : 24,
+                    }}
+                  >
+                    {isDesignMode ? `Vertical Spacer (${fObj.height || 'md'})` : null}
+                  </div>
+                )}
+                {(fObj.type === 'html-text' || fObj.type === 'html') && (
+                  <div className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed bg-zinc-50/70 dark:bg-zinc-800/40 p-3.5 rounded-xl border border-zinc-200/60 dark:border-zinc-800">
+                    {fObj.labelOverride || 'Instructions or information text...'}
+                  </div>
+                )}
+                {fObj.type === 'alert' && (
+                  <div
+                    className={cn(
+                      'p-3.5 rounded-xl border flex items-center gap-2.5 text-xs font-semibold',
+                      fObj.alertStyle === 'error'
+                        ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'
+                        : fObj.alertStyle === 'warning'
+                        ? 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400'
+                        : fObj.alertStyle === 'success'
+                        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                        : 'bg-indigo-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400'
+                    )}
+                  >
+                    {fObj.alertStyle === 'error' ? (
+                      <XCircle size={16} />
+                    ) : fObj.alertStyle === 'warning' ? (
+                      <AlertTriangle size={16} />
+                    ) : fObj.alertStyle === 'success' ? (
+                      <CheckCircle2 size={16} />
+                    ) : (
+                      <Info size={16} />
+                    )}
+                    <span>{fObj.labelOverride || 'Important notice'}</span>
+                  </div>
+                )}
+              </>
+            );
+            if (isDesignMode && designMode?.wrapField) {
+              return <React.Fragment key={fObj.id}>{designMode.wrapField(fObj, visualBody)}</React.Fragment>;
+            }
+            return (
+              <div key={fObj.id} className={cn('flex flex-col', colClass)}>
+                {visualBody}
+              </div>
+            );
+          }
+
+          const isRequired = Boolean(fObj.required || fieldForInput.required);
+          const isFieldReadOnly = Boolean(readOnly || fObj.readOnly);
+          const err = fieldErrors[fObj.id];
+          const effectiveType = fieldForInput.type || fObj.type || 'text';
+
+          // 1. Repeatable Sub-Table (1:N)
+          if (effectiveType === 'repeatableGroup') {
+            if (isDesignMode && designMode?.wrapField) {
+              return <React.Fragment key={fObj.id}>{designMode.wrapField(fObj, null)}</React.Fragment>;
+            }
+            const activeSubFields = resolveContainerChildFields(
+              fObj,
+              fieldForInput,
+              resolvedLayout,
+              resolvedWorkflow,
+              canonicalForm.customFields
+            );
+            const currentRows: Record<string, any>[] = Array.isArray(formValues[fObj.id])
+              ? formValues[fObj.id]
+              : [];
+
+            const repeaterFieldConfig: ModuleField = {
+              ...(fieldForInput as ModuleField),
+              type: 'repeatableGroup',
+              collapsible: fObj.collapsible ?? true,
+              defaultCollapsed: fObj.defaultCollapsed ?? false,
+              fields: activeSubFields,
+            };
+
+            return (
+              <div key={fObj.id} className={cn('flex flex-col space-y-1.5', colClass)}>
+                <CollapsibleFieldGroup field={repeaterFieldConfig} count={currentRows.length}>
+                  <RepeatableGroupBlock
+                    field={repeaterFieldConfig}
+                    value={currentRows}
+                    onChange={(nextRows) => {
+                      if (fObj.maxRows && fObj.maxRows > 0 && nextRows.length > fObj.maxRows) {
+                        toast.warning(
+                          `Maximum of ${fObj.maxRows} rows allowed for ${repeaterFieldConfig.label}`
+                        );
+                        return;
+                      }
+                      handleFieldChange(fObj.id, nextRows);
+                    }}
+                    readOnly={isFieldReadOnly}
+                    hideHeader
+                  />
+                </CollapsibleFieldGroup>
+                {err ? (
+                  <p className="text-[10px] font-semibold text-rose-500">{err}</p>
+                ) : fieldForInput.helperText ? (
+                  <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                    {fieldForInput.helperText}
+                  </p>
+                ) : null}
+              </div>
+            );
+          }
+
+          // 2. Collapsible Field Group Section
+          if (['fieldGroup', 'group', 'card', 'accordion'].includes(effectiveType)) {
+            if (isDesignMode && designMode?.wrapField) {
+              return <React.Fragment key={fObj.id}>{designMode.wrapField(fObj, null)}</React.Fragment>;
+            }
+            const activeChildFields = resolveContainerChildFields(
+              fObj,
+              fieldForInput,
+              resolvedLayout,
+              resolvedWorkflow,
+              canonicalForm.customFields
+            );
+
+            const groupFieldConfig: ModuleField = {
+              ...(fieldForInput as ModuleField),
+              type: 'fieldGroup',
+              collapsible: fObj.collapsible ?? true,
+              defaultCollapsed: fObj.defaultCollapsed ?? false,
+              fields: activeChildFields,
+            };
+
+            return (
+              <div key={fObj.id} className={cn('flex flex-col space-y-1.5', colClass)}>
+                <CollapsibleFieldGroup field={groupFieldConfig}>
+                  <div className="grid grid-cols-12 gap-4">
+                    {activeChildFields.map((childField: any) => {
+                      if (!isFieldVisible(childField, formValues)) return null;
+                      const childErr = fieldErrors[childField.id];
+                      const childColClass =
+                        childField.colSpan === 6
+                          ? 'col-span-12 sm:col-span-6'
+                          : childField.colSpan === 4
+                          ? 'col-span-12 sm:col-span-4'
+                          : childField.colSpan === 3
+                          ? 'col-span-12 sm:col-span-3'
+                          : 'col-span-12';
+                      return (
+                        <div
+                          key={childField.id}
+                          className={cn('flex flex-col space-y-1.5', childColClass)}
+                        >
+                          <label className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                            <span>{childField.label}</span>
+                            {childField.required && (
+                              <span className="text-rose-500 font-bold">*</span>
+                            )}
+                          </label>
+                          <FieldInput
+                            field={childField}
+                            value={formValues[childField.id]}
+                            onChange={(val) => handleFieldChange(childField.id, val)}
+                            readonly={Boolean(isFieldReadOnly || childField.readonly)}
+                            recordData={formValues}
+                            allFields={allResolvedFields}
+                            error={Boolean(childErr)}
+                          />
+                          {childErr && (
+                            <p className="text-[10px] font-semibold text-rose-500">{childErr}</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CollapsibleFieldGroup>
+              </div>
+            );
+          }
+
+          if (isDesignMode && designMode?.wrapField) {
+            const designLeafInput = (
+              <div className="pointer-events-none select-none space-y-1">
+                <FieldInput
+                  field={fieldForInput}
+                  value={formValues[fObj.id]}
+                  onChange={() => {}}
+                  readonly={false}
+                  recordData={formValues}
+                  allFields={allResolvedFields}
+                  error={false}
+                />
+                {fieldForInput.helperText && (
+                  <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                    {fieldForInput.helperText}
+                  </p>
+                )}
+              </div>
+            );
+            return <React.Fragment key={fObj.id}>{designMode.wrapField(fObj, designLeafInput)}</React.Fragment>;
+          }
+
+          return (
+            <div
+              key={fObj.id}
+              className={cn(
+                'flex flex-col space-y-1.5',
+                colClass,
+                fObj.hidden && isPreviewMode && 'opacity-50 border border-dashed border-amber-500/40 p-2 rounded-xl'
+              )}
+            >
+              <label className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider flex items-center justify-between gap-1.5">
+                <span className="flex items-center gap-1.5">
+                  <span>{fieldForInput.label}</span>
+                  {isRequired && <span className="text-rose-500 font-bold">*</span>}
+                  {fObj.hidden && isPreviewMode && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 font-bold">
+                      Hidden at Runtime
+                    </span>
+                  )}
+                  {fObj.readOnly && (
+                    <Lock size={10} className="text-zinc-400" title="Read-only field" />
+                  )}
+                </span>
+                {fieldForInput.tooltip && (
+                  <span title={fieldForInput.tooltip} className="text-zinc-400 hover:text-indigo-500 cursor-help">
+                    <HelpCircle size={12} />
+                  </span>
+                )}
+              </label>
+
+              <FieldInput
+                field={fieldForInput}
+                value={formValues[fObj.id]}
+                onChange={(val) => handleFieldChange(fObj.id, val)}
+                readonly={isFieldReadOnly}
+                recordData={formValues}
+                allFields={allResolvedFields}
+                error={Boolean(err)}
+              />
+
+              {err ? (
+                <p className="text-[10px] font-semibold text-rose-500">{err}</p>
+              ) : fieldForInput.helperText ? (
+                <p className="text-[10px] text-zinc-400 dark:text-zinc-500">{fieldForInput.helperText}</p>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    );
+
+    return isDesignMode && designMode?.wrapGrid ? designMode.wrapGrid(gridNode) : gridNode;
+  };
+
   return (
     <form
-      onSubmit={handleSubmit}
+      onSubmit={(e) => {
+        if (isDesignMode) {
+          e.preventDefault();
+          return;
+        }
+        handleSubmit(e);
+      }}
       className={cn(
         'space-y-6 bg-white dark:bg-zinc-900 p-6 sm:p-8 rounded-3xl border border-zinc-200 dark:border-zinc-800 shadow-sm',
         className
       )}
     >
       {/* Context Banner when running in Portal Site mode with Logged-In User */}
-      {(canonicalForm.usage === 'portal_site' || canonicalForm.settings?.contextBindings?.captureLoggedInUser) &&
+      {!isDesignMode &&
+        (canonicalForm.usage === 'portal_site' || canonicalForm.settings?.contextBindings?.captureLoggedInUser) &&
         context?.user && (
           <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-700 dark:text-purple-300 text-xs">
             <div className="flex items-center gap-2">
@@ -784,23 +1147,27 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
         )}
 
       {/* Header */}
-      {!hideHeader && (displayTitle || displaySubtitle) && (
-        <div className="border-b border-zinc-100 dark:border-zinc-800/80 pb-5">
-          {displayTitle && (
-            <h2 className="text-xl font-bold text-zinc-900 dark:text-white tracking-tight">
-              {displayTitle}
-            </h2>
-          )}
-          {displaySubtitle && (
-            <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
-              {displaySubtitle}
-            </p>
-          )}
-        </div>
+      {isDesignMode && designMode?.renderHeader ? (
+        designMode.renderHeader()
+      ) : (
+        !hideHeader && (displayTitle || displaySubtitle) && (
+          <div className="border-b border-zinc-100 dark:border-zinc-800/80 pb-5">
+            {displayTitle && (
+              <h2 className="text-xl font-bold text-zinc-900 dark:text-white tracking-tight">
+                {displayTitle}
+              </h2>
+            )}
+            {displaySubtitle && (
+              <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
+                {displaySubtitle}
+              </p>
+            )}
+          </div>
+        )
       )}
 
       {/* Multi-step Wizard Progress & Step Bar */}
-      {canonicalForm.isMultistep && visibleSteps.length > 0 && (
+      {!isDesignMode && canonicalForm.isMultistep && visibleSteps.length > 0 && (
         <div className="space-y-3 pb-4 border-b border-zinc-100 dark:border-zinc-800/80">
           {canonicalForm.settings?.theme?.showProgressBar !== false && (
             <div className="space-y-1.5">
@@ -1029,294 +1396,11 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
         </div>
       ) : (
         /* 12-Column Responsive Grid */
-        <div className="grid grid-cols-12 gap-x-5 gap-y-4">
-        {activePlacements.map((fObj) => {
-          const isVisual =
-            String(fObj.id || '').startsWith('visual-') ||
-            ['heading', 'divider', 'spacer', 'html-text', 'alert'].includes(fObj.type || '');
-
-          if (fObj.hidden && !isPreviewMode) {
-            return null;
-          }
-
-          if (!isFieldVisible(fObj, formValues)) {
-            return null;
-          }
-
-          const baseField = isVisual
-            ? null
-            : getUnifiedFieldDefinition(
-                fObj.id,
-                resolvedLayout,
-                resolvedWorkflow,
-                canonicalForm.customFields
-              );
-
-          const fieldForInput = baseField
-            ? {
-                ...baseField,
-                label: fObj.labelOverride || baseField.label,
-                placeholder: fObj.placeholderOverride || baseField.placeholder,
-                helperText: fObj.helperTextOverride || baseField.helperText,
-                required: Boolean(fObj.required || baseField.required),
-                calculationLogic: fObj.calculationLogic || baseField.calculationLogic,
-              }
-            : {
-                id: fObj.id,
-                label: fObj.labelOverride || fObj.id,
-                type: (fObj.type || 'text') as any,
-                placeholder: fObj.placeholderOverride,
-                helperText: fObj.helperTextOverride,
-                required: Boolean(fObj.required),
-                calculationLogic: fObj.calculationLogic,
-              };
-
-          const colClass =
-            viewport === 'mobile'
-              ? 'col-span-12'
-              : viewport === 'tablet'
-              ? fObj.width === 'one-quarter' ||
-                fObj.width === '3' ||
-                fObj.width === 3 ||
-                fObj.width === 'one-third' ||
-                fObj.width === '4' ||
-                fObj.width === 4
-                ? 'col-span-12 sm:col-span-6'
-                : widthToGridClass(fObj.width)
-              : widthToGridClass(fObj.width);
-
-          if (isVisual) {
-            return (
-              <div key={fObj.id} className={cn('flex flex-col', colClass)}>
-                {fObj.type === 'heading' && (
-                  <h4 className="font-bold text-zinc-900 dark:text-white text-sm pt-2 pb-1 border-b border-zinc-100 dark:border-zinc-800/80 mb-1">
-                    {fObj.labelOverride || 'Section Heading'}
-                  </h4>
-                )}
-                {fObj.type === 'divider' && (
-                  <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800 my-2" />
-                )}
-                {fObj.type === 'spacer' && (
-                  <div
-                    style={{
-                      height:
-                        fObj.height === 'sm'
-                          ? 12
-                          : fObj.height === 'lg'
-                          ? 40
-                          : fObj.height === 'xl'
-                          ? 64
-                          : 24,
-                    }}
-                  />
-                )}
-                {(fObj.type === 'html-text' || fObj.type === 'html') && (
-                  <div className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed bg-zinc-50/70 dark:bg-zinc-800/40 p-3.5 rounded-xl border border-zinc-200/60 dark:border-zinc-800">
-                    {fObj.labelOverride || 'Instructions or information text...'}
-                  </div>
-                )}
-                {fObj.type === 'alert' && (
-                  <div
-                    className={cn(
-                      'p-3.5 rounded-xl border flex items-center gap-2.5 text-xs font-semibold',
-                      fObj.alertStyle === 'error'
-                        ? 'bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400'
-                        : fObj.alertStyle === 'warning'
-                        ? 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400'
-                        : fObj.alertStyle === 'success'
-                        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-                        : 'bg-indigo-500/10 border-indigo-500/20 text-indigo-600 dark:text-indigo-400'
-                    )}
-                  >
-                    {fObj.alertStyle === 'error' ? (
-                      <XCircle size={16} />
-                    ) : fObj.alertStyle === 'warning' ? (
-                      <AlertTriangle size={16} />
-                    ) : fObj.alertStyle === 'success' ? (
-                      <CheckCircle2 size={16} />
-                    ) : (
-                      <Info size={16} />
-                    )}
-                    <span>{fObj.labelOverride || 'Important notice'}</span>
-                  </div>
-                )}
-              </div>
-            );
-          }
-
-          const isRequired = Boolean(fObj.required || fieldForInput.required);
-          const isFieldReadOnly = Boolean(readOnly || fObj.readOnly);
-          const err = fieldErrors[fObj.id];
-          const effectiveType = fieldForInput.type || fObj.type || 'text';
-
-          // 1. Repeatable Sub-Table (1:N)
-          if (effectiveType === 'repeatableGroup') {
-            const activeSubFields = resolveContainerChildFields(
-              fObj,
-              fieldForInput,
-              resolvedLayout,
-              resolvedWorkflow,
-              canonicalForm.customFields
-            );
-            const currentRows: Record<string, any>[] = Array.isArray(formValues[fObj.id])
-              ? formValues[fObj.id]
-              : [];
-
-            const repeaterFieldConfig: ModuleField = {
-              ...(fieldForInput as ModuleField),
-              type: 'repeatableGroup',
-              collapsible: fObj.collapsible ?? true,
-              defaultCollapsed: fObj.defaultCollapsed ?? false,
-              fields: activeSubFields,
-            };
-
-            return (
-              <div key={fObj.id} className={cn('flex flex-col space-y-1.5', colClass)}>
-                <CollapsibleFieldGroup field={repeaterFieldConfig} count={currentRows.length}>
-                  <RepeatableGroupBlock
-                    field={repeaterFieldConfig}
-                    value={currentRows}
-                    onChange={(nextRows) => {
-                      if (fObj.maxRows && fObj.maxRows > 0 && nextRows.length > fObj.maxRows) {
-                        toast.warning(
-                          `Maximum of ${fObj.maxRows} rows allowed for ${repeaterFieldConfig.label}`
-                        );
-                        return;
-                      }
-                      handleFieldChange(fObj.id, nextRows);
-                    }}
-                    readOnly={isFieldReadOnly}
-                    hideHeader
-                  />
-                </CollapsibleFieldGroup>
-                {err ? (
-                  <p className="text-[10px] font-semibold text-rose-500">{err}</p>
-                ) : fieldForInput.helperText ? (
-                  <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
-                    {fieldForInput.helperText}
-                  </p>
-                ) : null}
-              </div>
-            );
-          }
-
-          // 2. Collapsible Field Group Section
-          if (['fieldGroup', 'group', 'card', 'accordion'].includes(effectiveType)) {
-            const activeChildFields = resolveContainerChildFields(
-              fObj,
-              fieldForInput,
-              resolvedLayout,
-              resolvedWorkflow,
-              canonicalForm.customFields
-            );
-
-            const groupFieldConfig: ModuleField = {
-              ...(fieldForInput as ModuleField),
-              type: 'fieldGroup',
-              collapsible: fObj.collapsible ?? true,
-              defaultCollapsed: fObj.defaultCollapsed ?? false,
-              fields: activeChildFields,
-            };
-
-            return (
-              <div key={fObj.id} className={cn('flex flex-col space-y-1.5', colClass)}>
-                <CollapsibleFieldGroup field={groupFieldConfig}>
-                  <div className="grid grid-cols-12 gap-4">
-                    {activeChildFields.map((childField: any) => {
-                      if (!isFieldVisible(childField, formValues)) return null;
-                      const childErr = fieldErrors[childField.id];
-                      const childColClass =
-                        childField.colSpan === 6
-                          ? 'col-span-12 sm:col-span-6'
-                          : childField.colSpan === 4
-                          ? 'col-span-12 sm:col-span-4'
-                          : childField.colSpan === 3
-                          ? 'col-span-12 sm:col-span-3'
-                          : 'col-span-12';
-                      return (
-                        <div
-                          key={childField.id}
-                          className={cn('flex flex-col space-y-1.5', childColClass)}
-                        >
-                          <label className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
-                            <span>{childField.label}</span>
-                            {childField.required && (
-                              <span className="text-rose-500 font-bold">*</span>
-                            )}
-                          </label>
-                          <FieldInput
-                            field={childField}
-                            value={formValues[childField.id]}
-                            onChange={(val) => handleFieldChange(childField.id, val)}
-                            readonly={Boolean(isFieldReadOnly || childField.readonly)}
-                            recordData={formValues}
-                            allFields={allResolvedFields}
-                            error={Boolean(childErr)}
-                          />
-                          {childErr && (
-                            <p className="text-[10px] font-semibold text-rose-500">{childErr}</p>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </CollapsibleFieldGroup>
-              </div>
-            );
-          }
-
-          return (
-            <div
-              key={fObj.id}
-              className={cn(
-                'flex flex-col space-y-1.5',
-                colClass,
-                fObj.hidden && isPreviewMode && 'opacity-50 border border-dashed border-amber-500/40 p-2 rounded-xl'
-              )}
-            >
-              <label className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider flex items-center justify-between gap-1.5">
-                <span className="flex items-center gap-1.5">
-                  <span>{fieldForInput.label}</span>
-                  {isRequired && <span className="text-rose-500 font-bold">*</span>}
-                  {fObj.hidden && isPreviewMode && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 font-bold">
-                      Hidden at Runtime
-                    </span>
-                  )}
-                  {fObj.readOnly && (
-                    <Lock size={10} className="text-zinc-400" title="Read-only field" />
-                  )}
-                </span>
-                {fieldForInput.tooltip && (
-                  <span title={fieldForInput.tooltip} className="text-zinc-400 hover:text-indigo-500 cursor-help">
-                    <HelpCircle size={12} />
-                  </span>
-                )}
-              </label>
-
-              <FieldInput
-                field={fieldForInput}
-                value={formValues[fObj.id]}
-                onChange={(val) => handleFieldChange(fObj.id, val)}
-                readonly={isFieldReadOnly}
-                recordData={formValues}
-                allFields={allResolvedFields}
-                error={Boolean(err)}
-              />
-
-              {err ? (
-                <p className="text-[10px] font-semibold text-rose-500">{err}</p>
-              ) : fieldForInput.helperText ? (
-                <p className="text-[10px] text-zinc-400 dark:text-zinc-500">{fieldForInput.helperText}</p>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
+        renderFieldsGrid()
       )}
 
       {/* Payable Form Checkout Summary (on final step or single-page form) */}
-      {isPayableForm &&
+      {!isDesignMode && isPayableForm &&
         (isReviewStep || !canonicalForm.isMultistep || currentStepIndex === visibleSteps.length - 1) && (
           <div className="p-4 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/25 border border-emerald-500/25 space-y-3">
             <div className="flex items-center justify-between">
@@ -1361,7 +1445,9 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
         )}
 
       {/* Footer Actions */}
-      {!readOnly && (
+      {isDesignMode && designMode?.renderSubmitBar ? (
+        designMode.renderSubmitBar()
+      ) : !readOnly && (
         <div className="pt-5 border-t border-zinc-100 dark:border-zinc-800/80 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             {isReviewStep ? (

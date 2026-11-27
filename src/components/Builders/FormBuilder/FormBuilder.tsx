@@ -91,6 +91,7 @@ import { Button } from '../../UI/Primitives';
 import { FormRenderer } from './FormRenderer';
 import { CalculatorModal } from '../../Builder/CalculatorModal';
 import { CanvasZoomControl, ZOOM_PRESETS } from '../../Builder/CanvasZoomControl';
+import { DesignControlOverlay } from '../../Builder/DesignControlOverlay';
 import { ConditionModal } from '../../Builder/ConditionModal';
 import { PublicFormPublishModal } from '../../Builder/PublicFormPublishModal';
 import { cn, flattenFields } from '../../../lib/utils';
@@ -174,6 +175,7 @@ interface SortableCanvasFieldProps {
   onRemoveFieldFromContainer?: (containerId: string, subFieldId: string, moveToCanvas?: boolean) => void;
   isRestricted?: boolean;
   viewportMode?: 'desktop' | 'tablet' | 'mobile';
+  renderedInput?: React.ReactNode;
 }
 
 const WIDTH_CYCLE_ORDER: Array<'full' | 'two-thirds' | 'half' | 'one-third' | 'one-quarter'> = [
@@ -199,6 +201,7 @@ const SortableCanvasField: React.FC<SortableCanvasFieldProps> = ({
   onRemoveFieldFromContainer,
   isRestricted,
   viewportMode = 'desktop',
+  renderedInput,
 }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: fObj.id,
@@ -274,196 +277,113 @@ const SortableCanvasField: React.FC<SortableCanvasFieldProps> = ({
   };
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      onClick={() => onSelect(fObj.id)}
-      className={cn(
-        colClass,
-        'group relative p-3.5 rounded-2xl border transition-all cursor-pointer select-none',
-        isDragging && 'opacity-50 scale-[1.01] shadow-2xl',
-        isSelected
-          ? 'bg-indigo-50/40 dark:bg-indigo-950/25 border-indigo-500 ring-2 ring-indigo-500/20 shadow-md'
-          : isRepeater
-          ? 'bg-violet-50/30 dark:bg-violet-950/15 border-violet-300/70 dark:border-violet-800/60 hover:border-violet-500'
-          : isFieldGroup
-          ? 'bg-indigo-50/20 dark:bg-indigo-950/10 border-indigo-200/80 dark:border-indigo-800/50 hover:border-indigo-400'
-          : 'bg-zinc-50/60 dark:bg-zinc-900/50 border-zinc-200/80 dark:border-zinc-800 hover:border-indigo-400/50',
-        fObj.hidden && 'opacity-60 border-dashed'
-      )}
-    >
-      {/* Adaptive Card Header — Field Label always has full priority without truncation on narrow columns */}
-      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-2">
-        <div className="flex items-center gap-1.5 min-w-[110px] flex-1">
-          {!isRestricted && (
-            <div
-              {...attributes}
-              {...listeners}
-              onClick={(e) => e.stopPropagation()}
-              className="p-0.5 -ml-1 text-zinc-400 hover:text-indigo-500 cursor-grab active:cursor-grabbing rounded-lg shrink-0"
-              title="Drag to reorder"
-            >
-              <GripVertical size={13} />
+    <div ref={setNodeRef} style={style} className={cn(colClass, 'relative')}>
+      <DesignControlOverlay
+        isSelected={isSelected}
+        isHidden={Boolean(fObj.hidden)}
+        isReadOnly={Boolean(fObj.readOnly)}
+        hasVisibilityRule={Boolean(fObj.visibilityRule)}
+        hasCalculation={Boolean(fObj.calculationLogic || fieldDef?.calculationLogic)}
+        isDragging={isDragging}
+        isRestricted={isRestricted}
+        widthLabel={widthLabel}
+        onCycleWidth={handleCycleWidth}
+        dragHandleProps={{ ...attributes, ...listeners }}
+        onToggleHidden={
+          onUpdatePlacement && !isRestricted
+            ? () => onUpdatePlacement(fObj.id, { hidden: !fObj.hidden })
+            : undefined
+        }
+        onDelete={() => onDelete(fObj.id)}
+        onClick={() => onSelect(fObj.id)}
+        extraBadges={
+          <>
+            {fieldDef?.isSystemMeta && (
+              <span className="px-1 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 text-[8px] font-bold uppercase">
+                Meta
+              </span>
+            )}
+            {isCustomField && !fieldDef?.isSystemMeta && !isRepeater && !isFieldGroup && (
+              <span className="px-1 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[8px] font-bold uppercase">
+                Custom
+              </span>
+            )}
+            {fObj.prefill && fObj.prefill.source !== 'none' && (
+              <span
+                className="px-1 py-0.5 rounded bg-sky-500/10 text-sky-600 dark:text-sky-400 text-[8px] font-bold uppercase"
+                title={`Prefill: ${fObj.prefill.source}`}
+              >
+                Prefill
+              </span>
+            )}
+          </>
+        }
+        className="p-1.5 -m-1.5"
+      >
+        {/* Exact FormRenderer Field Label & Content (Zero Permanent Builder Box) */}
+        {isVisual ? (
+          <div className="py-0.5 pointer-events-none">
+            {renderedInput || (
+              <>
+                {fObj.type === 'heading' && (
+                  <h4 className="font-bold text-zinc-900 dark:text-white text-sm pt-2 pb-1 border-b border-zinc-100 dark:border-zinc-800/80 mb-1">
+                    {fObj.labelOverride || 'Section Heading'}
+                  </h4>
+                )}
+                {fObj.type === 'divider' && (
+                  <div className="w-full h-px bg-zinc-200 dark:bg-zinc-800 my-2" />
+                )}
+                {fObj.type === 'spacer' && (
+                  <div
+                    className="flex items-center justify-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg text-[9px] font-mono text-zinc-400 uppercase"
+                    style={{
+                      height:
+                        fObj.height === 'sm'
+                          ? 16
+                          : fObj.height === 'lg'
+                          ? 40
+                          : fObj.height === 'xl'
+                          ? 64
+                          : 24,
+                    }}
+                  >
+                    Vertical Spacer ({fObj.height || 'md'})
+                  </div>
+                )}
+                {(fObj.type === 'html-text' || fObj.type === 'html') && (
+                  <div className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed bg-zinc-50/70 dark:bg-zinc-800/40 p-3.5 rounded-xl border border-zinc-200/60 dark:border-zinc-800">
+                    {fObj.labelOverride || 'Instructions or information text...'}
+                  </div>
+                )}
+                {fObj.type === 'alert' && (
+                  <div className="p-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-xs font-semibold flex items-center gap-2.5">
+                    <Info size={16} />
+                    <span>{fObj.labelOverride || 'Important notice'}</span>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        ) : isRepeater ? (
+          <div className="rounded-xl bg-white dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-zinc-800/80 shadow-sm overflow-hidden">
+            <div className="px-3.5 py-2 flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800/80">
+              <div className="flex items-center gap-2 min-w-0">
+                <ListOrdered size={13} className="text-violet-500 shrink-0" />
+                <span className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider truncate">
+                  {fObj.labelOverride || fieldDef?.label || fObj.id}
+                </span>
+                <span className="px-1.5 py-0.2 bg-zinc-100 dark:bg-zinc-800 rounded text-[9px] font-mono font-semibold text-zinc-400 border border-zinc-200/60 dark:border-zinc-700/60">
+                  {containerSubFields.length}
+                </span>
+              </div>
             </div>
-          )}
-
-          {isVisual ? (
-            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-500">
-              {fObj.type}
-            </span>
-          ) : (
-            <span
-              className="text-xs font-bold text-zinc-900 dark:text-white leading-tight flex items-center gap-1.5"
-              title={fObj.labelOverride || fieldDef?.label || fObj.id}
-            >
-              {isRepeater && <ListOrdered size={13} className="text-violet-500 shrink-0" />}
-              {isFieldGroup && <Folder size={13} className="text-indigo-500 shrink-0" />}
-              <span className="break-words">{fObj.labelOverride || fieldDef?.label || fObj.id}</span>
-            </span>
-          )}
-
-          {!isVisual && (fObj.required || fieldDef?.required) && (
-            <span className="text-rose-500 font-bold text-xs shrink-0">*</span>
-          )}
-        </div>
-
-        {/* Compact Status & Quick-Resize Badges */}
-        <div className="flex items-center gap-1 shrink-0 ml-auto">
-          {isRepeater && (
-            <span className="px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-600 dark:text-violet-400 text-[9px] font-bold uppercase">
-              Repeater (1:N)
-            </span>
-          )}
-          {isFieldGroup && (
-            <span className="px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold uppercase">
-              Field Group
-            </span>
-          )}
-          {fieldDef?.isSystemMeta && (
-            <span className="px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 text-[9px] font-bold uppercase">
-              Meta
-            </span>
-          )}
-          {isCustomField && !fieldDef?.isSystemMeta && !isRepeater && !isFieldGroup && (
-            <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[9px] font-bold uppercase">
-              Custom
-            </span>
-          )}
-          {fObj.readOnly && (
-            <span
-              className="p-0.5 rounded bg-zinc-200/70 dark:bg-zinc-800 text-zinc-500"
-              title="Read-Only"
-            >
-              <Lock size={10} />
-            </span>
-          )}
-          {fObj.hidden && (
-            <span
-              className="p-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400"
-              title="Hidden Field (Populated via prefill/context)"
-            >
-              <EyeOff size={10} />
-            </span>
-          )}
-          {fObj.visibilityRule && (
-            <span
-              className="p-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400"
-              title="Conditional Visibility Rule Active"
-            >
-              <Zap size={10} />
-            </span>
-          )}
-          {(fObj.calculationLogic || fieldDef?.calculationLogic) && (
-            <span
-              className="p-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
-              title="Calculation Formula Active"
-            >
-              <Calculator size={10} />
-            </span>
-          )}
-          {fObj.prefill && fObj.prefill.source !== 'none' && (
-            <span
-              className="px-1 py-0.5 rounded bg-sky-500/10 text-sky-600 dark:text-sky-400 text-[8px] font-bold uppercase"
-              title={`Prefill: ${fObj.prefill.source}`}
-            >
-              Prefill
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={handleCycleWidth}
-            title="Click to cycle column width (Full → 2/3 → 1/2 → 1/3 → 1/4)"
-            className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-zinc-200/70 dark:bg-zinc-800 hover:bg-indigo-500/20 hover:text-indigo-600 dark:hover:text-indigo-400 text-zinc-600 dark:text-zinc-400 transition-colors cursor-pointer"
-          >
-            {widthLabel}
-          </button>
-          {!isVisual && !isRepeater && !isFieldGroup && (
-            <span className="text-[8px] font-mono font-bold px-1 py-0.5 rounded bg-zinc-200/60 dark:bg-zinc-800/80 text-zinc-500 dark:text-zinc-400 uppercase">
-              {effectiveType}
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(fObj.id);
-            }}
-            className="p-0.5 text-zinc-400 hover:text-rose-500 rounded-lg transition-colors cursor-pointer"
-            title="Remove from form"
-          >
-            <Trash2 size={12} />
-          </button>
-        </div>
-      </div>
-
-      {/* Field Preview Representation */}
-      {isVisual ? (
-        <div className="py-1">
-          {fObj.type === 'heading' && (
-            <h4 className="text-sm font-bold text-zinc-900 dark:text-white border-b border-zinc-200 dark:border-zinc-800 pb-1">
-              {fObj.labelOverride || 'Section Heading'}
-            </h4>
-          )}
-          {fObj.type === 'divider' && (
-            <div className="h-px bg-zinc-300 dark:bg-zinc-700 w-full my-2" />
-          )}
-          {fObj.type === 'spacer' && (
             <div
-              className="flex items-center justify-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg text-[9px] font-mono text-zinc-400 uppercase"
-              style={{
-                height:
-                  fObj.height === 'sm'
-                    ? 20
-                    : fObj.height === 'lg'
-                    ? 48
-                    : fObj.height === 'xl'
-                    ? 64
-                    : 32,
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect(fObj.id);
               }}
+              className="p-3 space-y-2.5"
             >
-              Vertical Spacer ({fObj.height || 'md'})
-            </div>
-          )}
-          {(fObj.type === 'html-text' || fObj.type === 'html') && (
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-              {fObj.labelOverride || 'Instructional text block...'}
-            </p>
-          )}
-          {fObj.type === 'alert' && (
-            <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-xs font-medium flex items-center gap-2">
-              <Info size={14} />
-              <span>{fObj.labelOverride || 'Important callout notice'}</span>
-            </div>
-          )}
-        </div>
-      ) : isRepeater ? (
-        <div
-          onClick={(e) => {
-            e.stopPropagation();
-            onSelect(fObj.id);
-          }}
-          className="mt-2 rounded-xl border border-violet-200/80 dark:border-violet-800/60 bg-white dark:bg-zinc-950 p-3 space-y-2.5"
-        >
           {containerSubFields.length > 0 ? (
             <div
               className={cn(
@@ -557,15 +477,27 @@ const SortableCanvasField: React.FC<SortableCanvasFieldProps> = ({
               {typeof fObj.maxRows === 'number' && fObj.maxRows > 0 ? ` • Max ${fObj.maxRows} rows` : ''}
             </span>
           </div>
+          </div>
         </div>
       ) : isFieldGroup ? (
-        <div
-          onClick={(e) => {
-            e.stopPropagation();
-            onSelect(fObj.id);
-          }}
-          className="mt-2 rounded-xl border border-indigo-200/70 dark:border-indigo-800/50 bg-white dark:bg-zinc-950 p-3 space-y-2.5"
-        >
+        <div className="rounded-xl bg-white dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-zinc-800/80 shadow-sm overflow-hidden">
+          <div className="px-3.5 py-2 flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800/80">
+            <div className="flex items-center gap-2 min-w-0">
+              <h5 className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider truncate">
+                {fObj.labelOverride || fieldDef?.label || fObj.id}
+              </h5>
+              <span className="px-1.5 py-0.2 bg-zinc-100 dark:bg-zinc-800 rounded text-[9px] font-mono font-semibold text-zinc-400 border border-zinc-200/60 dark:border-zinc-700/60">
+                {containerSubFields.length}
+              </span>
+            </div>
+          </div>
+          <div
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect(fObj.id);
+            }}
+            className="p-3 space-y-2.5"
+          >
           {containerSubFields.length > 0 ? (
             <div
               className={cn(
@@ -669,21 +601,33 @@ const SortableCanvasField: React.FC<SortableCanvasFieldProps> = ({
               <span>{fObj.collapsible !== false ? 'Collapsible' : 'Static'}</span>
             </div>
           </div>
+          </div>
         </div>
       ) : (
-        <div className="h-9 bg-white dark:bg-zinc-950 border border-zinc-200/80 dark:border-zinc-800 rounded-xl px-3 flex items-center justify-between text-xs text-zinc-400 pointer-events-none">
-          <span className="truncate">
-            {fObj.placeholderOverride ||
-              fieldDef?.placeholder ||
-              `Enter ${(fObj.labelOverride || fieldDef?.label || 'value').toLowerCase()}...`}
-          </span>
-          {fieldDef?.options && Array.isArray(fieldDef.options) && (
-            <span className="text-[10px] font-mono text-zinc-400 shrink-0 ml-2">
-              {fieldDef.options.length} options
-            </span>
+        <div className="flex flex-col space-y-1.5">
+          <label className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+            <span className="truncate">{fObj.labelOverride || fieldDef?.label || fObj.id}</span>
+            {(fObj.required || fieldDef?.required) && (
+              <span className="text-rose-500 font-bold">*</span>
+            )}
+          </label>
+          {renderedInput || (
+            <div className="h-9 bg-white dark:bg-zinc-950 border border-zinc-200/80 dark:border-zinc-800 rounded-xl px-3 flex items-center justify-between text-xs text-zinc-400 pointer-events-none">
+              <span className="truncate">
+                {fObj.placeholderOverride ||
+                  fieldDef?.placeholder ||
+                  `Enter ${(fObj.labelOverride || fieldDef?.label || 'value').toLowerCase()}...`}
+              </span>
+              {fieldDef?.options && Array.isArray(fieldDef.options) && (
+                <span className="text-[10px] font-mono text-zinc-400 shrink-0 ml-2">
+                  {fieldDef.options.length} options
+                </span>
+              )}
+            </div>
           )}
         </div>
       )}
+      </DesignControlOverlay>
     </div>
   );
 };
@@ -4625,159 +4569,169 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
                   </div>
                 )}
 
-                {/* Form Canvas Surface */}
-                <div className="bg-white dark:bg-zinc-900 p-6 sm:p-8 rounded-3xl border border-zinc-200 dark:border-zinc-800 shadow-sm space-y-6">
-                  {/* Form Canvas Header — Primary Inline Editor for Form Title & Description */}
-                  <div
-                    onClick={() => setSelectedItemId(null)}
-                    className="pb-5 border-b border-zinc-100 dark:border-zinc-800"
-                  >
-                    <div className="space-y-1">
-                      <input
-                        type="text"
-                        value={activeForm.name}
-                        onChange={(e) =>
-                          updateActiveForm((prev) => ({
-                            ...prev,
-                            name: e.target.value,
-                            title: e.target.value,
-                          }))
-                        }
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-xl font-bold text-zinc-900 dark:text-white bg-transparent border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 focus:border-indigo-500 focus:outline-none rounded-lg px-2 py-0.5 -ml-2 w-full max-w-md transition-colors"
-                        placeholder="Enter form name..."
-                      />
-                      <input
-                        type="text"
-                        value={activeForm.description || activeForm.settings?.description || ''}
-                        onChange={(e) =>
-                          updateActiveForm((prev) => ({
-                            ...prev,
-                            description: e.target.value,
-                            settings: { ...prev.settings, description: e.target.value },
-                          }))
-                        }
-                        onClick={(e) => e.stopPropagation()}
-                        placeholder="Add form description or applicant instructions..."
-                        className="text-xs text-zinc-500 dark:text-zinc-400 bg-transparent border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 focus:border-indigo-500 focus:outline-none rounded-lg px-2 py-1 -ml-2 w-full transition-colors"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Sortable 12-Col Grid */}
-                  <DndContext
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    onDragEnd={handleDragEnd}
-                  >
-                    <SortableContext
-                      items={currentCanvasPlacements.map((f) => f.id)}
-                      strategy={rectSortingStrategy}
-                    >
-                      <div className="grid grid-cols-12 gap-4">
-                        {currentCanvasPlacements.length > 0 ? (
-                          currentCanvasPlacements.map((fObj) => {
-                            const incIds = isContainerPlacement(fObj)
-                              ? getContainerIncludedIds(fObj)
-                              : [];
-                            const addable = isContainerPlacement(fObj)
-                              ? allLeafCandidateFieldsForContainers.filter(
-                                  (cand) => cand.id !== fObj.id && !incIds.includes(cand.id)
-                                )
-                              : [];
-                            return (
-                              <SortableCanvasField
-                                key={fObj.id}
-                                fObj={fObj}
-                                isSelected={selectedItemId === fObj.id}
-                                moduleLayout={resolvedModuleLayout}
-                                workflow={resolvedWorkflow}
-                                customFields={activeForm.customFields || []}
-                                availableFieldsToAdd={addable}
-                                onSelect={setSelectedItemId}
-                                onDelete={handleDeleteFieldFromForm}
-                                onUpdatePlacement={handleUpdateFieldPlacement}
-                                onAddFieldToContainer={handleAddExistingFieldToContainer}
-                                onCreateSubFieldInContainer={(cid) =>
-                                  handleCreateNewSubFieldInContainer(cid, 'text', 'Sub-Field')
-                                }
-                                onRemoveFieldFromContainer={handleRemoveSubFieldFromContainer}
-                                isRestricted={isRestricted}
-                                viewportMode={viewportMode}
-                              />
-                            );
-                          })
+                {/* Real FormRenderer Canvas Surface (WYSIWYG Design Mode) */}
+                <FormRenderer
+                  form={activeForm}
+                  moduleLayout={resolvedModuleLayout}
+                  workflow={resolvedWorkflow}
+                  isPreviewMode
+                  disableAutoBackendSubmit
+                  viewport={viewportMode}
+                  designMode={{
+                    enabled: true,
+                    activeStepId: currentStep?.id,
+                    renderHeader: () => (
+                      <div
+                        onClick={() => setSelectedItemId(null)}
+                        className="pb-5 border-b border-zinc-100 dark:border-zinc-800"
+                      >
+                        <div className="space-y-1">
+                          <input
+                            type="text"
+                            value={activeForm.name}
+                            onChange={(e) =>
+                              updateActiveForm((prev) => ({
+                                ...prev,
+                                name: e.target.value,
+                                title: e.target.value,
+                              }))
+                            }
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-xl font-bold text-zinc-900 dark:text-white bg-transparent border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 focus:border-indigo-500 focus:outline-none rounded-lg px-2 py-0.5 -ml-2 w-full max-w-md transition-colors"
+                            placeholder="Enter form name..."
+                          />
+                          <input
+                            type="text"
+                            value={activeForm.description || activeForm.settings?.description || ''}
+                            onChange={(e) =>
+                              updateActiveForm((prev) => ({
+                                ...prev,
+                                description: e.target.value,
+                                settings: { ...prev.settings, description: e.target.value },
+                              }))
+                            }
+                            onClick={(e) => e.stopPropagation()}
+                            placeholder="Add form description or applicant instructions..."
+                            className="text-xs text-zinc-500 dark:text-zinc-400 bg-transparent border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 focus:border-indigo-500 focus:outline-none rounded-lg px-2 py-1 -ml-2 w-full transition-colors"
+                          />
+                        </div>
+                      </div>
+                    ),
+                    wrapGrid: (gridNode) => (
+                      <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleDragEnd}
+                      >
+                        <SortableContext
+                          items={currentCanvasPlacements.map((f) => f.id)}
+                          strategy={rectSortingStrategy}
+                        >
+                          {gridNode}
+                        </SortableContext>
+                      </DndContext>
+                    ),
+                    wrapField: (fObj, renderedBody) => {
+                      const incIds = isContainerPlacement(fObj)
+                        ? getContainerIncludedIds(fObj)
+                        : [];
+                      const addable = isContainerPlacement(fObj)
+                        ? allLeafCandidateFieldsForContainers.filter(
+                            (cand) => cand.id !== fObj.id && !incIds.includes(cand.id)
+                          )
+                        : [];
+                      return (
+                        <SortableCanvasField
+                          key={fObj.id}
+                          fObj={fObj}
+                          isSelected={selectedItemId === fObj.id}
+                          moduleLayout={resolvedModuleLayout}
+                          workflow={resolvedWorkflow}
+                          customFields={activeForm.customFields || []}
+                          availableFieldsToAdd={addable}
+                          onSelect={setSelectedItemId}
+                          onDelete={handleDeleteFieldFromForm}
+                          onUpdatePlacement={handleUpdateFieldPlacement}
+                          onAddFieldToContainer={handleAddExistingFieldToContainer}
+                          onCreateSubFieldInContainer={(cid) =>
+                            handleCreateNewSubFieldInContainer(cid, 'text', 'Sub-Field')
+                          }
+                          onRemoveFieldFromContainer={handleRemoveSubFieldFromContainer}
+                          isRestricted={isRestricted}
+                          viewportMode={viewportMode}
+                          renderedInput={renderedBody}
+                        />
+                      );
+                    },
+                    renderEmptyCanvas: () => (
+                      <div className="col-span-12 py-16 text-center space-y-3 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl">
+                        <div className="w-12 h-12 bg-zinc-100 dark:bg-zinc-800 rounded-2xl flex items-center justify-center mx-auto text-zinc-400">
+                          <MousePointer2 size={22} />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-sm font-bold text-zinc-900 dark:text-white">
+                            This form canvas is empty
+                          </p>
+                          <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+                            Click fields in the left palette to add Module Fields, Record Meta Fields, or Custom Intake Fields.
+                          </p>
+                        </div>
+                      </div>
+                    ),
+                    renderSubmitBar: () => (
+                      <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+                        {activeForm.settings?.allowSaveDraft ? (
+                          <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+                            <Save size={13} />
+                            Save & Resume Later Enabled
+                          </span>
                         ) : (
-                          <div className="col-span-12 py-16 text-center space-y-3 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl">
-                            <div className="w-12 h-12 bg-zinc-100 dark:bg-zinc-800 rounded-2xl flex items-center justify-center mx-auto text-zinc-400">
-                              <MousePointer2 size={22} />
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-sm font-bold text-zinc-900 dark:text-white">
-                                This form canvas is empty
-                              </p>
-                              <p className="text-xs text-zinc-500 max-w-sm mx-auto">
-                                Click fields in the left palette to add Module Fields, Record Meta Fields, or Custom Intake Fields.
-                              </p>
-                            </div>
+                          <span />
+                        )}
+                        {isEditingSubmitLabel ? (
+                          <div className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-xl shadow-md shadow-indigo-500/20 ring-2 ring-indigo-400/70">
+                            <input
+                              type="text"
+                              autoFocus
+                              value={submitLabelDraft}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setSubmitLabelDraft(val);
+                                updateActiveForm((prev) => ({
+                                  ...prev,
+                                  settings: { ...prev.settings, submitLabel: val },
+                                }));
+                              }}
+                              onBlur={() => setIsEditingSubmitLabel(false)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === 'Escape') {
+                                  setIsEditingSubmitLabel(false);
+                                }
+                              }}
+                              style={{ width: `${Math.max(6, (submitLabelDraft || 'Submit').length + 1)}ch` }}
+                              className="bg-transparent text-white text-xs font-bold text-center outline-none placeholder:text-indigo-200"
+                              placeholder="Submit"
+                            />
                           </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedItemId(null);
+                              setSubmitLabelDraft(activeForm.settings?.submitLabel || 'Submit');
+                              setIsEditingSubmitLabel(true);
+                            }}
+                            title="Click to edit button text"
+                            className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-500/10 transition-all cursor-text hover:ring-2 hover:ring-indigo-400/50"
+                          >
+                            {activeForm.settings?.submitLabel || 'Submit'}
+                          </button>
                         )}
                       </div>
-                    </SortableContext>
-                  </DndContext>
-
-                  {/* Submit Button Preview */}
-                  <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
-                    {activeForm.settings?.allowSaveDraft ? (
-                      <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
-                        <Save size={13} />
-                        Save & Resume Later Enabled
-                      </span>
-                    ) : (
-                      <span />
-                    )}
-                    {isEditingSubmitLabel ? (
-                      <div className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-xl shadow-md shadow-indigo-500/20 ring-2 ring-indigo-400/70">
-                        <input
-                          type="text"
-                          autoFocus
-                          value={submitLabelDraft}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setSubmitLabelDraft(val);
-                            updateActiveForm((prev) => ({
-                              ...prev,
-                              settings: { ...prev.settings, submitLabel: val },
-                            }));
-                          }}
-                          onBlur={() => setIsEditingSubmitLabel(false)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === 'Escape') {
-                              setIsEditingSubmitLabel(false);
-                            }
-                          }}
-                          style={{ width: `${Math.max(6, (submitLabelDraft || 'Submit').length + 1)}ch` }}
-                          className="bg-transparent text-white text-xs font-bold text-center outline-none placeholder:text-indigo-200"
-                          placeholder="Submit"
-                        />
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedItemId(null);
-                          setSubmitLabelDraft(activeForm.settings?.submitLabel || 'Submit');
-                          setIsEditingSubmitLabel(true);
-                        }}
-                        title="Click to edit button text"
-                        className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-500/10 transition-all cursor-text hover:ring-2 hover:ring-indigo-400/50"
-                      >
-                        {activeForm.settings?.submitLabel || 'Submit'}
-                      </button>
-                    )}
-                  </div>
-                </div>
+                    ),
+                  }}
+                />
               </div>
             </div>
             </div>

@@ -355,8 +355,8 @@ export const calculateHeight = (field: any, placeholder?: { index: number, span?
     const fields = field.fields || [];
     if (fields.length === 0 && !placeholder) return 3;
     
-    const rowHeight = 50;
-    const gap = 20;
+    const rowHeight = 28;
+    const gap = 12;
     const gridToPx = (units: number) => units * rowHeight + Math.max(0, units - 1) * gap;
     const pxToGrid = (px: number) => Math.max(2, Math.ceil((px + gap) / (rowHeight + gap)));
 
@@ -399,11 +399,39 @@ export const calculateHeight = (field: any, placeholder?: { index: number, span?
       return pxToGrid(neededPx);
     }
 
-    const childHeights = fields.map((f: any) => {
-      const h = calculateHeight(f);
-      const r = typeof f.rowIndex === 'number' ? f.rowIndex : 0;
-      return r + h;
+    // Simulate RGL vertical compaction so overlapping/stale rowIndex values never under-calculate group height
+    const placed: Array<{ x: number; y: number; w: number; h: number }> = [];
+    const sortedChildren = [...fields].sort((a: any, b: any) => {
+      const ay = typeof a.rowIndex === 'number' ? a.rowIndex : 0;
+      const by = typeof b.rowIndex === 'number' ? b.rowIndex : 0;
+      if (ay !== by) return ay - by;
+      return (a.startCol || 1) - (b.startCol || 1);
     });
+
+    sortedChildren.forEach((f: any) => {
+      const x = Math.max(0, (f.startCol || 1) - 1);
+      const w = Math.max(1, Math.min(12, f.colSpan || 12));
+      const h = calculateHeight(f);
+      let y = typeof f.rowIndex === 'number' ? Math.max(0, f.rowIndex) : 0;
+
+      // Push down if colliding with any already-placed sibling
+      let collided = true;
+      while (collided) {
+        collided = false;
+        for (const p of placed) {
+          const xOverlap = x < p.x + p.w && x + w > p.x;
+          const yOverlap = y < p.y + p.h && y + h > p.y;
+          if (xOverlap && yOverlap) {
+            y = p.y + p.h;
+            collided = true;
+            break;
+          }
+        }
+      }
+      placed.push({ x, y, w, h });
+    });
+
+    const childHeights = placed.map(p => p.y + p.h);
 
     if (placeholder) {
       const pHeight = placeholder.rowSpan || 2;
@@ -412,7 +440,7 @@ export const calculateHeight = (field: any, placeholder?: { index: number, span?
     
     const maxChildBottom = Math.max(0, ...childHeights);
     const innerGridPx = gridToPx(maxChildBottom);
-    const totalGroupPx = 120 + innerGridPx;
+    const totalGroupPx = 76 + innerGridPx;
     
     return pxToGrid(totalGroupPx);
   }

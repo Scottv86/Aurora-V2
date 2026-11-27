@@ -240,6 +240,12 @@ import { VersionsSetupTab } from './Builder/VersionsSetupTab';
 import { VersionsModal } from './Builder/VersionsModal';
 import { CanvasZoomControl, ZOOM_PRESETS } from './Builder/CanvasZoomControl';
 import { ModulePreviewModal } from './Builder/ModulePreviewModal';
+import { ModuleView } from '../pages/Module/ModuleView';
+import { RecordHeaderSurface } from './Record/Surfaces/RecordHeaderSurface';
+import { RecordFieldSurface } from './Record/Surfaces/RecordFieldSurface';
+import { RecordSectionSplitSidebarSurface } from './Record/Surfaces/RecordSectionNavSurface';
+import { RecordContextRail, ContextRailTab } from './Record/RecordContextRail';
+import { DesignControlOverlay } from './Builder/DesignControlOverlay';
 import { BuilderAICopilotDrawer } from './Builder/BuilderAICopilotDrawer';
 import { PublicFormPublishModal } from './Builder/PublicFormPublishModal';
 import { versionControlService } from '../utils/versionControlService';
@@ -256,12 +262,12 @@ const METADATA_FIELDS = [
   { id: '_record_key', label: 'Record Key', type: 'text', tabId: 'metadata' },
 ];
 
-// --- Grid Constants ---
+// --- Grid Constants (1:1 matched to RecordDetailView field density) ---
 export const GRID_CONFIG = {
-  rowHeight: 50,
-  gap: 20,
-  padding: 32,
-  nestedPadding: 12, // Match p-3 in FieldGroup
+  rowHeight: 28,
+  gap: 12,
+  padding: 20,
+  nestedPadding: 0,
   cols: 12
 };
 
@@ -270,8 +276,11 @@ interface NestedRglContainerProps {
   fields: Field[];
   viewportSize: 'desktop' | 'tablet' | 'mobile';
   dragOverInfo?: { active: boolean; parentId?: string; col: number; span: number; index: number; rowSpan?: number } | null;
+  rglDropTargetId?: string | null;
   resolveCollisionsInArray?: (triggerField: Field, fields: Field[]) => Field[];
   onLayoutChange: (parentId: string, newLayout: any[]) => void;
+  onCrossDrag?: (fieldId: string, sourceParentId: string | undefined, clientX: number, clientY: number) => void;
+  onCrossDragStop?: (fieldId: string, sourceParentId: string | undefined, clientX: number, clientY: number) => void;
   children: React.ReactNode;
 }
 
@@ -280,8 +289,11 @@ const NestedRglContainer: React.FC<NestedRglContainerProps> = ({
   fields,
   viewportSize,
   dragOverInfo,
+  rglDropTargetId,
   resolveCollisionsInArray,
   onLayoutChange,
+  onCrossDrag,
+  onCrossDragStop,
   children
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -312,17 +324,14 @@ const NestedRglContainer: React.FC<NestedRglContainerProps> = ({
       const placeholderField: Field = {
         id: '__cross_drop_placeholder__',
         name: '__cross_drop_placeholder__',
-        type: 'text',
-        label: 'Drop Zone',
+        type: 'placeholder',
+        label: 'Drop here',
         startCol: dragOverInfo.col || 1,
         rowIndex: typeof dragOverInfo.index === 'number' ? dragOverInfo.index : 0,
-        colSpan: dragOverInfo.span || 6
+        colSpan: dragOverInfo.span || 6,
+        rowSpan: dragOverInfo.rowSpan || 2,
       };
-      if (resolveCollisionsInArray) {
-        activeFields = resolveCollisionsInArray(placeholderField, [...fields, placeholderField]);
-      } else {
-        activeFields = [...fields, placeholderField];
-      }
+      activeFields = [...fields, placeholderField];
     }
     return activeFields.map(f => ({
       i: f.id,
@@ -333,9 +342,12 @@ const NestedRglContainer: React.FC<NestedRglContainerProps> = ({
       minW: 2,
       minH: 1
     }));
-  }, [fields, dragOverInfo, parentId, resolveCollisionsInArray]);
+  }, [fields, dragOverInfo, parentId]);
 
-  const isDraggingOutside = dragOverInfo?.active && dragOverInfo?.parentId !== parentId;
+  const isDraggingOutside = Boolean(
+    (dragOverInfo?.active && dragOverInfo?.parentId !== parentId) ||
+    (rglDropTargetId && rglDropTargetId !== parentId)
+  );
 
   return (
     <div ref={containerRef} className="w-full col-span-12 relative min-h-[60px]">
@@ -345,11 +357,32 @@ const NestedRglContainer: React.FC<NestedRglContainerProps> = ({
           className={cn("layout", isDraggingOutside && "is-dragging-cross-container")}
           layout={rglLayout}
           width={width}
-          onLayoutChange={(newLayout: any[]) => onLayoutChange(parentId, newLayout)}
+          onLayoutChange={(newLayout: any[]) => {
+            if (isDraggingOutside) return;
+            onLayoutChange(parentId, newLayout);
+          }}
+          onDrag={(_layout: any, _oldItem: any, newItem: any, _placeholder: any, e: any) => {
+            if (onCrossDrag && newItem?.i && e) {
+              const cx = e.clientX ?? e.touches?.[0]?.clientX;
+              const cy = e.clientY ?? e.touches?.[0]?.clientY;
+              if (typeof cx === 'number' && typeof cy === 'number') {
+                onCrossDrag(newItem.i, parentId, cx, cy);
+              }
+            }
+          }}
+          onDragStop={(_layout: any, _oldItem: any, newItem: any, _placeholder: any, e: any) => {
+            if (onCrossDragStop && newItem?.i && e) {
+              const cx = e.clientX ?? e.changedTouches?.[0]?.clientX;
+              const cy = e.clientY ?? e.changedTouches?.[0]?.clientY;
+              if (typeof cx === 'number' && typeof cy === 'number') {
+                onCrossDragStop(newItem.i, parentId, cx, cy);
+              }
+            }
+          }}
           gridConfig={{
             cols: viewportSize === 'mobile' ? 1 : 12,
             rowHeight: GRID_CONFIG.rowHeight,
-            margin: [16, 16],
+            margin: [GRID_CONFIG.gap, GRID_CONFIG.gap],
             containerPadding: [0, 0]
           }}
           dragConfig={{
@@ -367,9 +400,12 @@ const NestedRglContainer: React.FC<NestedRglContainerProps> = ({
           {dragOverInfo?.active && dragOverInfo?.parentId === parentId && (
             <div
               key="__cross_drop_placeholder__"
-              className="react-grid-placeholder"
-              style={{ pointerEvents: 'none' }}
-            />
+              className="rounded-xl border-2 border-dashed border-indigo-400/80 dark:border-indigo-500/70 bg-indigo-500/[0.07] dark:bg-indigo-500/[0.12] flex items-center justify-center pointer-events-none"
+            >
+              <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400">
+                Drop here
+              </span>
+            </div>
           )}
         </ReactGridLayout>
       ) : (
@@ -386,8 +422,11 @@ interface SectionRglContainerProps {
   fields: Field[];
   viewportSize: 'desktop' | 'tablet' | 'mobile';
   dragOverInfo?: { active: boolean; parentId?: string; tabId?: string; col: number; span: number; index: number; rowSpan?: number } | null;
+  rglDropTargetId?: string | null;
   resolveCollisionsInArray?: (triggerField: Field, fields: Field[]) => Field[];
   onLayoutChange: (newLayout: any[], targetTabId: string) => void;
+  onCrossDrag?: (fieldId: string, sourceParentId: string | undefined, clientX: number, clientY: number) => void;
+  onCrossDragStop?: (fieldId: string, sourceParentId: string | undefined, clientX: number, clientY: number) => void;
   children: React.ReactNode;
 }
 
@@ -396,8 +435,11 @@ const SectionRglContainer: React.FC<SectionRglContainerProps> = ({
   fields,
   viewportSize,
   dragOverInfo,
+  rglDropTargetId,
   resolveCollisionsInArray,
   onLayoutChange,
+  onCrossDrag,
+  onCrossDragStop,
   children
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -428,17 +470,14 @@ const SectionRglContainer: React.FC<SectionRglContainerProps> = ({
       const placeholderField: Field = {
         id: '__cross_drop_placeholder__',
         name: '__cross_drop_placeholder__',
-        type: 'text',
-        label: 'Drop Zone',
+        type: 'placeholder',
+        label: 'Drop here',
         startCol: dragOverInfo.col || 1,
         rowIndex: typeof dragOverInfo.index === 'number' ? dragOverInfo.index : 0,
-        colSpan: dragOverInfo.span || 6
+        colSpan: dragOverInfo.span || 6,
+        rowSpan: dragOverInfo.rowSpan || 2,
       };
-      if (resolveCollisionsInArray) {
-        activeFields = resolveCollisionsInArray(placeholderField, [...fields, placeholderField]);
-      } else {
-        activeFields = [...fields, placeholderField];
-      }
+      activeFields = [...fields, placeholderField];
     }
     return activeFields.map(f => ({
       i: f.id,
@@ -449,17 +488,43 @@ const SectionRglContainer: React.FC<SectionRglContainerProps> = ({
       minW: isContainerField(f.type) ? 4 : 2,
       minH: 1
     }));
-  }, [fields, dragOverInfo, sectionTabId, resolveCollisionsInArray]);
+  }, [fields, dragOverInfo, sectionTabId]);
+
+  const isDraggingCross = Boolean(
+    (dragOverInfo?.active && dragOverInfo?.parentId) ||
+    (rglDropTargetId && rglDropTargetId !== '__root__')
+  );
 
   return (
     <div ref={containerRef} className="w-full col-span-12 relative min-h-[120px]">
       {mounted && width > 0 ? (
         <ReactGridLayout
           key={`section-rgl-${sectionTabId}`}
-          className={cn("layout", dragOverInfo?.active && dragOverInfo?.parentId && "is-dragging-cross-container")}
+          className={cn("layout", isDraggingCross && "is-dragging-cross-container")}
           layout={rglLayout}
           width={width}
-          onLayoutChange={(newLayout: any[]) => onLayoutChange(newLayout, sectionTabId)}
+          onLayoutChange={(newLayout: any[]) => {
+            if (isDraggingCross) return;
+            onLayoutChange(newLayout, sectionTabId);
+          }}
+          onDrag={(_layout: any, _oldItem: any, newItem: any, _placeholder: any, e: any) => {
+            if (onCrossDrag && newItem?.i && e) {
+              const cx = e.clientX ?? e.touches?.[0]?.clientX;
+              const cy = e.clientY ?? e.touches?.[0]?.clientY;
+              if (typeof cx === 'number' && typeof cy === 'number') {
+                onCrossDrag(newItem.i, undefined, cx, cy);
+              }
+            }
+          }}
+          onDragStop={(_layout: any, _oldItem: any, newItem: any, _placeholder: any, e: any) => {
+            if (onCrossDragStop && newItem?.i && e) {
+              const cx = e.clientX ?? e.changedTouches?.[0]?.clientX;
+              const cy = e.clientY ?? e.changedTouches?.[0]?.clientY;
+              if (typeof cx === 'number' && typeof cy === 'number') {
+                onCrossDragStop(newItem.i, undefined, cx, cy);
+              }
+            }
+          }}
           gridConfig={{
             cols: viewportSize === 'mobile' ? 1 : 12,
             rowHeight: GRID_CONFIG.rowHeight,
@@ -481,9 +546,12 @@ const SectionRglContainer: React.FC<SectionRglContainerProps> = ({
           {dragOverInfo?.active && !dragOverInfo.parentId && (!dragOverInfo.tabId || dragOverInfo.tabId === sectionTabId) && (
             <div
               key="__cross_drop_placeholder__"
-              className="react-grid-placeholder"
-              style={{ pointerEvents: 'none' }}
-            />
+              className="rounded-xl border-2 border-dashed border-indigo-400/80 dark:border-indigo-500/70 bg-indigo-500/[0.07] dark:bg-indigo-500/[0.12] flex items-center justify-center pointer-events-none"
+            >
+              <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400">
+                Drop here
+              </span>
+            </div>
           )}
         </ReactGridLayout>
       ) : (
@@ -1172,6 +1240,26 @@ export const FIELD_CATEGORIES = [
     ]
   },
   {
+    id: 'platform',
+    label: 'Platform',
+    fields: [
+      { id: 'party', label: 'Directory Entity', icon: Building2, defaultSpan: 6 },
+      { id: 'user', label: 'User Select', icon: Users, defaultSpan: 6 },
+      { id: 'multi_user', label: 'Multi-User', icon: Users, defaultSpan: 6 },
+      { id: 'team_select', label: 'Team Select', icon: Layers, defaultSpan: 6 },
+      { id: 'position_select', label: 'Position / Role', icon: ShieldCheck, defaultSpan: 6 },
+      { id: 'global_list', label: 'Global List', icon: ListFilter, defaultSpan: 6 },
+      { id: 'lookup', label: 'Record Lookup', icon: Search, defaultSpan: 6 },
+      { id: 'sub_module', label: 'Submodule (1:N)', icon: Layers, defaultSpan: 12 },
+      { id: 'relationship_m2m', label: 'Related (M:M)', icon: ArrowRightLeft, defaultSpan: 12 },
+      { id: 'rollup', label: 'Rollup', icon: Calculator, defaultSpan: 6 },
+      { id: 'calculation', label: 'Calculation', icon: Calculator, defaultSpan: 6 },
+      { id: 'autonumber', label: 'Auto-Number', icon: Hash, defaultSpan: 6 },
+      { id: 'ai_summary', label: 'AI Summary', icon: BrainCircuit, defaultSpan: 12 },
+      { id: 'connector', label: 'API Connector', icon: Plug, defaultSpan: 12 },
+    ]
+  },
+  {
     id: 'actions',
     label: 'Actions & Tools',
     fields: [
@@ -1188,7 +1276,7 @@ export const FIELD_CATEGORIES = [
     label: 'Content & Display',
     fields: [
       { id: 'heading', label: 'Heading', icon: Heading, defaultSpan: 6 },
-      { id: 'richtext', label: 'Rich Text / WYSIWYG', icon: FileJson, defaultSpan: 6 },
+      { id: 'richtext', label: 'Rich Text', icon: FileJson, defaultSpan: 6 },
       { id: 'html', label: 'HTML Block', icon: Code, defaultSpan: 6 },
       { id: 'icon', label: 'Icon Display', icon: Smile, defaultSpan: 6 },
       { id: 'divider', label: 'Divider', icon: Minus, defaultSpan: 6 },
@@ -1198,7 +1286,7 @@ export const FIELD_CATEGORIES = [
       { id: 'video', label: 'Video Player', icon: Video, defaultSpan: 6 },
       { id: 'audio', label: 'Audio Player', icon: Music, defaultSpan: 6 },
       { id: 'progress', label: 'Progress Bar', icon: Activity, defaultSpan: 6 },
-      { id: 'map', label: 'Map / Geolocation', icon: MapPin, defaultSpan: 6 },
+      { id: 'map', label: 'Map Location', icon: MapPin, defaultSpan: 6 },
       { id: 'canvas', label: 'Drawing Canvas', icon: Brush, defaultSpan: 6 },
       { id: 'chat', label: 'Chat Stream', icon: MessageSquare, defaultSpan: 6 },
     ]
@@ -1219,26 +1307,11 @@ export const FIELD_CATEGORIES = [
   },
   {
     id: 'data',
-    label: 'Data & Intelligence',
+    label: 'Data Views',
     fields: [
       { id: 'datatable', label: 'Data Table', icon: Table, defaultSpan: 6 },
       { id: 'duallist', label: 'Dual List', icon: ArrowRightLeft, defaultSpan: 6 },
       { id: 'treeview', label: 'Tree View', icon: TreePalm, defaultSpan: 6 },
-      { id: 'calculation', label: 'Calculation', icon: Calculator, defaultSpan: 6 },
-      { id: 'lookup', label: 'Data Lookup', icon: Search, defaultSpan: 6 },
-      { id: 'party', label: 'Directory Entity', icon: Building2, defaultSpan: 6 },
-      { id: 'user', label: 'User Selector', icon: Users, defaultSpan: 6 },
-      { id: 'autonumber', label: 'Auto-increment', icon: Hash, defaultSpan: 6 },
-      { id: 'automation', label: 'AI Prompt', icon: Sparkles, defaultSpan: 6 },
-    ]
-  },
-  {
-    id: 'hierarchical',
-    label: 'Relational & Computed',
-    fields: [
-      { id: 'sub_module', label: '1:N Submodule Table', icon: Layers, defaultSpan: 12 },
-      { id: 'relationship_m2m', label: 'Many-to-Many Junction', icon: ArrowRightLeft, defaultSpan: 12 },
-      { id: 'rollup', label: 'Rollup Aggregate (SUM/COUNT)', icon: Calculator, defaultSpan: 6 },
     ]
   }
 ];
@@ -2361,7 +2434,7 @@ export const ModuleEditor = () => {
   const [isWideViewport, setIsWideViewport] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth >= 1680 : true
   );
-  const [leftPanelWidth, setLeftPanelWidth] = useState(288);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(332);
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const [rightPanelWidth, setRightPanelWidth] = useState(340);
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
@@ -3337,6 +3410,54 @@ export const ModuleEditor = () => {
     moduleAccessControl
   ]);
 
+  const [masterDesignRecords, setMasterDesignRecords] = useState<Record<string, any>[]>([]);
+
+  useEffect(() => {
+    if (masterDesignRecords.length === 0 && layout.length > 0) {
+      const rawPrefix = moduleSettings.recordKeyPrefix || 'REC';
+      const prefix = rawPrefix.endsWith('-') ? rawPrefix.slice(0, -1) : rawPrefix;
+      const suffix = moduleSettings.recordKeySuffix || '';
+      const startNum = Number(moduleSettings.nextKeyNumber) || 1;
+      const generated = (generateMockDataset(layout, { count: 8, domain: 'general' }) || []).map((rec: any, idx: number) => {
+        const recordKey = `${prefix}-${startNum + idx}${suffix}`;
+        return {
+          ...rec,
+          id: rec.id || `design_rec_${idx + 1}`,
+          moduleId: id || 'new',
+          _record_key: recordKey,
+          status: rec.status || 'Open',
+          createdAt: rec.createdAt || new Date(Date.now() - idx * 86400000).toISOString(),
+          updatedAt: rec.updatedAt || new Date(Date.now() - idx * 43200000).toISOString(),
+          data: { ...(rec.data || {}), ...rec, _record_key: recordKey }
+        };
+      });
+      setMasterDesignRecords(generated);
+    }
+  }, [layout, id, moduleSettings.recordKeyPrefix, moduleSettings.recordKeySuffix, moduleSettings.nextKeyNumber, masterDesignRecords.length]);
+
+  const masterDesignPreviewConfig = useMemo(() => ({
+    enabled: true as const,
+    designMode: true,
+    moduleOverride: draftModuleForPreview,
+    dataSource: 'mock' as const,
+    records: masterDesignRecords,
+    onRecordsChange: (updater: (prev: Record<string, any>[]) => Record<string, any>[]) => {
+      setMasterDesignRecords(prev => updater(prev));
+    },
+    onSelectDesignTarget: (targetId: string) => {
+      setSelectedId(targetId);
+    },
+    onOpenRecord: () => {
+      setSelectedId('__table_settings');
+    },
+    onLayoutTypeChange: (layoutType: string) => {
+      setInterfaceSettings(prev => ({
+        ...prev,
+        master: { ...prev.master, layoutType: layoutType as any }
+      }));
+    }
+  }), [draftModuleForPreview, masterDesignRecords]);
+
   const handleSave = useCallback(async (): Promise<ModuleVersionSnapshot | null> => {
     if (!tenant?.id) return null;
     setIsSaving(true);
@@ -3976,32 +4097,55 @@ export const ModuleEditor = () => {
     return finalSlug;
   };
 
-  const createField = (type: FieldType): Field => {
+  const createField = (rawType: FieldType | string): Field => {
     const id = `field-${generateId()}`;
+    const resolvedType: FieldType =
+      rawType === 'team_select' || rawType === 'position_select' || rawType === 'multi_user'
+        ? 'lookup'
+        : rawType === 'global_list'
+        ? 'select'
+        : (rawType as FieldType);
+
+    const presetLabelMap: Record<string, string> = {
+      party: 'Directory Entity',
+      team_select: 'Team',
+      position_select: 'Position / Role',
+      global_list: 'Global List',
+      multi_user: 'Users',
+      ai_summary: 'AI Summary',
+      connector: 'API Connector',
+    };
     const label =
-      type === 'party'
-        ? 'Directory Entity'
-        : `New ${type.charAt(0).toUpperCase() + type.slice(1).replace('_', ' ')}`;
+      presetLabelMap[rawType] ||
+      `New ${resolvedType.charAt(0).toUpperCase() + resolvedType.slice(1).replace('_', ' ')}`;
     const name = generateSlug(label, layout, id);
+
+    const presetPlaceholderMap: Record<string, string> = {
+      party: 'Search people or organisations in Directory...',
+      team_select: 'Select team...',
+      position_select: 'Select position or role...',
+      global_list: 'Select from global list...',
+      multi_user: 'Select users...',
+      ai_summary: 'AI Summary will be generated after saving.',
+    };
     
     return {
       id,
       name,
-      type,
+      type: resolvedType,
       label,
       placeholder:
-        type === 'party'
-          ? 'Search people or organisations in Directory...'
-          : ['select', 'lookup', 'user'].includes(type) 
-          ? `Select ${type.replace('_', ' ')}...`
-          : `Enter ${type.replace('_', ' ')}...`,
+        presetPlaceholderMap[rawType] ||
+        (['select', 'lookup', 'user'].includes(resolvedType) 
+          ? `Select ${resolvedType.replace('_', ' ')}...`
+          : `Enter ${resolvedType.replace('_', ' ')}...`),
       helperText: '',
       required: false,
       currencySymbol: '$',
       options: ['Option 1', 'Option 2'],
       calculationLogic: '',
       targetModuleId: '',
-      ...(type === 'party'
+      ...(rawType === 'party'
         ? {
             lookupSource: 'platform' as const,
             platformEntity: 'modules' as const,
@@ -4010,13 +4154,33 @@ export const ModuleEditor = () => {
             classificationFilter: 'ALL',
             allowInlineCreate: true,
           }
+        : rawType === 'team_select'
+        ? {
+            lookupSource: 'platform' as const,
+            platformEntity: 'teams' as const,
+          }
+        : rawType === 'position_select'
+        ? {
+            lookupSource: 'platform' as const,
+            platformEntity: 'positions' as const,
+          }
+        : rawType === 'multi_user'
+        ? {
+            lookupSource: 'platform' as const,
+            platformEntity: 'users' as const,
+            allowMultiple: true,
+          }
+        : rawType === 'global_list'
+        ? {
+            optionsSource: 'global_list' as const,
+          }
         : {}),
-      colSpan: 6,
+      colSpan: ['ai_summary', 'connector', 'sub_module', 'relationship_m2m'].includes(resolvedType) ? 12 : 6,
       startCol: 1,
       rowIndex: layout.length,
       tabId: currentTabId,
       showInTable: false,
-      fields: isContainerField(type) ? [] : undefined
+      fields: isContainerField(resolvedType) ? [] : undefined
     };
   };
 
@@ -4398,6 +4562,28 @@ export const ModuleEditor = () => {
   }, [dragOverInfo?.active]);
 
   // Move an existing field into a container (group / repeater / accordion section)
+  const findNextAvailableSlot = useCallback((existing: Field[], span: number, itemH: number): { startCol: number; rowIndex: number } => {
+    const w = Math.max(1, Math.min(12, span || 6));
+    const rects = existing.map(ef => ({
+      x: Math.max(0, (ef.startCol || 1) - 1),
+      y: typeof ef.rowIndex === 'number' ? Math.max(0, ef.rowIndex) : 0,
+      w: Math.max(1, Math.min(12, ef.colSpan || 12)),
+      h: calculateHeight(ef),
+    }));
+    const maxBottom = rects.reduce((acc, r) => Math.max(acc, r.y + r.h), 0);
+    const collides = (cx: number, cy: number) =>
+      rects.some(r => cx < r.x + r.w && cx + w > r.x && cy < r.y + r.h && cy + itemH > r.y);
+
+    for (let y = 0; y <= maxBottom; y++) {
+      for (let x = 0; x <= 12 - w; x++) {
+        if (!collides(x, y)) {
+          return { startCol: x + 1, rowIndex: y };
+        }
+      }
+    }
+    return { startCol: 1, rowIndex: maxBottom };
+  }, []);
+
   const moveFieldToContainer = useCallback((containerId: string, fieldId: string) => {
     if (!containerId || !fieldId || containerId === fieldId) return;
     const targetField = findFieldRecursive(layout, fieldId);
@@ -4415,13 +4601,16 @@ export const ModuleEditor = () => {
 
     setLayout(prev => {
       const cleaned = removeFieldRecursive(prev, fieldId);
+      const itemSpan = targetField.colSpan || 6;
+      const itemHeight = calculateHeight(targetField);
+
       const updatedField: Field = {
         ...targetField,
         parentId: containerId,
         tabId: undefined,
         startCol: 1,
-        rowIndex: 999,
-        colSpan: targetField.colSpan || 6
+        rowIndex: 0,
+        colSpan: itemSpan
       };
 
       const insertIntoParent = (fields: Field[]): Field[] => {
@@ -4430,7 +4619,7 @@ export const ModuleEditor = () => {
             if (f.type === 'accordion' && updatedField.type !== 'group' && updatedField.type !== 'fieldGroup') {
               if (!f.fields || f.fields.length === 0) {
                 const sectionId = `section-${Date.now()}`;
-                const fieldWithParent = { ...updatedField, parentId: sectionId };
+                const fieldWithParent = { ...updatedField, parentId: sectionId, startCol: 1, rowIndex: 0 };
                 const newSection: Field = {
                   id: sectionId,
                   type: 'group' as FieldType,
@@ -4442,13 +4631,16 @@ export const ModuleEditor = () => {
                 return { ...f, fields: [newSection] };
               }
               const firstSection = f.fields[0];
-              const fieldWithParent = { ...updatedField, parentId: firstSection.id };
+              const slot = findNextAvailableSlot(firstSection.fields || [], itemSpan, itemHeight);
+              const fieldWithParent = { ...updatedField, parentId: firstSection.id, startCol: slot.startCol, rowIndex: slot.rowIndex };
               const updatedSections = f.fields.map((s, idx) =>
                 idx === 0 ? { ...s, fields: normalizeLayout([...(s.fields || []), fieldWithParent]) } : s
               );
               return { ...f, fields: updatedSections };
             }
-            return { ...f, fields: normalizeLayout([...(f.fields || []), updatedField]) };
+            const slot = findNextAvailableSlot(f.fields || [], itemSpan, itemHeight);
+            const placedField = { ...updatedField, startCol: slot.startCol, rowIndex: slot.rowIndex };
+            return { ...f, fields: normalizeLayout([...(f.fields || []), placedField]) };
           }
           if (f.fields) {
             return { ...f, fields: insertIntoParent(f.fields) };
@@ -4485,18 +4677,221 @@ export const ModuleEditor = () => {
 
     setLayout(prev => {
       const cleaned = removeFieldRecursive(prev, fieldId);
+      const sameTabRootFields = cleaned.filter(
+        f => !f.parentId && (f.tabId === targetTabId || (!f.tabId && targetTabId === tabs[0]?.id))
+      );
+      const span = targetField.colSpan || 6;
+      const slot = findNextAvailableSlot(sameTabRootFields, span, calculateHeight(targetField));
       const updatedField: Field = {
         ...targetField,
         parentId: undefined,
         tabId: targetTabId,
-        startCol: 1,
-        rowIndex: 999
+        colSpan: span,
+        startCol: slot.startCol,
+        rowIndex: slot.rowIndex
       };
       return normalizeLayout([...cleaned, updatedField]);
     });
     setSelectedId(fieldId);
     toast.success(`Moved "${targetField.label}" to root canvas`);
-  }, [layout, currentTabId]);
+  }, [layout, currentTabId, tabs, findNextAvailableSlot]);
+
+  // Cross-container drag-and-drop state & handlers (Root ↔ Group, Group A ↔ Group B, Any → Tab)
+  const [rglDropTargetId, setRglDropTargetId] = useState<string | null>(null);
+  const [rglDropTabId, setRglDropTabId] = useState<string | null>(null);
+  const [rglDragCount, setRglDragCount] = useState<number>(1);
+
+  const moveFieldsToTab = useCallback((fieldIds: string[], targetTabId: string) => {
+    if (!targetTabId || fieldIds.length === 0) return;
+    const targetTab = tabs.find(t => t.id === targetTabId);
+    if (!targetTab) return;
+
+    // Resolve unique top-level fields to move (if a parent group and its child are both selected, move the group once)
+    const idSet = new Set(fieldIds);
+    const hasSelectedAncestor = (f: Field | undefined): boolean => {
+      if (!f?.parentId) return false;
+      if (idSet.has(f.parentId)) return true;
+      return hasSelectedAncestor(findFieldRecursive(layout, f.parentId));
+    };
+
+    const topIds = Array.from(idSet).filter(fid => {
+      const f = findFieldRecursive(layout, fid);
+      return Boolean(f) && !hasSelectedAncestor(f);
+    });
+    if (topIds.length === 0) return;
+
+    const fieldsToMove = topIds
+      .map(fid => findFieldRecursive(layout, fid))
+      .filter(Boolean) as Field[];
+
+    setLayout(prev => {
+      let cleaned = prev;
+      topIds.forEach(fid => {
+        cleaned = removeFieldRecursive(cleaned, fid);
+      });
+
+      const targetTabExisting = cleaned.filter(
+        f => !f.parentId && (f.tabId === targetTabId || (!f.tabId && targetTabId === tabs[0]?.id))
+      );
+      const placedOnTarget = [...targetTabExisting];
+      const movedFields: Field[] = [];
+
+      fieldsToMove.forEach(tf => {
+        const span = tf.colSpan || (isContainerField(tf.type) ? 12 : 6);
+        const slot = findNextAvailableSlot(placedOnTarget, span, calculateHeight(tf));
+        const moved: Field = {
+          ...tf,
+          parentId: undefined,
+          tabId: targetTabId,
+          colSpan: span,
+          startCol: slot.startCol,
+          rowIndex: slot.rowIndex,
+        };
+        placedOnTarget.push(moved);
+        movedFields.push(moved);
+      });
+
+      return normalizeLayout([...cleaned, ...movedFields]);
+    });
+
+    setCurrentTabId(targetTabId);
+    setSelectedIds(topIds);
+    toast.success(
+      fieldsToMove.length === 1
+        ? `Moved "${fieldsToMove[0].label}" to "${targetTab.label}"`
+        : `Moved ${fieldsToMove.length} fields to "${targetTab.label}"`
+    );
+  }, [layout, tabs, findNextAvailableSlot]);
+
+  const resolveDropTabAtPoint = useCallback((clientX: number, clientY: number): string | null => {
+    const elements = document.elementsFromPoint(clientX, clientY);
+    for (const el of elements) {
+      const tabEl = (el as HTMLElement).closest?.('[data-tab-drop-id]') as HTMLElement | null;
+      if (tabEl) {
+        const tid = tabEl.getAttribute('data-tab-drop-id');
+        if (tid) return tid;
+      }
+    }
+    return null;
+  }, []);
+
+  const resolveDropContainerAtPoint = useCallback((draggedFieldId: string, clientX: number, clientY: number): string | null => {
+    const draggedEl = document.getElementById(`canvas-field-${draggedFieldId}`);
+    const elements = document.elementsFromPoint(clientX, clientY);
+    for (const el of elements) {
+      if (draggedEl && (el === draggedEl || draggedEl.contains(el))) continue;
+      const containerEl = (el as HTMLElement).closest?.('[data-container-id]') as HTMLElement | null;
+      if (containerEl) {
+        if (draggedEl && (containerEl === draggedEl || draggedEl.contains(containerEl))) continue;
+        const cid = containerEl.getAttribute('data-container-id');
+        if (cid && cid !== draggedFieldId) {
+          return cid;
+        }
+      }
+    }
+    return null;
+  }, []);
+
+  const handleRglCrossDrag = useCallback((fieldId: string, sourceParentId: string | undefined, clientX: number, clientY: number) => {
+    // 1. Check if hovering over another section tab first
+    const hoveredTabDropId = resolveDropTabAtPoint(clientX, clientY);
+    if (hoveredTabDropId && hoveredTabDropId !== currentTabId) {
+      const idsToMove = selectedIds.includes(fieldId) && selectedIds.length > 1 ? selectedIds : [fieldId];
+      setRglDropTabId(prev => (prev === hoveredTabDropId ? prev : hoveredTabDropId));
+      setRglDragCount(idsToMove.length);
+      setRglDropTargetId(prev => (prev === '__tab__' ? prev : '__tab__'));
+      setDragOverInfo(prev => (prev === null ? prev : null));
+      return;
+    } else {
+      setRglDropTabId(prev => (prev === null ? prev : null));
+    }
+
+    const targetId = resolveDropContainerAtPoint(fieldId, clientX, clientY);
+    const draggedField = findFieldRecursive(layout, fieldId);
+    const span = draggedField?.colSpan || 6;
+    const height = draggedField ? calculateHeight(draggedField) : 2;
+
+    if (targetId && targetId !== sourceParentId) {
+      setRglDropTargetId(prev => (prev === targetId ? prev : targetId));
+      const targetContainer = findFieldRecursive(layout, targetId);
+      const targetFields = (targetContainer?.fields || []).filter(f => f.id !== fieldId);
+      const slot = findNextAvailableSlot(targetFields, span, height);
+      setDragOverInfo(prev => {
+        if (prev?.active && prev.parentId === targetId && prev.col === slot.startCol && prev.index === slot.rowIndex && prev.span === span) {
+          return prev;
+        }
+        return {
+          col: slot.startCol,
+          span,
+          index: slot.rowIndex,
+          rowSpan: height,
+          active: true,
+          parentId: targetId,
+          tabId: currentTabId,
+        };
+      });
+    } else if (!targetId && sourceParentId) {
+      const sourceEl = document.querySelector(`[data-container-id="${sourceParentId}"]`);
+      const rect = sourceEl?.getBoundingClientRect();
+      const isOutsideSource = !rect || clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom;
+      if (isOutsideSource) {
+        setRglDropTargetId(prev => (prev === '__root__' ? prev : '__root__'));
+        const rootFields = layout.filter(
+          f => !f.parentId && f.id !== fieldId && (f.tabId === currentTabId || (!f.tabId && currentTabId === tabs[0]?.id))
+        );
+        const slot = findNextAvailableSlot(rootFields, span, height);
+        setDragOverInfo(prev => {
+          if (prev?.active && !prev.parentId && prev.col === slot.startCol && prev.index === slot.rowIndex && prev.span === span) {
+            return prev;
+          }
+          return {
+            col: slot.startCol,
+            span,
+            index: slot.rowIndex,
+            rowSpan: height,
+            active: true,
+            parentId: undefined,
+            tabId: currentTabId,
+          };
+        });
+      } else {
+        setRglDropTargetId(prev => (prev === null ? prev : null));
+        setDragOverInfo(prev => (prev === null ? prev : null));
+      }
+    } else {
+      setRglDropTargetId(prev => (prev === null ? prev : null));
+      setDragOverInfo(prev => (prev === null ? prev : null));
+    }
+  }, [resolveDropTabAtPoint, resolveDropContainerAtPoint, layout, currentTabId, tabs, selectedIds, findNextAvailableSlot]);
+
+  const handleRglCrossDragStop = useCallback((fieldId: string, sourceParentId: string | undefined, clientX: number, clientY: number) => {
+    setRglDropTargetId(null);
+    setRglDropTabId(null);
+    setDragOverInfo(null);
+
+    // 1. Drop onto another section tab
+    const droppedTabId = resolveDropTabAtPoint(clientX, clientY);
+    if (droppedTabId && droppedTabId !== currentTabId) {
+      const idsToMove = selectedIds.includes(fieldId) && selectedIds.length > 1 ? selectedIds : [fieldId];
+      requestAnimationFrame(() => moveFieldsToTab(idsToMove, droppedTabId));
+      return;
+    }
+
+    const targetId = resolveDropContainerAtPoint(fieldId, clientX, clientY);
+    if (targetId && targetId !== sourceParentId) {
+      // Defer slightly so RGL's synchronous onLayoutChange completes before reparenting
+      requestAnimationFrame(() => moveFieldToContainer(targetId, fieldId));
+      return;
+    }
+    if (!targetId && sourceParentId) {
+      const sourceEl = document.querySelector(`[data-container-id="${sourceParentId}"]`);
+      const rect = sourceEl?.getBoundingClientRect();
+      const isOutsideSource = !rect || clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom;
+      if (isOutsideSource) {
+        requestAnimationFrame(() => moveFieldToRoot(fieldId));
+      }
+    }
+  }, [resolveDropTabAtPoint, resolveDropContainerAtPoint, currentTabId, selectedIds, moveFieldsToTab, moveFieldToContainer, moveFieldToRoot]);
 
   // Create a new field directly inside a container (group / repeater / accordion section)
   const createFieldInContainer = useCallback((containerId: string, fieldType: FieldType = 'text') => {
@@ -4506,9 +4901,8 @@ export const ModuleEditor = () => {
     const newField = createField(fieldType);
     newField.parentId = containerId;
     newField.tabId = undefined;
-    newField.startCol = 1;
-    newField.rowIndex = 999;
     newField.colSpan = ['heading', 'divider', 'spacer', 'alert', 'html'].includes(newField.type) ? 12 : 6;
+    const itemHeight = calculateHeight(newField);
 
     setLayout(prev => {
       const insertIntoParent = (fields: Field[]): Field[] => {
@@ -4517,7 +4911,7 @@ export const ModuleEditor = () => {
             if (f.type === 'accordion' && newField.type !== 'group' && newField.type !== 'fieldGroup') {
               if (!f.fields || f.fields.length === 0) {
                 const sectionId = `section-${Date.now()}`;
-                const fieldWithParent = { ...newField, parentId: sectionId };
+                const fieldWithParent = { ...newField, parentId: sectionId, startCol: 1, rowIndex: 0 };
                 const newSection: Field = {
                   id: sectionId,
                   type: 'group' as FieldType,
@@ -4529,13 +4923,16 @@ export const ModuleEditor = () => {
                 return { ...f, fields: [newSection] };
               }
               const firstSection = f.fields[0];
-              const fieldWithParent = { ...newField, parentId: firstSection.id };
+              const slot = findNextAvailableSlot(firstSection.fields || [], newField.colSpan || 6, itemHeight);
+              const fieldWithParent = { ...newField, parentId: firstSection.id, startCol: slot.startCol, rowIndex: slot.rowIndex };
               const updatedSections = f.fields.map((s, idx) =>
                 idx === 0 ? { ...s, fields: normalizeLayout([...(s.fields || []), fieldWithParent]) } : s
               );
               return { ...f, fields: updatedSections };
             }
-            return { ...f, fields: normalizeLayout([...(f.fields || []), newField]) };
+            const slot = findNextAvailableSlot(f.fields || [], newField.colSpan || 6, itemHeight);
+            const placedField = { ...newField, startCol: slot.startCol, rowIndex: slot.rowIndex };
+            return { ...f, fields: normalizeLayout([...(f.fields || []), placedField]) };
           }
           if (f.fields) {
             return { ...f, fields: insertIntoParent(f.fields) };
@@ -4758,39 +5155,52 @@ export const ModuleEditor = () => {
     
     const container = gridElement.getBoundingClientRect();
     
-    // Use snapToGrid for exact 1:1 coordinates
-    const { x, y } = snapToGrid(
-      e.clientX - container.left,
-      e.clientY - container.top,
-      container.width,
-      GRID_CONFIG.rowHeight,
-      GRID_CONFIG.gap,
-      isNested ? GRID_CONFIG.nestedPadding : GRID_CONFIG.padding
-    );
+    const resolvedTabId = targetTabId || currentTabId;
 
-    const col = x + 1;
-    const rowIndex = y;
-    
     // Determine span and height from activeDragItem
     let span = 6;
+    let draggedHeight = 2;
 
     if (activeDragItem) {
       if (activeDragItem.type === 'field') {
         const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === activeDragItem.fieldType);
         if (fieldDef?.defaultSpan) span = fieldDef.defaultSpan;
+        draggedHeight = calculateHeight({ type: activeDragItem.fieldType } as any);
       } else if (activeDragItem.type === 'move') {
         const field = layout.find(f => f.id === activeDragItem.fieldId) || findFieldRecursive(layout, activeDragItem.fieldId || '');
         if (field) {
           span = field.colSpan || 6;
+          draggedHeight = calculateHeight(field);
         }
       }
     }
 
-    const constrainedSpan = Math.min(span, 13 - col);
+    let col = 1;
+    let rowIndex = 0;
+    let constrainedSpan = span;
 
-    const fieldToMoveId = activeDragItem?.type === 'move' ? activeDragItem.fieldId : null;
-    const draggedField = fieldToMoveId ? findFieldRecursive(layout, fieldToMoveId) : null;
-    const draggedHeight = draggedField ? calculateHeight(draggedField) : 2;
+    if (activeDragItem?.type === 'field') {
+      // Place preview dropzone at the exact next available slot without moving existing fields
+      const targetFields = parentId
+        ? (findFieldRecursive(layout, parentId)?.fields || [])
+        : layout.filter(f => !f.parentId && (f.tabId === resolvedTabId || (!f.tabId && resolvedTabId === tabs[0]?.id)));
+      const slot = findNextAvailableSlot(targetFields, span, draggedHeight);
+      col = slot.startCol;
+      rowIndex = slot.rowIndex;
+      constrainedSpan = span;
+    } else {
+      const { x, y } = snapToGrid(
+        e.clientX - container.left,
+        e.clientY - container.top,
+        container.width,
+        GRID_CONFIG.rowHeight,
+        GRID_CONFIG.gap,
+        isNested ? GRID_CONFIG.nestedPadding : GRID_CONFIG.padding
+      );
+      col = x + 1;
+      rowIndex = y;
+      constrainedSpan = Math.min(span, 13 - col);
+    }
 
     const info = { 
       col, 
@@ -4798,7 +5208,7 @@ export const ModuleEditor = () => {
       index: rowIndex, 
       active: true, 
       parentId,
-      tabId: targetTabId || currentTabId,
+      tabId: resolvedTabId,
       rowSpan: draggedHeight
     };
 
@@ -4878,8 +5288,13 @@ export const ModuleEditor = () => {
 
       const resolvedTabId = targetTabId || currentTabId;
 
+      const isNewFromLibrary = data.type === 'field';
+      const itemSpan = fieldToInsert.colSpan || (isContainerField(fieldToInsert.type) ? 12 : 6);
+      const itemHeight = calculateHeight(fieldToInsert);
+
       const updatedField: Field = { 
         ...fieldToInsert, 
+        colSpan: itemSpan,
         startCol: dropCol, 
         rowIndex: dropRow, 
         parentId: parentId || undefined,
@@ -4889,12 +5304,17 @@ export const ModuleEditor = () => {
       // Helper to insert field into the tree
       const performInsert = (fields: Field[], targetId?: string): { fields: Field[], insertedField?: Field } => {
         if (!targetId) {
-          const sameTabFields = fields.filter(f => !f.parentId && f.tabId === resolvedTabId);
-          const otherFields = fields.filter(f => f.parentId || f.tabId !== resolvedTabId);
-          const resolved = resolveCollisionsInArray(updatedField, [...sameTabFields, updatedField]);
+          const sameTabFields = fields.filter(f => !f.parentId && (f.tabId === resolvedTabId || (!f.tabId && resolvedTabId === tabs[0]?.id)));
+          const otherFields = fields.filter(f => f.parentId || !(f.tabId === resolvedTabId || (!f.tabId && resolvedTabId === tabs[0]?.id)));
+          const placedField = isNewFromLibrary
+            ? { ...updatedField, ...findNextAvailableSlot(sameTabFields, itemSpan, itemHeight) }
+            : updatedField;
+          const resolved = isNewFromLibrary
+            ? [...sameTabFields, placedField]
+            : resolveCollisionsInArray(placedField, [...sameTabFields, placedField]);
           return { 
             fields: [...otherFields, ...normalizeLayout(resolved)], 
-            insertedField: updatedField 
+            insertedField: placedField 
           };
         }
         
@@ -4904,7 +5324,7 @@ export const ModuleEditor = () => {
             if (f.type === 'accordion' && updatedField.type !== 'group' && updatedField.type !== 'fieldGroup') {
               if (!f.fields || f.fields.length === 0) {
                 const sectionId = `section-${Date.now()}`;
-                const fieldWithParent = { ...updatedField, parentId: sectionId };
+                const fieldWithParent = { ...updatedField, parentId: sectionId, startCol: 1, rowIndex: 0 };
                 const newSection: Field = {
                   id: sectionId,
                   type: 'group' as FieldType,
@@ -4917,16 +5337,21 @@ export const ModuleEditor = () => {
                 return { ...f, fields: [newSection] };
               }
               const firstSection = f.fields[0];
-              const fieldWithParent = { ...updatedField, parentId: firstSection.id };
-              const sectionFields = [...(firstSection.fields || []), fieldWithParent];
-              const resolved = resolveCollisionsInArray(fieldWithParent, sectionFields);
-              insertedField = fieldWithParent;
+              const placedInSection = isNewFromLibrary
+                ? { ...updatedField, parentId: firstSection.id, ...findNextAvailableSlot(firstSection.fields || [], itemSpan, itemHeight) }
+                : { ...updatedField, parentId: firstSection.id };
+              const sectionFields = [...(firstSection.fields || []), placedInSection];
+              const resolved = isNewFromLibrary ? sectionFields : resolveCollisionsInArray(placedInSection, sectionFields);
+              insertedField = placedInSection;
               const updatedSections = f.fields.map((s, idx) => idx === 0 ? { ...s, fields: normalizeLayout(resolved) } : s);
               return { ...f, fields: updatedSections };
             }
-            const nestedFields = [...(f.fields || []), updatedField];
-            const resolved = resolveCollisionsInArray(updatedField, nestedFields);
-            insertedField = updatedField;
+            const placedNested = isNewFromLibrary
+              ? { ...updatedField, ...findNextAvailableSlot(f.fields || [], itemSpan, itemHeight) }
+              : updatedField;
+            const nestedFields = [...(f.fields || []), placedNested];
+            const resolved = isNewFromLibrary ? nestedFields : resolveCollisionsInArray(placedNested, nestedFields);
+            insertedField = placedNested;
             return { ...f, fields: normalizeLayout(resolved) };
           }
           if (f.fields) {
@@ -6120,7 +6545,7 @@ export const ModuleEditor = () => {
             renderNested={(nestedFields, pId) => renderFieldBlocks(nestedFields as any, pId, targetTabId)}
             viewportSize={viewportSize}
             onClone={cloneField}
-            isDraggingOver={dragOverInfo?.active && dragOverInfo?.parentId === block.id}
+            isDraggingOver={(dragOverInfo?.active && dragOverInfo?.parentId === block.id) || rglDropTargetId === block.id}
             hoveredMapping={hoveredMapping}
             dragOverInfo={dragOverInfo}
             isDragging={!!activeDragItem}
@@ -6151,6 +6576,13 @@ export const ModuleEditor = () => {
         currentSpan === 4 ? '1/3' :
         currentSpan === 3 ? '1/4' : `${currentSpan}/12`;
 
+      const isVisualBlock = ['heading', 'alert', 'divider', 'spacer'].includes(block.type);
+      const isBlockSelected = selectedIds.includes(block.id);
+      const mappingEntry = Object.entries(connectorMappings).find(([_, m]) => Object.values(m).includes(block.id));
+      const mappedConnector = mappingEntry ? connectorRegistry.find(c => c.id === mappingEntry[0]) : null;
+      const sampleRec = previewRecords[0] || {};
+      const sampleVal = sampleRec?.[block.id] ?? sampleRec?.[block.name || ''] ?? block.defaultValue ?? '';
+
       return (
         <div
           key={block.id}
@@ -6165,26 +6597,13 @@ export const ModuleEditor = () => {
             gridRow: viewportSize === 'mobile' ? 'auto' : `${(block.rowIndex || 0) + 1} / span ${calculateHeight(block)}`,
             minHeight: `${calculateHeight(block) * GRID_CONFIG.rowHeight}px`
           } : undefined}
-          onClick={(e) => {
-            if (block.isDraggingPlaceholder) return;
-            e.stopPropagation();
-            if (e.shiftKey || e.metaKey || e.ctrlKey) {
-              setSelectedIds(prev => prev.includes(block.id) ? prev.filter(id => id !== block.id) : [...prev, block.id]);
-            } else {
-              setSelectedIds([block.id]);
-            }
-          }}
           id={`canvas-field-${block.id}`}
           className={cn(
-            "group/field relative p-3.5 rounded-xl cursor-pointer transition-all border h-full flex flex-col",
-            block.isDraggingPlaceholder
-              ? "border-dashed border-indigo-500/40 bg-indigo-50/20 dark:bg-indigo-500/5 select-none pointer-events-none"
-              : (selectedIds.includes(block.id) 
-                  ? "border-indigo-500 bg-indigo-50/20 dark:bg-indigo-500/5 ring-2 ring-indigo-500/20 z-30 shadow-sm" 
-                  : "bg-white dark:bg-zinc-900 border-zinc-200/80 dark:border-zinc-800/80 hover:border-indigo-500/40 hover:shadow-xs hover:z-40"),
-            block.hidden && activeTab === 'builder' && "opacity-45 border-dashed grayscale-[0.4] hover:opacity-100 hover:grayscale-0",
+            "relative h-full flex flex-col",
+            isBlockSelected ? "z-50" : "z-10 hover:z-40",
+            block.isDraggingPlaceholder && "rounded-xl border border-dashed border-indigo-500/40 bg-indigo-50/20 dark:bg-indigo-500/5 select-none pointer-events-none",
             activeDragItem?.fieldId === block.id && "opacity-20 z-50 cursor-grabbing",
-            hoveredMapping?.targetFieldId === block.id && "ring-4 ring-indigo-500/30 border-indigo-500 scale-[1.01] shadow-xl z-30"
+            hoveredMapping?.targetFieldId === block.id && "ring-4 ring-indigo-500/30 rounded-xl scale-[1.01] shadow-xl z-50"
           )}
         >
           {block.isDraggingPlaceholder ? (() => {
@@ -6201,148 +6620,56 @@ export const ModuleEditor = () => {
               </div>
             );
           })() : (
-            <>
-              <div className="space-y-1.5 flex-1 overflow-y-auto scrollbar-hide flex flex-col justify-between">
-                {/* Field Header matching RecordDetailView.tsx label & quick builder controls */}
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <div 
-                      className={cn(
-                        "drag-handle text-zinc-400 hover:text-indigo-600 dark:text-zinc-500 dark:hover:text-indigo-400 cursor-grab active:cursor-grabbing p-0.5 -ml-1 rounded flex items-center shrink-0 transition-colors",
-                        parentId ? "nested-drag-handle" : "root-drag-handle"
-                      )}
-                      title="Drag to reposition"
-                    >
-                      <GripVertical size={13} />
-                    </div>
-                    {!(block.type === 'heading' || block.type === 'alert' || block.type === 'divider' || block.type === 'spacer') ? (
-                      <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-300 flex items-center gap-1.5 truncate cursor-pointer">
-                        {(() => {
-                          const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === block.type);
-                          const Icon = fieldDef?.icon;
-                          return Icon ? <Icon size={11} className="text-zinc-400 shrink-0" /> : null;
-                        })()}
-                        <span className="truncate">{block.label || block.name}</span>
-                        {block.required && <span className="text-rose-500 font-black">*</span>}
-                        {block.tooltip && <HelpCircle size={10} className="text-zinc-400 shrink-0" />}
-                      </label>
-                    ) : (
-                      <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest truncate">
-                        {block.type}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Right Status Badges & Quick Actions */}
-                  <div className="flex items-center gap-1 shrink-0">
-                    {(() => {
-                      const mappingEntry = Object.entries(connectorMappings).find(([_, m]) => Object.values(m).includes(block.id));
-                      if (mappingEntry) {
-                        const [connId] = mappingEntry;
-                        const connector = connectorRegistry.find(c => c.id === connId);
-                        return (
-                          <div 
-                            className={cn(
-                              "flex items-center gap-1 px-1.5 py-0.5 rounded-md border transition-all",
-                              hoveredMapping?.targetFieldId === block.id 
-                                ? "bg-indigo-600 border-indigo-600 text-white" 
-                                : "bg-indigo-500/10 border-indigo-500/20 text-indigo-500"
-                            )}
-                            title={`Mapped to ${connector?.label || 'Nexus Connector'}`}
-                          >
-                            <Zap size={9} />
-                            <span className="text-[8px] font-black uppercase tracking-tighter">Mapped</span>
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
-                    {block.visibilityRule && (
-                      <div className="flex items-center gap-1 px-1.5 py-0.5 bg-amber-500/10 rounded-md border border-amber-500/20 text-amber-600 dark:text-amber-400" title="Conditional Visibility Logic Applied">
-                        <BrainCircuit size={9} />
-                        <span className="text-[8px] font-black uppercase tracking-tighter">Logic</span>
-                      </div>
-                    )}
-                    {block.hidden && (
-                      <div 
-                        className="flex items-center gap-1 px-1.5 py-0.5 bg-rose-500/10 rounded-md border border-rose-500/20 text-rose-500 cursor-pointer hover:bg-rose-500/20" 
-                        title="Hidden by Default (Click to show)"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          updateField(block.id, { hidden: false });
-                        }}
-                      >
-                        <EyeOff size={9} />
-                        <span className="text-[8px] font-black uppercase tracking-tighter">Hidden</span>
-                      </div>
-                    )}
-
-                    {/* 1-Click Width Cycle Pill */}
-                    <button
-                      type="button"
-                      onClick={cycleSpan}
-                      title="Click to cycle width (Full → 2/3 → 1/2 → 1/3 → 1/4)"
-                      className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 hover:bg-indigo-500/10 text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 border border-zinc-200/80 dark:border-zinc-700/80 text-[8px] font-black uppercase tracking-wider transition-colors"
-                    >
-                      {spanLabel}
-                    </button>
-
-                    {/* Hover Toolbar Actions */}
-                    <div className="hidden group-hover/field:flex items-center gap-0.5 pl-0.5">
-                      {parentId && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            moveFieldToRoot(block.id);
-                          }}
-                          className="p-1 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors"
-                          title="Move out of group to Root Canvas"
-                        >
-                          <ExternalLink size={11} />
-                        </button>
-                      )}
-                      {!block.hidden && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            updateField(block.id, { hidden: true });
-                          }}
-                          className="p-1 text-zinc-400 hover:text-amber-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors"
-                          title="Quick Hide Field"
-                        >
-                          <EyeOff size={11} />
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          cloneField(block.id);
-                        }}
-                        className="p-1 text-zinc-400 hover:text-indigo-600 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors"
-                        title="Duplicate Field"
-                      >
-                        <Copy size={11} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteBlocks([block.id]);
-                        }}
-                        className="p-1 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded transition-colors"
-                        title="Delete Field"
-                      >
-                        <Trash2 size={11} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Realistic Workspace Input / Block Preview */}
-                <div className="min-h-[20px] flex-1 flex flex-col justify-center">
+            <DesignControlOverlay
+              isSelected={isBlockSelected}
+              isHidden={Boolean(block.hidden)}
+              isReadOnly={Boolean((block as any).readOnly)}
+              hasVisibilityRule={Boolean(block.visibilityRule)}
+              hasCalculation={Boolean(block.calculationLogic)}
+              widthLabel={spanLabel}
+              onCycleWidth={cycleSpan}
+              dragHandleClassName={cn("drag-handle", parentId ? "nested-drag-handle" : "root-drag-handle")}
+              onToggleHidden={() => updateField(block.id, { hidden: !block.hidden })}
+              onDuplicate={() => cloneField(block.id)}
+              onDelete={() => deleteBlocks([block.id])}
+              extraBadges={
+                mappedConnector ? (
+                  <span
+                    className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[9px] font-semibold"
+                    title={`Mapped to ${mappedConnector.label || 'Nexus Connector'}`}
+                  >
+                    <Zap size={9} />
+                  </span>
+                ) : null
+              }
+              extraActions={
+                parentId ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      moveFieldToRoot(block.id);
+                    }}
+                    className="p-1 rounded-md text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                    title="Move out of group to Root Canvas"
+                  >
+                    <ExternalLink size={11} />
+                  </button>
+                ) : null
+              }
+              onClick={(e) => {
+                e.stopPropagation();
+                if (e.shiftKey || e.metaKey || e.ctrlKey) {
+                  setSelectedIds(prev => prev.includes(block.id) ? prev.filter(id => id !== block.id) : [...prev, block.id]);
+                } else {
+                  setSelectedIds([block.id]);
+                }
+              }}
+              disableChildPointerEvents
+              className="h-full flex flex-col justify-center p-1 -m-1"
+            >
+              {isVisualBlock ? (
+                <div className="py-1">
                   {block.type === 'heading' ? (() => {
                     const rawTag = block.options?.[0] || 'h2';
                     const Tag = (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(rawTag) ? rawTag : 'h2') as React.ElementType;
@@ -6351,20 +6678,14 @@ export const ModuleEditor = () => {
                                  Tag === 'h3' ? 'text-base font-bold' :
                                  Tag === 'h4' ? 'text-sm font-bold' : 'text-base font-bold';
                     return (
-                      <div className="pt-0.5">
-                        <Tag className={cn("text-zinc-900 dark:text-white tracking-tight", size)}>
-                          {block.label || 'Heading'}
-                        </Tag>
-                      </div>
+                      <Tag className={cn("text-zinc-900 dark:text-white tracking-tight", size)}>
+                        {block.label || 'Heading'}
+                      </Tag>
                     );
                   })() : block.type === 'divider' ? (
-                    <div className="py-1">
-                      <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-1" />
-                    </div>
+                    <div className="h-px bg-zinc-200 dark:bg-zinc-800 my-2" />
                   ) : block.type === 'spacer' ? (
-                    <div className="py-1">
-                      <div className="h-5 border-x border-zinc-200 dark:border-zinc-800 border-dashed mx-auto w-px" />
-                    </div>
+                    <div className="h-6 border-x border-zinc-200 dark:border-zinc-800 border-dashed mx-auto w-px" />
                   ) : block.type === 'alert' ? (() => {
                     const variant = block.options?.[0] || 'info';
                     const alertStyle = variant === 'error' ? 'bg-rose-500/10 border-rose-500/20 text-rose-600' :
@@ -6380,132 +6701,64 @@ export const ModuleEditor = () => {
                         <span className="text-xs font-semibold">{block.label || 'Alert Notice'}</span>
                       </div>
                     );
-                  })() : block.type === 'html' ? (
-                    <div className="min-h-[84px] bg-zinc-950 rounded-xl p-3.5 font-mono text-[10px] text-emerald-500/80 leading-relaxed border border-white/5 overflow-hidden relative">
-                      <span className="block text-indigo-400">&lt;div class="custom-card"&gt;</span>
-                      <span className="block pl-3">&lt;h4&gt;{block.label}&lt;/h4&gt;</span>
-                      <span className="block text-indigo-400">&lt;/div&gt;</span>
-                    </div>
-                  ) : block.type === 'button' ? (
-                    <div>
-                      <button
-                        type="button"
-                        className={cn(
-                          "px-4 py-2 rounded-lg text-xs font-semibold transition-all",
-                          block.variant === 'secondary' ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white" :
-                          block.variant === 'outline' ? "border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-white" :
-                          block.variant === 'danger' ? "bg-rose-500 text-white" :
-                          "bg-indigo-600 text-white shadow-xs"
-                        )}
-                      >
-                        {block.label || 'Action Button'}
-                      </button>
-                    </div>
-                  ) : block.type === 'sub_module' ? (
-                    renderSubmoduleMock(block)
-                  ) : block.type === 'relationship_m2m' ? (
-                    renderRelationshipM2MMock(block)
-                  ) : block.type === 'rollup' ? (
-                    renderRollupMock(block)
-                  ) : block.type === 'connector' ? (
-                    <div className="p-3.5 bg-indigo-500/5 border border-indigo-500/20 rounded-xl flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-8 h-8 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-indigo-500 shrink-0">
-                          <Zap size={15} />
-                        </div>
-                        <div className="min-w-0">
-                          <h4 className="text-xs font-bold text-zinc-900 dark:text-white truncate">{block.label || 'Nexus Connector'}</h4>
-                          <p className="text-[10px] text-zinc-500 truncate">
-                            {block.connectorId ? `${Object.keys(connectorMappings[block.connectorId] || {}).length} streams mapped` : 'Setup required'}
-                          </p>
-                        </div>
-                      </div>
-                      <span className={cn("px-2 py-0.5 rounded-full text-[9px] font-bold uppercase", block.connectorId ? "bg-emerald-500/10 text-emerald-600" : "bg-rose-500/10 text-rose-500")}>
-                        {block.connectorId ? 'Active' : 'Configure'}
-                      </span>
-                    </div>
-                  ) : block.type === 'party' ? (
-                    <div className="h-9 w-full bg-zinc-50/70 dark:bg-zinc-950/60 border border-indigo-500/30 rounded-lg flex items-center justify-between px-3">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Building2 size={13} className="text-indigo-500 shrink-0" />
-                        <span className="text-xs text-zinc-400 truncate">
-                          {block.placeholder || `Search ${block.label} in Directory...`}
-                        </span>
-                      </div>
-                      <span className="px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold uppercase shrink-0">
-                        Directory
-                      </span>
-                    </div>
-                  ) : block.type === 'lookup' ? (
-                    <div className="h-9 w-full bg-zinc-50/70 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 rounded-lg flex items-center justify-between px-3">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Search size={13} className="text-zinc-400 shrink-0" />
-                        <span className="text-xs text-zinc-400 truncate">
-                          {block.placeholder || `Search ${block.label}...`}
-                        </span>
-                      </div>
-                      <ChevronDown size={13} className="text-zinc-400 shrink-0" />
-                    </div>
-                  ) : block.type === 'calculation' ? (
-                    <div className="h-9 bg-indigo-500/5 border border-indigo-500/15 rounded-lg flex items-center px-3">
-                      <Calculator size={12} className="text-indigo-500 mr-2 shrink-0" />
-                      <span className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 truncate flex-1">
-                        {block.calculationLogic || 'No formula defined'}
-                      </span>
-                    </div>
-                  ) : block.type === 'autonumber' ? (
-                    <div className="h-9 bg-zinc-100/80 dark:bg-zinc-800/60 rounded-lg flex items-center px-3 font-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold border border-indigo-500/10">
-                      {block.autonumberPrefix || ''}
-                      {(block.autonumberStart || 1).toString().padStart(block.autonumberDigits || 4, '0')}
-                      {block.autonumberSuffix || ''}
-                    </div>
-                  ) : (block.type === 'textarea' || block.type === 'longText' || block.type === 'richtext' || (block.type as string) === 'rich_text') ? (
-                    <div className="flex-1 min-h-[72px] w-full bg-zinc-50/70 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 rounded-lg p-2.5 text-xs text-zinc-400">
-                      {block.placeholder || `Enter ${block.label?.toLowerCase() || 'details'}...`}
-                    </div>
-                  ) : (block.type === 'select' || block.type === 'user' || (block.type as string) === 'status') ? (
-                    <div className="h-9 w-full bg-zinc-50/70 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 rounded-lg flex items-center justify-between px-3">
-                      <span className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
-                        {block.defaultValue || block.options?.[0] || block.placeholder || `Select ${block.label?.toLowerCase() || 'option'}...`}
-                      </span>
-                      <ChevronDown size={13} className="text-zinc-400 shrink-0" />
-                    </div>
-                  ) : (block.type === 'date' || (block.type as string) === 'datetime') ? (
-                    <div className="h-9 w-full bg-zinc-50/70 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 rounded-lg flex items-center justify-between px-3">
-                      <span className="text-xs text-zinc-400 truncate">{block.defaultValue || 'MM / DD / YYYY'}</span>
-                      <Calendar size={13} className="text-zinc-400 shrink-0" />
-                    </div>
-                  ) : block.type === 'time' ? (
-                    <div className="h-9 w-full bg-zinc-50/70 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 rounded-lg flex items-center justify-between px-3">
-                      <span className="text-xs text-zinc-400 truncate">{block.defaultValue || '09:00 AM'}</span>
-                      <Clock size={13} className="text-zinc-400 shrink-0" />
-                    </div>
-                  ) : (block.type === 'boolean' || block.type === 'toggle' || block.type === 'checkbox') ? (
-                    <div className="flex items-center gap-2.5 h-9">
-                      <div className="w-8 h-4.5 bg-indigo-600 rounded-full relative flex items-center p-0.5">
-                        <div className="w-3.5 h-3.5 bg-white rounded-full shadow-xs ml-auto" />
-                      </div>
-                      <span className="text-xs text-zinc-600 dark:text-zinc-400 font-medium">{block.placeholder || 'Enabled'}</span>
-                    </div>
-                  ) : block.type === 'currency' ? (
-                    <div className="h-9 w-full bg-zinc-50/70 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 rounded-lg flex items-center px-3 gap-1.5">
-                      <span className="text-xs font-bold text-zinc-400">{block.currencySymbol || '$'}</span>
-                      <span className="text-xs text-zinc-400 truncate">{block.defaultValue || block.placeholder || '0.00'}</span>
-                    </div>
-                  ) : (
-                    <div className="h-9 w-full bg-zinc-50/70 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800 rounded-lg flex items-center px-3">
-                      <span className="text-xs text-zinc-400 truncate">
-                        {block.defaultValue || block.placeholder || `Enter ${block.label?.toLowerCase() || 'value'}...`}
-                      </span>
-                    </div>
-                  )}
-
-                  {block.helperText && !(block.type === 'heading' || block.type === 'alert' || block.type === 'divider' || block.type === 'spacer') && (
-                    <p className="text-[10px] text-zinc-400 truncate mt-1">{block.helperText}</p>
-                  )}
+                  })() : null}
                 </div>
-              </div>
-            </>
+              ) : block.type === 'sub_module' ? (
+                renderSubmoduleMock(block)
+              ) : block.type === 'relationship_m2m' ? (
+                renderRelationshipM2MMock(block)
+              ) : block.type === 'rollup' ? (
+                renderRollupMock(block)
+              ) : block.type === 'connector' ? (
+                <div className="p-3.5 bg-indigo-500/5 border border-indigo-500/20 rounded-xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-indigo-500 shrink-0">
+                      <Zap size={15} />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-bold text-zinc-900 dark:text-white truncate">{block.label || 'Nexus Connector'}</h4>
+                      <p className="text-[10px] text-zinc-500 truncate">
+                        {block.connectorId ? `${Object.keys(connectorMappings[block.connectorId] || {}).length} streams mapped` : 'Setup required'}
+                      </p>
+                    </div>
+                  </div>
+                  <span className={cn("px-2 py-0.5 rounded-full text-[9px] font-bold uppercase", block.connectorId ? "bg-emerald-500/10 text-emerald-600" : "bg-rose-500/10 text-rose-500")}>
+                    {block.connectorId ? 'Active' : 'Configure'}
+                  </span>
+                </div>
+              ) : block.type === 'button' ? (
+                <div className="py-1">
+                  <button
+                    type="button"
+                    className={cn(
+                      "px-4 py-2 rounded-lg text-xs font-semibold transition-all",
+                      block.variant === 'secondary' ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white" :
+                      block.variant === 'outline' ? "border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-white" :
+                      block.variant === 'danger' ? "bg-rose-500 text-white" :
+                      "bg-indigo-600 text-white shadow-xs"
+                    )}
+                  >
+                    {block.label || 'Action Button'}
+                  </button>
+                </div>
+              ) : (
+                <RecordFieldSurface
+                  label={block.label || block.name}
+                  required={Boolean(block.required)}
+                  tooltip={block.tooltip}
+                  helperText={block.helperText}
+                >
+                  <FieldInput
+                    field={block as any}
+                    value={sampleVal}
+                    onChange={() => {}}
+                    readonly={false}
+                    recordData={sampleRec}
+                    allFields={allFields as any}
+                  />
+                </RecordFieldSurface>
+              )}
+            </DesignControlOverlay>
           )}
         </div>
       );
@@ -6518,8 +6771,11 @@ export const ModuleEditor = () => {
           fields={filtered}
           viewportSize={viewportSize}
           dragOverInfo={dragOverInfo}
+          rglDropTargetId={rglDropTargetId}
           resolveCollisionsInArray={resolveCollisionsInArray}
           onLayoutChange={handleNestedRglLayoutChange}
+          onCrossDrag={handleRglCrossDrag}
+          onCrossDragStop={handleRglCrossDragStop}
         >
           {renderedCards}
         </NestedRglContainer>
@@ -7001,7 +7257,7 @@ export const ModuleEditor = () => {
               </button>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-6 custom-scrollbar">
+            <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-4 custom-scrollbar">
               {activeViewMode === 'master' ? (
                 (() => {
                   const filtered = displayFields.filter(f => 
@@ -7333,12 +7589,12 @@ export const ModuleEditor = () => {
                   if (filteredFields.length === 0) return null;
   
                   return (
-                    <div key={category.id} className="space-y-4">
+                    <div key={category.id} className="space-y-1.5">
                       <div className="flex items-center justify-between px-1">
-                        <h4 className="text-[10px] font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest">{category.label}</h4>
-                        <span className="text-[8px] font-bold text-zinc-300 dark:text-zinc-800">{filteredFields.length}</span>
+                        <h4 className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">{category.label}</h4>
+                        <span className="text-[9px] font-mono text-zinc-400 dark:text-zinc-600">{filteredFields.length}</span>
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-2 gap-1.5">
                         {filteredFields.map((field) => (
                           <div
                             key={field.id}
@@ -7353,10 +7609,11 @@ export const ModuleEditor = () => {
                               const newField = createField(field.id as any);
                               if (newField) {
                                 const activeTabFields = layout.filter(f => !f.parentId && (f.tabId === currentTabId || (!f.tabId && currentTabId === tabs[0]?.id)));
-                                const maxY = activeTabFields.reduce((max, f) => Math.max(max, (f.rowIndex || 0) + calculateHeight(f)), 0);
-                                newField.rowIndex = maxY;
-                                newField.startCol = 1;
-                                newField.colSpan = newField.colSpan || (['heading', 'divider', 'spacer', 'alert', 'html'].includes(newField.type) ? 12 : 6);
+                                const span = newField.colSpan || (isContainerField(newField.type) || ['heading', 'divider', 'spacer', 'alert', 'html'].includes(newField.type) ? 12 : 6);
+                                const slot = findNextAvailableSlot(activeTabFields, span, calculateHeight(newField));
+                                newField.rowIndex = slot.rowIndex;
+                                newField.startCol = slot.startCol;
+                                newField.colSpan = span;
                                 newField.tabId = currentTabId;
                                 setLayout(prev => [...prev, newField]);
                                 setSelectedId(newField.id);
@@ -7364,17 +7621,15 @@ export const ModuleEditor = () => {
                                 toast.success(`Added ${field.label} field`);
                               }
                             }}
-                            className="group cursor-pointer active:scale-95 transition-all space-y-2 select-none"
+                            className="group h-8 px-2 rounded-lg border border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 hover:border-indigo-400/70 hover:bg-indigo-50/40 dark:hover:bg-indigo-500/10 flex items-center gap-1.5 cursor-grab active:cursor-grabbing active:scale-[0.98] transition-all select-none"
                             title={selectedField && isContainerField(selectedField.type) ? `Click to add inside ${selectedField.label}` : `Click to add or drag into canvas`}
                           >
-                            <BlockThumbnail type={field.id} />
-                            <div className="flex items-center justify-between gap-1 px-1">
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <field.icon size={12} className="text-zinc-400 group-hover:text-indigo-500 transition-colors shrink-0" />
-                                <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400 group-hover:text-zinc-900 dark:group-hover:text-zinc-200 transition-colors truncate">{field.label}</span>
-                              </div>
-                              <Plus size={11} className="text-zinc-400 opacity-0 group-hover:opacity-100 group-hover:text-indigo-500 transition-opacity shrink-0" />
+                            <div className="w-5 h-5 rounded-md bg-zinc-100/90 dark:bg-zinc-800 group-hover:bg-indigo-500/15 text-zinc-500 dark:text-zinc-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 flex items-center justify-center shrink-0 transition-colors">
+                              <field.icon size={11} />
                             </div>
+                            <span className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300 group-hover:text-zinc-950 dark:group-hover:text-white transition-colors truncate flex-1">
+                              {field.label}
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -7689,485 +7944,148 @@ export const ModuleEditor = () => {
             activeViewMode === 'master' ? (
               <div
                 onWheel={handleCanvasWheelZoom}
-                className="flex-1 flex flex-col overflow-hidden bg-zinc-100/60 dark:bg-black bg-[radial-gradient(#d4d4d8_1px,transparent_1px)] dark:bg-[radial-gradient(#27272a_1px,transparent_1px)] [background-size:24px_24px] p-6 md:p-8 custom-scrollbar overflow-y-auto min-h-full"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={handleTableDrop}
+                className="w-full flex-1 flex flex-col overflow-hidden bg-zinc-100/60 dark:bg-black bg-[radial-gradient(#d4d4d8_1px,transparent_1px)] dark:bg-[radial-gradient(#27272a_1px,transparent_1px)] [background-size:24px_24px] p-4 md:p-5 custom-scrollbar overflow-y-auto min-h-full"
               >
                 <div
                   style={canvasZoom !== 1 ? ({ zoom: canvasZoom } as React.CSSProperties) : undefined}
-                  className="max-w-6xl mx-auto w-full space-y-4"
+                  className={cn(
+                    "w-full mx-auto flex-1 flex flex-col gap-3 min-h-[680px] transition-all duration-300",
+                    viewportSize === 'desktop' && "max-w-[1440px]",
+                    viewportSize === 'tablet' && "w-[768px] max-w-full p-5 bg-zinc-200/50 dark:bg-zinc-900/60 rounded-[2.5rem] border-2 border-zinc-300/80 dark:border-zinc-700/80 shadow-2xl ring-1 ring-black/5",
+                    viewportSize === 'mobile' && "w-[390px] max-w-full p-3.5 bg-zinc-200/80 dark:bg-zinc-900/80 rounded-[3rem] border-[6px] border-zinc-300 dark:border-zinc-700 shadow-2xl ring-1 ring-black/10"
+                  )}
                 >
-                  
-                  {/* Master View Tier 1 Context Action Bar & Tier 2 Workbench Toolbar matching ModuleView.tsx */}
-                  <div className="border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 rounded-2xl shadow-xs overflow-hidden select-none z-20 relative">
-                    {/* Tier 1: h-10 Context Action Bar */}
-                    <div className="h-10 px-4 border-b border-zinc-200/80 dark:border-zinc-800/80 flex items-center justify-between gap-3 bg-white dark:bg-zinc-900">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-6 h-6 rounded-md flex items-center justify-center bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shrink-0">
-                          <DynamicIcon name={moduleSettings.iconName || 'Box'} size={13} />
-                        </div>
-                        <span className="text-[11px] font-medium text-zinc-400 hidden sm:inline">Workspace</span>
-                        <span className="text-zinc-300 dark:text-zinc-700 hidden sm:inline">/</span>
-                        <h2 className="text-xs font-bold text-zinc-900 dark:text-white tracking-tight truncate">
-                          {moduleSettings.name || 'Module Records'}
-                        </h2>
-                        <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 border border-zinc-200/80 dark:border-zinc-700/80">
-                          {previewRecords.length}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {/* View Switcher Pill */}
-                        <div className="flex items-center gap-1 h-7 px-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-700/80 text-[10px] font-bold text-zinc-700 dark:text-zinc-200">
-                          <TableProperties size={11} className="text-indigo-500" />
-                          <select
-                            value={interfaceSettings.master.layoutType || 'table'}
-                            onChange={(e) => {
-                              const val = e.target.value as any;
-                              setInterfaceSettings(prev => ({
-                                ...prev,
-                                master: { ...prev.master, layoutType: val }
-                              }));
-                            }}
-                            className="bg-transparent focus:outline-none cursor-pointer uppercase tracking-wider text-[10px] font-bold"
-                          >
-                            {[
-                              { id: 'table', label: 'Table' },
-                              { id: 'split', label: 'Split' },
-                              { id: 'kanban', label: 'Kanban' },
-                              { id: 'calendar', label: 'Calendar' },
-                              { id: 'analytics', label: 'Analytics' },
-                              { id: 'pipeline', label: 'Pipeline' },
-                              { id: 'timeline', label: 'Timeline' },
-                              { id: 'gantt', label: 'Gantt' },
-                              { id: 'cards', label: 'Cards' },
-                              { id: 'portfolio', label: 'Portfolio' },
-                              { id: 'map', label: 'Map' }
-                            ].filter(v => (interfaceSettings.master?.toolbar?.enabledViews || []).includes(v.id) || v.id === (interfaceSettings.master.layoutType || 'table')).map(v => (
-                              <option key={v.id} value={v.id} className="bg-white dark:bg-zinc-900">{v.label}</option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* Configure Toolbar & View Button */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedId('__table_settings');
-                          }}
-                          className={cn(
-                            "h-7 px-2 rounded-lg border text-[10px] font-bold flex items-center gap-1 transition-colors",
-                            selectedId === '__table_settings'
-                              ? "bg-indigo-600 border-indigo-600 text-white"
-                              : "bg-zinc-50 dark:bg-zinc-800/80 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:border-indigo-500/40"
-                          )}
-                          title="Configure Master Toolbar & View Settings"
-                        >
-                          <Settings2 size={11} />
-                          <span className="hidden md:inline">Configure</span>
-                        </button>
-
-                        {/* Custom Quick Actions */}
-                        {(interfaceSettings.actions || []).slice(0, 2).map((act) => (
-                          <button
-                            key={act.id}
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedId('__table_settings');
-                            }}
-                            className="h-7 px-2.5 bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg text-[10px] font-semibold text-zinc-700 dark:text-zinc-200 hover:border-indigo-500/40 flex items-center gap-1 transition-colors"
-                            title="Quick Action (Click to edit in Table Settings)"
-                          >
-                            <DynamicIcon name={act.icon || 'Zap'} size={11} className="text-indigo-500" />
-                            <span>{act.label}</span>
-                          </button>
-                        ))}
-
-                        {/* Action Trigger Forms */}
-                        {forms.filter(f => f.usage === 'action_trigger').slice(0, 1).map(f => (
-                          <button
-                            key={f.id}
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveTab('forms');
-                              setSelectedFormId(f.id);
-                            }}
-                            className="h-7 px-2.5 bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 rounded-lg text-[10px] font-semibold text-zinc-700 dark:text-zinc-200 hover:border-indigo-500/40 hidden sm:flex items-center gap-1"
-                            title="Action Trigger Form"
-                          >
-                            <FileText size={11} className="text-indigo-500" />
-                            <span>{f.settings?.workspaceButtonLabel || f.name}</span>
-                          </button>
-                        ))}
-
-                        {/* Split Create Button */}
-                        <div className="flex items-center h-7 rounded-lg bg-indigo-600 text-white text-[11px] font-semibold shadow-2xs overflow-hidden">
-                          <span className="px-2.5 flex items-center gap-1">
-                            <Plus size={12} />
-                            <span>{forms.find(f => f.usage === 'workspace_create')?.settings?.workspaceButtonLabel || 'Create'}</span>
-                          </span>
-                          <span className="h-full px-1 border-l border-indigo-500 flex items-center">
-                            <ChevronDown size={10} />
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Tier 2: TableFilterBar Workbench Toolbar */}
-                    <div
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedId('__table_settings');
-                      }}
-                      className="px-4 py-2 bg-zinc-50/60 dark:bg-zinc-950/40 flex flex-wrap items-center justify-between gap-2 cursor-pointer hover:bg-indigo-500/[0.02] transition-colors"
-                      title="Click to configure Workbench Toolbar features in Inspector"
-                    >
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {interfaceSettings.master?.toolbar?.enableSavedViews !== false && (
-                          <div className="h-7 px-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 text-[10px] font-semibold text-zinc-600 dark:text-zinc-300 flex items-center gap-1.5">
-                            <Bookmark size={11} className="text-indigo-500" />
-                            <span>All Records</span>
-                            <ChevronDown size={10} className="text-zinc-400" />
-                          </div>
-                        )}
-                        <div className="h-7 px-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 text-[10px] font-semibold text-zinc-600 dark:text-zinc-300 flex items-center gap-1.5">
-                          <Filter size={11} className="text-zinc-400" />
-                          <span>Filters</span>
-                        </div>
-                        {interfaceSettings.master?.toolbar?.enableGrouping !== false && (
-                          <div className="h-7 px-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 text-[10px] font-semibold text-zinc-600 dark:text-zinc-300 flex items-center gap-1.5">
-                            <Layers size={11} className="text-zinc-400" />
-                            <span>Group By</span>
-                          </div>
-                        )}
-                        {interfaceSettings.master?.toolbar?.enableAskAurora !== false && (
-                          <div className="h-7 px-2.5 rounded-lg bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
-                            <Sparkles size={11} />
-                            <span>Ask Aurora</span>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-1.5">
-                        <div className="h-7 px-2.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 text-[10px] text-zinc-400 flex items-center gap-1.5 w-36 sm:w-44">
-                          <Search size={11} />
-                          <span className="truncate">Search records...</span>
-                        </div>
-                        {interfaceSettings.master?.toolbar?.enableChartToggle !== false && (
-                          <div className="h-7 px-2 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 text-[10px] font-semibold text-zinc-500 flex items-center gap-1" title="Chart Visualizer Toggle">
-                            <BarChart3 size={11} />
-                            <span className="hidden sm:inline">Chart</span>
-                          </div>
-                        )}
-                        {interfaceSettings.master?.toolbar?.enableSpreadsheetMode && (
-                          <div className="h-7 px-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1" title="Spreadsheet Edit Mode Enabled">
-                            <TableProperties size={11} />
-                            <span className="hidden sm:inline">Edit Mode</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {(!interfaceSettings.master.layoutType || interfaceSettings.master.layoutType === 'table') ? (
-                    <div className="space-y-4">
-                      <div className="space-y-4" onDragOver={(e) => e.preventDefault()} onDrop={handleTableDrop}>
-                      <div 
+                  {/* Compact Design Selection Strip (Columns & Toolbar Quick-Inspect) */}
+                  <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-white/90 dark:bg-zinc-900/90 backdrop-blur-xs border border-zinc-200/80 dark:border-zinc-800 shadow-2xs">
+                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar min-w-0">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedId('__table_settings');
+                        }}
                         className={cn(
-                          "rounded-2xl relative overflow-hidden bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-xs",
-                          tableDropIndicator && "!border-indigo-500 ring-4 ring-indigo-500/30 shadow-lg shadow-indigo-500/5"
+                          'shrink-0 h-6 px-2.5 rounded-lg border text-[11px] font-medium flex items-center gap-1.5 transition-colors cursor-pointer',
+                          selectedId === '__table_settings'
+                            ? 'bg-indigo-600 border-indigo-600 text-white'
+                            : 'bg-zinc-50 dark:bg-zinc-800/80 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 hover:border-indigo-400'
                         )}
                       >
-                          {activeColumns.length === 0 ? (
-                            <div className="py-24 text-center space-y-4 px-6">
-                              <div className="w-16 h-16 bg-zinc-50 dark:bg-zinc-900/50 rounded-2xl flex items-center justify-center mx-auto text-zinc-300 dark:text-zinc-700 border border-zinc-100 dark:border-zinc-800">
-                                <TableProperties size={28} />
-                              </div>
-                              <div className="space-y-1">
-                                <p className="text-sm font-bold text-zinc-900 dark:text-white">Your table is empty</p>
-                                <p className="text-xs text-zinc-500 max-w-sm mx-auto leading-relaxed">
-                                  Drag and drop fields from the **Available Fields** palette on the left directly into this table to build your columns!
-                                </p>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="overflow-x-auto custom-scrollbar">
-                              <table className="w-full text-left table-fixed">
-                                <thead>
-                                  <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/40 dark:bg-zinc-900/30">
-                                    {/* Bulk Selection Checkbox Column matching ModuleView.tsx */}
-                                    {interfaceSettings.master?.toolbar?.enableBulkActions !== false && (
-                                      <th className="w-10 px-3 py-2.5 text-center border-r border-zinc-100 dark:border-zinc-800/50 select-none">
-                                        <div className="w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 mx-auto" />
-                                      </th>
-                                    )}
+                        <Settings2 size={11} />
+                        <span>View & Toolbar</span>
+                      </button>
 
-                                    {/* Lead Key Column (Fixed, always first data column) */}
-                                    <th 
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedId('_record_key');
-                                      }}
-                                      onDragOver={handleKeyHeaderDragOver}
-                                      onDragLeave={handleColumnDragLeave}
-                                      style={{ width: `${interfaceSettings.master.columns?.find((c: any) => c.fieldId === '_record_key')?.width || 120}px` }}
-                                      className={cn(
-                                        "text-[10px] font-bold uppercase tracking-wider cursor-pointer hover:bg-zinc-100/50 dark:hover:bg-zinc-800/30 transition-colors select-none border-r border-zinc-100 dark:border-zinc-800/50 relative group/key",
-                                        interfaceSettings.master.density === 'compact' ? 'px-4 py-2' : 
-                                        interfaceSettings.master.density === 'spacious' ? 'px-6 py-4' : 'px-5 py-3',
-                                        selectedId === '_record_key' 
-                                          ? "bg-indigo-50/40 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" 
-                                          : "text-zinc-400"
-                                      )}
-                                    >
-                                      <span>{interfaceSettings.master.columns?.find((c: any) => c.fieldId === '_record_key')?.label || 'Key'}</span>
-                                      
-                                      {/* Drop Indicator lines for Key column right drop */}
-                                      {tableDropIndicator && tableDropIndicator.hoveredIndex === -1 && (
-                                        <div className="absolute top-0 bottom-0 right-0 w-[4px] bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.8)] z-30 animate-pulse pointer-events-none -mr-[2px]" />
-                                      )}
-                                    </th>
-
-                                    {/* Draggable & Resizable Column Headers */}
-                                    {activeColumns.map((col, idx) => {
-                                      const isSelected = selectedId === col.id;
-                                      const width = col.width || col.columnWidth || (['createdAt', 'createdBy', 'updatedAt', 'status', 'nextStep', 'assigneeId', 'participantIds'].includes(col.id) ? 140 : 200);
-                                      const isSystem = ['createdAt', 'createdBy', 'updatedAt', 'status', 'nextStep', 'assigneeId', 'participantIds'].includes(col.id);
-
-                                      return (
-                                        <th 
-                                          key={col.id}
-                                          style={{ width: `${width}px` }}
-                                          draggable
-                                          onDragStart={(e) => handleColumnDragStart(e, idx)}
-                                          onDragOver={(e) => handleColumnHeaderDragOver(e, idx)}
-                                          onDragLeave={handleColumnDragLeave}
-                                          onDrop={(e) => handleColumnDrop(e, idx)}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setSelectedId(col.id);
-                                          }}
-                                          className={cn(
-                                            "text-[10px] font-bold uppercase tracking-wider cursor-grab active:cursor-grabbing hover:bg-zinc-100/50 dark:hover:bg-zinc-800/30 transition-colors group relative border-l border-zinc-100 dark:border-zinc-800/50 select-none",
-                                            interfaceSettings.master.density === 'compact' ? 'px-3 py-2' : 
-                                            interfaceSettings.master.density === 'spacious' ? 'px-6 py-4' : 'px-4 py-3',
-                                            isSelected 
-                                              ? "bg-indigo-50/40 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" 
-                                              : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white",
-                                            draggingColumnIndex === idx && "opacity-40 bg-zinc-200 dark:bg-zinc-800"
-                                          )}
-                                        >
-                                          <div className="flex items-center justify-between gap-1">
-                                            <div className="flex items-center gap-1.5 min-w-0">
-                                              <GripVertical size={11} className="text-zinc-400 opacity-40 group-hover:opacity-100 transition-opacity shrink-0" />
-                                              <span className="truncate">{col.label || col.name}</span>
-                                              {col.inlineEdit && (
-                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" title="Inline Editable" />
-                                              )}
-                                            </div>
-                                            
-                                            {/* Remove Header Button */}
-                                            <button
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                if (!isSystem) {
-                                                  updateField(col.id, { showInTable: false });
-                                                }
-                                                setInterfaceSettings(prev => {
-                                                  const cols = prev.master.columns || [];
-                                                  return {
-                                                    ...prev,
-                                                    master: {
-                                                      ...prev.master,
-                                                      columns: cols.map(c => c.fieldId === col.id ? { ...c, visible: false } : c)
-                                                    }
-                                                  };
-                                                });
-                                                if (selectedId === col.id) setSelectedId(null);
-                                                toast.success("Column removed");
-                                              }}
-                                              className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-rose-500 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                                            >
-                                              <X size={10} />
-                                            </button>
-                                          </div>
-
-                                          {/* Direct Column-Edge Drag Resize Handle */}
-                                          <div
-                                            draggable={false}
-                                            onMouseDown={(e) => {
-                                              e.stopPropagation();
-                                              e.preventDefault();
-                                              const startX = e.clientX;
-                                              const startW = width;
-                                              const onMove = (moveEvt: MouseEvent) => {
-                                                const nextW = Math.max(80, Math.min(500, Math.round((startW + (moveEvt.clientX - startX)) / 10) * 10));
-                                                if (!isSystem) {
-                                                  updateField(col.id, { columnWidth: nextW });
-                                                }
-                                                setInterfaceSettings(prev => {
-                                                  const cols = prev.master.columns || [];
-                                                  const exists = cols.some(c => c.fieldId === col.id);
-                                                  if (!exists) {
-                                                    return {
-                                                      ...prev,
-                                                      master: {
-                                                        ...prev.master,
-                                                        columns: [
-                                                          ...cols,
-                                                          { fieldId: col.id, visible: true, inlineEdit: !!col.inlineEdit, width: nextW }
-                                                        ]
-                                                      }
-                                                    };
-                                                  }
-                                                  return {
-                                                    ...prev,
-                                                    master: {
-                                                      ...prev.master,
-                                                      columns: cols.map(c => c.fieldId === col.id ? { ...c, width: nextW } : c)
-                                                    }
-                                                  };
-                                                });
-                                              };
-                                              const onUp = () => {
-                                                window.removeEventListener('mousemove', onMove);
-                                                window.removeEventListener('mouseup', onUp);
-                                              };
-                                              window.addEventListener('mousemove', onMove);
-                                              window.addEventListener('mouseup', onUp);
-                                            }}
-                                            className="absolute top-0 bottom-0 right-0 w-1.5 cursor-col-resize hover:bg-indigo-500/60 transition-colors z-20"
-                                            title="Drag to resize column width"
-                                          />
-
-                                          {/* Drop Indicator lines */}
-                                          {tableDropIndicator && tableDropIndicator.hoveredIndex === idx && (
-                                            <div 
-                                              className={cn(
-                                                "absolute top-0 bottom-0 w-[4px] bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.8)] z-30 animate-pulse pointer-events-none",
-                                                tableDropIndicator.side === 'left' ? "left-0 -ml-[2px]" : "right-0 -mr-[2px]"
-                                              )}
-                                            />
-                                          )}
-                                        </th>
-                                      );
-                                    })}
-
-                                    {/* Sticky Actions Column matching ModuleView.tsx */}
-                                    <th className="w-20 px-3 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider text-zinc-400 border-l border-zinc-100 dark:border-zinc-800/50 select-none">
-                                      Actions
-                                    </th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50 select-none">
-                                  {/* Renders preview records */}
-                                  {previewRecords.slice(0, 5).map((row: any, rIdx: number) => (
-                                    <tr key={rIdx} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/20 transition-colors">
-                                      {interfaceSettings.master?.toolbar?.enableBulkActions !== false && (
-                                        <td className="w-10 px-3 text-center border-r border-zinc-100 dark:border-zinc-800/50">
-                                          <div className="w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 mx-auto" />
-                                        </td>
-                                      )}
-
-                                      {/* Lead ID column */}
-                                      <td className={cn(
-                                        "font-semibold text-indigo-600 dark:text-indigo-400 font-mono",
-                                        interfaceSettings.master.density === 'compact' ? 'px-4 py-2 text-[10px]' : 
-                                        interfaceSettings.master.density === 'spacious' ? 'px-6 py-4 text-sm' : 'px-5 py-3 text-xs'
-                                      )}>
-                                        {row._record_key || `${moduleSettings.recordKeyPrefix || 'KEY'}-${1001 + rIdx}${moduleSettings.recordKeySuffix || ''}`}
-                                      </td>
-                                      
-                                      {/* Active columns data cells */}
-                                      {activeColumns.map((col) => {
-                                        const width = col.width || col.columnWidth || (['createdAt', 'createdBy', 'updatedAt', 'status', 'nextStep', 'assigneeId', 'participantIds'].includes(col.id) ? 140 : 200);
-                                        let cellValue = row[col.id] || row[col.name] || '-';
-                                        
-                                        if (col.type === 'multi-user' || col.id === 'participantIds') {
-                                          cellValue = (
-                                            <div className="flex items-center -space-x-1.5 overflow-hidden">
-                                              <div className="w-5 h-5 rounded-full bg-indigo-100 dark:bg-indigo-950 flex items-center justify-center text-[9px] font-bold text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 ring-2 ring-white dark:ring-zinc-900">
-                                                AM
-                                              </div>
-                                              <div className="w-5 h-5 rounded-full bg-purple-100 dark:bg-purple-950 flex items-center justify-center text-[9px] font-bold text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-800 ring-2 ring-white dark:ring-zinc-900">
-                                                JD
-                                              </div>
-                                            </div>
-                                          );
-                                        } else if (col.type === 'user' || col.id === 'createdBy' || col.id === 'assigneeId') {
-                                          cellValue = (
-                                            <div className="flex items-center gap-1.5">
-                                              <div className="w-5 h-5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-[9px] font-bold border border-indigo-500/20">
-                                                AM
-                                              </div>
-                                              <span className="text-zinc-700 dark:text-zinc-300 truncate text-xs font-medium">Alex Morgan</span>
-                                            </div>
-                                          );
-                                        } else if (col.type === 'date' || col.id === 'createdAt' || col.id === 'updatedAt') {
-                                          cellValue = new Date().toLocaleDateString();
-                                        } else if (col.id === 'status' || col.type === 'status') {
-                                          cellValue = (
-                                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold border border-emerald-500/20">
-                                              {(workflow?.nodes?.[0] as any)?.data?.label || (workflow?.nodes?.[0] as any)?.label || 'In Progress'}
-                                            </span>
-                                          );
-                                        } else if (col.id === 'nextStep') {
-                                          cellValue = (
-                                            <span className="px-2 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[10px] font-semibold border border-indigo-500/20 inline-flex items-center gap-1">
-                                              <span>{(workflow?.nodes?.[1] as any)?.data?.label || (workflow?.nodes?.[1] as any)?.label || 'Advance Stage'}</span>
-                                              <ArrowRight size={9} />
-                                            </span>
-                                          );
-                                        } else if (typeof cellValue === 'object') {
-                                          cellValue = 'Data';
+                      {(!interfaceSettings.master.layoutType || interfaceSettings.master.layoutType === 'table') && (
+                        <>
+                          <div className="h-3.5 w-px bg-zinc-200 dark:bg-zinc-800 shrink-0 mx-0.5" />
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedId('_record_key');
+                            }}
+                            className={cn(
+                              'shrink-0 h-6 px-2 rounded-md border text-[10px] font-semibold transition-colors cursor-pointer',
+                              selectedId === '_record_key'
+                                ? 'bg-indigo-50 dark:bg-indigo-500/15 border-indigo-400 text-indigo-700 dark:text-indigo-300'
+                                : 'bg-white dark:bg-zinc-900 border-zinc-200/80 dark:border-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200'
+                            )}
+                          >
+                            {interfaceSettings.master.columns?.find((c: any) => c.fieldId === '_record_key')?.label || 'Key'}
+                          </button>
+                          {activeColumns.map((col, idx) => {
+                            const isSelected = selectedId === col.id;
+                            const isSystem = ['createdAt', 'createdBy', 'updatedAt', 'status', 'nextStep', 'assigneeId', 'participantIds'].includes(col.id);
+                            return (
+                              <div
+                                key={col.id}
+                                draggable
+                                onDragStart={(e) => handleColumnDragStart(e, idx)}
+                                onDragOver={(e) => handleColumnHeaderDragOver(e, idx)}
+                                onDragLeave={handleColumnDragLeave}
+                                onDrop={(e) => handleColumnDrop(e, idx)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedId(col.id);
+                                }}
+                                className={cn(
+                                  'shrink-0 h-6 pl-1.5 pr-1 rounded-md border text-[10px] font-medium flex items-center gap-1 cursor-grab active:cursor-grabbing transition-colors group',
+                                  isSelected
+                                    ? 'bg-indigo-50 dark:bg-indigo-500/15 border-indigo-400 text-indigo-700 dark:text-indigo-300'
+                                    : 'bg-white dark:bg-zinc-900 border-zinc-200/80 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700',
+                                  draggingColumnIndex === idx && 'opacity-40'
+                                )}
+                                title="Click to configure column or drag to reorder"
+                              >
+                                <GripVertical size={10} className="text-zinc-400 shrink-0" />
+                                <span className="max-w-[110px] truncate">{col.label || col.name}</span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (!isSystem) {
+                                      updateField(col.id, { showInTable: false });
+                                    }
+                                    setInterfaceSettings(prev => {
+                                      const cols = prev.master.columns || [];
+                                      return {
+                                        ...prev,
+                                        master: {
+                                          ...prev.master,
+                                          columns: cols.map(c => c.fieldId === col.id ? { ...c, visible: false } : c)
                                         }
-
-                                        return (
-                                          <td 
-                                            key={col.id} 
-                                            style={{ width: `${width}px` }}
-                                            className={cn(
-                                              "text-zinc-600 dark:text-zinc-400 truncate border-l border-zinc-100 dark:border-zinc-800/50",
-                                              interfaceSettings.master.density === 'compact' ? 'px-3 py-2 text-[11px]' : 
-                                              interfaceSettings.master.density === 'spacious' ? 'px-6 py-4 text-sm' : 'px-4 py-3 text-xs'
-                                            )}
-                                          >
-                                            {cellValue}
-                                          </td>
-                                        );
-                                      })}
-
-                                      {/* Row Actions cell */}
-                                      <td className="w-20 px-3 text-right border-l border-zinc-100 dark:border-zinc-800/50">
-                                        <div className="inline-flex items-center gap-1 text-zinc-400">
-                                          <Eye size={12} />
-                                          <Trash2 size={12} />
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                                      };
+                                    });
+                                    if (selectedId === col.id) setSelectedId(null);
+                                    toast.success("Column removed");
+                                  }}
+                                  className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                                  title="Hide column"
+                                >
+                                  <X size={9} />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </>
+                      )}
                     </div>
-                  ) : renderMasterViewPreview()}
+                    <span className="shrink-0 text-[10px] text-zinc-400 hidden lg:inline">
+                      Drop fields from palette to add columns
+                    </span>
+                  </div>
+
+                  {/* Real Workspace ModuleView Canvas */}
+                  <div
+                    className={cn(
+                      'flex-1 rounded-2xl border bg-white dark:bg-zinc-950 shadow-sm overflow-hidden flex flex-col min-h-[600px] transition-all',
+                      selectedId === '__table_settings'
+                        ? 'border-indigo-400 ring-2 ring-indigo-500/20'
+                        : tableDropIndicator
+                        ? 'border-indigo-500 ring-4 ring-indigo-500/25'
+                        : 'border-zinc-200 dark:border-zinc-800'
+                    )}
+                  >
+                    <ModuleView
+                      key={`design-master-${id || 'new'}`}
+                      previewConfig={masterDesignPreviewConfig}
+                    />
+                  </div>
                 </div>
               </div>
             ) : (
               <div 
                 ref={scrollContainerRef}
                 onWheel={handleCanvasWheelZoom}
-                className="w-full flex-1 overflow-y-auto custom-scrollbar relative p-6 md:p-8 bg-zinc-100/60 dark:bg-black bg-[radial-gradient(#d4d4d8_1px,transparent_1px)] dark:bg-[radial-gradient(#27272a_1px,transparent_1px)] [background-size:24px_24px] flex justify-center items-start min-h-full"
+                className="w-full flex-1 overflow-y-auto custom-scrollbar relative p-4 md:p-5 bg-zinc-100/60 dark:bg-black bg-[radial-gradient(#d4d4d8_1px,transparent_1px)] dark:bg-[radial-gradient(#27272a_1px,transparent_1px)] [background-size:24px_24px] flex justify-center items-start min-h-full"
               >
                 <div
                   style={canvasZoom !== 1 ? ({ zoom: canvasZoom } as React.CSSProperties) : undefined}
                   className={cn(
                     "w-full mx-auto space-y-3 transition-all duration-300",
-                    viewportSize === 'desktop' && "max-w-6xl",
+                    viewportSize === 'desktop' && "max-w-[1440px]",
                     viewportSize === 'tablet' && "w-[768px] max-w-full p-5 bg-zinc-200/50 dark:bg-zinc-900/60 rounded-[2.5rem] border-2 border-zinc-300/80 dark:border-zinc-700/80 shadow-2xl ring-1 ring-black/5",
                     viewportSize === 'mobile' && "w-[390px] max-w-full p-3.5 bg-zinc-200/80 dark:bg-zinc-900/80 rounded-[3rem] border-[6px] border-zinc-300 dark:border-zinc-700 shadow-2xl ring-1 ring-black/10"
                   )}
@@ -8206,134 +8124,112 @@ export const ModuleEditor = () => {
                   {/* Connection Visualizer Layer */}
                   <ConnectionLine hoveredMapping={hoveredMapping} containerRef={canvasContainerRef} />
 
-                  {/* Standardized Full-Width Sticky PageHeader matching RecordDetailView.tsx */}
-                  <div className="w-full px-6 py-3.5 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-4 z-20 select-none">
-                    {/* Left: Back + Stepper + Icon + Title + Subtitle Metadata */}
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="flex items-center gap-1 shrink-0">
-                        <div className="h-8 w-8 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-400 rounded-lg flex items-center justify-center">
+                  {/* Shared RecordHeaderSurface (100% synced with RecordDetailView.tsx) */}
+                  <RecordHeaderSurface
+                    designMode
+                    isHeaderSelected={selectedId === 'page-header'}
+                    onSelectHeader={(e) => {
+                      e.stopPropagation();
+                      setSelectedId('page-header');
+                    }}
+                    leadingSlot={
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="h-8 w-8 bg-zinc-100/80 dark:bg-zinc-800/80 border border-zinc-200/60 dark:border-zinc-700/60 text-zinc-400 rounded-lg flex items-center justify-center shadow-xs">
                           <ArrowLeft size={14} />
                         </div>
-                        <div className="hidden sm:flex items-center bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/80 rounded-lg h-8 px-1.5 gap-1 text-[10px] font-mono text-zinc-400">
+                        <div className="hidden sm:flex items-center bg-zinc-100/80 dark:bg-zinc-800/80 border border-zinc-200/80 dark:border-zinc-700/80 rounded-lg h-8 px-1.5 gap-1 text-[10px] font-mono text-zinc-400">
                           <ChevronLeft size={12} />
                           <span>1/{previewRecords.length || 25}</span>
                           <ChevronRight size={12} />
                         </div>
                       </div>
+                    }
+                    iconSlot={<DynamicIcon name={moduleSettings.iconName || 'Box'} size={16} />}
+                    recordKey={`${moduleSettings.recordKeyPrefix || 'KEY'}-1001${moduleSettings.recordKeySuffix || ''}`}
+                    title={
+                      <>
+                        <span>
+                          {(() => {
+                            const sampleRec = previewRecords[0];
+                            if (moduleSettings.titleFieldId) {
+                              const tf = allFields.find(f => f.id === moduleSettings.titleFieldId);
+                              if (tf) {
+                                const sampleVal = sampleRec?.[tf.id] || sampleRec?.[tf.name || ''];
+                                return sampleVal ? `${sampleVal}` : `${tf.label} (Title Field)`;
+                              }
+                            }
+                            return sampleRec ? getRecordTitle(sampleRec) : (moduleSettings.name ? `${moduleSettings.name} Record` : 'Sample Record Title');
+                          })()}
+                        </span>
+                        <Settings2 size={12} className={cn("transition-opacity shrink-0", selectedId === 'page-header' ? "text-indigo-500 opacity-100" : "text-zinc-400 opacity-60")} />
+                      </>
+                    }
+                    subtitleSlot={
+                      <>
+                        <span className="font-semibold text-zinc-700 dark:text-zinc-300">
+                          {moduleSettings.name || 'Module'}
+                        </span>
+                        {(moduleSettings.subtitleFieldIds || []).map((subId) => {
+                          const subField = allFields.find(f => f.id === subId) || METADATA_FIELDS.find(f => f.id === subId);
+                          if (!subField) return null;
+                          const sampleVal = previewRecords[0]?.[subField.id] || previewRecords[0]?.[(subField as any).name || ''];
+                          return (
+                            <React.Fragment key={subId}>
+                              <span className="text-zinc-300 dark:text-zinc-600">&bull;</span>
+                              <span className="px-1.5 py-0.2 rounded bg-indigo-500/5 border border-indigo-500/15 text-indigo-600 dark:text-indigo-400 font-medium text-[10px]">
+                                {subField.label}: {sampleVal && typeof sampleVal !== 'object' ? String(sampleVal) : 'Sample'}
+                              </span>
+                            </React.Fragment>
+                          );
+                        })}
+                        {(moduleSettings.subtitleFieldIds || []).length === 0 && (
+                          <>
+                            <span className="text-zinc-300 dark:text-zinc-600">&bull;</span>
+                            <span className="text-zinc-400 dark:text-zinc-500 italic text-[10px]">+ Click to add subtitle fields</span>
+                          </>
+                        )}
+                        <span className="text-zinc-300 dark:text-zinc-600">&bull;</span>
+                        <span className="text-zinc-400 dark:text-zinc-500">Updated Just Now</span>
+                      </>
+                    }
+                    actionsSlot={
+                      <>
+                        <div className="hidden lg:flex items-center -space-x-1.5 mr-1">
+                          <div className="w-6 h-6 rounded-full bg-indigo-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-zinc-900" title="Active Collaborator">
+                            SV
+                          </div>
+                          <div className="w-6 h-6 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-zinc-900" title="Active Collaborator">
+                            AM
+                          </div>
+                        </div>
 
-                      <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shrink-0">
-                        <DynamicIcon name={moduleSettings.iconName || 'Box'} size={18} />
-                      </div>
-
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 font-mono text-[10px] font-bold text-indigo-600 dark:text-indigo-400 shrink-0">
-                            {moduleSettings.recordKeyPrefix || 'KEY'}-1001{moduleSettings.recordKeySuffix || ''}
-                          </span>
-                          <h1 
+                        {(interfaceSettings.actions || []).slice(0, 2).map((act) => (
+                          <div
+                            key={act.id}
                             onClick={(e) => {
                               e.stopPropagation();
-                              setSelectedId('page-header');
+                              setSelectedId('__table_settings');
                             }}
-                            className={cn(
-                              "text-base font-bold leading-none truncate cursor-pointer rounded px-1.5 py-0.5 -mx-1 transition-all flex items-center gap-1.5",
-                              selectedId === 'page-header' 
-                                ? "text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 ring-2 ring-indigo-500/30" 
-                                : "text-zinc-950 dark:text-white hover:text-indigo-600 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                            )}
-                            title="Click to configure Record Title & Subtitle fields"
+                            className="h-8 px-2.5 bg-zinc-100/80 dark:bg-zinc-800/80 hover:border-indigo-500/40 border border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-xs cursor-pointer"
+                            title="Custom Quick Action"
                           >
-                            <span>
-                              {(() => {
-                                const sampleRec = previewRecords[0];
-                                if (moduleSettings.titleFieldId) {
-                                  const tf = allFields.find(f => f.id === moduleSettings.titleFieldId);
-                                  if (tf) {
-                                    const sampleVal = sampleRec?.[tf.id] || sampleRec?.[tf.name || ''];
-                                    return sampleVal ? `${sampleVal}` : `${tf.label} (Title Field)`;
-                                  }
-                                }
-                                return sampleRec ? getRecordTitle(sampleRec) : (moduleSettings.name ? `${moduleSettings.name} Record` : 'Sample Record Title');
-                              })()}
-                            </span>
-                            <Settings2 size={12} className={cn("transition-opacity shrink-0", selectedId === 'page-header' ? "text-indigo-500 opacity-100" : "text-zinc-400 opacity-60")} />
-                          </h1>
+                            <DynamicIcon name={act.icon || 'Zap'} size={12} className="text-indigo-500" />
+                            <span>{act.label}</span>
+                          </div>
+                        ))}
+
+                        <div className="h-8 px-2.5 bg-zinc-100/80 dark:bg-zinc-800/80 border border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-xs">
+                          <Zap size={12} className="text-amber-500" />
+                          <span>Automations</span>
                         </div>
 
-                        <div 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedId('page-header');
-                          }}
-                          className="flex flex-wrap items-center gap-1.5 mt-1 text-[11px] text-zinc-500 dark:text-zinc-400 cursor-pointer hover:text-indigo-500 transition-colors"
-                          title="Click to configure Subtitle Metadata fields"
-                        >
-                          <span className="font-semibold text-zinc-700 dark:text-zinc-300">
-                            {moduleSettings.name || 'Module'}
-                          </span>
-                          {(moduleSettings.subtitleFieldIds || []).map((subId) => {
-                            const subField = allFields.find(f => f.id === subId) || METADATA_FIELDS.find(f => f.id === subId);
-                            if (!subField) return null;
-                            const sampleVal = previewRecords[0]?.[subField.id] || previewRecords[0]?.[(subField as any).name || ''];
-                            return (
-                              <React.Fragment key={subId}>
-                                <span className="text-zinc-300 dark:text-zinc-600">&bull;</span>
-                                <span className="px-1.5 py-0.2 rounded bg-indigo-500/5 border border-indigo-500/15 text-indigo-600 dark:text-indigo-400 font-medium text-[10px]">
-                                  {subField.label}: {sampleVal && typeof sampleVal !== 'object' ? String(sampleVal) : 'Sample'}
-                                </span>
-                              </React.Fragment>
-                            );
-                          })}
-                          {(moduleSettings.subtitleFieldIds || []).length === 0 && (
-                            <>
-                              <span className="text-zinc-300 dark:text-zinc-600">&bull;</span>
-                              <span className="text-zinc-400 dark:text-zinc-500 italic text-[10px]">+ Click to add subtitle fields</span>
-                            </>
-                          )}
-                          <span className="text-zinc-300 dark:text-zinc-600">&bull;</span>
-                          <span className="text-zinc-400 dark:text-zinc-500">Updated Just Now</span>
+                        <div className="h-8 px-2.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs font-semibold flex items-center gap-1.5">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          <span>{(workflow?.nodes?.[0] as any)?.data?.label || (workflow?.nodes?.[0] as any)?.label || 'In Progress'}</span>
                         </div>
-                      </div>
-                    </div>
-
-                    {/* Right: Presence Stack + Quick Actions Cluster matching RecordDetailView.tsx */}
-                    <div className="flex items-center gap-2 flex-wrap md:flex-nowrap shrink-0">
-                      {/* Mock Presence Stack */}
-                      <div className="hidden lg:flex items-center -space-x-1.5 mr-1">
-                        <div className="w-6 h-6 rounded-full bg-indigo-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-zinc-900" title="Active Collaborator">
-                          SV
-                        </div>
-                        <div className="w-6 h-6 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-zinc-900" title="Active Collaborator">
-                          AM
-                        </div>
-                      </div>
-
-                      {(interfaceSettings.actions || []).slice(0, 2).map((act) => (
-                        <div
-                          key={act.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedId('__table_settings');
-                          }}
-                          className="h-7 px-2.5 bg-zinc-100 dark:bg-zinc-800 hover:border-indigo-500/40 border border-zinc-200/80 dark:border-zinc-700/80 text-zinc-700 dark:text-zinc-200 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 shadow-2xs cursor-pointer"
-                          title="Custom Quick Action"
-                        >
-                          <DynamicIcon name={act.icon || 'Zap'} size={11} className="text-indigo-500" />
-                          <span>{act.label}</span>
-                        </div>
-                      ))}
-
-                      <div className="h-7 px-2.5 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200/80 dark:border-zinc-700/80 text-zinc-700 dark:text-zinc-200 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 shadow-2xs">
-                        <Zap size={11} className="text-amber-500" />
-                        <span>Automations</span>
-                      </div>
-
-                      <div className="h-7 px-2.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 rounded-lg text-[11px] font-semibold flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        <span>{(workflow?.nodes?.[0] as any)?.data?.label || (workflow?.nodes?.[0] as any)?.label || 'In Progress'}</span>
-                      </div>
-                    </div>
-                  </div>
+                      </>
+                    }
+                  />
 
                   {/* Workspace-Accurate h-10 Underline Section Tab Bar ( matching RecordDetailView.tsx ) */}
                   {activeTab === 'builder' && (interfaceSettings.detail?.layoutType === 'tabs' || !interfaceSettings.detail?.layoutType) && (
@@ -8388,7 +8284,6 @@ export const ModuleEditor = () => {
                                   const isParent = subtabs.length > 0;
                                   const isParentActive = isParent && subtabs.some(sub => sub.id === currentTabId);
                                   const isActive = currentTabId === tab.id || isParentActive;
-                                  const tabFieldCount = layout.filter(f => !f.parentId && (f.tabId === tab.id || (!f.tabId && tab.id === tabs[0]?.id))).length;
 
                                   return (
                                     <Reorder.Item 
@@ -8425,6 +8320,7 @@ export const ModuleEditor = () => {
                                           }}
                                         >
                                           <button
+                                            data-tab-drop-id={isParent ? subtabs[0].id : tab.id}
                                             onClick={(e) => {
                                               e.stopPropagation();
                                               if (isParent) {
@@ -8437,23 +8333,24 @@ export const ModuleEditor = () => {
                                             }}
                                             onDoubleClick={() => setIsEditingTab(tab.id)}
                                             className={cn(
-                                              "relative h-full px-3 text-xs font-semibold transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-grab active:cursor-grabbing",
-                                              isActive
+                                              "relative h-full px-3 text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-grab active:cursor-grabbing rounded-lg",
+                                              rglDropTabId === (isParent ? subtabs[0].id : tab.id)
+                                                ? "bg-indigo-50 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 ring-2 ring-inset ring-indigo-500"
+                                                : isActive
                                                 ? "text-indigo-600 dark:text-indigo-400 font-bold"
                                                 : "text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
                                             )}
-                                            title="Click to select tab, double-click to rename, drag to reorder"
+                                            title="Click to select tab, double-click to rename, drag to reorder, or drop fields here"
                                           >
                                             {interfaceSettings.detail?.showTabIcons && (
                                               <DynamicIcon name={tab.iconName || (isParent ? 'Folder' : 'Layout')} size={13} className="shrink-0" />
                                             )}
                                             <span>{tab.label}</span>
-                                            <span className={cn(
-                                              "text-[9px] px-1.5 py-0.2 rounded-full font-bold",
-                                              isActive ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400"
-                                            )}>
-                                              {tabFieldCount}
-                                            </span>
+                                            {rglDropTabId === (isParent ? subtabs[0].id : tab.id) && (
+                                              <span className="px-1.5 py-0.5 rounded-full bg-indigo-600 text-white text-[9px] font-bold">
+                                                +{rglDragCount}
+                                              </span>
+                                            )}
                                             {tab.visibilityRule && (
                                               <span title="Conditional Tab Visibility Rule" className="inline-flex">
                                                 <BrainCircuit size={10} className="text-amber-500 shrink-0" />
@@ -8734,9 +8631,30 @@ export const ModuleEditor = () => {
                   {/* Horizontal split container for Left Sidebar + Main Grid + Right Workflow Panel */}
                   <div className="flex w-full items-stretch flex-1">
                     
-                    {/* Sidebar Vertical Tabs list if layoutType === 'split' */}
+                    {/* Sidebar Vertical Tabs list if layoutType === 'split' (Shared Surface) */}
                     {activeTab === 'builder' && interfaceSettings.detail?.layoutType === 'split' && (
-                      <div className="w-60 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/20 p-5 space-y-4 flex flex-col justify-between select-none">
+                      <RecordSectionSplitSidebarSurface
+                        className="select-none"
+                        footerSlot={
+                          !isLoading ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const newId = `tab-${Date.now()}`;
+                                setTabs([...tabs, { id: newId, label: 'New Section' }]);
+                                setCurrentTabId(newId);
+                                setIsEditingTab(newId);
+                                setSelectedId(newId);
+                              }}
+                              className="w-full py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-500 hover:text-indigo-600 hover:border-indigo-500/50 transition-all flex items-center justify-center gap-1.5 shadow-2xs font-semibold text-xs cursor-pointer"
+                            >
+                              <Plus size={13} />
+                              <span>Add Section</span>
+                            </button>
+                          ) : undefined
+                        }
+                      >
                         {isLoading ? (
                           <div className="space-y-4 animate-pulse w-full">
                             <div className="h-3 w-16 bg-zinc-200 dark:bg-zinc-800 rounded px-2 ml-2" />
@@ -8747,18 +8665,15 @@ export const ModuleEditor = () => {
                             </div>
                           </div>
                         ) : (
-                          <>
-                            <div className="space-y-4 flex-1 min-h-0 flex flex-col">
-                              <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-widest px-2">Sections</p>
-                              <div className="flex-1 px-1.5 pt-1.5 pb-2">
-                                <Reorder.Group 
-                                  axis="y" 
-                                  values={getSortedTabs(tabs)} 
-                                  onReorder={(newSortedOrder) => {
-                                    setTabs(newSortedOrder);
-                                  }}
-                                  className="space-y-1.5"
-                                >
+                          <div className="space-y-2 flex-1 min-h-0 flex flex-col">
+                            <Reorder.Group
+                              axis="y"
+                              values={getSortedTabs(tabs)}
+                              onReorder={(newSortedOrder) => {
+                                setTabs(newSortedOrder);
+                              }}
+                              className="space-y-1.5"
+                            >
                                   {getSortedTabs(tabs).map((tab) => {
                                     const subtabs = tabs.filter(sub => sub.parentId === tab.id);
                                     const isParent = subtabs.length > 0;
@@ -8788,6 +8703,7 @@ export const ModuleEditor = () => {
                                         ) : (
                                           <div className="flex items-center">
                                             <button
+                                              data-tab-drop-id={isParent ? subtabs[0].id : tab.id}
                                               onClick={(e) => {
                                                 e.stopPropagation();
                                                 if (isParent) {
@@ -8801,7 +8717,9 @@ export const ModuleEditor = () => {
                                               onDoubleClick={() => setIsEditingTab(tab.id)}
                                               className={cn(
                                                 "w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-between group cursor-pointer",
-                                                isActive
+                                                rglDropTabId === (isParent ? subtabs[0].id : tab.id)
+                                                  ? "bg-indigo-50 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 ring-2 ring-indigo-500"
+                                                  : isActive
                                                   ? "bg-zinc-100 dark:bg-white/10 text-zinc-900 dark:text-white font-bold shadow-sm"
                                                   : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60"
                                               )}
@@ -8811,6 +8729,11 @@ export const ModuleEditor = () => {
                                                   <DynamicIcon name={tab.iconName || (isParent ? 'Folder' : 'Layout')} size={14} className="shrink-0" />
                                                 )}
                                                 <span className="truncate">{tab.label}</span>
+                                                {rglDropTabId === (isParent ? subtabs[0].id : tab.id) && (
+                                                  <span className="px-1.5 py-0.5 rounded-full bg-indigo-600 text-white text-[9px] font-bold shrink-0">
+                                                    +{rglDragCount}
+                                                  </span>
+                                                )}
                                               </div>
                                               {!isParent && <ChevronRight size={12} className={cn("transition-transform shrink-0 ml-2 opacity-50 group-hover:opacity-100", isActive ? "text-zinc-900 dark:text-white opacity-100" : "text-zinc-400 group-hover:translate-x-0.5")} />}
                                               {isParent && <ChevronDown size={12} className={cn("transition-transform shrink-0 ml-2 opacity-50 group-hover:opacity-100", isActive ? "text-zinc-900 dark:text-white opacity-100" : "text-zinc-400")} />}
@@ -8850,25 +8773,8 @@ export const ModuleEditor = () => {
                                   })}
                                 </Reorder.Group>
                               </div>
-                            </div>
-                            
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const newId = `tab-${Date.now()}`;
-                                setTabs([...tabs, { id: newId, label: 'New Section' }]);
-                                setCurrentTabId(newId);
-                                setIsEditingTab(newId);
-                                setSelectedId(newId);
-                              }}
-                              className="w-full py-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-400 hover:text-indigo-600 hover:border-indigo-500/50 transition-all flex items-center justify-center gap-2 shadow-sm font-bold text-xs uppercase tracking-widest"
-                            >
-                              <Plus size={14} />
-                              <span>Add Section</span>
-                            </button>
-                          </>
                         )}
-                      </div>
+                      </RecordSectionSplitSidebarSurface>
                     )}
 
                     {activeTab === 'builder' && interfaceSettings.detail?.layoutType === 'accordion' ? (() => {
@@ -8937,8 +8843,11 @@ export const ModuleEditor = () => {
                                           fields={tabFields}
                                           viewportSize={viewportSize}
                                           dragOverInfo={dragOverInfo}
+                                          rglDropTargetId={rglDropTargetId}
                                           resolveCollisionsInArray={resolveCollisionsInArray}
                                           onLayoutChange={handleRglLayoutChange}
+                                          onCrossDrag={handleRglCrossDrag}
+                                          onCrossDragStop={handleRglCrossDragStop}
                                         >
                                           {renderFieldBlocks(tabFields, undefined, tab.id)}
                                         </SectionRglContainer>
@@ -8964,8 +8873,9 @@ export const ModuleEditor = () => {
                         onDragLeave={handleDragLeave}
                         onDrop={handleDropOnCanvas}
                         className={cn(
-                          "flex-1 min-w-0 p-6 pb-32 min-h-[720px] relative z-10 transition-all duration-300 bg-zinc-50/30 dark:bg-zinc-950/20",
-                          interfaceSettings.detail?.layoutType === 'sidebar' && "flex flex-col gap-6",
+                          "flex-1 min-w-0 p-4 sm:p-5 pb-24 min-h-[680px] relative z-10 transition-all duration-300 bg-zinc-50 dark:bg-[#101010]",
+                          rglDropTargetId === '__root__' && "ring-2 ring-inset ring-indigo-500/40 bg-indigo-500/[0.02]",
+                          interfaceSettings.detail?.layoutType === 'sidebar' && "flex flex-col gap-5",
                           isArchitectThinking && "opacity-40 grayscale-[0.5] scale-[0.99] pointer-events-none"
                         )}
                       >
@@ -9029,8 +8939,11 @@ export const ModuleEditor = () => {
                                       fields={tabFields}
                                       viewportSize={viewportSize}
                                       dragOverInfo={dragOverInfo}
+                                      rglDropTargetId={rglDropTargetId}
                                       resolveCollisionsInArray={resolveCollisionsInArray}
                                       onLayoutChange={handleRglLayoutChange}
+                                      onCrossDrag={handleRglCrossDrag}
+                                      onCrossDragStop={handleRglCrossDragStop}
                                     >
                                       {renderFieldBlocks(tabFields, undefined, tab.id)}
                                     </SectionRglContainer>
@@ -9061,8 +8974,11 @@ export const ModuleEditor = () => {
                                   fields={activeTabFields}
                                   viewportSize={viewportSize}
                                   dragOverInfo={dragOverInfo}
+                                  rglDropTargetId={rglDropTargetId}
                                   resolveCollisionsInArray={resolveCollisionsInArray}
                                   onLayoutChange={handleRglLayoutChange}
+                                  onCrossDrag={handleRglCrossDrag}
+                                  onCrossDragStop={handleRglCrossDragStop}
                                 >
                                   {renderFieldBlocks(activeTabFields, undefined, currentTabId)}
                                 </SectionRglContainer>
@@ -9122,9 +9038,14 @@ export const ModuleEditor = () => {
                       ];
                       const visibleRailTabs = allRailTabs.filter(t => t.id === 'overview' || (railCfg.enabledTabs || []).includes(t.id));
                       const activeRailTabId = visibleRailTabs.some(t => t.id === canvasRailTab) ? canvasRailTab : 'overview';
-                      const pinnedFields = (railCfg.pinnedFieldIds || [])
-                        .map(fid => allFields.find(f => f.id === fid))
-                        .filter(Boolean) as Field[];
+
+                      const sampleRec = previewRecords[0] || {
+                        id: 'design-sample-1',
+                        _record_key: `${moduleSettings.recordKeyPrefix || 'KEY'}-1001${moduleSettings.recordKeySuffix || ''}`,
+                        status: (workflow?.nodes?.[0] as any)?.data?.label || (workflow?.nodes?.[0] as any)?.label || 'In Progress',
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                      };
 
                       return (
                         <div
@@ -9132,162 +9053,48 @@ export const ModuleEditor = () => {
                             e.stopPropagation();
                             setSelectedId('__context_rail_settings');
                           }}
-                          className={cn(
-                            "flex shrink-0 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 select-none cursor-pointer transition-all relative",
-                            selectedId === '__context_rail_settings' && "ring-2 ring-inset ring-indigo-500/40"
-                          )}
+                          className="group/rail flex shrink-0 relative cursor-pointer transition-all"
                           title="Click to configure Context Rail in Inspector"
                         >
-                          {!canvasRailCollapsed && (
-                            <div className="w-64 flex flex-col border-r border-zinc-100 dark:border-zinc-800/80">
-                              {/* Rail Header */}
-                              <div className="h-10 px-3.5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-                                <span className="text-[11px] font-bold text-zinc-900 dark:text-white capitalize">{activeRailTabId}</span>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedId('__context_rail_settings');
-                                  }}
-                                  className="p-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-indigo-600"
-                                  title="Configure Context Rail"
-                                >
-                                  <Settings2 size={12} />
-                                </button>
-                              </div>
-
-                              {/* Rail Body Content */}
-                              <div className="p-3.5 space-y-3 overflow-y-auto flex-1 text-xs">
-                                {activeRailTabId === 'overview' ? (
-                                  <>
-                                    {/* Workflow Status Card */}
-                                    <div className="p-3 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/30 space-y-2">
-                                      <div className="flex items-center justify-between">
-                                        <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Status & Stage</span>
-                                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[9px] font-bold border border-emerald-500/20">
-                                          {(workflow?.nodes?.[0] as any)?.data?.label || (workflow?.nodes?.[0] as any)?.label || 'In Progress'}
-                                        </span>
-                                      </div>
-                                      {workflow?.nodes && workflow.nodes.length > 1 && (
-                                        <div className="pt-1 border-t border-zinc-200/50 dark:border-zinc-800/60 flex items-center justify-between text-[10px] text-zinc-500">
-                                          <span>Next Transition:</span>
-                                          <span className="font-semibold text-indigo-600 dark:text-indigo-400">{(workflow.nodes[1] as any)?.data?.label || (workflow.nodes[1] as any)?.label || 'Complete'} →</span>
-                                        </div>
-                                      )}
-                                    </div>
-
-                                    {/* Pinned Key Properties Card */}
-                                    <div className="p-3 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/30 space-y-2">
-                                      <div className="flex items-center justify-between">
-                                        <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Key Properties</span>
-                                        <span className="text-[9px] font-semibold text-indigo-500">{pinnedFields.length} pinned</span>
-                                      </div>
-                                      {pinnedFields.length > 0 ? (
-                                        <div className="space-y-1.5 pt-1">
-                                          {pinnedFields.map(pf => (
-                                            <div key={pf.id} className="flex items-center justify-between gap-2 text-[11px]">
-                                              <span className="text-zinc-500 truncate">{pf.label}</span>
-                                              <span className="font-semibold text-zinc-800 dark:text-zinc-200 truncate">
-                                                {String(previewRecords[0]?.[pf.id] || previewRecords[0]?.[pf.name || ''] || pf.defaultValue || 'Sample')}
-                                              </span>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      ) : (
-                                        <p className="text-[10px] text-zinc-400 italic">Click to pin key fields to Overview</p>
-                                      )}
-                                    </div>
-
-                                    {/* People Card */}
-                                    <div className="p-3 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/30 space-y-2.5">
-                                      <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 block">People</span>
-                                      <div className="flex items-center justify-between text-[11px]">
-                                        <span className="text-zinc-500">Assignee</span>
-                                        <div className="flex items-center gap-1.5">
-                                          <div className="w-4 h-4 rounded-full bg-indigo-500/15 text-indigo-600 text-[8px] font-bold flex items-center justify-center">AM</div>
-                                          <span className="font-medium text-zinc-700 dark:text-zinc-300">Alex Morgan</span>
-                                        </div>
-                                      </div>
-                                      <div className="flex items-center justify-between text-[11px]">
-                                        <span className="text-zinc-500">Participants</span>
-                                        <div className="flex items-center -space-x-1">
-                                          <div className="w-4 h-4 rounded-full bg-indigo-500 text-white text-[7px] font-bold flex items-center justify-center ring-1 ring-white dark:ring-zinc-900">SV</div>
-                                          <div className="w-4 h-4 rounded-full bg-purple-500 text-white text-[7px] font-bold flex items-center justify-center ring-1 ring-white dark:ring-zinc-900">JD</div>
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    {/* Dates & Audit Card */}
-                                    <div className="p-3 rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/30 space-y-1.5 text-[10px] text-zinc-500">
-                                      <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 block mb-1">Audit Trail</span>
-                                      <div className="flex justify-between">
-                                        <span>Created</span>
-                                        <span className="font-medium text-zinc-700 dark:text-zinc-300">Today, 09:41 AM</span>
-                                      </div>
-                                      <div className="flex justify-between">
-                                        <span>Updated</span>
-                                        <span className="font-medium text-zinc-700 dark:text-zinc-300">Just now</span>
-                                      </div>
-                                    </div>
-                                  </>
-                                ) : (
-                                  <div className="py-12 text-center space-y-2">
-                                    <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 capitalize">{activeRailTabId} Panel</p>
-                                    <p className="text-[10px] text-zinc-400 px-4">Live {activeRailTabId} stream renders here in the workspace.</p>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* 44px Vertical Icon Strip matching RecordContextRail.tsx */}
-                          <div className="w-11 flex flex-col items-center py-2.5 gap-1.5 bg-zinc-50/60 dark:bg-zinc-950/40">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setCanvasRailCollapsed(prev => !prev);
-                              }}
-                              className="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200/60 dark:hover:bg-zinc-800 transition-colors mb-1"
-                              title={canvasRailCollapsed ? "Expand Context Rail" : "Collapse Context Rail"}
-                            >
-                              {canvasRailCollapsed ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
-                            </button>
-
-                            {visibleRailTabs.map((rt) => {
-                              const RIcon = rt.icon;
-                              const isTabActive = !canvasRailCollapsed && activeRailTabId === rt.id;
-                              return (
-                                <button
-                                  key={rt.id}
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setCanvasRailTab(rt.id);
-                                    if (canvasRailCollapsed) setCanvasRailCollapsed(false);
-                                    setSelectedId('__context_rail_settings');
-                                  }}
-                                  className={cn(
-                                    "w-8 h-8 rounded-xl flex items-center justify-center relative transition-all",
-                                    isTabActive
-                                      ? "bg-indigo-600 text-white shadow-xs"
-                                      : "text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200/50 dark:hover:bg-zinc-800/60"
-                                  )}
-                                  title={`${rt.label} Tab`}
-                                >
-                                  <RIcon size={14} />
-                                  {rt.count && (
-                                    <span className={cn(
-                                      "absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full text-[8px] font-bold flex items-center justify-center",
-                                      isTabActive ? "bg-white text-indigo-600" : "bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300"
-                                    )}>
-                                      {rt.count}
-                                    </span>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
+                          <div
+                            className={cn(
+                              'pointer-events-none absolute inset-0 z-40 transition-all',
+                              selectedId === '__context_rail_settings'
+                                ? 'ring-2 ring-inset ring-indigo-500 bg-indigo-500/[0.02]'
+                                : 'group-hover/rail:ring-1 group-hover/rail:ring-inset group-hover/rail:ring-indigo-400/50'
+                            )}
+                          />
+                          <RecordContextRail
+                            designMode
+                            record={sampleRec}
+                            moduleId={id}
+                            moduleData={draftModuleForPreview}
+                            editData={sampleRec}
+                            workflow={workflow}
+                            allFields={allFields}
+                            isCollapsed={canvasRailCollapsed}
+                            onToggleCollapse={() => setCanvasRailCollapsed((prev) => !prev)}
+                            activeTab={activeRailTabId as ContextRailTab}
+                            onTabChange={(tab) => {
+                              setCanvasRailTab(tab);
+                              if (canvasRailCollapsed) setCanvasRailCollapsed(false);
+                              setSelectedId('__context_rail_settings');
+                            }}
+                            statusOptions={
+                              workflow?.nodes?.length
+                                ? workflow.nodes.map((n: any) => n.data?.label || n.label || n.id)
+                                : ['Todo', 'In Progress', 'Done']
+                            }
+                            workflowTransitions={workflow?.edges || []}
+                            onToggleStar={() => setSelectedId('__context_rail_settings')}
+                            onOpenShare={() => setSelectedId('__context_rail_settings')}
+                            onCopyLink={() => setSelectedId('__context_rail_settings')}
+                            onDuplicate={() => setSelectedId('__context_rail_settings')}
+                            onOpenMove={() => setSelectedId('__context_rail_settings')}
+                            onExportPdf={() => setSelectedId('__context_rail_settings')}
+                            onOpenHistory={() => setSelectedId('__context_rail_settings')}
+                            onDeleteRecord={() => setSelectedId('__context_rail_settings')}
+                          />
                         </div>
                       );
                     })()}
@@ -12398,6 +12205,59 @@ export const ModuleEditor = () => {
                                             ...prev.detail.contextRail,
                                             enabledTabs: nextTabs
                                           }
+                                        }
+                                      };
+                                    });
+                                  }}
+                                  className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                                />
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Overview Action Buttons */}
+                      <div className="space-y-2.5 pt-4 border-t border-zinc-100 dark:border-zinc-900">
+                        <div className="px-1">
+                          <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block">Overview Action Buttons</label>
+                          <span className="text-[9px] text-zinc-400 block mt-0.5">Choose which quick action buttons appear at the top of the Overview tab.</span>
+                        </div>
+                        <div className="space-y-1.5 bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-2.5">
+                          {[
+                            { id: 'star', label: 'Star / Favorite Record' },
+                            { id: 'duplicate', label: 'Duplicate Record' },
+                            { id: 'exportPdf', label: 'Export PDF' },
+                            { id: 'share', label: 'Share Record' },
+                            { id: 'copyLink', label: 'Copy Record Link' },
+                            { id: 'delete', label: 'Move to Recycling Bin (Delete)' }
+                          ].map(act => {
+                            const defaultActions = ['star', 'duplicate', 'exportPdf', 'share', 'copyLink', 'delete'];
+                            const currentActions = (interfaceSettings.detail.contextRail as any)?.enabledActions ?? defaultActions;
+                            const isChecked = currentActions.includes(act.id);
+                            return (
+                              <label
+                                key={act.id}
+                                className="flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800/60 cursor-pointer transition-colors"
+                              >
+                                <span className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">{act.label}</span>
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => {
+                                    setInterfaceSettings(prev => {
+                                      const prevActions: string[] = (prev.detail.contextRail as any)?.enabledActions ?? defaultActions;
+                                      const nextActions = prevActions.includes(act.id)
+                                        ? prevActions.filter(x => x !== act.id)
+                                        : [...prevActions, act.id];
+                                      return {
+                                        ...prev,
+                                        detail: {
+                                          ...prev.detail,
+                                          contextRail: {
+                                            ...prev.detail.contextRail,
+                                            enabledActions: nextActions
+                                          } as any
                                         }
                                       };
                                     });

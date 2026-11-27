@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { GripVertical, Trash2, Folder, ListPlus, Move, BrainCircuit, Settings2, Copy, ChevronDown, Box, LayoutGrid, FolderTree, ListOrdered, GitCommit, Layers, Plus, ExternalLink, Sparkles } from 'lucide-react';
+import { GripVertical, Trash2, Move, BrainCircuit, Settings2, Copy, ChevronDown, Plus, ExternalLink } from 'lucide-react';
 import { cn, calculateHeight } from '../../lib/utils';
 import { GRID_CONFIG } from '../ModuleEditor';
 
@@ -29,6 +29,7 @@ export interface Field {
 }
 
 import { DynamicIcon } from '../UI/DynamicIcon';
+import { CollapsibleFieldGroup } from '../UI/CollapsibleFieldGroup';
 
 interface FieldGroupProps {
   block: Field;
@@ -97,36 +98,7 @@ export const FieldGroup = React.forwardRef<HTMLDivElement, FieldGroupProps & Omi
 }, ref) => {
   const isSelected = selectedIds.includes(block.id);
   const isRepeatable = block.type === 'repeatableGroup';
-  const isCard = block.type === 'card';
   const isAccordion = block.type === 'accordion';
-  const isTabs = block.type === 'tabs_nested';
-  
-  const cardPadding = density === 'compact' ? 'p-2 rounded-lg' : density === 'spacious' ? 'p-5 rounded-2xl' : 'p-4 rounded-xl';
-  const headerMargin = density === 'compact' ? 'mb-1' : density === 'spacious' ? 'mb-3' : 'mb-2';
-  const iconBoxSize = density === 'compact' ? 'w-6 h-6 rounded-md' : density === 'spacious' ? 'w-8 h-8 rounded-lg' : 'w-7 h-7 rounded-lg';
-  const iconSize = density === 'compact' ? 12 : density === 'spacious' ? 16 : 14;
-  const titleTextSize = density === 'compact' ? 'text-xs' : density === 'spacious' ? 'text-sm font-bold' : 'text-xs font-bold';
-  const subtitleTextSize = density === 'compact' ? 'text-[8px]' : density === 'spacious' ? 'text-[10px]' : 'text-[9px]';
-
-  const getIcon = (size: number = 16) => {
-    if (block.iconName) {
-      return <DynamicIcon name={block.iconName} size={size} />;
-    }
-
-    switch (block.type) {
-      case 'card': return <Box size={size} />;
-      case 'accordion': return <LayoutGrid size={size} />;
-      case 'tabs_nested': return <FolderTree size={size} />;
-      case 'stepper': return <ListOrdered size={size} />;
-      case 'timeline': return <GitCommit size={size} />;
-      case 'repeatableGroup': return <ListPlus size={size} />;
-      case 'group': return <Layers size={size} />;
-      case 'fieldGroup': return <Folder size={size} />;
-      default: return <Folder size={size} />;
-    }
-  };
-
-  const showIcon = block.showIcon !== false;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [isResizing] = useState<'left' | 'right' | null>(null);
@@ -161,143 +133,125 @@ export const FieldGroup = React.forwardRef<HTMLDivElement, FieldGroupProps & Omi
         rest.onClick?.(e);
       }}
       className={cn(
-        "group/group relative cursor-pointer border-2 h-full flex flex-col",
-        cardPadding,
-        isCard ? "bg-white dark:bg-zinc-900/80 border-zinc-200 dark:border-zinc-800 shadow-xl" :
-        isAccordion ? "bg-zinc-50/60 dark:bg-zinc-900/40 border-zinc-200/80 dark:border-zinc-800/80 shadow-sm" :
-        "bg-zinc-50/80 dark:bg-zinc-900/40 border-zinc-200/80 dark:border-zinc-800/80",
-        isSelected ? "border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/10 ring-4 ring-indigo-500/15 z-30 shadow-2xl" : "hover:border-indigo-500/30 z-10 hover:z-40",
-        isResizing && "ring-4 ring-indigo-500/20 border-indigo-400 z-30",
-        isDraggingOver && "border-indigo-500 bg-indigo-50/10 dark:bg-indigo-500/5 ring-4 ring-indigo-500/15 shadow-2xl z-30 scale-[1.005]",
-        hoveredMapping?.targetFieldId === block.id && "ring-8 ring-indigo-500/30 border-indigo-500 scale-[1.02] shadow-2xl z-30",
+        "group/group relative cursor-pointer h-full flex flex-col",
+        isSelected ? "z-30" : "z-10 hover:z-30",
+        isResizing && "z-30",
+        isDraggingOver && "z-30",
+        hoveredMapping?.targetFieldId === block.id && "z-30",
         className
       )}
     >
-      {isSelected && (
-        <div className="absolute -top-3 left-6 px-3 py-1 bg-indigo-600 text-white rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg z-50">
-          Selected
-        </div>
-      )}
-      <div className={cn("absolute inset-0 bg-gradient-to-br from-zinc-50/50 to-transparent dark:from-zinc-900/20 dark:to-transparent pointer-events-none", density === 'compact' ? 'rounded-lg' : density === 'spacious' ? 'rounded-2xl' : 'rounded-xl')} />
-
-      <div className={cn("flex items-center justify-between gap-2 pb-2 border-b border-zinc-200/60 dark:border-zinc-800/60", headerMargin)}>
-        <div className={cn("flex items-center min-w-0", density === 'compact' ? 'gap-1.5' : 'gap-2.5')}>
-          <div 
-            className={cn(
-              "drag-handle text-zinc-400 hover:text-indigo-500 dark:text-zinc-500 dark:hover:text-indigo-400 cursor-grab active:cursor-grabbing p-1 -ml-1 rounded-lg flex items-center shrink-0 transition-colors",
-              isNested ? "nested-drag-handle" : "root-drag-handle"
-            )}
-            title="Drag to move container"
-          >
-            <GripVertical size={14} />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <p className={cn("font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider truncate", titleTextSize)}>
-                {block.label}
-              </p>
-              <span className={cn("px-1.5 py-0.5 rounded bg-zinc-200/70 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 font-mono font-bold uppercase shrink-0", subtitleTextSize)}>
-                {({
-                  repeatableGroup: 'Repeater (1:N)',
-                  fieldGroup: 'Field Group',
-                  group: 'Group',
-                  card: 'Card',
-                  accordion: 'Accordion',
-                  tabs_nested: 'Tabs',
-                  stepper: 'Stepper',
-                  timeline: 'Timeline',
-                } as Record<string, string>)[block.type] || block.type}
-              </span>
-              <span className="px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800/80 rounded text-[9px] font-mono font-semibold text-zinc-500 border border-zinc-200/60 dark:border-zinc-700/60 shrink-0">
-                {block.fields?.length || 0}
-              </span>
-            </div>
-            {block.helperText && (
-              <p className="text-[10px] text-zinc-400 font-medium truncate mt-0.5">
-                {block.helperText}
-              </p>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1 shrink-0">
-          {block.visibilityRule && (
-            <div className="flex items-center gap-1 px-2 py-0.5 bg-amber-500/10 rounded-md border border-amber-500/20" title="Conditional Logic Applied">
-              <BrainCircuit size={11} className="text-amber-500" />
-              <span className="text-[8px] font-black text-amber-600 dark:text-amber-400 uppercase">Logic</span>
-            </div>
+      {/* Floating Hover / Selected Pill Bar (Zero Layout Shift) */}
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className={cn(
+          "absolute -top-3 right-2 z-40 flex items-center gap-0.5 px-1 py-0.5 rounded-lg bg-white/95 dark:bg-zinc-900/95 backdrop-blur-sm border shadow-md transition-all duration-150",
+          isSelected
+            ? "opacity-100 translate-y-0 border-indigo-400/70 dark:border-indigo-500/60 pointer-events-auto"
+            : "opacity-0 -translate-y-0.5 border-zinc-200 dark:border-zinc-700 pointer-events-none group-hover/group:opacity-100 group-hover/group:translate-y-0 group-hover/group:pointer-events-auto"
+        )}
+      >
+        <div
+          className={cn(
+            "drag-handle p-1 rounded-md text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-grab active:cursor-grabbing transition-colors",
+            isNested ? "nested-drag-handle" : "root-drag-handle"
           )}
+          title="Drag to move group"
+        >
+          <GripVertical size={12} />
+        </div>
 
-          {/* 1-Click Width Cycle Pill (FormBuilder consistency) */}
+        {block.visibilityRule && (
+          <span className="p-0.5 text-amber-500" title="Conditional Logic Applied">
+            <BrainCircuit size={11} />
+          </span>
+        )}
+
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            const cur = block.colSpan || 12;
+            const idx = SPAN_CYCLE.indexOf(cur);
+            const nextSpan = SPAN_CYCLE[(idx + 1) % SPAN_CYCLE.length];
+            const maxStart = Math.max(1, 13 - nextSpan);
+            const nextStart = Math.min(block.startCol || 1, maxStart);
+            onUpdate(block.id, { colSpan: nextSpan, startCol: nextStart });
+          }}
+          title="Click to cycle width (Full → 2/3 → 1/2 → 1/3 → 1/4)"
+          className="px-1.5 py-0.5 rounded-md text-[10px] font-mono font-semibold text-zinc-600 dark:text-zinc-300 hover:bg-indigo-50 dark:hover:bg-indigo-500/15 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+        >
+          {getSpanLabel(block.colSpan)}
+        </button>
+
+        {isNested && onMoveToRoot && (
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              const cur = block.colSpan || 12;
-              const idx = SPAN_CYCLE.indexOf(cur);
-              const nextSpan = SPAN_CYCLE[(idx + 1) % SPAN_CYCLE.length];
-              const maxStart = Math.max(1, 13 - nextSpan);
-              const nextStart = Math.min(block.startCol || 1, maxStart);
-              onUpdate(block.id, { colSpan: nextSpan, startCol: nextStart });
+              onMoveToRoot(block.id);
             }}
-            title="Click to cycle width (Full → 2/3 → 1/2 → 1/3 → 1/4)"
-            className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-zinc-200/70 dark:bg-zinc-800 hover:bg-indigo-500/20 hover:text-indigo-600 dark:hover:text-indigo-400 text-zinc-600 dark:text-zinc-400 transition-colors cursor-pointer"
+            className="p-1 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors cursor-pointer"
+            title="Move container out to main canvas"
           >
-            {getSpanLabel(block.colSpan)}
+            <ExternalLink size={11} />
           </button>
+        )}
 
-          {isNested && onMoveToRoot && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onMoveToRoot(block.id);
-              }}
-              className="p-1 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors cursor-pointer"
-              title="Move container out to main canvas"
-            >
-              <ExternalLink size={12} />
-            </button>
-          )}
-
-          <button 
+        {(onRequestAddSubfield || onCreateFieldInContainer) && (
+          <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); onClone(block.id); }}
-            className="p-1 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-zinc-200/60 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
-            title="Duplicate Group"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onRequestAddSubfield) {
+                onRequestAddSubfield(block.id, block.label || 'Group');
+              } else if (onCreateFieldInContainer) {
+                onCreateFieldInContainer(block.id);
+              }
+            }}
+            className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/15 flex items-center gap-0.5 transition-colors cursor-pointer"
+            title="Add field into this group"
           >
-            <Copy size={12} />
+            <Plus size={11} />
+            <span>Field</span>
           </button>
+        )}
 
-          <button 
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onDelete(block.id); }}
-            className="p-1 text-zinc-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
-            title="Delete Group"
-          >
-            <Trash2 size={12} />
-          </button>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onClone(block.id); }}
+          className="p-1 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors cursor-pointer"
+          title="Duplicate Group"
+        >
+          <Copy size={11} />
+        </button>
 
-          {block.collapsible && (
-            <button 
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onUpdate(block.id, { isCollapsed: !isCollapsed }); }}
-              className={cn(
-                "w-6 h-6 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer",
-                isCollapsed ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-400" : "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500"
-              )}
-              title={isCollapsed ? "Expand Group" : "Collapse Group"}
-            >
-              <ChevronDown 
-                size={13} 
-                className={cn("transition-transform duration-200 ease-out", isCollapsed ? "-rotate-90" : "rotate-0")} 
-              />
-            </button>
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onDelete(block.id); }}
+          className="p-1 text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-md transition-colors cursor-pointer"
+          title="Delete Group"
+        >
+          <Trash2 size={11} />
+        </button>
       </div>
 
-      {!isCollapsed && (
+      {/* Real Workspace CollapsibleFieldGroup Component */}
+      <CollapsibleFieldGroup
+        field={block as any}
+        count={isRepeatable ? (block.fields?.length || 0) : undefined}
+        isCollapsed={isCollapsed}
+        onToggle={(collapsed) => onUpdate(block.id, { isCollapsed: collapsed })}
+        className={cn(
+          "flex-1 flex flex-col h-full",
+          isSelected
+            ? "!border-indigo-500 ring-2 ring-indigo-500/40"
+            : "group-hover/group:border-indigo-400/60",
+          isResizing && "ring-2 ring-indigo-500/40 !border-indigo-400",
+          isDraggingOver && "!border-indigo-500 ring-2 ring-indigo-500/40",
+          hoveredMapping?.targetFieldId === block.id && "ring-4 ring-indigo-500/30 !border-indigo-500"
+        )}
+      >
         <div className="flex-1 flex flex-col min-h-0 w-full">
           <div 
             onDragOver={(e) => { 
@@ -314,10 +268,7 @@ export const FieldGroup = React.forwardRef<HTMLDivElement, FieldGroupProps & Omi
             onMouseLeave={() => setIsContentHovered(false)}
             data-group-id={block.id}
             data-container-id={block.id}
-            className={cn(
-              "relative border-2 border-dashed transition-all duration-300 flex-1 flex flex-col min-h-0 w-full rounded-2xl",
-              isAccordion ? "p-0 mt-3 bg-transparent border-none" : "bg-zinc-100/50 dark:bg-zinc-900/20 border-zinc-200/80 dark:border-zinc-800/80 p-3.5 mt-1"
-            )}
+            className="relative transition-all duration-200 flex-1 flex flex-col min-h-0 w-full"
           >
               {isAccordion ? (
                 <div className={cn("flex flex-col", density === 'compact' ? 'gap-2' : 'gap-3')}>
@@ -497,70 +448,10 @@ export const FieldGroup = React.forwardRef<HTMLDivElement, FieldGroupProps & Omi
                 </div>
               ) : (
                 ((block.fields && block.fields.length > 0) || isDraggingOver) ? (
-                  <div 
-                    className="relative w-full flex-1 min-h-0 z-10 flex flex-col justify-between"
-                    style={{ 
-                      padding: `${gc.nestedPadding}px`
-                    }}
-                  >
+                  <div className="relative w-full flex-1 min-h-0 z-10 flex flex-col">
                     <div className="relative w-full flex-1">
-                      {isDragging && (
-                        <div className="absolute inset-0 pointer-events-none z-0 grid grid-cols-12 opacity-50" style={{ gap: `${gc.gap}px` }}>
-                          {Array.from({ length: 12 }).map((_, i) => (
-                            <div key={i} className="h-full border-x border-dashed border-indigo-500/10 bg-indigo-500/[0.005] rounded-xl" />
-                          ))}
-                        </div>
-                      )}
                       {renderNested && renderNested(block.fields || [], block.id)}
                     </div>
-
-                    {/* FormBuilder-style Inline Add Field to Group Toolbar */}
-                    {(onMoveFieldToContainer || onCreateFieldInContainer) && (
-                      <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 mt-2 border-t border-zinc-200/70 dark:border-zinc-800/80 relative z-20">
-                        <div className="flex items-center gap-1.5">
-                          {onMoveFieldToContainer && availableFieldsToNest.length > 0 && (
-                            <select
-                              value=""
-                              onClick={(e) => e.stopPropagation()}
-                              onChange={(e) => {
-                                e.stopPropagation();
-                                if (e.target.value) {
-                                  onMoveFieldToContainer(block.id, e.target.value);
-                                }
-                              }}
-                              className="px-2.5 py-1 rounded-lg bg-white dark:bg-zinc-900 border border-indigo-200 dark:border-indigo-800/70 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold focus:outline-none cursor-pointer shadow-2xs"
-                            >
-                              <option value="">+ Move Existing Field into {isRepeatable ? 'Repeater' : 'Group'}...</option>
-                              {availableFieldsToNest.map((af) => (
-                                <option key={af.id} value={af.id}>
-                                  {af.label} ({af.type})
-                                </option>
-                              ))}
-                            </select>
-                          )}
-                          {(onRequestAddSubfield || onCreateFieldInContainer) && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (onRequestAddSubfield) {
-                                  onRequestAddSubfield(block.id, block.label || 'Group');
-                                } else if (onCreateFieldInContainer) {
-                                  onCreateFieldInContainer(block.id);
-                                }
-                              }}
-                              className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95"
-                            >
-                              <Plus size={11} />
-                              <span>New Sub-Field</span>
-                            </button>
-                          )}
-                        </div>
-                        <span className="text-[9px] text-zinc-400 font-semibold">
-                          {isSelected ? 'Active target: click any palette block to add here' : `${block.fields?.length || 0} nested`}
-                        </span>
-                      </div>
-                    )}
                   </div>
                 ) : (
                   <div className="flex-1 flex flex-col items-center justify-center gap-2 py-4 px-3">
@@ -618,7 +509,7 @@ export const FieldGroup = React.forwardRef<HTMLDivElement, FieldGroupProps & Omi
               )}
             </div>
           </div>
-        )}
+      </CollapsibleFieldGroup>
 
     </div>
   );

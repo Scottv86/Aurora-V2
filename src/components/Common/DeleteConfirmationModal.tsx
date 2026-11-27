@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { X, AlertTriangle, Trash2 } from 'lucide-react';
+import { X, AlertTriangle, Trash2, Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { createPortal } from 'react-dom';
 
@@ -15,118 +15,131 @@ interface DeleteConfirmationModalProps {
   isDeleting?: boolean;
 }
 
-export const DeleteConfirmationModal = ({ 
-  isOpen, 
-  onClose, 
-  onConfirm, 
-  title, 
-  description, 
+export const DeleteConfirmationModal = ({
+  isOpen,
+  onClose,
+  onConfirm,
+  title,
+  description,
   itemName,
   moduleName,
   moduleId,
-  isDeleting = false 
+  isDeleting = false,
 }: DeleteConfirmationModalProps) => {
   if (typeof document === 'undefined') return null;
+
+  const hasModuleContext = Boolean(moduleName || moduleId);
 
   return createPortal(
     <AnimatePresence>
       {isOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="absolute inset-0 bg-white/60 dark:bg-black/60 backdrop-blur-md"
+            transition={{ duration: 0.16, ease: 'easeOut' }}
+            onClick={() => {
+              if (!isDeleting) onClose();
+            }}
+            className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
           />
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.97, y: 6 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="relative w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2rem] shadow-2xl overflow-hidden"
+            exit={{ opacity: 0, scale: 0.97, y: 6 }}
+            transition={{ duration: 0.16, ease: 'easeOut' }}
+            className="relative w-full max-w-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl overflow-hidden"
           >
             {/* Header */}
-            <div className="p-6 border-b border-zinc-100 dark:border-zinc-800/50 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50">
-              <div className="flex items-center gap-4">
-                <div className="p-2.5 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl">
-                  <AlertTriangle size={20} />
+            <div className="px-5 py-4 border-b border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-rose-50 dark:bg-rose-500/10 border border-rose-200/70 dark:border-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+                  <AlertTriangle size={17} />
                 </div>
-                <h2 className="text-lg font-bold text-zinc-900 dark:text-white leading-tight">{title}</h2>
+                <h2 className="text-[15px] font-semibold text-zinc-900 dark:text-white tracking-tight truncate">
+                  {title}
+                </h2>
               </div>
-              <button 
+              <button
+                type="button"
                 onClick={onClose}
-                className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full"
+                disabled={isDeleting}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer disabled:opacity-50"
+                aria-label="Close"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
-            {/* Content */}
-            <div className="p-8 space-y-4">
-              <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed text-center">
+            {/* Body */}
+            <div className="px-5 py-4 space-y-3.5">
+              <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
                 {description}
               </p>
+
               {itemName && (
-                <div className="p-6 bg-zinc-50 dark:bg-zinc-950 border border-zinc-100 dark:border-zinc-800 rounded-[1.5rem] space-y-6">
-                  <div className="space-y-2 text-left">
-                    <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">Logic Asset to Delete</p>
-                    <p className="text-lg font-bold text-zinc-900 dark:text-white font-mono leading-tight break-words">{itemName}</p>
+                <div className="rounded-xl bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200/80 dark:border-zinc-800 p-3.5 space-y-3">
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 block">
+                      Item to delete
+                    </span>
+                    <p className="text-sm font-semibold text-zinc-900 dark:text-white break-words">
+                      {itemName}
+                    </p>
                   </div>
-                  
-                  <div className="pt-6 border-t border-zinc-200/50 dark:border-zinc-800/50 space-y-4 text-left">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">Module Context</p>
-                      {moduleName ? (
-                        <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-full text-[10px] font-bold uppercase tracking-tight">Active</span>
-                      ) : (
-                        <span className="px-2 py-0.5 bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 rounded-full text-[10px] font-bold uppercase tracking-tight">Orphaned</span>
-                      )}
+
+                  {hasModuleContext && (
+                    <div className="pt-2.5 border-t border-zinc-200/70 dark:border-zinc-800/80 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500 block">
+                          Module
+                        </span>
+                        <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300 truncate">
+                          {moduleName || moduleId}
+                        </p>
+                      </div>
+                      <span
+                        className={cn(
+                          'px-2 py-0.5 rounded-full text-[10px] font-semibold border shrink-0',
+                          moduleName
+                            ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200/70 dark:border-emerald-500/20'
+                            : 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-200/70 dark:border-rose-500/20'
+                        )}
+                      >
+                        {moduleName ? 'Active' : 'Orphaned'}
+                      </span>
                     </div>
-                    
-                    <div className="p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm">
-                      {moduleName ? (
-                        <div className="space-y-1">
-                          <p className="text-xs font-bold text-zinc-900 dark:text-white">{moduleName}</p>
-                          <p className="text-[10px] text-zinc-500 font-mono italic opacity-50">{moduleId}</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-1">
-                          <p className="text-xs font-bold text-rose-500/60 font-mono line-through decoration-rose-500/30">{moduleId || 'Unknown ID'}</p>
-                          <p className="text-[10px] text-rose-500/40 italic">This module no longer exists in your workspace</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  )}
                 </div>
               )}
             </div>
 
             {/* Footer */}
-            <div className="p-6 border-t border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/50 dark:bg-zinc-900/50 flex gap-3">
-              <button 
+            <div className="px-5 py-3.5 border-t border-zinc-100 dark:border-zinc-800/80 bg-zinc-50/60 dark:bg-zinc-950/40 flex items-center justify-end gap-2">
+              <button
+                type="button"
                 onClick={onClose}
                 disabled={isDeleting}
-                className="flex-1 py-3 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl font-bold text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all text-sm"
+                className="h-9 px-4 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors cursor-pointer disabled:opacity-50"
               >
                 Cancel
               </button>
-              <button 
+              <button
+                type="button"
                 onClick={onConfirm}
                 disabled={isDeleting}
-                className={cn(
-                  "flex-1 py-3 bg-red-500 text-white rounded-xl font-bold shadow-lg shadow-red-500/20 hover:bg-red-600 transition-all disabled:opacity-50 flex items-center justify-center gap-2 text-sm",
-                  isDeleting && "animate-pulse"
-                )}
+                className="h-9 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-xs transition-colors disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
               >
                 {isDeleting ? (
                   <>
-                    <Trash2 size={16} className="animate-bounce" />
+                    <Loader2 size={13} className="animate-spin" />
                     <span>Deleting...</span>
                   </>
                 ) : (
                   <>
-                    <Trash2 size={16} />
-                    <span>Confirm Delete</span>
+                    <Trash2 size={13} />
+                    <span>Delete</span>
                   </>
                 )}
               </button>

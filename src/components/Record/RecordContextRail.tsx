@@ -135,6 +135,8 @@ interface RecordContextRailProps {
   fullViewUrl?: string;
   onToggleParticipant?: (memberId: string) => void;
   onClearParticipants?: () => void;
+  /** Builder design mode: renders live rail UI with zero backend fetches or socket joins */
+  designMode?: boolean;
 }
 
 interface RailCacheEntry {
@@ -196,7 +198,8 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
   onDeleteRecord,
   fullViewUrl,
   onToggleParticipant,
-  onClearParticipants
+  onClearParticipants,
+  designMode = false
 }) => {
   const { session } = useAuth();
   const { tenant, user: platformUser } = usePlatform();
@@ -824,6 +827,13 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
 
   // Load record data and reset previous record's state immediately when record switches
   useEffect(() => {
+    if (designMode) {
+      setActivityLoading(false);
+      setNotesLoading(false);
+      setFilesLoading(false);
+      setTasksLoading(false);
+      return;
+    }
     if (!recordId) {
       setActivities([]);
       setNotes([]);
@@ -863,7 +873,7 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
 
   // Real-time socket listener for live activity feed
   useEffect(() => {
-    if (!recordId || !tenantId) return;
+    if (designMode || !recordId || !tenantId) return;
     const socket = getSharedSocket(token, tenantId);
     if (!socket) return;
 
@@ -1309,12 +1319,28 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
         </div>
       ) : (
         <div className="w-full h-full overflow-y-auto custom-scrollbar p-3 space-y-3">
-          {activeTab === 'overview' && (
+          {activeTab === 'overview' && (() => {
+            const configuredActions: string[] | undefined =
+              (moduleData as any)?.interfaceSettings?.detail?.contextRail?.enabledActions ??
+              (moduleData as any)?.config?.interfaceSettings?.detail?.contextRail?.enabledActions;
+            const isActionEnabled = (actionId: string) =>
+              !Array.isArray(configuredActions) || configuredActions.includes(actionId);
+            const showStar = Boolean(onToggleStar) && isActionEnabled('star');
+            const showDuplicate = Boolean(onDuplicate) && isActionEnabled('duplicate');
+            const showExportPdf = Boolean(onExportPdf) && isActionEnabled('exportPdf');
+            const showShare = Boolean(onOpenShare) && isActionEnabled('share');
+            const showCopyLink = isActionEnabled('copyLink');
+            const showDelete = Boolean(onDeleteRecord) && isActionEnabled('delete');
+            const hasAnyQuickAction =
+              showStar || showDuplicate || showExportPdf || showShare || showCopyLink || showDelete || Boolean(fullViewUrl);
+
+            return (
             <div className="space-y-3">
               {/* 1. Quick Action Command Bar (Uniform Icon Actions) */}
+              {hasAnyQuickAction && (
               <div className="p-1.5 bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl shadow-2xs flex items-center justify-between gap-1">
                 {/* Star Toggle Button */}
-                {onToggleStar && (
+                {showStar && (
                   <button
                     type="button"
                     onClick={onToggleStar}
@@ -1331,7 +1357,7 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
                 )}
 
                 {/* Duplicate Record */}
-                {onDuplicate && (
+                {showDuplicate && (
                   <button
                     type="button"
                     disabled={isCloning}
@@ -1344,7 +1370,7 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
                 )}
 
                 {/* Export PDF */}
-                {onExportPdf && (
+                {showExportPdf && (
                   <button
                     type="button"
                     onClick={onExportPdf}
@@ -1356,7 +1382,7 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
                 )}
 
                 {/* Share Button */}
-                {onOpenShare && (
+                {showShare && (
                   <button
                     type="button"
                     onClick={onOpenShare}
@@ -1368,17 +1394,19 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
                 )}
 
                 {/* Copy Link Button */}
-                <button
-                  type="button"
-                  onClick={handleCopyRecordLink}
-                  className="flex-1 py-1.5 rounded-xl text-zinc-600 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors border border-zinc-200/60 dark:border-zinc-700/60 bg-zinc-50 dark:bg-zinc-800/60 cursor-pointer shadow-2xs flex items-center justify-center"
-                  title="Copy Record Link"
-                >
-                  {copiedLink ? <Check size={13} className="text-emerald-500" /> : <Link2 size={13} />}
-                </button>
+                {showCopyLink && (
+                  <button
+                    type="button"
+                    onClick={handleCopyRecordLink}
+                    className="flex-1 py-1.5 rounded-xl text-zinc-600 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors border border-zinc-200/60 dark:border-zinc-700/60 bg-zinc-50 dark:bg-zinc-800/60 cursor-pointer shadow-2xs flex items-center justify-center"
+                    title="Copy Record Link"
+                  >
+                    {copiedLink ? <Check size={13} className="text-emerald-500" /> : <Link2 size={13} />}
+                  </button>
+                )}
 
                 {/* Move to Recycling Bin */}
-                {onDeleteRecord && (
+                {showDelete && (
                   <button
                     type="button"
                     onClick={onDeleteRecord}
@@ -1400,6 +1428,7 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
                   </a>
                 )}
               </div>
+              )}
 
               {/* 2. Record Identity & Quick Reference Header */}
               <div className="p-3.5 bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800/80 rounded-2xl shadow-2xs space-y-3">
@@ -1944,80 +1973,9 @@ export const RecordContextRail: React.FC<RecordContextRailProps> = ({
                   )}
                 </div>
               </div>
-
-              {/* 5. Quick Jump Shortcuts */}
-              <div className="p-3 bg-zinc-50/70 dark:bg-zinc-900/60 border border-zinc-200/60 dark:border-zinc-800/60 rounded-2xl space-y-2">
-                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
-                  Quick Jump
-                </span>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => switchTab('activity')}
-                    className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-zinc-800/90 hover:bg-zinc-100 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 text-left transition-colors cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <History size={12} className="text-zinc-400 group-hover:text-indigo-500 shrink-0" />
-                      <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 truncate">Activity</span>
-                    </div>
-                    {meaningfulActivities.length > 0 && (
-                      <span className="text-[10px] px-1.5 rounded-full bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-300 font-bold shrink-0">
-                        {meaningfulActivities.length}
-                      </span>
-                    )}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => switchTab('tasks')}
-                    className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-zinc-800/90 hover:bg-zinc-100 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 text-left transition-colors cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <Calendar size={12} className="text-zinc-400 group-hover:text-indigo-500 shrink-0" />
-                      <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 truncate">Tasks</span>
-                    </div>
-                    {tasks.length > 0 && (
-                      <span className="text-[10px] px-1.5 rounded-full bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-300 font-bold shrink-0">
-                        {tasks.length}
-                      </span>
-                    )}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => switchTab('notes')}
-                    className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-zinc-800/90 hover:bg-zinc-100 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 text-left transition-colors cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <StickyNote size={12} className="text-zinc-400 group-hover:text-indigo-500 shrink-0" />
-                      <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 truncate">Notes</span>
-                    </div>
-                    {notes.length > 0 && (
-                      <span className="text-[10px] px-1.5 rounded-full bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-300 font-bold shrink-0">
-                        {notes.length}
-                      </span>
-                    )}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => switchTab('files')}
-                    className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-zinc-800/90 hover:bg-zinc-100 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 text-left transition-colors cursor-pointer group"
-                  >
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <Files size={12} className="text-zinc-400 group-hover:text-indigo-500 shrink-0" />
-                      <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 truncate">Files</span>
-                    </div>
-                    {files.length > 0 && (
-                      <span className="text-[10px] px-1.5 rounded-full bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-300 font-bold shrink-0">
-                        {files.length}
-                      </span>
-                    )}
-                  </button>
-                </div>
-              </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* B. WORKFLOW CONSOLE TAB */}
           {activeTab === 'workflow' && (

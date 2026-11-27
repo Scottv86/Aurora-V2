@@ -35,4 +35,10 @@ export interface ModulePreviewConfig {
   onOpenRecord?: (record: Record<string, any>) => void;
   /** Optional form ID to automatically open the Create Record modal on mount */
   initialCreateFormId?: string | null;
+  /** True when embedded inside ModuleEditor's Interface -> List View design canvas */
+  designMode?: boolean;
+  /** Callback when user clicks a configurable region (e.g. '__table_settings') in design mode */
+  onSelectDesignTarget?: (targetId: string) => void;
+  /** Callback when user switches the master view layout inside ModuleView in design mode */
+  onLayoutTypeChange?: (layoutType: string) => void;
 }

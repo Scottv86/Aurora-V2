@@ -34,6 +34,12 @@ import { useAuth } from '../../hooks/useAuth';
 import { ShareRecordModal } from '../../components/Platform/ShareRecordModal';
 import { MoveRecordModal } from '../../components/Platform/MoveRecordModal';
 import { RecordContextRail, ContextRailTab } from '../../components/Record/RecordContextRail';
+import { RecordHeaderSurface } from '../../components/Record/Surfaces/RecordHeaderSurface';
+import { RecordFieldSurface } from '../../components/Record/Surfaces/RecordFieldSurface';
+import {
+  RecordSectionSplitSidebarSurface,
+  RecordSectionSplitNavItem,
+} from '../../components/Record/Surfaces/RecordSectionNavSurface';
 import { RecordPdfExportModal } from '../../components/Record/RecordPdfExportModal';
 import { RecordActivityDrawer } from '../../components/Platform/RecordActivityDrawer';
 import { RecordDocumentsDrawer } from '../../components/Platform/RecordDocumentsDrawer';
@@ -4197,53 +4203,52 @@ export const RecordDetailView = ({
             ) : (() => {
               const collabProps = getCollaboratorWrapperProps(field);
               return (
-                <div
+                <RecordFieldSurface
+                  label={field.label}
+                  required={Boolean(field.required)}
+                  tooltip={field.tooltip}
                   onFocusCapture={collabProps.onFocusCapture}
                   onBlurCapture={collabProps.onBlurCapture}
                   style={collabProps.style}
                   className={cn(
-                    "space-y-1 relative transition-all duration-300 rounded-xl",
                     collabProps.className,
                     isFieldAiModifying(field) && "p-2 -m-2 ring-2 ring-indigo-500/80 shadow-[0_0_18px_rgba(99,102,241,0.35)] dark:shadow-[0_0_24px_rgba(129,140,248,0.3)] bg-indigo-50/50 dark:bg-indigo-950/30",
                     isFieldAiUpdated(field) && !isFieldAiModifying(field) && "p-2 -m-2 ring-2 ring-emerald-500/70 shadow-[0_0_18px_rgba(16,185,129,0.25)] bg-emerald-50/40 dark:bg-emerald-950/20"
                   )}
-                >
-                  <label className="text-[10px] font-bold text-zinc-500 dark:text-zinc-500 uppercase tracking-widest flex items-center gap-1.5 relative group/label">
-                    {field.label}
-                    {field.required && <span className="text-rose-500">*</span>}
-                    {renderCollaboratorFieldBadge(field)}
-                    {isFieldAiModifying(field) && (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-indigo-600 text-white animate-pulse shadow-xs ml-auto">
-                        <Sparkles size={10} className="animate-spin" />
-                        AI Updating...
-                      </span>
-                    )}
-                    {isFieldAiUpdated(field) && !isFieldAiModifying(field) && (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-emerald-600 text-white shadow-xs ml-auto animate-in fade-in zoom-in-95 duration-200">
-                        <CheckCircle2 size={10} />
-                        Updated by AI
-                      </span>
-                    )}
-                    {field.tooltip && (
-                      <div className="relative cursor-help">
-                        <HelpCircle size={10} className="text-zinc-400 hover:text-indigo-500 transition-colors" />
-                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-3 py-2 bg-zinc-900 text-white text-[10px] rounded-lg opacity-0 group-hover/label:opacity-100 pointer-events-none transition-all duration-200 whitespace-pre-wrap w-48 shadow-xl border border-white/10 z-50">
-                          {field.tooltip}
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-8 border-transparent border-b-zinc-900" />
-                        </div>
-                      </div>
-                    )}
-                    {!activeFieldId && !isDirect && (
-                      isSecReadOnly || ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(field.type) ? (
-                        <Lock size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-zinc-400" />
-                      ) : (
-                        !['datatable'].includes(field.type) && (
-                          <Edit2 size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-indigo-500" />
+                  labelTrailingSlot={
+                    <>
+                      {renderCollaboratorFieldBadge(field)}
+                      {isFieldAiModifying(field) && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-indigo-600 text-white animate-pulse shadow-xs ml-auto">
+                          <Sparkles size={10} className="animate-spin" />
+                          AI Updating...
+                        </span>
+                      )}
+                      {isFieldAiUpdated(field) && !isFieldAiModifying(field) && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-emerald-600 text-white shadow-xs ml-auto animate-in fade-in zoom-in-95 duration-200">
+                          <CheckCircle2 size={10} />
+                          Updated by AI
+                        </span>
+                      )}
+                      {!activeFieldId && !isDirect && (
+                        isSecReadOnly || ['calculation', 'ai_summary', 'autonumber', 'automation'].includes(field.type) ? (
+                          <Lock size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-zinc-400" />
+                        ) : (
+                          !['datatable'].includes(field.type) && (
+                            <Edit2 size={8} className="opacity-0 group-hover/field:opacity-100 transition-opacity text-indigo-500" />
+                          )
                         )
-                      )
-                    )}
-                  </label>
-                  <FieldInput 
+                      )}
+                    </>
+                  }
+                  error={
+                    isErrorField && validationErrorField
+                      ? { message: validationErrorField.message, severity: validationErrorField.severity === 'warning' ? 'warning' : 'error' }
+                      : null
+                  }
+                  helperText={field.helperText}
+                >
+                  <FieldInput
                     field={field}
                     value={(() => {
                       const edited = getFieldValue(editData, field.id, field.name);
@@ -4275,19 +4280,7 @@ export const RecordDetailView = ({
                     recordData={editData}
                     allFields={allFields}
                   />
-                  {isErrorField && (
-                    <div className={cn(
-                      "mt-1.5 flex items-center gap-1.5 font-bold px-0.5 text-[9px] uppercase tracking-wider animate-in fade-in slide-in-from-top-1 duration-200",
-                      validationErrorField?.severity === 'warning' ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400"
-                    )}>
-                      {validationErrorField?.severity === 'warning' ? <AlertTriangle size={10} className="shrink-0" /> : <AlertCircle size={10} className="shrink-0" />}
-                      <span>{validationErrorField.message}</span>
-                    </div>
-                  )}
-                  {field.helperText && !isErrorField && (
-                    <p className="text-[10px] text-zinc-500 mt-0.5 font-medium px-0.5 italic absolute top-full left-0 z-10 pointer-events-none truncate max-w-full">{field.helperText}</p>
-                  )}
-                </div>
+                </RecordFieldSurface>
               );
             })()}
             </div>
@@ -4577,16 +4570,14 @@ export const RecordDetailView = ({
         }
       `}</style>
 
-      {/* Standardized Full-Width Sticky PageHeader */}
-      <div className={cn(
-        "w-full px-5 py-2.5 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-3 z-30",
-        !isModal && !isEmbedded && "sticky top-0",
-        isEmbedded && "h-[54px] py-0 px-5 box-border flex-row items-center"
-      )}>
-        {/* Left: Back + Icon + Title + Metadata */}
-        <div className="flex items-center gap-3 min-w-0">
-          {isModal ? (
-            <button 
+      {/* Standardized Full-Width Sticky PageHeader (Shared Surface) */}
+      <RecordHeaderSurface
+        motionKey={effectiveRecordId}
+        sticky={!isModal && !isEmbedded}
+        isEmbedded={isEmbedded}
+        leadingSlot={
+          isModal ? (
+            <button
               onClick={onClose}
               className="w-8 h-8 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white rounded-lg transition-all flex items-center justify-center shadow-xs shrink-0"
               title="Back"
@@ -4595,7 +4586,7 @@ export const RecordDetailView = ({
             </button>
           ) : !isEmbedded ? (
             <div className="flex items-center gap-1.5 shrink-0">
-              <Link 
+              <Link
                 to={getBackUrl()}
                 className="w-8 h-8 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white rounded-lg transition-all flex items-center justify-center shadow-xs shrink-0"
                 title="Back"
@@ -4628,124 +4619,107 @@ export const RecordDetailView = ({
                 </div>
               )}
             </div>
-          ) : null}
+          ) : null
+        }
+        iconSlot={Icon ? <Icon size={16} /> : undefined}
+        recordKey={recKey}
+        title={
+          recordTitle && recordTitle !== recKey ? (
+            <h1 className="text-sm font-bold text-zinc-950 dark:text-white leading-none truncate">
+              {recordTitle}
+            </h1>
+          ) : !recKey ? (
+            <h1 className="text-sm font-bold text-zinc-950 dark:text-white leading-none truncate">
+              {recordTitle || 'Record Details'}
+            </h1>
+          ) : null
+        }
+        subtitleSlot={
+          <>
+            {(() => {
+              const config = moduleData.config || (moduleData as any).config;
+              const subtitleFieldIds =
+                config?.subtitleFieldIds ||
+                (moduleData as any)?.subtitleFieldIds ||
+                (moduleData as any)?.interfaceSettings?.master?.subtitleFieldIds;
 
-          {Icon && (
-            <div className="w-8 h-8 rounded-lg bg-indigo-50/80 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-500/20 flex items-center justify-center shrink-0">
-              <Icon size={16} />
-            </div>
-          )}
-
-          <motion.div 
-            key={effectiveRecordId}
-            initial={{ opacity: 0, y: 1 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.16, ease: "easeOut" }}
-            className="min-w-0 flex flex-col justify-center"
-          >
-            {/* Title Row: Monospace Key Badge + Descriptive Title */}
-            <div className="flex items-center gap-2 min-w-0">
-              {recKey && (
-                <span className="px-2 py-0.5 font-mono text-[11px] font-bold rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200/80 dark:border-zinc-700/80 shrink-0 select-all tracking-tight shadow-2xs">
-                  {recKey}
-                </span>
-              )}
-              {recordTitle && recordTitle !== recKey ? (
-                <h1 className="text-sm font-bold text-zinc-950 dark:text-white leading-none truncate">
-                  {recordTitle}
-                </h1>
-              ) : !recKey ? (
-                <h1 className="text-sm font-bold text-zinc-950 dark:text-white leading-none truncate">
-                  {recordTitle || 'Record Details'}
-                </h1>
-              ) : null}
-
-
-            </div>
-
-            {/* Subtitle Row: Custom Subtitle Fields + Created Date */}
-            <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-              {(() => {
-                const config = moduleData.config || (moduleData as any).config;
-                const subtitleFieldIds =
-                  config?.subtitleFieldIds ||
-                  (moduleData as any)?.subtitleFieldIds ||
-                  (moduleData as any)?.interfaceSettings?.master?.subtitleFieldIds;
-                
-                if (subtitleFieldIds && Array.isArray(subtitleFieldIds) && subtitleFieldIds.length > 0) {
-                  const items = subtitleFieldIds.map((fieldId) => {
+              if (subtitleFieldIds && Array.isArray(subtitleFieldIds) && subtitleFieldIds.length > 0) {
+                const items = subtitleFieldIds
+                  .map((fieldId) => {
                     if (fieldId === 'createdAt') return null;
                     if (fieldId === 'createdBy') return record.createdBy ? `By ${record.createdBy}` : null;
                     if (fieldId === '_record_key') return null;
 
-                    const field = allFields.find(f => f.id === fieldId);
-                    const value = getFieldValue(editData, fieldId, field?.name) ?? getFieldValue(record, fieldId, field?.name);
+                    const field = allFields.find((f) => f.id === fieldId);
+                    const value =
+                      getFieldValue(editData, fieldId, field?.name) ??
+                      getFieldValue(record, fieldId, field?.name);
                     if (!value && value !== 0) return null;
-                    
+
                     let displayValue = value;
                     if (field?.type === 'date' && value) {
                       displayValue = new Date(value).toLocaleDateString();
                     }
                     return displayValue;
-                  }).filter(Boolean);
+                  })
+                  .filter(Boolean);
 
-                  if (items.length > 0) {
-                    return items.map((item, idx) => (
-                      <span key={idx} className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-                        <span>{String(item)}</span>
-                        <span className="text-zinc-300 dark:text-zinc-700">•</span>
-                      </span>
-                    ));
-                  }
+                if (items.length > 0) {
+                  return items.map((item, idx) => (
+                    <span key={idx} className="flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+                      <span>{String(item)}</span>
+                      <span className="text-zinc-300 dark:text-zinc-700">•</span>
+                    </span>
+                  ));
                 }
-                return null;
-              })()}
+              }
+              return null;
+            })()}
 
-              <span className="text-[11px] text-zinc-400 dark:text-zinc-500">
-                Created {record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'Just now'}
-              </span>
-            </div>
-          </motion.div>
-        </div>
+            <span className="text-[11px] text-zinc-400 dark:text-zinc-500">
+              Created {record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'Just now'}
+            </span>
+          </>
+        }
+        actionsSlot={
+          <>
+            {/* Real-time Collaboration & Presence Avatar Stack (MS 365 / Figma style) */}
+            <RecordPresenceStack
+              collaborators={recordCollaborators}
+              otherCollaborators={recordOtherCollaborators}
+              getFieldLabel={(fId) => allFields.find((f) => f.id === fId || f.name === fId)?.label || fId}
+            />
 
-        {/* Right: Actions Cluster */}
-        <div className="flex items-center gap-2 flex-wrap md:flex-nowrap shrink-0">
-          {/* Real-time Collaboration & Presence Avatar Stack (MS 365 / Figma style) */}
-          <RecordPresenceStack
-            collaborators={recordCollaborators}
-            otherCollaborators={recordOtherCollaborators}
-            getFieldLabel={(fId) => allFields.find(f => f.id === fId || f.name === fId)?.label || fId}
-          />
+            {/* Quick Actions & Automations */}
+            {quickActionAutomations.map((auto: any) => (
+              <button
+                key={auto.id}
+                disabled={triggeringAutomationId === auto.id}
+                onClick={() => handleTriggerQuickAction(auto)}
+                className="h-8 px-2.5 bg-zinc-100/80 dark:bg-zinc-800/80 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-200 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+              >
+                {triggeringAutomationId === auto.id ? (
+                  <Loader2 size={12} className="animate-spin text-indigo-500" />
+                ) : (
+                  <LucideIcons.Zap size={12} className="text-amber-500" />
+                )}
+                <span>{auto.name}</span>
+              </button>
+            ))}
 
-          {/* Quick Actions & Automations */}
-          {quickActionAutomations.map((auto: any) => (
-            <button
-              key={auto.id}
-              disabled={triggeringAutomationId === auto.id}
-              onClick={() => handleTriggerQuickAction(auto)}
-              className="h-8 px-2.5 bg-zinc-100/80 dark:bg-zinc-800/80 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-200 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shadow-xs disabled:opacity-50"
-            >
-              {triggeringAutomationId === auto.id ? (
-                <Loader2 size={12} className="animate-spin text-indigo-500" />
-              ) : (
-                <LucideIcons.Zap size={12} className="text-amber-500" />
-              )}
-              <span>{auto.name}</span>
-            </button>
-          ))}
-
-          {/* Close Button (for Modal) */}
-          {isModal && (
-            <button 
-              onClick={onClose}
-              className="w-8 h-8 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white rounded-lg transition-all flex items-center justify-center shadow-xs"
-              title="Close"
-            >
-              <X size={14} />
-            </button>
-          )}
-        </div>
-      </div>
+            {/* Close Button (for Modal) */}
+            {isModal && (
+              <button
+                onClick={onClose}
+                className="w-8 h-8 bg-zinc-100/80 hover:bg-zinc-200/80 dark:bg-zinc-800/80 dark:hover:bg-zinc-700/80 border border-zinc-200/60 dark:border-zinc-700/60 text-zinc-700 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white rounded-lg transition-all flex items-center justify-center shadow-xs"
+                title="Close"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </>
+        }
+      />
 
       {/* 2-Column Main Workspace: Form Layout (Left) + Unified Context Rail (Right) */}
       <div className="flex-1 flex flex-row w-full min-h-0 relative overflow-hidden">
@@ -4763,52 +4737,45 @@ export const RecordDetailView = ({
         </div>
       ) : interfaceSettings.detail?.layoutType === 'split' ? (
         <div className="flex-1 w-full min-h-0 relative z-10 flex flex-row overflow-hidden bg-zinc-50 dark:bg-[#101010]">
-          {/* Edge-to-Edge Left Navigation Menu */}
-          <div className="w-64 md:w-72 shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 flex flex-col h-full overflow-hidden">
-            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-1.5 custom-scrollbar">
-              {sortedVisibleTabs.map((tab: any) => {
-                const subtabs = sortedVisibleTabs.filter((sub: any) => sub.parentId === tab.id);
-                const isParent = subtabs.length > 0;
-                const isParentActive = isParent && subtabs.some((sub: any) => sub.id === activeTabId);
-                const isActive = activeTabId === tab.id || isParentActive;
-                const isSubtab = !!tab.parentId && sortedVisibleTabs.some((p: any) => p.id === tab.parentId);
-                
-                const hasErrors = failedTabSeverities[tab.id] === 'error' || (isParent && subtabs.some((sub: any) => failedTabSeverities[sub.id] === 'error'));
-                const hasWarnings = failedTabSeverities[tab.id] === 'warning' || (isParent && subtabs.some((sub: any) => failedTabSeverities[sub.id] === 'warning'));
+          {/* Edge-to-Edge Left Navigation Menu (Shared Surface) */}
+          <RecordSectionSplitSidebarSurface>
+            {sortedVisibleTabs.map((tab: any) => {
+              const subtabs = sortedVisibleTabs.filter((sub: any) => sub.parentId === tab.id);
+              const isParent = subtabs.length > 0;
+              const isParentActive = isParent && subtabs.some((sub: any) => sub.id === activeTabId);
+              const isActive = activeTabId === tab.id || isParentActive;
+              const isSubtab = !!tab.parentId && sortedVisibleTabs.some((p: any) => p.id === tab.parentId);
 
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => {
-                      if (isParent) {
-                        setActiveTabId(subtabs[0].id);
-                      } else {
-                        setActiveTabId(tab.id);
-                      }
-                    }}
-                    className={cn(
-                      "w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center justify-between group cursor-pointer",
-                      isActive
-                        ? "bg-zinc-100 dark:bg-white/10 text-zinc-900 dark:text-white font-bold shadow-sm"
-                        : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60",
-                      isSubtab && "pl-7 border-l-2 border-zinc-200 dark:border-zinc-800 ml-3.5 rounded-l-none"
+              const hasErrors = failedTabSeverities[tab.id] === 'error' || (isParent && subtabs.some((sub: any) => failedTabSeverities[sub.id] === 'error'));
+              const hasWarnings = failedTabSeverities[tab.id] === 'warning' || (isParent && subtabs.some((sub: any) => failedTabSeverities[sub.id] === 'warning'));
+
+              return (
+                <RecordSectionSplitNavItem
+                  key={tab.id}
+                  active={isActive}
+                  isSubtab={isSubtab}
+                  onClick={() => {
+                    if (isParent) {
+                      setActiveTabId(subtabs[0].id);
+                    } else {
+                      setActiveTabId(tab.id);
+                    }
+                  }}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {interfaceSettings.detail?.showTabIcons && (
+                      <DynamicIcon name={tab.iconName || (isParent ? 'Folder' : 'Layout')} size={14} className="shrink-0" />
                     )}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      {interfaceSettings.detail?.showTabIcons && (
-                        <DynamicIcon name={tab.iconName || (isParent ? 'Folder' : 'Layout')} size={14} className="shrink-0" />
-                      )}
-                      <span className="truncate">{tab.label}</span>
-                      {hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 ml-1.5 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />}
-                      {hasWarnings && !hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 ml-1.5 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />}
-                    </div>
-                    {!isParent && <ChevronRight size={12} className={cn("transition-transform flex-shrink-0 ml-2 opacity-50 group-hover:opacity-100", isActive ? "text-zinc-900 dark:text-white opacity-100" : "text-zinc-400 group-hover:translate-x-0.5")} />}
-                    {isParent && <ChevronDown size={12} className={cn("transition-transform flex-shrink-0 ml-2 opacity-50 group-hover:opacity-100", isActive ? "text-zinc-900 dark:text-white opacity-100" : "text-zinc-400")} />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+                    <span className="truncate">{tab.label}</span>
+                    {hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 ml-1.5 shadow-[0_0_6px_rgba(244,63,94,0.6)]" />}
+                    {hasWarnings && !hasErrors && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 ml-1.5 shadow-[0_0_6px_rgba(245,158,11,0.6)]" />}
+                  </div>
+                  {!isParent && <ChevronRight size={12} className={cn("transition-transform flex-shrink-0 ml-2 opacity-50 group-hover:opacity-100", isActive ? "text-zinc-900 dark:text-white opacity-100" : "text-zinc-400 group-hover:translate-x-0.5")} />}
+                  {isParent && <ChevronDown size={12} className={cn("transition-transform flex-shrink-0 ml-2 opacity-50 group-hover:opacity-100", isActive ? "text-zinc-900 dark:text-white opacity-100" : "text-zinc-400")} />}
+                </RecordSectionSplitNavItem>
+              );
+            })}
+          </RecordSectionSplitSidebarSurface>
 
           {/* Right Field Cards Container */}
           <div className="flex-1 min-h-0 h-full p-4 sm:p-5 overflow-y-auto custom-scrollbar bg-zinc-50 dark:bg-[#101010]">

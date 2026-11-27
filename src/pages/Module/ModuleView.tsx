@@ -1224,7 +1224,10 @@ export const ModuleView = ({ previewConfig }: { previewConfig?: ModulePreviewCon
   useEffect(() => {
     if (!isPreview || !previewConfig) return;
     setModuleData(previewConfig.moduleOverride);
-  }, [isPreview, previewConfig?.moduleOverride]);
+    if (previewConfig.designMode) {
+      setActiveLayoutOverride(null);
+    }
+  }, [isPreview, previewConfig?.moduleOverride, previewConfig?.designMode]);
 
   useEffect(() => {
     if (!isPreview || !previewConfig) return;
@@ -2167,9 +2170,14 @@ export const ModuleView = ({ previewConfig }: { previewConfig?: ModulePreviewCon
   }, [searchParams, moduleData, allFields, setSearchParams]);
 
   const handleSelectViewLayout = useCallback((layoutType: string | null) => {
-    setActiveLayoutOverride(layoutType);
     setShowMoreViewsDropdown(false);
-    if (!moduleId) return;
+    if (previewConfig?.designMode) {
+      setActiveLayoutOverride(null);
+      previewConfig.onLayoutTypeChange?.(layoutType || 'table');
+      return;
+    }
+    setActiveLayoutOverride(layoutType);
+    if (isPreview || !moduleId) return;
     try {
       if (layoutType) {
         localStorage.setItem(`aurora_view_layout_${moduleId}`, layoutType);
@@ -2177,7 +2185,7 @@ export const ModuleView = ({ previewConfig }: { previewConfig?: ModulePreviewCon
         localStorage.removeItem(`aurora_view_layout_${moduleId}`);
       }
     } catch {}
-  }, [moduleId]);
+  }, [moduleId, isPreview, previewConfig]);
 
   const interfaceSettings = useMemo(() => {
     const raw = (moduleData as any)?.interfaceSettings || {
@@ -6534,13 +6542,24 @@ export const ModuleView = ({ previewConfig }: { previewConfig?: ModulePreviewCon
     <div className="flex flex-col w-full flex-1 min-h-0 h-full bg-transparent overflow-hidden">
       
       {/* Tier 1: Consistent Breadcrumbs & Context Action Bar */}
-      <div className="sticky top-0 z-30 h-9 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between px-5 shrink-0 gap-3">
+      <div
+        onClick={previewConfig?.designMode ? () => previewConfig.onSelectDesignTarget?.('__table_settings') : undefined}
+        className={cn(
+          "sticky top-0 z-30 h-9 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between px-5 shrink-0 gap-3",
+          previewConfig?.designMode && "cursor-pointer hover:bg-indigo-50/30 dark:hover:bg-indigo-500/5 transition-colors"
+        )}
+      >
         <div className="flex items-center gap-3 min-w-0">
           {isPreview ? (
             <div className="flex items-center gap-2 text-xs min-w-0">
               <span className="text-zinc-400">Workspace</span>
               <span className="text-zinc-300 dark:text-zinc-700">/</span>
               <span className="font-semibold text-zinc-900 dark:text-white truncate">{moduleData?.name || 'Module'}</span>
+              {previewConfig?.designMode && (
+                <span className="ml-1 px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 text-[10px] font-medium">
+                  Live Workspace UI
+                </span>
+              )}
             </div>
           ) : (
             <Breadcrumbs />

@@ -22,6 +22,7 @@ import { TooltipProvider } from './components/UI/Tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { usePlatform } from './hooks/usePlatform';
 import { useAuth } from './hooks/useAuth';
+import { useTheme } from './hooks/useTheme';
 import { PageLoader } from './components/UI/PageLoader';
 
 const queryClient = new QueryClient({
@@ -241,6 +242,7 @@ const MyWorkRouteWrapper = () => {
 
 const PlatformToaster = () => {
   const { tenant } = usePlatform();
+  const { theme } = useTheme();
   const toastConfig = tenant?.workspaceSettings?.notifications?.toasts || {};
   const position = toastConfig.position || tenant?.branding?.toastPosition || 'bottom-left';
   const duration = toastConfig.duration ?? 4000;
@@ -250,7 +252,7 @@ const PlatformToaster = () => {
   return (
     <Toaster 
       key={`toaster-${position}-${expand}-${closeButton}`}
-      theme="dark"
+      theme={theme}
       toastOptions={{
         style: {
           maxWidth: 'min(460px, calc(100vw - 32px))'
