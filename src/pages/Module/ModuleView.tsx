@@ -45,6 +45,7 @@ import { cn, isFieldVisible, flattenFields, getFieldValue, checkCondition, evalu
 import { validateRecordRules, fetchExternalValidationRulesets, mergeValidationRulesForModule, evaluateVisualCondition, resolveDotPathValue } from '../../lib/validationEngine';
 import { getSystemMetaFields, resolveFormInitialValues } from '../../lib/formFieldUtils';
 import { Module, ModuleField } from '../../types/platform';
+import { ModulePreviewConfig } from '../../types/preview';
 import { calculateDefaultValue } from '../../services/fieldService';
 import { CollapsibleFieldGroup } from '../../components/UI/CollapsibleFieldGroup';
 import { RepeatableGroupBlock } from '../../components/Platform/RepeatableGroupBlock';
@@ -891,7 +892,8 @@ const RecordActionsCell: React.FC<RecordActionsCellProps> = ({
   );
 };
 
-export const ModuleView = () => {
+export const ModuleView = ({ previewConfig }: { previewConfig?: ModulePreviewConfig } = {}) => {
+  const isPreview = Boolean(previewConfig?.enabled);
   const { moduleId: moduleIdRaw } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -911,20 +913,40 @@ export const ModuleView = () => {
     fetchExternalValidationRulesets(API_BASE_URL, tenant.id, session?.access_token).then(setExternalRulesets);
   }, [tenant?.id, session?.access_token]);
 
-  const isTenantAdmin = isDeveloper || 
+  const isTenantAdmin = !isPreview && (isDeveloper || 
     platformUser?.role === 'TENANT_ADMIN' || 
     platformUser?.role?.toLowerCase() === 'tenant admin' || 
     platformUser?.role?.toLowerCase() === 'admin' || 
     platformUser?.isSuperAdmin === true || 
-    platformUser?.licenceType === 'Developer';
+    platformUser?.licenceType === 'Developer');
+
+  const effectiveSecurityUser = useMemo(() => {
+    if (isPreview && previewConfig?.simulatedUser) {
+      return previewConfig.simulatedUser;
+    }
+    if (isPreview && previewConfig?.simulatedRole) {
+      const role = previewConfig.simulatedRole;
+      return {
+        ...(platformUser || user || {}),
+        role,
+        roleId: role,
+        isSuperAdmin: role === 'admin',
+        permissionGroupIds: [role]
+      };
+    }
+    return platformUser || user;
+  }, [isPreview, previewConfig?.simulatedUser, previewConfig?.simulatedRole, platformUser, user]);
 
   const moduleId = useMemo(() => {
+    if (isPreview && previewConfig?.moduleOverride?.id) {
+      return previewConfig.moduleOverride.id;
+    }
     if (!moduleIdRaw || !modules) return moduleIdRaw || '';
     const matchedMod = modules.find(
       (m: any) => m.type !== 'PAGE' && (slugify(m.name) === moduleIdRaw || m.name.toLowerCase() === moduleIdRaw.toLowerCase())
     );
     return matchedMod ? matchedMod.id : moduleIdRaw;
-  }, [moduleIdRaw, modules]);
+  }, [isPreview, previewConfig?.moduleOverride?.id, moduleIdRaw, modules]);
   
   const activeQueue = useMemo(() => {
     if (!menuConfig?.sections || !queueIdRaw) return null;
@@ -963,12 +985,18 @@ export const ModuleView = () => {
   }, [members, platformUser, session]);
 
   const resolvedCurrentUserId = useMemo(() => {
+    if (isPreview && previewConfig?.simulatedUser?.id) {
+      return previewConfig.simulatedUser.id;
+    }
     return activeTenantMember?.id || (platformUser as any)?.id || (session?.user as any)?.id;
-  }, [activeTenantMember, platformUser, session]);
+  }, [isPreview, previewConfig?.simulatedUser?.id, activeTenantMember, platformUser, session]);
 
   const resolvedCurrentUserName = useMemo(() => {
+    if (isPreview && previewConfig?.simulatedUser?.name) {
+      return previewConfig.simulatedUser.name;
+    }
     return activeTenantMember?.name || (platformUser as any)?.name || (session?.user as any)?.user_metadata?.full_name || (session?.user as any)?.email;
-  }, [activeTenantMember, platformUser, session]);
+  }, [isPreview, previewConfig?.simulatedUser?.name, activeTenantMember, platformUser, session]);
 
   useModalStack();
 
@@ -976,18 +1004,21 @@ export const ModuleView = () => {
   const { getRecordCollaborators } = useRecordListPresence({
     tenantId: resolvedTenantId,
     currentUserId: resolvedCurrentUserId,
-    enabled: Boolean(resolvedTenantId),
+    enabled: Boolean(resolvedTenantId) && !isPreview,
   });
   const matchedModuleInitial = useMemo(() => {
+    if (isPreview && previewConfig?.moduleOverride) return previewConfig.moduleOverride;
     if (!moduleId || !modules) return null;
     return modules.find(
       (m: any) => m.type !== 'PAGE' && (m.id === moduleId || slugify(m.name) === moduleId || m.name?.toLowerCase() === moduleId.toLowerCase())
     ) || null;
-  }, [moduleId, modules]);
+  }, [isPreview, previewConfig?.moduleOverride, moduleId, modules]);
 
   const recordsCacheKey = `records_${tenant?.id || 'default'}_${moduleId || 'none'}`;
   const [moduleData, setModuleData] = useState<Module | null>(() => matchedModuleInitial);
-  const [records, setRecords] = useState<Record<string, any>[]>(() => builderCache.get(recordsCacheKey) || []);
+  const [records, setRecords] = useState<Record<string, any>[]>(() =>
+    isPreview ? (previewConfig?.records || []) : (builderCache.get(recordsCacheKey) || [])
+  );
   const [showNewEntryModal, setShowNewEntryModal] = useState(false);
   const [showBulkPasteModal, setShowBulkPasteModal] = useState(false);
   const [showCreateDropdown, setShowCreateDropdown] = useState(false);
@@ -1097,7 +1128,7 @@ export const ModuleView = () => {
         map.set(f.id, f);
       }
     });
-    return Array.from(map.values()).filter((f: any) => !isFieldHiddenBySecurity(f.id, moduleData, platformUser || user));
+    return Array.from(map.values()).filter((f: any) => !isFieldHiddenBySecurity(f.id, moduleData, effectiveSecurityUser));
   }, [moduleData, platformUser, user]);
 
   const activeWorkflow = useMemo(() => {
@@ -1176,7 +1207,7 @@ export const ModuleView = () => {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
       return fetchModule(moduleId, tenant.id, token, modules);
     },
-    enabled: !!tenant?.id && !!moduleId && !platformLoading && (!!session?.access_token || !!(import.meta as any).env.VITE_DEV_TOKEN)
+    enabled: !isPreview && !!tenant?.id && !!moduleId && !platformLoading && (!!session?.access_token || !!(import.meta as any).env.VITE_DEV_TOKEN)
   });
 
   const { data: recordsResult, isLoading: recordsQueryLoading, isFetching: recordsQueryFetching } = useQuery({
@@ -1186,12 +1217,36 @@ export const ModuleView = () => {
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       return fetchRecords(moduleId, tenant.id, token, queueId ? 1 : page, queueId ? 2000 : pageSize);
     },
-    enabled: !!tenant?.id && !!moduleId && !platformLoading && (!!session?.access_token || !!(import.meta as any).env.VITE_DEV_TOKEN),
+    enabled: !isPreview && !!tenant?.id && !!moduleId && !platformLoading && (!!session?.access_token || !!(import.meta as any).env.VITE_DEV_TOKEN),
     placeholderData: (previousData) => previousData
   });
 
+  useEffect(() => {
+    if (!isPreview || !previewConfig) return;
+    setModuleData(previewConfig.moduleOverride);
+  }, [isPreview, previewConfig?.moduleOverride]);
+
+  useEffect(() => {
+    if (!isPreview || !previewConfig) return;
+    setRecords(previewConfig.records || []);
+    setTotalRecords((previewConfig.records || []).length);
+  }, [isPreview, previewConfig?.records]);
+
+  const initialFormOpenedRef = useRef(false);
+  useEffect(() => {
+    if (!isPreview || !previewConfig?.initialCreateFormId || initialFormOpenedRef.current) return;
+    initialFormOpenedRef.current = true;
+    const modForms = (previewConfig.moduleOverride as any)?.forms || [];
+    const targetForm = modForms.find((f: any) => f.id === previewConfig.initialCreateFormId);
+    if (targetForm) {
+      setSelectedCreateFormId(targetForm.id);
+    }
+    setShowNewEntryModal(true);
+  }, [isPreview, previewConfig?.initialCreateFormId, previewConfig?.moduleOverride]);
+
   // Fast switch when moduleId changes
   useEffect(() => {
+    if (isPreview) return;
     const nextMod = (modules || []).find(
       (m: any) => m.type !== 'PAGE' && (m.id === moduleId || slugify(m.name) === moduleId || m.name?.toLowerCase() === moduleId.toLowerCase())
     );
@@ -1199,7 +1254,7 @@ export const ModuleView = () => {
     const cached = builderCache.get<Record<string, any>[]>(recordsCacheKey);
     setRecords(cached || []);
     setPage(1);
-  }, [moduleId, modules, recordsCacheKey]);
+  }, [isPreview, moduleId, modules, recordsCacheKey]);
 
   useEffect(() => {
     if (moduleResult) setModuleData(moduleResult);
@@ -1444,6 +1499,38 @@ export const ModuleView = () => {
   const createMutation = useMutation({
     mutationFn: async (payload: any) => {
       const { _silentToast, ...finalData } = payload || {};
+      if (isPreview && previewConfig) {
+        const prefix = (moduleData as any)?.recordKeyPrefix || 'REC';
+        const suffix = (moduleData as any)?.recordKeySuffix || '';
+        const baseNext = Number((moduleData as any)?.nextKeyNumber) || 1;
+        const maxExistingNum = (records || []).reduce((max: number, r: any) => {
+          const match = String(r?._record_key || '').match(/(\d+)/);
+          const n = match ? parseInt(match[1], 10) : 0;
+          return n > max ? n : max;
+        }, 0);
+        const nextNum = Math.max(baseNext, maxExistingNum + 1);
+        const normalizedPrefix = prefix.endsWith('-') ? prefix.slice(0, -1) : prefix;
+        const recordKey = `${normalizedPrefix}-${nextNum}${suffix}`;
+        const now = new Date().toISOString();
+        const sandboxRecord: Record<string, any> = {
+          id: `sandbox_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          moduleId,
+          _record_key: recordKey,
+          status: finalData.status || 'Open',
+          createdAt: now,
+          updatedAt: now,
+          createdBy: resolvedCurrentUserName || 'Sandbox User',
+          ...finalData,
+          data: {
+            ...(finalData.data || {}),
+            ...finalData,
+            _record_key: recordKey
+          }
+        };
+        previewConfig.onRecordsChange(prev => [sandboxRecord, ...prev], 'Created record');
+        return sandboxRecord;
+      }
+
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       const res = await fetch(`${DATA_API_URL}/records`, {
         method: 'POST',
@@ -1466,18 +1553,20 @@ export const ModuleView = () => {
       return res.json();
     },
     onSuccess: (savedRecord, variables: any) => {
-      queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
-      
-      const queryKey = ['records', tenant?.id, moduleId, page, pageSize];
-      queryClient.setQueryData(queryKey, (old: any) => {
-        if (!old) return old;
-        return {
-          ...old,
-          records: [savedRecord, ...old.records.filter((r: any) => r.id !== savedRecord.id)],
-          total: old.total + 1,
-          totalPages: Math.ceil((old.total + 1) / pageSize)
-        };
-      });
+      if (!isPreview) {
+        queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+        
+        const queryKey = ['records', tenant?.id, moduleId, page, pageSize];
+        queryClient.setQueryData(queryKey, (old: any) => {
+          if (!old) return old;
+          return {
+            ...old,
+            records: [savedRecord, ...old.records.filter((r: any) => r.id !== savedRecord.id)],
+            total: old.total + 1,
+            totalPages: Math.ceil((old.total + 1) / pageSize)
+          };
+        });
+      }
 
       setRecords(prev => {
         if (prev.some(r => r.id === savedRecord.id)) return prev;
@@ -1486,7 +1575,7 @@ export const ModuleView = () => {
       setTotalRecords(t => t + 1);
 
       if (!variables?._silentToast) {
-        toast.success("Record created successfully");
+        toast.success(isPreview ? 'Record created (Sandbox)' : 'Record created successfully');
       }
       setShowNewEntryModal(false);
       setNewEntryData({});
@@ -1602,7 +1691,7 @@ export const ModuleView = () => {
           if (!isFieldVisible(fObj, finalData, visibilityContext)) return;
           const field = allFields.find(f => f.id === fObj.id);
           const isRequired = fObj.required || field?.required;
-          const value = finalData[fObj.id];
+          const value = getFieldValue(finalData, fObj.id, field?.name);
           if (isRequired && (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0))) {
             hasErrors = true;
           } else if (value !== undefined && value !== null && value !== '' && fObj.validation?.pattern) {
@@ -1627,7 +1716,7 @@ export const ModuleView = () => {
       const rules = mergeValidationRulesForModule(moduleData?.id || moduleId, moduleRules, externalRulesets);
       const validationErrors = validateRecordRules(finalData, rules, allFields, {}, undefined, {
         isNewRecord: true,
-        userRole: platformUser?.role
+        userRole: effectiveSecurityUser?.role
       });
       if (validationErrors.length > 0) {
         const hardErrors = validationErrors.filter(e => e.enforcement === 'block');
@@ -1639,7 +1728,14 @@ export const ModuleView = () => {
             return rule?.showToast !== false;
           });
           if (toastErrors.length > 0) {
-            toast.error(toastErrors.map(e => e.message).join(' | '));
+            toast.error(
+              toastErrors
+                .map(e => {
+                  const rule = rules.find((r: any) => r.id === e.ruleId);
+                  return isPreview && rule?.name ? `${rule.name}: ${e.message}` : e.message;
+                })
+                .join(' | ')
+            );
           }
           setIsSubmitting(false);
           return;
@@ -1929,9 +2025,8 @@ export const ModuleView = () => {
       const groupId = fieldToGroupMap[fieldId];
       if (groupId) {
         updatedData[groupId] = { ...(prev[groupId] || {}), [fieldId]: val };
-      } else {
-        updatedData[fieldId] = val;
       }
+      updatedData[fieldId] = val;
       
       // Execute Lookup Output Mappings
       const field = allFields.find(f => f.id === fieldId);
@@ -2134,12 +2229,21 @@ export const ModuleView = () => {
   const handleRecordClick = (recordId: string) => {
     if (interfaceSettings.master.layoutType === 'split') {
       setSelectedSplitRecordId(recordId);
-      setSearchParams(prev => {
-        const next = new URLSearchParams(prev);
-        next.set('recordId', recordId);
-        return next;
-      }, { replace: true });
+      if (!isPreview) {
+        setSearchParams(prev => {
+          const next = new URLSearchParams(prev);
+          next.set('recordId', recordId);
+          return next;
+        }, { replace: true });
+      }
       return;
+    }
+    if (isPreview && previewConfig?.onOpenRecord) {
+      const targetRec = records.find(r => r.id === recordId);
+      if (targetRec) {
+        previewConfig.onOpenRecord(targetRec);
+        return;
+      }
     }
     const detailViewMode = interfaceSettings.master.detailViewMode || 'page';
     if (detailViewMode === 'modal') {
@@ -2500,7 +2604,7 @@ export const ModuleView = () => {
       const rules = mergeValidationRulesForModule(moduleData?.id || moduleId, moduleRules, externalRulesets);
       const validationErrors = validateRecordRules(fullRecord, rules, allFields, {}, undefined, {
         isNewRecord: false,
-        userRole: platformUser?.role
+        userRole: effectiveSecurityUser?.role
       });
       if (validationErrors.length > 0) {
         const hardErrors = validationErrors.filter(e => e.enforcement === 'block');
@@ -2537,6 +2641,20 @@ export const ModuleView = () => {
         if (toastWarnings.length > 0) {
           toast.warning(toastWarnings.map(e => e.message).join(' | '));
         }
+      }
+
+      if (isPreview && previewConfig) {
+        const updatedRecord = {
+          ...originalRecord,
+          ...data,
+          data: { ...(originalRecord.data || {}), ...data },
+          updatedAt: new Date().toISOString()
+        };
+        previewConfig.onRecordsChange(
+          prev => prev.map(r => (r.id === recordId ? updatedRecord : r)),
+          'Updated record'
+        );
+        return updatedRecord;
       }
 
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
@@ -2605,16 +2723,25 @@ export const ModuleView = () => {
       }
     },
     onSettled: () => {
-      // Refetch in the background to ensure data sync
-      queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+      if (!isPreview) {
+        queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+      }
     },
     onSuccess: () => {
-      toast.success("Record updated successfully");
+      toast.success(isPreview ? 'Record updated (Sandbox)' : 'Record updated successfully');
     }
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (recordId: string) => {
+      if (isPreview && previewConfig) {
+        previewConfig.onRecordsChange(
+          prev => prev.filter(r => r.id !== recordId),
+          'Deleted record'
+        );
+        return { deletedRecordId: recordId };
+      }
+
       const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token;
       const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
         method: 'DELETE',
@@ -3467,10 +3594,13 @@ export const ModuleView = () => {
                 recordIdProp={effectiveSelectedSplitRecordId}
                 initialRecordProp={records.find(r => r.id === effectiveSelectedSplitRecordId)}
                 isEmbedded={true}
+                previewConfig={previewConfig}
                 onRecordUpdate={handleEmbeddedRecordUpdate}
                 onClose={() => {
                   setSelectedSplitRecordId(null);
-                  queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+                  if (!isPreview) {
+                    queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+                  }
                 }}
               />
             </div>
@@ -5767,7 +5897,7 @@ export const ModuleView = () => {
         style: colWidth ? { width: `${colWidth}px`, minWidth: `${colWidth}px` } : undefined,
         accessor: (record: any) => {
         const rawVal = record[field.id] || record[field.name];
-        const val = isFieldMaskedBySecurity(field.id, moduleData, platformUser || user)
+        const val = isFieldMaskedBySecurity(field.id, moduleData, effectiveSecurityUser)
           ? formatMaskedFieldValue(rawVal)
           : rawVal;
         if (field.type === 'checkbox') return val ? 'Yes' : 'No';
@@ -6406,7 +6536,15 @@ export const ModuleView = () => {
       {/* Tier 1: Consistent Breadcrumbs & Context Action Bar */}
       <div className="sticky top-0 z-30 h-9 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-between px-5 shrink-0 gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <Breadcrumbs />
+          {isPreview ? (
+            <div className="flex items-center gap-2 text-xs min-w-0">
+              <span className="text-zinc-400">Workspace</span>
+              <span className="text-zinc-300 dark:text-zinc-700">/</span>
+              <span className="font-semibold text-zinc-900 dark:text-white truncate">{moduleData?.name || 'Module'}</span>
+            </div>
+          ) : (
+            <Breadcrumbs />
+          )}
         </div>
 
         {/* Center/Right: Interactive Multi-View Switcher + Context Actions */}
@@ -7134,7 +7272,7 @@ export const ModuleView = () => {
                                   </label>
                                   <FieldInput 
                                     field={field!}
-                                    value={newEntryData[field!.id]}
+                                    value={getFieldValue(newEntryData, field!.id, field!.name)}
                                     onChange={(val, metadata) => handleFieldChange(field!.id, val, metadata)}
                                     recordData={newEntryData}
                                     readonly={isReadOnly}
@@ -7878,10 +8016,13 @@ export const ModuleView = () => {
                   recordIdProp={activeDetailRecordId} 
                   initialRecordProp={records.find(r => r.id === activeDetailRecordId)}
                   isModal={true} 
+                  previewConfig={previewConfig}
                   onRecordUpdate={handleEmbeddedRecordUpdate}
                   onClose={() => {
                     setActiveDetailRecordId(null);
-                    queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+                    if (!isPreview) {
+                      queryClient.invalidateQueries({ queryKey: ['records', tenant?.id, moduleId] });
+                    }
                   }} 
                 />
               </div>

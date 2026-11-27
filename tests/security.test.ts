@@ -1,4 +1,5 @@
 import 'dotenv/config';
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 import { isPrivateOrReservedIp, validateSafeUrl } from '../server/lib/ssrfGuard';
 import { encryptSecret, decryptSecret } from '../server/lib/crypto';
 import { sanitizeHtml } from '../src/lib/sanitizeHtml';
@@ -315,6 +316,64 @@ async function runSecurityTests() {
   const targetTenantId = 'tenant-victim-beta';
   const isAuthorized = userTenantIds.includes(targetTenantId);
   assert(isAuthorized === false, 'Platform routes reject updates to unassigned tenants');
+
+  // TEST SUITE 11: Module Builder Security & Governance (Access Control & FLS)
+  console.log('\n--- 11. Module Builder Security & Governance Tests ---');
+  const { resolveSecurityRoleKey, isUserAuthorizedForModule, getFieldSecurityPermission, formatMaskedFieldValue } = await import('../src/utils/fieldSecurity');
+  const { isUserAuthorizedForModule: serverIsUserAuthorized } = await import('../server/routes/dataRoutes');
+
+  const mockFieldSecConfig = {
+    admin: { salary: { read: true, write: true, masked: false, hidden: false } },
+    grp_hr_managers: { salary: { read: true, write: true, masked: false, hidden: false } },
+    grp_finance_auditors: { salary: { read: true, write: false, masked: true, hidden: false } },
+    staff: { salary: { read: false, write: false, masked: false, hidden: true } }
+  };
+
+  // 11.1 Role & Security Group Key Resolution
+  const adminUser = { roleId: 'admin', isSuperAdmin: false };
+  assert(resolveSecurityRoleKey(adminUser, mockFieldSecConfig) === 'admin', 'Resolves tenant admin via roleId to "admin"');
+
+  const hrUser = { roleId: 'member', permissionGroupIds: ['grp_hr_managers'] };
+  assert(resolveSecurityRoleKey(hrUser, mockFieldSecConfig) === 'grp_hr_managers', 'Resolves user with dynamic group to "grp_hr_managers"');
+
+  const auditorUser = { roleId: 'member', permissionGroupIds: ['grp_finance_auditors'] };
+  assert(resolveSecurityRoleKey(auditorUser, mockFieldSecConfig) === 'grp_finance_auditors', 'Resolves auditor with dynamic group to "grp_finance_auditors"');
+
+  const standardUser = { roleId: 'member', permissionGroupIds: ['grp_unrelated'] };
+  assert(resolveSecurityRoleKey(standardUser, mockFieldSecConfig) === 'staff', 'Falls back to staff for users without matching group or admin role');
+
+  // 11.2 Field-Level Permissions
+  const permHR = getFieldSecurityPermission('salary', { fieldSecurity: mockFieldSecConfig }, hrUser);
+  assert(permHR.read === true && permHR.write === true && permHR.masked === false, 'HR Manager has full read/write to salary');
+
+  const permAuditor = getFieldSecurityPermission('salary', { fieldSecurity: mockFieldSecConfig }, auditorUser);
+  assert(permAuditor.read === true && permAuditor.write === false && permAuditor.masked === true, 'Auditor has read-only masked access to salary');
+  assert(formatMaskedFieldValue('125000') === '••5000', 'Masks salary correctly with formatMaskedFieldValue');
+
+  const permStaff = getFieldSecurityPermission('salary', { fieldSecurity: mockFieldSecConfig }, standardUser);
+  assert(permStaff.hidden === true && permStaff.read === false, 'Standard staff has salary hidden');
+
+  // 11.3 Module-Level Access Control (Client & Server)
+  const openModule = { config: { accessControl: { mode: 'all' } } };
+  assert(isUserAuthorizedForModule(standardUser, openModule) === true, 'Client allows any user into open module');
+  assert(serverIsUserAuthorized(standardUser, openModule) === true, 'Server allows any user into open module');
+
+  const restrictedModule = {
+    config: {
+      accessControl: {
+        mode: 'restricted',
+        allowedGroupIds: ['grp_hr_managers', 'grp_finance_auditors']
+      }
+    }
+  };
+  assert(isUserAuthorizedForModule(adminUser, restrictedModule) === true, 'Client allows tenant admin into restricted module');
+  assert(serverIsUserAuthorized(adminUser, restrictedModule) === true, 'Server allows tenant admin into restricted module');
+
+  assert(isUserAuthorizedForModule(hrUser, restrictedModule) === true, 'Client allows authorized HR group member into restricted module');
+  assert(serverIsUserAuthorized(hrUser, restrictedModule) === true, 'Server allows authorized HR group member into restricted module');
+
+  assert(isUserAuthorizedForModule(standardUser, restrictedModule) === false, 'Client blocks unauthorized user from restricted module');
+  assert(serverIsUserAuthorized(standardUser, restrictedModule) === false, 'Server blocks unauthorized user from restricted module');
 
   console.log('\n==========================================');
   console.log(`TOTAL TESTS: ${passed + failed} | PASSED: ${passed} | FAILED: ${failed}`);

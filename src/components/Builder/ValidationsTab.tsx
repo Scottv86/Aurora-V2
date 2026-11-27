@@ -145,15 +145,17 @@ export const ValidationsTab: React.FC<ValidationsTabProps> = ({
     }
   }, [validationRules, selectedRuleId]);
 
-  // Sidebar resize listeners
+  // Sidebar resize listeners (delta-based so it works with or without an outer sidebar)
+  const resizeOriginRef = useRef<{ x: number; width: number }>({ x: 0, width: 0 });
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!resizingSideRef.current) return;
+      const delta = e.clientX - resizeOriginRef.current.x;
       if (resizingSideRef.current === 'left') {
-        const next = Math.min(380, Math.max(220, e.clientX - 56));
+        const next = Math.min(380, Math.max(220, resizeOriginRef.current.width + delta));
         setLeftWidth(next);
       } else {
-        const next = Math.min(440, Math.max(260, window.innerWidth - e.clientX));
+        const next = Math.min(440, Math.max(260, resizeOriginRef.current.width - delta));
         setRightWidth(next);
       }
     };
@@ -171,7 +173,9 @@ export const ValidationsTab: React.FC<ValidationsTabProps> = ({
     };
   }, []);
 
-  const startResize = (side: 'left' | 'right') => {
+  const startResize = (side: 'left' | 'right', e: React.MouseEvent) => {
+    e.preventDefault();
+    resizeOriginRef.current = { x: e.clientX, width: side === 'left' ? leftWidth : rightWidth };
     resizingSideRef.current = side;
     setResizingSide(side);
     document.body.style.cursor = 'col-resize';
@@ -919,7 +923,7 @@ export const ValidationsTab: React.FC<ValidationsTabProps> = ({
 
           {/* Resize Handle */}
           <div
-            onMouseDown={() => startResize('left')}
+            onMouseDown={(e) => startResize('left', e)}
             className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-indigo-500/40 transition-colors z-10"
           />
           </motion.aside>
@@ -1610,7 +1614,7 @@ export const ValidationsTab: React.FC<ValidationsTabProps> = ({
           >
           {/* Resize Handle */}
           <div
-            onMouseDown={() => startResize('right')}
+            onMouseDown={(e) => startResize('right', e)}
             className="absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-indigo-500/40 transition-colors z-10"
           />
 

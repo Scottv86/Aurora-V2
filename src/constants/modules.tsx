@@ -17,7 +17,7 @@ export const MODULES = [
   { 
     id: 'people_org', 
     name: 'People & Organisation', 
-    type: 'RECORD',
+    type: 'REGISTRY',
     category: 'Core', 
     icon: Users, 
     description: 'Manage people and relationships across your organization.',
@@ -51,7 +51,7 @@ export const MODULES = [
   { 
     id: 'invoicing', 
     name: 'Invoicing', 
-    type: 'FINANCIAL',
+    type: 'WORK_ITEM',
     category: 'Finance', 
     icon: CreditCard, 
     description: 'Generate, send, and track invoices and payments.',
@@ -69,7 +69,7 @@ export const MODULES = [
   { 
     id: 'assets', 
     name: 'Asset Register', 
-    type: 'RECORD',
+    type: 'REGISTRY',
     category: 'Platform', 
     icon: Database, 
     description: 'Track physical and digital assets with maintenance history.',
@@ -102,7 +102,7 @@ export const MODULES = [
   { 
     id: 'risk-register', 
     name: 'Risk Register', 
-    type: 'RECORD',
+    type: 'REGISTRY',
     category: 'Risk & Compliance', 
     icon: ShieldCheck, 
     description: 'Identify, assess, and mitigate operational risks.',
@@ -118,7 +118,7 @@ export const MODULES = [
   { 
     id: 'point-of-sale', 
     name: 'Point of Sale', 
-    type: 'FINANCIAL',
+    type: 'WORK_ITEM',
     category: 'Platform', 
     icon: ShoppingCart, 
     description: 'Process retail transactions and manage till sessions.',
@@ -151,7 +151,7 @@ export const MODULES = [
   { 
     id: 'test-case-management', 
     name: 'Test Case Management', 
-    type: 'RECORD',
+    type: 'REGISTRY',
     category: 'Platform', 
     icon: TestTube, 
     description: 'Track and organize manual and automated test cases, step-by-step procedures, and execution priorities.',

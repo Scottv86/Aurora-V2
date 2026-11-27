@@ -18,7 +18,7 @@ import {
   GitFork, Zap, Activity, Clock, Play, Settings2, Trash2, Bug, Info, ChevronLeft, ChevronRight, 
   Search, Layout as LayoutIcon, Wand2, Mail, MessageSquare, RefreshCw, FileText, Globe, Sparkles as SparklesIcon, X as CloseIcon,
   Bot, Target, CheckSquare, Plus, ChevronUp, ChevronDown, Workflow as WorkflowIcon,
-  FilePlus2, Bell, CreditCard, Table, Pin, CheckCircle2
+  FilePlus2, Bell, CreditCard, Table, Pin, CheckCircle2, Undo2, Redo2
 } from 'lucide-react';
 import { Workflow, WorkflowNodeType, WorkflowSubstep } from '../../../types/platform';
 import { WorkflowDebugger } from './WorkflowDebugger';
@@ -98,6 +98,10 @@ interface GraphEditorProps {
   setRightSidebarTab: (tab: 'inspector' | 'debugger' | 'architect') => void;
   showGridlines?: boolean;
   fields?: any[];
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
 }
 
 const nodeTypes = {
@@ -807,7 +811,11 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
   rightSidebarTab,
   setRightSidebarTab,
   showGridlines,
-  fields
+  fields,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false
 }) => {
   const { screenToFlowPosition, getNodes, getEdges } = useReactFlow();
   const [searchQuery, setSearchQuery] = React.useState('');
@@ -1581,6 +1589,29 @@ export const WorkflowGraphEditorContent: React.FC<GraphEditorProps> = ({
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
+              {(onUndo || onRedo) && (
+                <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={onUndo}
+                    disabled={!canUndo}
+                    className="p-1.5 rounded-md text-zinc-600 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-white transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                    title="Undo (Ctrl+Z)"
+                  >
+                    <Undo2 size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onRedo}
+                    disabled={!canRedo}
+                    className="p-1.5 rounded-md text-zinc-600 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-white transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                    title="Redo (Ctrl+Y)"
+                  >
+                    <Redo2 size={14} />
+                  </button>
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={() => onLayout('TB')}

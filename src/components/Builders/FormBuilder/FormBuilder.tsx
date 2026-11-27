@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -59,6 +59,8 @@ import {
   Monitor,
   Tablet,
   Smartphone,
+  Undo2,
+  Redo2,
 } from 'lucide-react';
 import {
   DndContext,
@@ -88,6 +90,7 @@ import {
 import { Button } from '../../UI/Primitives';
 import { FormRenderer } from './FormRenderer';
 import { CalculatorModal } from '../../Builder/CalculatorModal';
+import { CanvasZoomControl, ZOOM_PRESETS } from '../../Builder/CanvasZoomControl';
 import { ConditionModal } from '../../Builder/ConditionModal';
 import { PublicFormPublishModal } from '../../Builder/PublicFormPublishModal';
 import { cn, flattenFields } from '../../../lib/utils';
@@ -130,6 +133,10 @@ export interface FormBuilderProps {
   workflow?: any;
   isRestricted?: boolean;
   onPromoteFieldToModule?: (field: ModuleField) => void;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
 }
 
 const STANDALONE_FIELD_TYPES: Array<{
@@ -697,6 +704,10 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
   workflow: propWorkflow,
   isRestricted = false,
   onPromoteFieldToModule,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
 }) => {
   const effectiveMode = explicitMode || builderContext.mode || 'global';
   const isModuleEmbedded = effectiveMode === 'module_embedded';
@@ -835,10 +846,72 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
   const [formSettingsTab, setFormSettingsTab] = useState<'general' | 'ecosystem' | 'governance'>(
     'general'
   );
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isEditingSubmitLabel, setIsEditingSubmitLabel] = useState(false);
+  const [submitLabelDraft, setSubmitLabelDraft] = useState('');
+  const [canvasZoom, setCanvasZoom] = useState<number>(1);
+  const formCanvasScrollRef = React.useRef<HTMLDivElement>(null);
+
+  const handleFitFormZoom = () => {
+    const container = formCanvasScrollRef.current;
+    if (!container) {
+      setCanvasZoom(1);
+      return;
+    }
+    const availableWidth = Math.max(320, container.clientWidth - 64);
+    const targetWidth = viewportMode === 'mobile' ? 390 : 768;
+    const fitted = Math.min(1, Math.max(0.5, Number((availableWidth / targetWidth).toFixed(2))));
+    setCanvasZoom(fitted);
+  };
+
+  const handleFormWheelZoom = (e: React.WheelEvent) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    setCanvasZoom(prev => {
+      if (e.deltaY < 0) {
+        const next = ZOOM_PRESETS.find(p => p > prev + 0.01);
+        return next ?? ZOOM_PRESETS[ZOOM_PRESETS.length - 1];
+      } else {
+        const next = [...ZOOM_PRESETS].reverse().find(p => p < prev - 0.01);
+        return next ?? ZOOM_PRESETS[0];
+      }
+    });
+  };
   const [fieldInspectorTab, setFieldInspectorTab] = useState<'layout' | 'logic'>('layout');
   const [viewportMode, setViewportMode] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const [isLeftCollapsed, setIsLeftCollapsed] = useState(false);
   const [isRightCollapsed, setIsRightCollapsed] = useState(false);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(288);
+  const [rightPanelWidth, setRightPanelWidth] = useState(340);
+  const [resizingPanel, setResizingPanel] = useState<'left' | 'right' | null>(null);
+
+  const startPanelResize = useCallback((panel: 'left' | 'right', e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = panel === 'left' ? leftPanelWidth : rightPanelWidth;
+    setResizingPanel(panel);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientX - startX;
+      if (panel === 'left') {
+        setLeftPanelWidth(Math.max(220, Math.min(440, startWidth + delta)));
+      } else {
+        setRightPanelWidth(Math.max(260, Math.min(500, startWidth - delta)));
+      }
+    };
+
+    const onMouseUp = () => {
+      setResizingPanel(null);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, [leftPanelWidth, rightPanelWidth]);
   const [showFormsManagerModal, setShowFormsManagerModal] = useState(false);
   const [formsModalSearch, setFormsModalSearch] = useState('');
   const [formsModalPurposeFilter, setFormsModalPurposeFilter] = useState<string>('all');
@@ -1986,24 +2059,38 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
           )}
         </div>
 
-        {/* Right: Mode Toggle + Viewport Switcher + Collapse Properties */}
+        {/* Right: Mode Toggle (Standalone) or Settings Button (Module Embedded) + Undo/Redo + Viewport Switcher */}
         <div className="flex items-center gap-2 shrink-0">
-          {/* Editor vs Preview vs Submissions vs Settings Toggle */}
-          <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg">
+          {isModuleEmbedded ? (
             <button
               type="button"
-              onClick={() => setViewMode('editor')}
+              onClick={() => setIsSettingsModalOpen(true)}
               className={cn(
-                'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer',
-                viewMode === 'editor'
-                  ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs'
-                  : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer',
+                isSettingsModalOpen
+                  ? 'border-indigo-500/40 bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400'
+                  : 'border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800'
               )}
+              title="Form settings (purpose, routing, governance)"
             >
-              <Layout size={13} className={viewMode === 'editor' ? 'text-indigo-600 dark:text-indigo-400' : ''} />
-              <span>Builder</span>
+              <Settings size={13} className={isSettingsModalOpen ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-500 dark:text-zinc-400'} />
+              <span>Settings</span>
             </button>
-            {!isModuleEmbedded && (
+          ) : (
+            <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg">
+              <button
+                type="button"
+                onClick={() => setViewMode('editor')}
+                className={cn(
+                  'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer',
+                  viewMode === 'editor'
+                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs'
+                    : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                )}
+              >
+                <Layout size={13} className={viewMode === 'editor' ? 'text-indigo-600 dark:text-indigo-400' : ''} />
+                <span>Builder</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setViewMode('preview')}
@@ -2017,34 +2104,67 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
                 <Eye size={13} className={viewMode === 'preview' ? 'text-indigo-600 dark:text-indigo-400' : ''} />
                 <span>Preview</span>
               </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setViewMode('submissions')}
-              className={cn(
-                'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer',
-                viewMode === 'submissions'
-                  ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs'
-                  : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
-              )}
-            >
-              <BarChart3 size={13} className={viewMode === 'submissions' ? 'text-indigo-600 dark:text-indigo-400' : ''} />
-              <span>Submissions</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('settings')}
-              className={cn(
-                'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer',
-                viewMode === 'settings'
-                  ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs'
-                  : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
-              )}
-            >
-              <Settings size={13} className={viewMode === 'settings' ? 'text-indigo-600 dark:text-indigo-400' : ''} />
-              <span>Settings</span>
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={() => setViewMode('submissions')}
+                className={cn(
+                  'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer',
+                  viewMode === 'submissions'
+                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs'
+                    : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                )}
+              >
+                <BarChart3 size={13} className={viewMode === 'submissions' ? 'text-indigo-600 dark:text-indigo-400' : ''} />
+                <span>Submissions</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('settings')}
+                className={cn(
+                  'flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors cursor-pointer',
+                  viewMode === 'settings'
+                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs'
+                    : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                )}
+              >
+                <Settings size={13} className={viewMode === 'settings' ? 'text-indigo-600 dark:text-indigo-400' : ''} />
+                <span>Settings</span>
+              </button>
+            </div>
+          )}
+
+          {/* Canvas Undo / Redo */}
+          {viewMode !== 'submissions' && viewMode !== 'settings' && (onUndo || onRedo) && (
+            <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg">
+              <button
+                type="button"
+                onClick={onUndo}
+                disabled={!canUndo}
+                className="p-1.5 rounded-md text-zinc-600 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-white transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                title="Undo (Ctrl+Z)"
+              >
+                <Undo2 size={14} />
+              </button>
+              <button
+                type="button"
+                onClick={onRedo}
+                disabled={!canRedo}
+                className="p-1.5 rounded-md text-zinc-600 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-white transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                title="Redo (Ctrl+Y)"
+              >
+                <Redo2 size={14} />
+              </button>
+            </div>
+          )}
+
+          {/* Canvas Zoom Control */}
+          {viewMode !== 'submissions' && viewMode !== 'settings' && (
+            <CanvasZoomControl
+              zoom={canvasZoom}
+              onChange={setCanvasZoom}
+              onFit={handleFitFormZoom}
+            />
+          )}
 
           {/* Viewport Device Switcher (icon-only, matching Interface) */}
           {viewMode !== 'submissions' && viewMode !== 'settings' && (
@@ -2478,44 +2598,84 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
               />
             </div>
           </div>
-        ) : viewMode === 'settings' ? (
-          <div className="flex-1 overflow-y-auto p-6 lg:p-8 bg-zinc-50/50 dark:bg-zinc-950/30 custom-scrollbar">
-            <div className="w-full space-y-6 pb-16">
-              {/* Page Header + Segmented Tabs */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">
-                    Form settings
-                  </h2>
-                  <p className="text-xs text-zinc-500 mt-0.5">
-                    Configure purpose, ecosystem routing, and submission policies for {activeForm.name}.
-                  </p>
-                </div>
+        ) : (
+          <>
+            <AnimatePresence>
+              {((!isModuleEmbedded && viewMode === 'settings') || (isModuleEmbedded && isSettingsModalOpen)) && (
+                <motion.div
+                  key="form-settings-wrapper"
+                  initial={isModuleEmbedded ? { opacity: 0 } : false}
+                  animate={{ opacity: 1 }}
+                  exit={isModuleEmbedded ? { opacity: 0 } : undefined}
+                  transition={{ duration: 0.16 }}
+                  className={cn(
+                    isModuleEmbedded
+                      ? 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-[2px]'
+                      : 'flex-1 flex flex-col overflow-hidden'
+                  )}
+                  onClick={isModuleEmbedded ? () => setIsSettingsModalOpen(false) : undefined}
+                >
+                  <motion.div
+                    initial={isModuleEmbedded ? { opacity: 0, scale: 0.97, y: 8 } : false}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={isModuleEmbedded ? { opacity: 0, scale: 0.97, y: 8 } : undefined}
+                    transition={{ duration: 0.16, ease: 'easeOut' }}
+                    className={cn(
+                      isModuleEmbedded
+                        ? 'relative w-full max-w-4xl max-h-[86vh] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col'
+                        : 'flex-1 flex flex-col overflow-hidden'
+                    )}
+                    onClick={isModuleEmbedded ? (e) => e.stopPropagation() : undefined}
+                  >
+                  <div className="flex-1 overflow-y-auto p-6 lg:p-8 bg-zinc-50/50 dark:bg-zinc-950/30 custom-scrollbar">
+                    <div className="w-full space-y-6 pb-8">
+                      {/* Page Header + Segmented Tabs */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                          <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">
+                            Form settings
+                          </h2>
+                          <p className="text-xs text-zinc-500 mt-0.5">
+                            Configure purpose, ecosystem routing, and submission policies for {activeForm.name}.
+                          </p>
+                        </div>
 
-                <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg self-start sm:self-auto">
-                  {(
-                    [
-                      { id: 'general', label: 'General' },
-                      { id: 'ecosystem', label: 'Ecosystem' },
-                      { id: 'governance', label: 'Governance' },
-                    ] as const
-                  ).map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setFormSettingsTab(tab.id)}
-                      className={cn(
-                        'px-3.5 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer',
-                        formSettingsTab === tab.id
-                          ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs'
-                          : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
-                      )}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                        <div className="flex items-center gap-2 self-start sm:self-auto">
+                          <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg">
+                            {(
+                              [
+                                { id: 'general', label: 'General' },
+                                { id: 'ecosystem', label: 'Ecosystem' },
+                                { id: 'governance', label: 'Governance' },
+                              ] as const
+                            ).map((tab) => (
+                              <button
+                                key={tab.id}
+                                type="button"
+                                onClick={() => setFormSettingsTab(tab.id)}
+                                className={cn(
+                                  'px-3.5 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer',
+                                  formSettingsTab === tab.id
+                                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs'
+                                    : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                                )}
+                              >
+                                {tab.label}
+                              </button>
+                            ))}
+                          </div>
+                          {isModuleEmbedded && (
+                            <button
+                              type="button"
+                              onClick={() => setIsSettingsModalOpen(false)}
+                              className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200/70 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                              title="Close form settings"
+                            >
+                              <X size={16} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
 
               {formSettingsTab === 'general' && (
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
@@ -3714,20 +3874,29 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
                       </div>
                     )}
                   </div>
-            </div>
-          </div>
-        ) : (
-          <>
-            {/* Left Sidebar 2: Unified Field Palette (Animated Collapsible) */}
+                    </div>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+            </AnimatePresence>
+            {(isModuleEmbedded || viewMode === 'editor') && (
+              <>
+                {/* Left Sidebar 2: Unified Field Palette (Animated Collapsible) */}
             <AnimatePresence initial={false}>
               {!isLeftCollapsed && (
                 <motion.aside
                   initial={{ width: 0, opacity: 0 }}
-                  animate={{ width: 288, opacity: 1 }}
+                  animate={{ width: leftPanelWidth, opacity: 1 }}
                   exit={{ width: 0, opacity: 0 }}
-                  transition={{ duration: 0.2, ease: 'easeOut' }}
-                  className="shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col overflow-hidden"
+                  transition={resizingPanel === 'left' ? { duration: 0 } : { duration: 0.2, ease: 'easeOut' }}
+                  className="relative shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col overflow-hidden"
                 >
+                  <div
+                    onMouseDown={(e) => startPanelResize('left', e)}
+                    className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-500/40 active:bg-indigo-500/60 transition-colors z-30"
+                    title="Drag to resize fields panel"
+                  />
               {/* Active Target Group / Repeater Indicator Banner */}
               {activeContainerPlacement && (
                 <div className="mx-3 mt-3 p-2.5 rounded-xl bg-indigo-600 text-white shadow-sm space-y-1">
@@ -4290,8 +4459,13 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
             {/* Center Builder Column (Inline Top Bar + Dot-Grid Canvas) */}
             <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
               {renderTopToolbar()}
-              <div className="flex-1 bg-zinc-100/70 dark:bg-zinc-950 bg-[radial-gradient(#d4d4d8_1px,transparent_1px)] dark:bg-[radial-gradient(#27272a_1px,transparent_1px)] [background-size:24px_24px] overflow-y-auto custom-scrollbar p-4 sm:p-8 flex flex-col items-center">
               <div
+                ref={formCanvasScrollRef}
+                onWheel={handleFormWheelZoom}
+                className="flex-1 bg-zinc-100/70 dark:bg-zinc-950 bg-[radial-gradient(#d4d4d8_1px,transparent_1px)] dark:bg-[radial-gradient(#27272a_1px,transparent_1px)] [background-size:24px_24px] overflow-y-auto custom-scrollbar p-4 sm:p-8 flex flex-col items-center"
+              >
+              <div
+                style={canvasZoom !== 1 ? ({ zoom: canvasZoom } as React.CSSProperties) : undefined}
                 className={cn(
                   'w-full mx-auto space-y-6 transition-all duration-300',
                   viewportMode === 'desktop' && 'max-w-3xl',
@@ -4562,13 +4736,46 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
                     ) : (
                       <span />
                     )}
-                    <button
-                      type="button"
-                      onClick={() => setSelectedItemId(null)}
-                      className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-500/10"
-                    >
-                      {activeForm.settings?.submitLabel || 'Submit'}
-                    </button>
+                    {isEditingSubmitLabel ? (
+                      <div className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-xl shadow-md shadow-indigo-500/20 ring-2 ring-indigo-400/70">
+                        <input
+                          type="text"
+                          autoFocus
+                          value={submitLabelDraft}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setSubmitLabelDraft(val);
+                            updateActiveForm((prev) => ({
+                              ...prev,
+                              settings: { ...prev.settings, submitLabel: val },
+                            }));
+                          }}
+                          onBlur={() => setIsEditingSubmitLabel(false)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === 'Escape') {
+                              setIsEditingSubmitLabel(false);
+                            }
+                          }}
+                          style={{ width: `${Math.max(6, (submitLabelDraft || 'Submit').length + 1)}ch` }}
+                          className="bg-transparent text-white text-xs font-bold text-center outline-none placeholder:text-indigo-200"
+                          placeholder="Submit"
+                        />
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedItemId(null);
+                          setSubmitLabelDraft(activeForm.settings?.submitLabel || 'Submit');
+                          setIsEditingSubmitLabel(true);
+                        }}
+                        title="Click to edit button text"
+                        className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-500/10 transition-all cursor-text hover:ring-2 hover:ring-indigo-400/50"
+                      >
+                        {activeForm.settings?.submitLabel || 'Submit'}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -4580,11 +4787,16 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
               {!isRightCollapsed && (
                 <motion.aside
                   initial={{ width: 0, opacity: 0 }}
-                  animate={{ width: 340, opacity: 1 }}
+                  animate={{ width: rightPanelWidth, opacity: 1 }}
                   exit={{ width: 0, opacity: 0 }}
-                  transition={{ duration: 0.2, ease: 'easeOut' }}
-                  className="shrink-0 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col overflow-hidden"
+                  transition={resizingPanel === 'right' ? { duration: 0 } : { duration: 0.2, ease: 'easeOut' }}
+                  className="relative shrink-0 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col overflow-hidden"
                 >
+                  <div
+                    onMouseDown={(e) => startPanelResize('right', e)}
+                    className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-500/40 active:bg-indigo-500/60 transition-colors z-30"
+                    title="Drag to resize properties panel"
+                  />
                   <div className="h-11 px-3.5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between shrink-0">
                     <div className="flex items-center gap-2">
                       <Settings2 size={14} className="text-indigo-600 dark:text-indigo-400" />
@@ -5786,6 +5998,8 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
                 </motion.aside>
               )}
             </AnimatePresence>
+              </>
+            )}
           </>
         )}
       </div>

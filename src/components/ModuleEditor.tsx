@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ReactGridLayout from 'react-grid-layout';
 import { sanitizeHtml } from '../lib/sanitizeHtml';
 
@@ -228,7 +228,6 @@ import { ValidationRule } from '../lib/validationEngine';
 import { ValidationsTab } from './Builder/ValidationsTab';
 import { ConnectorsTab } from './Builder/ConnectorsTab';
 import { AutomationBuilder } from './Builders';
-import { SidebarItem } from './Navigation/SidebarItem';
 import { ConditionalFormattingModal } from './Builder/ConditionalFormattingModal';
 import { ConditionalFormattingRule } from '../types/platform';
 import { PRESET_FORMATTING_MAP } from '../lib/utils';
@@ -236,13 +235,15 @@ import { MockDataGeneratorModal } from './Builder/MockDataGeneratorModal';
 import { generateMockDataset } from '../utils/mockDataGenerator';
 import { RollupExpressionEditor } from './Builder/RollupExpressionEditor';
 import { RelationshipConfigDrawer } from './Builder/RelationshipConfigDrawer';
-import { SchemaDiffModal } from './Builder/SchemaDiffModal';
+import { DeployModuleModal } from './Builder/DeployModuleModal';
+import { VersionsSetupTab } from './Builder/VersionsSetupTab';
+import { VersionsModal } from './Builder/VersionsModal';
+import { CanvasZoomControl, ZOOM_PRESETS } from './Builder/CanvasZoomControl';
+import { ModulePreviewModal } from './Builder/ModulePreviewModal';
 import { BuilderAICopilotDrawer } from './Builder/BuilderAICopilotDrawer';
 import { PublicFormPublishModal } from './Builder/PublicFormPublishModal';
-import { ScheduledDeploymentsDrawer } from './Builder/ScheduledDeploymentsDrawer';
-import { VersionHistoryDrawer } from './Builder/VersionHistoryDrawer';
 import { versionControlService } from '../utils/versionControlService';
-import { deploymentQueueService } from '../utils/deploymentQueueService';
+import { ModuleVersionSnapshot, ModuleVersionSnapshotState } from '../types/versionControl';
 
 
 
@@ -2042,7 +2043,7 @@ export const ModuleEditor = () => {
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const returnUrl = (location.state as any)?.returnUrl || searchParams.get('returnUrl');
-  const { tenant, modules, refreshModules, setBreadcrumbOverride, isBuilderFullscreen, setIsBuilderFullscreen } = usePlatform();
+  const { tenant, modules, members, user: platformUser, refreshModules, setBreadcrumbOverride, isBuilderFullscreen, setIsBuilderFullscreen } = usePlatform();
   const { session, user } = useAuth();
 
   useEffect(() => {
@@ -2065,7 +2066,7 @@ export const ModuleEditor = () => {
     description: 'Created via Drag-and-Drop Builder',
     category: 'Custom',
     iconName: 'Box',
-    type: 'RECORD' as ModuleType,
+    type: 'REGISTRY' as ModuleType,
     status: 'ACTIVE' as 'ACTIVE' | 'DRAFT' | 'ARCHIVED',
     recordKeyPrefix: '',
     recordKeySuffix: '',
@@ -2210,37 +2211,108 @@ export const ModuleEditor = () => {
     staff: {},
     guest: {}
   });
+  const [moduleAccessControl, setModuleAccessControl] = useState<{
+    mode: 'all' | 'restricted';
+    allowedGroupIds: string[];
+    allowedRoles: string[];
+    requiredCapability?: string;
+  }>({
+    mode: 'all',
+    allowedGroupIds: [],
+    allowedRoles: [],
+    requiredCapability: ''
+  });
+  const [fieldSecuritySearchQuery, setFieldSecuritySearchQuery] = useState('');
   const [persistedLayout, setPersistedLayout] = useState<Field[]>([]);
-  const [isSchemaDiffModalOpen, setIsSchemaDiffModalOpen] = useState(false);
+  const [isDeployModalOpen, setIsDeployModalOpen] = useState(false);
+  const [isVersionsModalOpen, setIsVersionsModalOpen] = useState(false);
+  const [deployTargetVersionId, setDeployTargetVersionId] = useState<string | null>(null);
   const [schemaVersion, setSchemaVersion] = useState('1.0');
+  const [latestVersionTag, setLatestVersionTag] = useState('v1.0');
+  const [liveVersionTag, setLiveVersionTag] = useState('v1.0');
+  const [hasUnpublishedVersion, setHasUnpublishedVersion] = useState(false);
   const [isAICopilotOpen, setIsAICopilotOpen] = useState(false);
   const [isPublicPublishModalOpen, setIsPublicPublishModalOpen] = useState(false);
-  const [isScheduledDeploymentsOpen, setIsScheduledDeploymentsOpen] = useState(false);
-  const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState(false);
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const [previewOpenedFromForms, setPreviewOpenedFromForms] = useState(false);
+  const [canvasZoom, setCanvasZoom] = useState<number>(1);
+  const [isHeaderIconPickerOpen, setIsHeaderIconPickerOpen] = useState(false);
+  const [headerIconSearch, setHeaderIconSearch] = useState('');
+  const headerIconPickerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!isLoading && layout && layout.length > 0 && id) {
+    if (!isHeaderIconPickerOpen) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (headerIconPickerRef.current && !headerIconPickerRef.current.contains(e.target as Node)) {
+        setIsHeaderIconPickerOpen(false);
+      }
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsHeaderIconPickerOpen(false);
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('keydown', handleEsc);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('keydown', handleEsc);
+    };
+  }, [isHeaderIconPickerOpen]);
+
+  const handleFitCanvasZoom = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) {
+      setCanvasZoom(1);
+      return;
+    }
+    const availableWidth = Math.max(320, container.clientWidth - 64);
+    const targetWidth = viewportSize === 'mobile' ? 390 : viewportSize === 'tablet' ? 768 : 1152;
+    const fitted = Math.min(1, Math.max(0.5, Number((availableWidth / targetWidth).toFixed(2))));
+    setCanvasZoom(fitted);
+  }, [viewportSize]);
+
+  const handleCanvasWheelZoom = useCallback((e: React.WheelEvent) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    setCanvasZoom(prev => {
+      if (e.deltaY < 0) {
+        const next = ZOOM_PRESETS.find(p => p > prev + 0.01);
+        return next ?? ZOOM_PRESETS[ZOOM_PRESETS.length - 1];
+      } else {
+        const next = [...ZOOM_PRESETS].reverse().find(p => p < prev - 0.01);
+        return next ?? ZOOM_PRESETS[0];
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isLoading && layout && layout.length > 0 && id && id !== 'new') {
       versionControlService.seedInitialVersionIfEmpty(id, moduleSettings.name, {
-        layout,
+        layout: persistedLayout.length > 0 ? persistedLayout : layout,
         tabs,
         moduleSettings,
         interfaceSettings,
         forms,
         validationRules,
-        fieldSecurity
+        fieldSecurity,
+        connectorMappings
       });
     }
   }, [isLoading, id, moduleSettings.name]);
-  const [_scheduledDeploymentsCount, setScheduledDeploymentsCount] = useState(0);
 
   useEffect(() => {
-    const updateCount = () => {
-      const list = deploymentQueueService.getDeployments(id || undefined);
-      setScheduledDeploymentsCount(list.filter(d => d.status === 'SCHEDULED').length);
+    if (!id || id === 'new') return;
+    const syncVersionMeta = () => {
+      const list = versionControlService.getVersions(id);
+      if (list.length === 0) return;
+      const latest = list[0];
+      const live = list.find(v => v.isDeployed) || list[0];
+      setLatestVersionTag(latest.versionTag);
+      setLiveVersionTag(live.versionTag);
+      setSchemaVersion(live.versionTag.replace(/^v/, ''));
+      setHasUnpublishedVersion(latest.id !== live.id);
     };
-    updateCount();
-    return deploymentQueueService.subscribe(updateCount);
-  }, [id]);
+    syncVersionMeta();
+    return versionControlService.subscribe(syncVersionMeta);
+  }, [id, isLoading]);
 
   const pendingSchemaChangesCount = React.useMemo(() => {
     const flatten = (fields: Field[]): Field[] => {
@@ -2284,13 +2356,40 @@ export const ModuleEditor = () => {
   }, [useRealData, realRecords, customMockData, defaultMockData]);
   const [rightSidebarTab, setRightSidebarTab] = useState<'inspector' | 'architect'>('inspector');
   const [isHeaderMoreOpen, setIsHeaderMoreOpen] = useState(false);
+  const [isMobileTabMenuOpen, setIsMobileTabMenuOpen] = useState(false);
   const [isPageRegionsOpen, setIsPageRegionsOpen] = useState(false);
+  const [isWideViewport, setIsWideViewport] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 1680 : true
+  );
   const [leftPanelWidth, setLeftPanelWidth] = useState(288);
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const [rightPanelWidth, setRightPanelWidth] = useState(340);
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
   const [copilotWidth, setCopilotWidth] = useState(360);
   const [resizingPanel, setResizingPanel] = useState<'left' | 'right' | 'copilot' | null>(null);
+
+  useEffect(() => {
+    const handleResize = () => setIsWideViewport(window.innerWidth >= 1680);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const handleToggleAICopilot = useCallback(() => {
+    setIsAICopilotOpen((prev) => {
+      const next = !prev;
+      if (next && typeof window !== 'undefined' && window.innerWidth < 1680) {
+        setRightPanelCollapsed(true);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleExpandRightProperties = useCallback(() => {
+    setRightPanelCollapsed(false);
+    if (typeof window !== 'undefined' && window.innerWidth < 1680) {
+      setIsAICopilotOpen(false);
+    }
+  }, []);
 
   const startPanelResize = useCallback((panel: 'left' | 'right' | 'copilot', e: React.MouseEvent) => {
     e.preventDefault();
@@ -2320,12 +2419,16 @@ export const ModuleEditor = () => {
     window.addEventListener('mouseup', onMouseUp);
   }, [leftPanelWidth, rightPanelWidth, copilotWidth]);
   const headerMoreRef = useRef<HTMLDivElement>(null);
+  const mobileTabMenuRef = useRef<HTMLDivElement>(null);
   const pageRegionsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (headerMoreRef.current && !headerMoreRef.current.contains(e.target as Node)) {
         setIsHeaderMoreOpen(false);
+      }
+      if (mobileTabMenuRef.current && !mobileTabMenuRef.current.contains(e.target as Node)) {
+        setIsMobileTabMenuOpen(false);
       }
       if (pageRegionsRef.current && !pageRegionsRef.current.contains(e.target as Node)) {
         setIsPageRegionsOpen(false);
@@ -2868,7 +2971,7 @@ export const ModuleEditor = () => {
           description: templateData.description || '',
           category: templateData.category || 'Custom',
           iconName: templateData.iconName || 'Layers',
-          type: (templateData.type as ModuleType) || 'RECORD',
+          type: (templateData.type as ModuleType) || 'REGISTRY',
           status: 'ACTIVE',
           recordKeyPrefix: templateData.recordKeyPrefix || '',
           recordKeySuffix: templateData.recordKeySuffix || '',
@@ -2921,7 +3024,7 @@ export const ModuleEditor = () => {
                 description: standardModule.description || '',
                 category: standardModule.category || 'Custom',
                 iconName: 'Box', // Defaulting to Box for standard modules as the icon is a component
-                type: (standardModule.type as ModuleType) || 'RECORD',
+                type: (standardModule.type as ModuleType) || 'REGISTRY',
                 status: 'ACTIVE',
                 recordKeyPrefix: (standardModule as any).recordKeyPrefix || '',
                 recordKeySuffix: (standardModule as any).recordKeySuffix || '',
@@ -2949,7 +3052,7 @@ export const ModuleEditor = () => {
           description: data.description || '',
           category: data.category || 'Custom',
           iconName: data.iconName || 'Box',
-          type: data.type || 'RECORD',
+          type: data.type || 'REGISTRY',
           status: data.status || 'ACTIVE',
           recordKeyPrefix: data.recordKeyPrefix || '',
           recordKeySuffix: data.recordKeySuffix || '',
@@ -3035,18 +3138,50 @@ export const ModuleEditor = () => {
           setFieldSecurity(data.fieldSecurity || data.config?.fieldSecurity);
         }
 
+        if (data.accessControl || data.config?.accessControl) {
+          setModuleAccessControl(data.accessControl || data.config?.accessControl);
+        }
+
         setIsRestricted(!!data.isGlobal);
 
         setBreadcrumbOverride(id, data.name || 'Untitled Module');
 
         if (data.layout) {
-          const normLayout = normalizeLayout(data.layout);
-          setLayout(normLayout);
-          setPersistedLayout(normLayout);
+          const liveNormLayout = normalizeLayout(data.layout);
+          setPersistedLayout(liveNormLayout);
+          if (data.__draftConfig && Array.isArray(data.__draftConfig.layout)) {
+            setLayout(normalizeLayout(data.__draftConfig.layout));
+          } else {
+            setLayout(liveNormLayout);
+          }
         }
-        if (data.tabs) setTabs(data.tabs);
-        if (data.validationRules) setValidationRules(data.validationRules);
-        if (data.connectorMappings) setConnectorMappings(data.connectorMappings);
+        if (data.__draftConfig) {
+          const draft = data.__draftConfig;
+          if (draft.tabs) setTabs(draft.tabs);
+          else if (data.tabs) setTabs(data.tabs);
+          if (draft.validationRules) setValidationRules(draft.validationRules);
+          else if (data.validationRules) setValidationRules(data.validationRules);
+          if (draft.connectorMappings) setConnectorMappings(draft.connectorMappings);
+          else if (data.connectorMappings) setConnectorMappings(data.connectorMappings);
+          if (draft.fieldSecurity) setFieldSecurity(draft.fieldSecurity);
+          if (draft.moduleSettings) {
+            setModuleSettings(prev => ({ ...prev, ...draft.moduleSettings }));
+          }
+          if (draft.interfaceSettings) {
+            setInterfaceSettings(prev => ({ ...prev, ...draft.interfaceSettings }));
+          }
+        } else {
+          if (data.tabs) setTabs(data.tabs);
+          if (data.validationRules) setValidationRules(data.validationRules);
+          if (data.connectorMappings) setConnectorMappings(data.connectorMappings);
+        }
+        if (data.__liveVersionTag) {
+          setLiveVersionTag(data.__liveVersionTag);
+          setSchemaVersion(String(data.__liveVersionTag).replace(/^v/, ''));
+        }
+        if (data.__draftVersionTag) {
+          setLatestVersionTag(data.__draftVersionTag);
+        }
         if (data.dataPopulationRules) setDataPopulationRules(data.dataPopulationRules);
         if (data.workflows && data.workflows.length > 0) {
           setWorkflow(data.workflows[0]);
@@ -3144,159 +3279,368 @@ export const ModuleEditor = () => {
     fetchModule();
   }, [id, tenant?.id]);
 
-  const handleSave = useCallback(async () => {
-    if (!tenant?.id) return;
+  const buildCurrentSnapshotState = useCallback((): ModuleVersionSnapshotState => ({
+    layout,
+    tabs,
+    moduleSettings,
+    interfaceSettings,
+    forms,
+    validationRules,
+    fieldSecurity,
+    connectorMappings,
+    dataPopulationRules,
+    workflows: workflow ? [workflow] : [],
+    accessControl: moduleAccessControl
+  }), [layout, tabs, moduleSettings, interfaceSettings, forms, validationRules, fieldSecurity, connectorMappings, dataPopulationRules, workflow, moduleAccessControl]);
+
+  const draftModuleForPreview = useMemo(() => ({
+    id: id || 'new',
+    name: moduleSettings.name || 'Untitled Module',
+    description: moduleSettings.description,
+    category: moduleSettings.category,
+    iconName: moduleSettings.iconName,
+    type: moduleSettings.type as any,
+    enabled: moduleSettings.status === 'ACTIVE',
+    status: moduleSettings.status,
+    recordKeyPrefix: moduleSettings.recordKeyPrefix,
+    recordKeySuffix: moduleSettings.recordKeySuffix,
+    nextKeyNumber: moduleSettings.nextKeyNumber,
+    layout: layout as any,
+    tabs: tabs as any,
+    forms: forms as any,
+    validationRules: validationRules as any,
+    fieldSecurity: fieldSecurity as any,
+    connectorMappings: connectorMappings as any,
+    dataPopulationRules: dataPopulationRules as any,
+    interfaceSettings: interfaceSettings as any,
+    workflow: workflow as any,
+    workflows: workflow ? [workflow as any] : [],
+    accessControl: moduleAccessControl as any,
+    config: {
+      titleFieldId: moduleSettings.titleFieldId,
+      subtitleFieldIds: moduleSettings.subtitleFieldIds,
+      validationRules: validationRules as any,
+      fieldSecurity: fieldSecurity as any
+    }
+  } as any), [
+    id,
+    moduleSettings,
+    layout,
+    tabs,
+    forms,
+    validationRules,
+    fieldSecurity,
+    connectorMappings,
+    dataPopulationRules,
+    interfaceSettings,
+    workflow,
+    moduleAccessControl
+  ]);
+
+  const handleSave = useCallback(async (): Promise<ModuleVersionSnapshot | null> => {
+    if (!tenant?.id) return null;
     setIsSaving(true);
     try {
-      console.log(`[ModuleEditor] Saving module ${id} for tenant ${tenant.id}`, {
-        ...moduleSettings,
-        layout,
-        tabs
-      });
-
       const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
       const isNew = id === 'new' || MODULES.some(m => m.id === id);
-      
-      const payload = {
-        ...moduleSettings,
-        config: {
-          titleFieldId: moduleSettings.titleFieldId,
-          subtitleFieldIds: moduleSettings.subtitleFieldIds,
-        },
-        id: isNew && id !== 'new' ? id : undefined, // Pass templateId if standard module
-        enabled: moduleSettings.status === 'ACTIVE',
-        layout,
-        tabs,
-        forms,
-        connectorMappings,
-        dataPopulationRules,
-        workflows: workflow ? [workflow] : [],
-        interfaceSettings,
-        validationRules,
-        fieldSecurity,
-        schedulingRole: moduleSettings.schedulingRole,
-        schedulingConfig: {
-          archetype: moduleSettings.schedulingArchetype,
-          resourceType: moduleSettings.schedulingResourceType,
-          startDateFieldId: moduleSettings.schedulingStartDateFieldId,
-          endDateFieldId: moduleSettings.schedulingEndDateFieldId,
-          resourceRefFieldId: moduleSettings.schedulingResourceRefFieldId,
-          customerRefFieldId: moduleSettings.schedulingCustomerRefFieldId,
-          statusFieldId: moduleSettings.schedulingStatusFieldId,
-          priceFieldId: moduleSettings.schedulingPriceFieldId,
-          defaultDurationMinutes: moduleSettings.schedulingDurationMinutes,
-          bufferMinutes: moduleSettings.schedulingBufferMinutes,
-        }
-      };
 
-      const url = isNew 
-        ? `${DATA_API_URL}/modules` 
-        : `${DATA_API_URL}/modules/${id}`;
-      
-      const response = await fetch(url, {
-        method: isNew ? 'POST' : 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'x-tenant-id': tenant.id
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Failed to save module');
-      }
-
-      const savedModule = await response.json();
-      const actualModuleId = savedModule.id || id;
-
-      // 2. Synchronize automations
-      // A. Delete removed rules
-      for (const delId of deletedAutomationIds) {
-        try {
-          await fetch(`${API_BASE_URL}/api/automations/${delId}`, {
-            method: 'DELETE',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'x-tenant-id': tenant.id || ''
-            }
-          });
-        } catch (err) {
-          console.error(`Failed to delete automation ${delId}:`, err);
-        }
-      }
-
-      // B. Create or update remaining rules
-      for (const aut of localAutomations) {
-        const isNewAut = String(aut.id).startsWith('temp-');
-        const autUrl = isNewAut
-          ? `${API_BASE_URL}/api/automations`
-          : `${API_BASE_URL}/api/automations/${aut.id}`;
-
-        const autPayload = {
-          ...aut,
-          id: isNewAut ? undefined : aut.id,
-          moduleId: actualModuleId
+      if (isNew) {
+        const payload = {
+          ...moduleSettings,
+          config: {
+            titleFieldId: moduleSettings.titleFieldId,
+            subtitleFieldIds: moduleSettings.subtitleFieldIds,
+          },
+          id: id !== 'new' ? id : undefined,
+          enabled: moduleSettings.status === 'ACTIVE',
+          layout,
+          tabs,
+          forms,
+          connectorMappings,
+          dataPopulationRules,
+          workflows: workflow ? [workflow] : [],
+          interfaceSettings,
+          validationRules,
+          fieldSecurity,
+          accessControl: moduleAccessControl,
+          schedulingRole: moduleSettings.schedulingRole,
+          schedulingConfig: {
+            archetype: moduleSettings.schedulingArchetype,
+            resourceType: moduleSettings.schedulingResourceType,
+            startDateFieldId: moduleSettings.schedulingStartDateFieldId,
+            endDateFieldId: moduleSettings.schedulingEndDateFieldId,
+            resourceRefFieldId: moduleSettings.schedulingResourceRefFieldId,
+            customerRefFieldId: moduleSettings.schedulingCustomerRefFieldId,
+            statusFieldId: moduleSettings.schedulingStatusFieldId,
+            priceFieldId: moduleSettings.schedulingPriceFieldId,
+            defaultDurationMinutes: moduleSettings.schedulingDurationMinutes,
+            bufferMinutes: moduleSettings.schedulingBufferMinutes,
+          }
         };
 
-        try {
-          const autRes = await fetch(autUrl, {
-            method: isNewAut ? 'POST' : 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
-              'x-tenant-id': tenant.id || ''
-            },
-            body: JSON.stringify(autPayload)
-          });
-          if (!autRes.ok) {
-            console.error(`Failed to save automation ${aut.name}:`, await autRes.text());
-          }
-        } catch (err) {
-          console.error(`Error saving automation ${aut.name}:`, err);
-        }
-      }
-
-      setDeletedAutomationIds([]);
-
-      // Refresh local automations state from DB to get actual DB ids
-      try {
-        const refreshRes = await fetch(`${API_BASE_URL}/api/automations?moduleId=${actualModuleId}`, {
+        const response = await fetch(`${DATA_API_URL}/modules`, {
+          method: 'POST',
           headers: {
+            'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
-            'x-tenant-id': tenant.id || ''
-          }
+            'x-tenant-id': tenant.id
+          },
+          body: JSON.stringify(payload)
         });
-        if (refreshRes.ok) {
-          const freshAuts = await refreshRes.json();
-          setLocalAutomations(freshAuts);
+
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.error || 'Failed to create module');
         }
-      } catch (err) {
-        console.error("Error refreshing automations after save:", err);
-      }
 
-      await refreshModules();
-      queryClient.invalidateQueries({ queryKey: ['module', tenant?.id, id] });
+        const savedModule = await response.json();
+        const actualModuleId = savedModule.id || id;
+        const snapshot = versionControlService.seedInitialVersionIfEmpty(
+          actualModuleId,
+          moduleSettings.name,
+          buildCurrentSnapshotState(),
+          'v1.0'
+        );
 
-      setPersistedLayout(layout);
-      setIsDirty(false);
-      if (isNew) {
-        toast.success('Module created successfully!');
-        const targetPath = returnUrl 
+        await refreshModules();
+        queryClient.invalidateQueries({ queryKey: ['module', tenant?.id, id] });
+        setPersistedLayout(layout);
+        setIsDirty(false);
+        toast.success('Module created (v1.0 live)');
+        const targetPath = returnUrl
           ? `/workspace/settings/builder/${savedModule.id}?returnUrl=${encodeURIComponent(returnUrl)}`
           : `/workspace/settings/builder/${savedModule.id}`;
         navigate(targetPath, { replace: true, state: { returnUrl } });
-      } else {
-        toast.success('Module saved successfully!');
+        return snapshot;
       }
+
+      // Existing module: Save as a new immutable draft version (NEVER touches live workspace!)
+      const actualModuleId = id!;
+      const currentState = buildCurrentSnapshotState();
+      const existingVersions = versionControlService.getVersions(actualModuleId);
+      const prevVersion = existingVersions[0] || null;
+      const nextTag = versionControlService.getNextVersionTag(actualModuleId);
+
+      const diffs = prevVersion
+        ? versionControlService.computeDiff(prevVersion.snapshot.layout || [], currentState.layout || [], {
+            moduleName: moduleSettings.name
+          })
+        : [];
+      const sectionChanges = prevVersion
+        ? versionControlService.computeSectionChanges(prevVersion.snapshot, currentState)
+        : [];
+      const instantSummary = versionControlService.buildLocalCommitSummary({
+        moduleName: moduleSettings.name,
+        diffs,
+        sectionChanges
+      });
+
+      const currentMember: any = (members || []).find((m: any) => {
+        const uid = (platformUser as any)?.id || session?.user?.id;
+        const email = ((platformUser as any)?.email || session?.user?.email || '').toLowerCase();
+        return (uid && (m.id === uid || m.userId === uid)) || (email && m.email?.toLowerCase() === email);
+      });
+      const authorName =
+        currentMember?.name ||
+        (platformUser as any)?.name ||
+        (session?.user as any)?.user_metadata?.full_name ||
+        session?.user?.email?.split('@')[0] ||
+        'Admin';
+      const authorId = currentMember?.id || (platformUser as any)?.id || session?.user?.id;
+
+      const newSnapshot = versionControlService.createSnapshot({
+        moduleId: actualModuleId,
+        moduleName: moduleSettings.name,
+        versionTag: nextTag,
+        name: instantSummary.title,
+        description: instantSummary.releaseNotes,
+        commitSummary: instantSummary.summary,
+        aiGenerated: false,
+        isGeneratingAI: true,
+        author: authorName,
+        authorId,
+        isDeployed: false,
+        state: currentState,
+        previousFields: prevVersion?.snapshot.layout,
+        sectionChanges
+      });
+
+      // Persist working draft on module without modifying live workspace config
+      const draftSaved = await versionControlService.saveDraftToBackend({
+        moduleId: actualModuleId,
+        draftConfig: currentState,
+        versionId: newSnapshot.id,
+        versionTag: newSnapshot.versionTag
+      });
+
+      if (!draftSaved) {
+        throw new Error('Could not persist working draft to server');
+      }
+
+      setIsDirty(false);
+      const toastId = `save-ver-${newSnapshot.id}`;
+      toast.success(`Saved ${newSnapshot.versionTag} (draft) — writing AI commit...`, { id: toastId });
+
+      // Automatically write AI commit title & release notes in background
+      versionControlService
+        .generateAICommit({
+          moduleId: actualModuleId,
+          moduleName: moduleSettings.name,
+          fromVersion: prevVersion?.versionTag || 'v1.0',
+          toVersion: newSnapshot.versionTag,
+          mode: 'commit',
+          diffs,
+          sectionChanges
+        })
+        .then(aiResult => {
+          versionControlService.updateSnapshot(newSnapshot.id, {
+            name: aiResult.title,
+            description: aiResult.releaseNotes,
+            commitSummary: aiResult.summary,
+            aiGenerated: aiResult.aiGenerated,
+            isGeneratingAI: false
+          });
+          toast.success(`Saved ${newSnapshot.versionTag} — "${aiResult.title}"`, { id: toastId });
+        })
+        .catch(() => {
+          versionControlService.updateSnapshot(newSnapshot.id, { isGeneratingAI: false });
+        });
+
+      return newSnapshot;
     } catch (error: any) {
-      console.error("Save Error:", error);
-      toast.error(error.message || 'Failed to save module layout.');
+      console.error('Save Error:', error);
+      toast.error(error.message || 'Failed to save version.');
+      return null;
     } finally {
       setIsSaving(false);
     }
-  }, [tenant?.id, id, moduleSettings, layout, tabs, forms, workflow, connectorMappings, dataPopulationRules, interfaceSettings, session?.access_token, navigate, refreshModules, queryClient, validationRules, localAutomations, deletedAutomationIds]);
+  }, [
+    tenant?.id,
+    id,
+    moduleSettings,
+    layout,
+    tabs,
+    forms,
+    workflow,
+    connectorMappings,
+    dataPopulationRules,
+    interfaceSettings,
+    session,
+    navigate,
+    refreshModules,
+    queryClient,
+    validationRules,
+    fieldSecurity,
+    moduleAccessControl,
+    returnUrl,
+    buildCurrentSnapshotState
+  ]);
+
+  const handlePromoteVersion = useCallback(async (
+    targetVersion: ModuleVersionSnapshot,
+    options: { softDeleteDropped: boolean; releaseNotes: string; isRollback: boolean }
+  ) => {
+    if (!tenant?.id || !id || id === 'new') return;
+    const token = (import.meta as any).env.VITE_DEV_TOKEN || session?.access_token;
+
+    const result = await versionControlService.promoteVersionToBackend({
+      moduleId: id,
+      snapshot: targetVersion.snapshot,
+      versionId: targetVersion.id,
+      versionTag: targetVersion.versionTag,
+      syncDraft: true
+    });
+
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to promote version to production');
+    }
+
+    // Sync automations on promotion to production
+    for (const delId of deletedAutomationIds) {
+      try {
+        await fetch(`${API_BASE_URL}/api/automations/${delId}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}`, 'x-tenant-id': tenant.id || '' }
+        });
+      } catch (_) {}
+    }
+    for (const aut of localAutomations) {
+      const isNewAut = String(aut.id).startsWith('temp-');
+      const autUrl = isNewAut ? `${API_BASE_URL}/api/automations` : `${API_BASE_URL}/api/automations/${aut.id}`;
+      try {
+        await fetch(autUrl, {
+          method: isNewAut ? 'POST' : 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+            'x-tenant-id': tenant.id || ''
+          },
+          body: JSON.stringify({ ...aut, id: isNewAut ? undefined : aut.id, moduleId: id })
+        });
+      } catch (_) {}
+    }
+    setDeletedAutomationIds([]);
+
+    const authorName =
+      (session?.user as any)?.user_metadata?.full_name ||
+      session?.user?.email?.split('@')[0] ||
+      'Admin';
+
+    versionControlService.markVersionLive(id, targetVersion.id, authorName);
+    if (options.releaseNotes) {
+      versionControlService.updateSnapshot(targetVersion.id, {
+        description: options.releaseNotes
+      });
+    }
+
+    // Keep builder canvas aligned with promoted version
+    const promotedSnap = targetVersion.snapshot;
+    if (promotedSnap.layout) {
+      const norm = normalizeLayout(promotedSnap.layout as any);
+      setLayout(norm);
+      setPersistedLayout(norm);
+    }
+    if (promotedSnap.tabs) setTabs(promotedSnap.tabs);
+    if (promotedSnap.moduleSettings) setModuleSettings(prev => ({ ...prev, ...promotedSnap.moduleSettings }));
+    if (promotedSnap.interfaceSettings) setInterfaceSettings(prev => ({ ...prev, ...promotedSnap.interfaceSettings }));
+    if (promotedSnap.forms) setForms(promotedSnap.forms);
+    if (promotedSnap.validationRules) setValidationRules(promotedSnap.validationRules);
+    if (promotedSnap.fieldSecurity) setFieldSecurity(promotedSnap.fieldSecurity);
+    if (promotedSnap.connectorMappings) setConnectorMappings(promotedSnap.connectorMappings);
+    setIsDirty(false);
+
+    await refreshModules();
+    queryClient.invalidateQueries({ queryKey: ['module', tenant?.id, id] });
+
+    toast.success(
+      options.isRollback
+        ? `Rolled back production to ${targetVersion.versionTag}`
+        : `Promoted ${targetVersion.versionTag} to production`
+    );
+  }, [tenant?.id, id, session, deletedAutomationIds, localAutomations, refreshModules, queryClient]);
+
+  const handleRestoreToDraft = useCallback(async (
+    restoredSnapshot: ModuleVersionSnapshotState,
+    version: ModuleVersionSnapshot
+  ) => {
+    if (!id || id === 'new') return;
+    if (restoredSnapshot.layout) setLayout(normalizeLayout(restoredSnapshot.layout as any));
+    if (restoredSnapshot.tabs) setTabs(restoredSnapshot.tabs);
+    if (restoredSnapshot.moduleSettings) setModuleSettings(prev => ({ ...prev, ...restoredSnapshot.moduleSettings }));
+    if (restoredSnapshot.interfaceSettings) setInterfaceSettings(prev => ({ ...prev, ...restoredSnapshot.interfaceSettings }));
+    if (restoredSnapshot.forms) setForms(restoredSnapshot.forms);
+    if (restoredSnapshot.validationRules) setValidationRules(restoredSnapshot.validationRules);
+    if (restoredSnapshot.fieldSecurity) setFieldSecurity(restoredSnapshot.fieldSecurity);
+    if (restoredSnapshot.connectorMappings) setConnectorMappings(restoredSnapshot.connectorMappings);
+
+    await versionControlService.saveDraftToBackend({
+      moduleId: id,
+      draftConfig: restoredSnapshot,
+      versionId: version.id,
+      versionTag: version.versionTag
+    });
+    setIsDirty(false);
+  }, [id]);
 
   // Global Keyboard Shortcuts
   useEffect(() => {
@@ -3336,13 +3680,43 @@ export const ModuleEditor = () => {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [handleSave, undo, redo]);
   
-  const [activeTab, setActiveTab] = useState<'details' | 'schema' | 'builder' | 'workflow' | 'validations' | 'connectors' | 'automation' | 'experience' | 'security' | 'localization' | 'map' | 'assets' | 'forms' | 'deployment' | 'preview'>('details');
+  type StudioTab = 'details' | 'builder' | 'forms' | 'workflow' | 'validations' | 'connectors' | 'automation' | 'preview';
+  const VALID_STUDIO_TABS: StudioTab[] = ['details', 'builder', 'forms', 'workflow', 'validations', 'connectors', 'automation', 'preview'];
+
+  const [activeTab, setActiveTab] = useState<StudioTab>(() => {
+    const urlTab = new URLSearchParams(location.search).get('tab');
+    if (urlTab === 'security') return 'details';
+    if (urlTab && (VALID_STUDIO_TABS as string[]).includes(urlTab)) {
+      return urlTab as StudioTab;
+    }
+    return id === 'new' ? 'details' : 'builder';
+  });
   const [activeViewMode, setActiveViewMode] = useState<'master' | 'detail'>('detail');
-  const [detailsTab, setDetailsTab] = useState<'general' | 'schema' | 'scheduling' | 'dependencies'>('general');
+  const [detailsTab, setDetailsTab] = useState<'general' | 'schema' | 'security' | 'scheduling' | 'dependencies' | 'versions'>(() => {
+    const urlTab = new URLSearchParams(location.search).get('tab');
+    if (urlTab === 'security') return 'security';
+    const sub = new URLSearchParams(location.search).get('section');
+    if (sub && ['general', 'schema', 'security', 'scheduling', 'dependencies'].includes(sub)) {
+      return sub as any;
+    }
+    return 'general';
+  });
   const [schemaSubTab, setSchemaSubTab] = useState<'fields' | 'relationships'>('fields');
   const [previewView, setPreviewView] = useState<'table' | 'detail' | 'create' | 'form'>('table');
   const [previewFormId, setPreviewFormId] = useState<string>('');
-  const [previewReturnTab, setPreviewReturnTab] = useState<'builder' | 'forms' | 'details' | 'workflow' | 'validations' | 'connectors' | 'automation' | 'security' | 'deployment'>('builder');
+  const [previewReturnTab, setPreviewReturnTab] = useState<'builder' | 'forms' | 'details' | 'workflow' | 'validations' | 'connectors' | 'automation'>('builder');
+
+  // Keep ?tab= synced with URL so refresh and deep links preserve context
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (activeTab === 'preview') return;
+    if (params.get('tab') !== activeTab) {
+      params.set('tab', activeTab);
+      const nextUrl = `${window.location.pathname}?${params.toString()}`;
+      window.history.replaceState(window.history.state, '', nextUrl);
+    }
+  }, [activeTab]);
   const [previewSelectedId, setPreviewSelectedId] = useState<string | null>(null);
   const [previewStepId, setPreviewStepId] = useState<string | null>(null);
   const [showConsole, setShowConsole] = useState(false);
@@ -6157,15 +6531,44 @@ export const ModuleEditor = () => {
 
   const HeaderModuleIcon = (LucideIcons as any)[moduleSettings.iconName] || Box;
 
+  const moduleBoundIntegrationsCount = useMemo(() => {
+    const usedIds = new Set<string>();
+    const scan = (fields: any[]) => {
+      (fields || []).forEach((f: any) => {
+        if (f?.connectorId) usedIds.add(f.connectorId);
+        if (Array.isArray(f?.fields)) scan(f.fields);
+      });
+    };
+    scan(layout);
+    (dataPopulationRules || []).forEach((r: any) => {
+      if (r?.connectorId) usedIds.add(r.connectorId);
+    });
+    Object.entries(connectorMappings || {}).forEach(([cid, map]) => {
+      if (map && Object.keys(map).length > 0) usedIds.add(cid);
+    });
+    return usedIds.size;
+  }, [layout, dataPopulationRules, connectorMappings]);
+
+  const allStudioTabs: { id: 'builder' | 'forms' | 'workflow' | 'validations' | 'automation' | 'connectors' | 'details'; label: string; icon: any; count?: number }[] = [
+    { id: 'details', label: 'Setup', icon: Settings2 },
+    { id: 'builder', label: 'Interface', icon: Layout },
+    { id: 'forms', label: 'Forms', icon: FileText, count: forms.length },
+    { id: 'workflow', label: 'Workflow', icon: WorkflowIcon },
+    { id: 'validations', label: 'Rules', icon: ShieldCheck, count: validationRules.length },
+    { id: 'automation', label: 'Automations', icon: Zap, count: localAutomations.length },
+    { id: 'connectors', label: 'Integrations', icon: Plug, count: moduleBoundIntegrationsCount },
+  ];
+  const currentStudioTabMeta = allStudioTabs.find((t) => t.id === (activeTab === 'preview' ? previewReturnTab : activeTab)) || allStudioTabs[0];
+
   return (
     <div className="h-full flex flex-col bg-transparent text-zinc-900 dark:text-zinc-100 overflow-hidden">
-      {/* Top Global Module Header (48px, stripped-back enterprise shell) */}
+      {/* Top Global Module Header (48px, single-row unified studio bar) */}
       <div className={cn(
-        "h-12 px-4 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0 flex items-center justify-between z-30 relative transition-all duration-200",
+        "h-12 px-3 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shrink-0 flex items-center justify-between gap-2 z-30 relative transition-all duration-200",
         isBuilderFullscreen && "shadow-xs"
       )}>
-        {/* Left: Back + Icon + Name + Subtle Version */}
-        <div className="flex items-center gap-2 min-w-0">
+        {/* Left: Back + Icon + Inline Editable Name + Subtle Unsaved Dot */}
+        <div className="flex items-center gap-1.5 min-w-0 shrink">
           <button 
             onClick={() => {
               if (isDirty || canUndo) {
@@ -6179,100 +6582,257 @@ export const ModuleEditor = () => {
                 }
               }
             }}
-            className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
             title={returnUrl ? "Back to Workspace" : "Back to Platform Modules"}
           >
             <ArrowLeft size={16} />
           </button>
 
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
-              <HeaderModuleIcon size={15} />
+          <div className="flex items-center gap-1.5 min-w-0">
+            <div className="relative shrink-0" ref={headerIconPickerRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsHeaderIconPickerOpen(v => !v);
+                  setHeaderIconSearch('');
+                }}
+                className={cn(
+                  "w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center transition-all cursor-pointer",
+                  isHeaderIconPickerOpen
+                    ? "ring-2 ring-indigo-500/40 bg-indigo-500/20"
+                    : "hover:bg-indigo-500/20 hover:ring-1 hover:ring-indigo-500/30"
+                )}
+                title="Click to change module icon"
+              >
+                <HeaderModuleIcon size={15} />
+              </button>
+
+              {isHeaderIconPickerOpen && (
+                <div className="absolute left-0 mt-1.5 w-72 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-2xl p-2.5 z-[70] space-y-2">
+                  <div className="relative">
+                    <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={headerIconSearch}
+                      onChange={e => setHeaderIconSearch(e.target.value)}
+                      placeholder="Search icons..."
+                      autoFocus
+                      className="w-full pl-8 pr-7 py-1.5 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    />
+                    {headerIconSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setHeaderIconSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 cursor-pointer"
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-6 gap-1 max-h-56 overflow-y-auto custom-scrollbar pr-0.5">
+                    {[
+                      'Box', 'Layout', 'Users', 'Database', 'Shield', 'ShieldCheck', 'Zap', 'Sparkles',
+                      'FileText', 'Mail', 'Calendar', 'Bell', 'CreditCard', 'BarChart3', 'Map', 'Globe',
+                      'Clock', 'LifeBuoy', 'Lock', 'Wrench', 'Compass', 'Heart', 'Star', 'CheckCircle2',
+                      'AlertCircle', 'HelpCircle', 'Folder', 'FolderKanban', 'Briefcase', 'Building2',
+                      'ShoppingBag', 'ShoppingCart', 'Truck', 'Home', 'Key', 'Terminal', 'Code', 'Layers',
+                      'PieChart', 'TrendingUp', 'Wallet', 'UserPlus', 'Inbox', 'ClipboardList', 'ListChecks',
+                      'Ticket', 'Headphones', 'Server', 'Cpu', 'HardDrive', 'Smartphone', 'Monitor',
+                      'Camera', 'Image', 'MapPin', 'Flag', 'Bookmark', 'Tag', 'Award', 'Target'
+                    ]
+                      .filter(name => name.toLowerCase().includes(headerIconSearch.trim().toLowerCase()))
+                      .map(iconName => {
+                        const IconComp = (LucideIcons as any)[iconName];
+                        if (!IconComp) return null;
+                        const isSelected = moduleSettings.iconName === iconName;
+                        return (
+                          <button
+                            key={iconName}
+                            type="button"
+                            onClick={() => {
+                              setModuleSettings(prev => ({ ...prev, iconName }));
+                              setIsHeaderIconPickerOpen(false);
+                              setHeaderIconSearch('');
+                            }}
+                            title={iconName}
+                            className={cn(
+                              "w-9 h-9 rounded-lg flex items-center justify-center transition-colors cursor-pointer",
+                              isSelected
+                                ? "bg-indigo-600 text-white shadow-xs"
+                                : "text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-indigo-600 dark:hover:text-indigo-400"
+                            )}
+                          >
+                            <IconComp size={16} />
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
             </div>
             <input
               type="text"
               placeholder="Untitled Module"
               value={moduleSettings.name}
               onChange={(e) => setModuleSettings(prev => ({ ...prev, name: e.target.value }))}
-              className="text-sm font-semibold text-zinc-900 dark:text-white bg-transparent border-none outline-none focus:ring-1 focus:ring-indigo-500/30 rounded-md px-1.5 py-0.5 transition-all min-w-[140px] max-w-[260px] truncate"
+              className="text-sm font-semibold text-zinc-900 dark:text-white bg-transparent border-none outline-none focus:ring-1 focus:ring-indigo-500/30 rounded-md px-1.5 py-0.5 transition-all min-w-[96px] max-w-[160px] xl:max-w-[200px] truncate"
             />
+            {isDirty && (
+              <span
+                className="w-2 h-2 rounded-full bg-amber-500 shrink-0"
+                title="Unsaved changes"
+              />
+            )}
+            {id && id !== 'new' && (
+              <button
+                type="button"
+                onClick={() => setIsVersionsModalOpen(true)}
+                className={cn(
+                  "hidden xl:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors shrink-0 cursor-pointer",
+                  hasUnpublishedVersion
+                    ? "border-amber-200 dark:border-amber-500/30 bg-amber-50/70 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-100/70"
+                    : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                )}
+                title={
+                  hasUnpublishedVersion
+                    ? `Draft ${latestVersionTag} (Live: ${liveVersionTag}) — Click to view Versions`
+                    : `Live ${liveVersionTag} — Click to view Versions`
+                }
+              >
+                <span
+                  className={cn(
+                    "w-1.5 h-1.5 rounded-full shrink-0",
+                    hasUnpublishedVersion ? "bg-amber-500" : "bg-emerald-500"
+                  )}
+                />
+                <span className="font-mono">
+                  {hasUnpublishedVersion ? `${latestVersionTag} · Live ${liveVersionTag}` : `${liveVersionTag} · Live`}
+                </span>
+              </button>
+            )}
+          </div>
+
+          {/* Compact Tab Switcher Dropdown (< 1024px) */}
+          <div className="relative lg:hidden ml-1" ref={mobileTabMenuRef}>
             <button
               type="button"
-              onClick={() => setIsVersionHistoryOpen(true)}
-              className="hidden sm:inline-flex items-center gap-1 text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 px-2 py-1 rounded-md transition-colors shrink-0"
-              title="Version History & Rollback"
+              onClick={() => setIsMobileTabMenuOpen((v) => !v)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-xs font-medium text-zinc-800 dark:text-zinc-100 hover:bg-zinc-200/80 dark:hover:bg-zinc-700/80 transition-colors"
             >
-              <span>{schemaVersion.startsWith('v') ? schemaVersion : `v${schemaVersion}`}</span>
+              <currentStudioTabMeta.icon size={13} className="text-indigo-600 dark:text-indigo-400 shrink-0" />
+              <span>{currentStudioTabMeta.label}</span>
+              <ChevronDown size={12} className="text-zinc-400" />
             </button>
-            {isDirty && (
-              <span className="hidden md:inline-flex items-center gap-1.5 text-[11px] text-zinc-400 dark:text-zinc-500 pl-1 shrink-0">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                Unsaved
-              </span>
+
+            {isMobileTabMenuOpen && (
+              <div className="absolute left-0 mt-1.5 w-52 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg py-1.5 z-50">
+                {allStudioTabs.map((t) => {
+                  const isActive = activeTab === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveTab(t.id);
+                        setIsMobileTabMenuOpen(false);
+                      }}
+                      className={cn(
+                        "w-full flex items-center justify-between px-3 py-2 text-xs font-medium transition-colors",
+                        isActive
+                          ? "bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400"
+                          : "text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                      )}
+                    >
+                      <span className="flex items-center gap-2">
+                        <t.icon size={14} className={isActive ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-400"} />
+                        <span>{t.label}</span>
+                      </span>
+                      {typeof t.count === 'number' && t.count > 0 && (
+                        <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400">
+                          {t.count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>
 
+        {/* Center: 7 Studio Navigation Tabs (Desktop >= 1024px) */}
+        <nav
+          aria-label="Module Builder Sections"
+          className="hidden lg:flex items-center gap-0.5 min-w-0 shrink-0 select-none"
+        >
+          {allStudioTabs.map((t) => {
+            const isActive = activeTab === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setActiveTab(t.id)}
+                className={cn(
+                  "relative flex items-center gap-1.5 px-2 xl:px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap cursor-pointer",
+                  isActive
+                    ? "bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400"
+                    : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/70"
+                )}
+              >
+                <t.icon
+                  size={13}
+                  className={cn(
+                    "shrink-0",
+                    isActive
+                      ? "text-indigo-600 dark:text-indigo-400"
+                      : "hidden 2xl:inline text-zinc-400 dark:text-zinc-500"
+                  )}
+                />
+                <span>{t.label}</span>
+                {typeof t.count === 'number' && t.count > 0 && (
+                  <span
+                    className={cn(
+                      "hidden xl:inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px] font-semibold leading-none",
+                      isActive
+                        ? "bg-indigo-600/15 dark:bg-indigo-400/20 text-indigo-700 dark:text-indigo-300"
+                        : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400"
+                    )}
+                  >
+                    {t.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
         {/* Right: Minimal Action Cluster */}
-        <div className="flex items-center gap-1.5">
-          {/* Undo / Redo */}
-          <div className="flex items-center">
-            <button 
-              type="button"
-              onClick={undo}
-              disabled={!canUndo}
-              className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors disabled:opacity-30 disabled:pointer-events-none"
-              title="Undo (Ctrl+Z)"
-            >
-              <Undo2 size={16} />
-            </button>
-            <button 
-              type="button"
-              onClick={redo}
-              disabled={!canRedo}
-              className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors disabled:opacity-30 disabled:pointer-events-none"
-              title="Redo (Ctrl+Y)"
-            >
-              <Redo2 size={16} />
-            </button>
-          </div>
-
-          <div className="h-4 w-px bg-zinc-200 dark:bg-zinc-800 mx-1" />
-
-          {/* Preview */}
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Preview (Real Workspace Sandbox Modal) */}
           <button 
+            type="button"
             onClick={() => {
-              if (activeTab === 'preview') {
-                setActiveTab(previewReturnTab as any);
-              } else {
-                const returnTarget = (['builder', 'forms', 'details', 'workflow', 'validations', 'connectors', 'automation', 'security', 'deployment'].includes(activeTab) ? activeTab : 'builder') as any;
-                setPreviewReturnTab(returnTarget);
-                if (activeTab === 'forms') {
-                  setPreviewView('form');
-                  setPreviewFormId(selectedFormId || forms[0]?.id || '');
-                } else if (previewView === 'form' && !previewFormId) {
-                  setPreviewFormId(selectedFormId || forms[0]?.id || '');
-                }
-                setActiveTab('preview');
-              }
+              setPreviewOpenedFromForms(activeTab === 'forms');
+              setIsPreviewModalOpen(true);
             }}
             className={cn(
-              "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
-              activeTab === 'preview' 
+              "flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer",
+              isPreviewModalOpen 
                 ? "bg-indigo-600 text-white" 
                 : "text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800"
             )}
-            title={activeTab === 'preview' ? 'Exit Preview' : 'Preview Module'}
+            title="Preview Module in Live Sandbox"
           >
             <Eye size={15} />
-            <span className="hidden sm:inline">{activeTab === 'preview' ? 'Exit Preview' : 'Preview'}</span>
+            <span className="hidden 2xl:inline">Preview</span>
           </button>
 
           {/* AI Copilot */}
           <button 
-            onClick={() => setIsAICopilotOpen(!isAICopilotOpen)}
+            onClick={handleToggleAICopilot}
             className={cn(
-              "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
+              "flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer",
               isAICopilotOpen 
                 ? "bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400" 
                 : "text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800"
@@ -6280,57 +6840,59 @@ export const ModuleEditor = () => {
             title="AI Assistant"
           >
             <Sparkles size={15} className="text-indigo-500" />
-            <span className="hidden md:inline">AI Assistant</span>
+            <span className="hidden 2xl:inline">AI</span>
           </button>
 
-          {/* Primary Save */}
+          {/* Promoted Deploy Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setDeployTargetVersionId(null);
+              setIsDeployModalOpen(true);
+            }}
+            disabled={id === 'new'}
+            className={cn(
+              "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ml-0.5 disabled:opacity-40 disabled:pointer-events-none",
+              hasUnpublishedVersion || pendingSchemaChangesCount > 0
+                ? "border-amber-300 dark:border-amber-500/40 bg-amber-50/80 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-100/80 dark:hover:bg-amber-500/20"
+                : "border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+            )}
+            title={`Promote a saved version to production (Live: ${liveVersionTag})`}
+          >
+            <Rocket size={13} className={hasUnpublishedVersion || pendingSchemaChangesCount > 0 ? "text-amber-500" : "text-zinc-500 dark:text-zinc-400"} />
+            <span className="hidden sm:inline">Deploy</span>
+            {(hasUnpublishedVersion || pendingSchemaChangesCount > 0) && (
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+            )}
+          </button>
+
+          {/* Primary Save (Saves Draft Version — Does Not Update Live Workspace) */}
           <button 
-            onClick={handleSave}
+            onClick={() => handleSave()}
             disabled={isSaving || isLoading}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition-colors shadow-xs disabled:opacity-50 ml-1"
+            title={id === 'new' ? 'Create module' : 'Save new draft version (Ctrl+S) — does not update live workspace'}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
           >
             <Save size={14} />
             <span>{isSaving ? 'Saving...' : 'Save'}</span>
           </button>
 
-          {/* Overflow / More Menu (Deploy, Public Form, Launch, History, Command Palette) */}
+          {/* Overflow / More Menu */}
           <div className="relative" ref={headerMoreRef}>
             <button
               type="button"
               onClick={() => setIsHeaderMoreOpen((v) => !v)}
               className={cn(
-                "relative p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors",
+                "relative p-1.5 rounded-lg text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer",
                 isHeaderMoreOpen && "bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white"
               )}
-              title="More actions (Deploy, Public Form, Launch, History)"
+              title="More actions"
             >
               <MoreHorizontal size={17} />
-              {pendingSchemaChangesCount > 0 && (
-                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-500 ring-2 ring-white dark:ring-zinc-900" />
-              )}
             </button>
 
             {isHeaderMoreOpen && (
               <div className="absolute right-0 mt-1.5 w-56 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg py-1.5 z-50">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsHeaderMoreOpen(false);
-                    setIsSchemaDiffModalOpen(true);
-                  }}
-                  className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                >
-                  <span className="flex items-center gap-2.5">
-                    <Database size={14} className={pendingSchemaChangesCount > 0 ? "text-amber-500" : "text-zinc-400"} />
-                    Deploy Schema
-                  </span>
-                  {pendingSchemaChangesCount > 0 && (
-                    <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400">
-                      {pendingSchemaChangesCount}
-                    </span>
-                  )}
-                </button>
-
                 <button
                   type="button"
                   onClick={() => {
@@ -6363,16 +6925,16 @@ export const ModuleEditor = () => {
                   type="button"
                   onClick={() => {
                     setIsHeaderMoreOpen(false);
-                    setIsVersionHistoryOpen(true);
+                    setIsVersionsModalOpen(true);
                   }}
                   className="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                 >
                   <span className="flex items-center gap-2.5">
                     <History size={14} className="text-zinc-400" />
-                    Version History
+                    Versions &amp; Releases
                   </span>
                   <span className="text-[11px] text-zinc-400 font-mono">
-                    {schemaVersion.startsWith('v') ? schemaVersion : `v${schemaVersion}`}
+                    {liveVersionTag}
                   </span>
                 </button>
 
@@ -6396,34 +6958,7 @@ export const ModuleEditor = () => {
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* 56px Vertical Icon Rail */}
-        <div className="w-[56px] shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex flex-col items-center py-3 px-1.5 space-y-1.5 z-20 overflow-y-auto no-scrollbar select-none">
-          {[
-            { id: 'details', label: 'Setup', icon: Settings2 },
-            { id: 'builder', label: 'Interface', icon: Layout },
-            { id: 'forms', label: 'Forms', icon: FileText },
-            { id: 'workflow', label: 'Workflow', icon: WorkflowIcon },
-            { id: 'validations', label: 'Rules', icon: ShieldCheck },
-            { id: 'connectors', label: 'Integrations', icon: Plug },
-            { id: 'automation', label: 'Automations', icon: Zap },
-            { id: 'security', label: 'Security', icon: Lock },
-            { id: 'deployment', label: 'Deployment', icon: Rocket }
-          ].map((t) => (
-            <SidebarItem
-              key={t.id}
-              icon={t.icon}
-              label={t.label}
-              active={activeTab === t.id}
-              collapsed={true}
-              onClick={() => {
-                if (activeTab === 'preview') setActiveTab('builder');
-                setActiveTab(t.id as any);
-              }}
-            />
-          ))}
-        </div>
-
+      <div className="flex-1 flex overflow-hidden relative">
         {/* Left Sidebar - Discovery Panel (When in Interface Builder) */}
         {activeTab === 'builder' && (
           <motion.aside
@@ -7072,6 +7607,35 @@ export const ModuleEditor = () => {
               </div>
 
               <div className="flex items-center gap-2">
+                {/* Canvas Undo / Redo */}
+                <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={undo}
+                    disabled={!canUndo}
+                    className="p-1.5 rounded-md text-zinc-600 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-white transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                    title="Undo (Ctrl+Z)"
+                  >
+                    <Undo2 size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={redo}
+                    disabled={!canRedo}
+                    className="p-1.5 rounded-md text-zinc-600 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-white transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                    title="Redo (Ctrl+Y)"
+                  >
+                    <Redo2 size={14} />
+                  </button>
+                </div>
+
+                {/* Canvas Zoom Control */}
+                <CanvasZoomControl
+                  zoom={canvasZoom}
+                  onChange={setCanvasZoom}
+                  onFit={handleFitCanvasZoom}
+                />
+
                 {/* Device Viewport Toggles */}
                 <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg">
                   {([
@@ -7098,7 +7662,7 @@ export const ModuleEditor = () => {
                 {rightPanelCollapsed && (
                   <button
                     type="button"
-                    onClick={() => setRightPanelCollapsed(false)}
+                    onClick={handleExpandRightProperties}
                     className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                     title="Expand properties panel"
                   >
@@ -7112,13 +7676,7 @@ export const ModuleEditor = () => {
 
           {/* Main Tab Content Area */}
           <div 
-            className={cn(
-              "flex-1 relative",
-              ['builder', 'forms', 'connectors', 'workflow', 'details'].includes(activeTab) 
-                ? "overflow-hidden h-full flex flex-col" 
-                : "overflow-y-auto",
-              activeTab === 'builder' ? "p-0" : "p-0"
-            )}
+            className="flex-1 relative overflow-hidden h-full flex flex-col p-0"
             onClick={(e) => {
               if (activeTab === 'builder') {
                 if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
@@ -7129,8 +7687,14 @@ export const ModuleEditor = () => {
           >
           {activeTab === 'builder' ? (
             activeViewMode === 'master' ? (
-              <div className="flex-1 flex flex-col overflow-hidden bg-zinc-100/60 dark:bg-black bg-[radial-gradient(#d4d4d8_1px,transparent_1px)] dark:bg-[radial-gradient(#27272a_1px,transparent_1px)] [background-size:24px_24px] p-6 md:p-8 custom-scrollbar overflow-y-auto min-h-full">
-                <div className="max-w-6xl mx-auto w-full space-y-4">
+              <div
+                onWheel={handleCanvasWheelZoom}
+                className="flex-1 flex flex-col overflow-hidden bg-zinc-100/60 dark:bg-black bg-[radial-gradient(#d4d4d8_1px,transparent_1px)] dark:bg-[radial-gradient(#27272a_1px,transparent_1px)] [background-size:24px_24px] p-6 md:p-8 custom-scrollbar overflow-y-auto min-h-full"
+              >
+                <div
+                  style={canvasZoom !== 1 ? ({ zoom: canvasZoom } as React.CSSProperties) : undefined}
+                  className="max-w-6xl mx-auto w-full space-y-4"
+                >
                   
                   {/* Master View Tier 1 Context Action Bar & Tier 2 Workbench Toolbar matching ModuleView.tsx */}
                   <div className="border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 rounded-2xl shadow-xs overflow-hidden select-none z-20 relative">
@@ -7596,9 +8160,11 @@ export const ModuleEditor = () => {
             ) : (
               <div 
                 ref={scrollContainerRef}
+                onWheel={handleCanvasWheelZoom}
                 className="w-full flex-1 overflow-y-auto custom-scrollbar relative p-6 md:p-8 bg-zinc-100/60 dark:bg-black bg-[radial-gradient(#d4d4d8_1px,transparent_1px)] dark:bg-[radial-gradient(#27272a_1px,transparent_1px)] [background-size:24px_24px] flex justify-center items-start min-h-full"
               >
                 <div
+                  style={canvasZoom !== 1 ? ({ zoom: canvasZoom } as React.CSSProperties) : undefined}
                   className={cn(
                     "w-full mx-auto space-y-3 transition-all duration-300",
                     viewportSize === 'desktop' && "max-w-6xl",
@@ -8849,10 +9415,19 @@ export const ModuleEditor = () => {
                           }}
                           className="px-2 py-1 text-xs font-medium bg-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-zinc-700 dark:text-zinc-200 outline-none cursor-pointer"
                         >
-                          <option value="admin">Administrator</option>
-                          <option value="manager">Department Manager</option>
-                          <option value="staff">Standard Staff</option>
-                          <option value="guest">External Guest</option>
+                          <optgroup label="Standard Roles">
+                            <option value="admin">Administrator</option>
+                            <option value="manager">Department Manager</option>
+                            <option value="staff">Standard Staff</option>
+                            <option value="guest">External Guest</option>
+                          </optgroup>
+                          {permissionGroups && permissionGroups.length > 0 && (
+                            <optgroup label="Security Groups">
+                              {permissionGroups.map((g: any) => (
+                                <option key={g.id} value={g.id}>{g.name}</option>
+                              ))}
+                            </optgroup>
+                          )}
                         </select>
                       </div>
                     </>
@@ -8913,7 +9488,14 @@ export const ModuleEditor = () => {
                     </>
                   )}
 
-                  {/* Device Viewport Toggles */}
+                  {/* Canvas Zoom Control */}
+                <CanvasZoomControl
+                  zoom={canvasZoom}
+                  onChange={setCanvasZoom}
+                  onFit={handleFitCanvasZoom}
+                />
+
+                {/* Device Viewport Toggles */}
                   <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg">
                     {([
                       { id: 'desktop', icon: Monitor, label: 'Desktop' },
@@ -8940,8 +9522,12 @@ export const ModuleEditor = () => {
               </div>
 
               {/* Unified Preview Canvas with Tablet & Mobile Bezel */}
-              <div className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-8 bg-zinc-100/70 dark:bg-zinc-950 bg-[radial-gradient(#d4d4d8_1px,transparent_1px)] dark:bg-[radial-gradient(#27272a_1px,transparent_1px)] [background-size:24px_24px] flex justify-center items-start">
+              <div
+                onWheel={handleCanvasWheelZoom}
+                className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-8 bg-zinc-100/70 dark:bg-zinc-950 bg-[radial-gradient(#d4d4d8_1px,transparent_1px)] dark:bg-[radial-gradient(#27272a_1px,transparent_1px)] [background-size:24px_24px] flex justify-center items-start"
+              >
                 <div
+                  style={canvasZoom !== 1 ? ({ zoom: canvasZoom } as React.CSSProperties) : undefined}
                   className={cn(
                     "w-full mx-auto space-y-3 transition-all duration-300",
                     viewportSize === 'desktop' && (previewView === 'form' ? "max-w-3xl" : "max-w-6xl"),
@@ -9596,8 +10182,10 @@ export const ModuleEditor = () => {
                 {[
                   { id: 'general', label: 'General', icon: Settings2 },
                   { id: 'schema', label: 'Schema', icon: Database },
+                  { id: 'security', label: 'Security', icon: Lock },
                   { id: 'scheduling', label: 'Scheduling', icon: Calendar },
-                  { id: 'dependencies', label: 'Dependencies', icon: GitCommit }
+                  { id: 'dependencies', label: 'Dependencies', icon: GitCommit },
+                  { id: 'versions', label: 'Versions', icon: History }
                 ].map(tab => (
                   <button
                     key={tab.id}
@@ -9637,22 +10225,53 @@ export const ModuleEditor = () => {
                                 <p className="text-xs text-zinc-500">Name, classification, and lifecycle status</p>
                               </div>
                             </div>
-                            <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg self-start overflow-x-auto no-scrollbar">
-                              {(['RECORD', 'WORK_ITEM', 'REGISTRY', 'LOG', 'FINANCIAL'] as ModuleType[]).map((type) => (
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 block">Classification</label>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                                 <button
-                                  key={type}
                                   type="button"
-                                  onClick={() => setModuleSettings(prev => ({ ...prev, type }))}
+                                  onClick={() => setModuleSettings(prev => ({ ...prev, type: 'REGISTRY' }))}
                                   className={cn(
-                                    "px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap",
-                                    moduleSettings.type === type
-                                      ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs"
-                                      : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200"
+                                    "flex flex-col items-start p-3 rounded-xl border text-left transition-all",
+                                    (moduleSettings.type === 'REGISTRY' || moduleSettings.type === 'RECORD' || moduleSettings.type === 'LOG')
+                                      ? "border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/20 text-zinc-900 dark:text-white ring-1 ring-indigo-500"
+                                      : "border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/50 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700"
                                   )}
                                 >
-                                  {type.replace('_', ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())}
+                                  <div className="flex items-center gap-2 mb-1 w-full">
+                                    <Database size={14} className={(moduleSettings.type === 'REGISTRY' || moduleSettings.type === 'RECORD' || moduleSettings.type === 'LOG') ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-400"} />
+                                    <span className="text-xs font-semibold">Registry</span>
+                                    {(moduleSettings.type === 'REGISTRY' || moduleSettings.type === 'RECORD' || moduleSettings.type === 'LOG') && (
+                                      <span className="ml-auto w-2 h-2 rounded-full bg-indigo-600 dark:bg-indigo-400" />
+                                    )}
+                                  </div>
+                                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug">
+                                    Enduring master data, objects, entities, and accounts managed over time.
+                                  </p>
                                 </button>
-                              ))}
+
+                                <button
+                                  type="button"
+                                  onClick={() => setModuleSettings(prev => ({ ...prev, type: 'WORK_ITEM' }))}
+                                  className={cn(
+                                    "flex flex-col items-start p-3 rounded-xl border text-left transition-all",
+                                    (moduleSettings.type === 'WORK_ITEM' || moduleSettings.type === 'FINANCIAL')
+                                      ? "border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/20 text-zinc-900 dark:text-white ring-1 ring-indigo-500"
+                                      : "border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/50 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700"
+                                  )}
+                                >
+                                  <div className="flex items-center gap-2 mb-1 w-full">
+                                    <CheckSquare size={14} className={(moduleSettings.type === 'WORK_ITEM' || moduleSettings.type === 'FINANCIAL') ? "text-indigo-600 dark:text-indigo-400" : "text-zinc-400"} />
+                                    <span className="text-xs font-semibold">Work item</span>
+                                    {(moduleSettings.type === 'WORK_ITEM' || moduleSettings.type === 'FINANCIAL') && (
+                                      <span className="ml-auto w-2 h-2 rounded-full bg-indigo-600 dark:bg-indigo-400" />
+                                    )}
+                                  </div>
+                                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug">
+                                    Short-term transactional records moving through a stage-driven lifecycle or queue.
+                                  </p>
+                                </button>
+                              </div>
                             </div>
                           </div>
 
@@ -9964,8 +10583,17 @@ export const ModuleEditor = () => {
 
                             <button
                               type="button"
+                              onClick={() => setActiveTab('builder')}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition-colors cursor-pointer"
+                            >
+                              <Layout size={13} />
+                              Edit in Interface
+                            </button>
+
+                            <button
+                              type="button"
                               onClick={handleExportSchemaJson}
-                              className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-xs font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                             >
                               <FileJson size={14} className="text-zinc-400" />
                               Export JSON
@@ -9988,6 +10616,7 @@ export const ModuleEditor = () => {
                                     <th className="px-4 py-3 text-xs font-medium text-zinc-500">Type</th>
                                     <th className="px-4 py-3 text-xs font-medium text-zinc-500">Validation</th>
                                     <th className="px-4 py-3 text-xs font-medium text-zinc-500">Logic</th>
+                                    <th className="px-4 py-3 text-xs font-medium text-zinc-500 text-right">Action</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -9995,13 +10624,25 @@ export const ModuleEditor = () => {
                                     const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === field.type);
                                     const Icon = fieldDef?.icon || GridIcon;
                                     return (
-                                      <tr key={field.id} className="hover:bg-zinc-50/60 dark:hover:bg-zinc-800/30 transition-colors">
+                                      <tr
+                                        key={field.id}
+                                        onClick={() => {
+                                          if (field.tabId) setCurrentTabId(field.tabId);
+                                          setActiveViewMode('detail');
+                                          setSelectedId(field.id);
+                                          setActiveTab('builder');
+                                        }}
+                                        className="group hover:bg-zinc-50/80 dark:hover:bg-zinc-800/40 transition-colors cursor-pointer"
+                                        title="Click to inspect and edit in Interface"
+                                      >
                                         <td className="px-4 py-3">
                                           <div className="flex items-center gap-2.5">
-                                            <div className="w-7 h-7 rounded-md bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 dark:text-zinc-400">
+                                            <div className="w-7 h-7 rounded-md bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 dark:text-zinc-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                                               <Icon size={13} />
                                             </div>
-                                            <span className="text-xs font-medium text-zinc-900 dark:text-white">{field.label || field.id}</span>
+                                            <span className="text-xs font-medium text-zinc-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                                              {field.label || field.id}
+                                            </span>
                                           </div>
                                         </td>
                                         <td className="px-4 py-3">
@@ -10012,8 +10653,23 @@ export const ModuleEditor = () => {
                                             {field.type}
                                           </span>
                                         </td>
-                                        <td className="px-4 py-3 text-xs text-zinc-500">
-                                          {field.required ? 'Required' : 'Optional'}
+                                        <td className="px-4 py-3 text-xs">
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              updateField(field.id, { required: !field.required });
+                                            }}
+                                            className={cn(
+                                              "px-2 py-0.5 rounded-md text-[11px] font-medium border transition-colors cursor-pointer",
+                                              field.required
+                                                ? "bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30 text-rose-600 dark:text-rose-400"
+                                                : "bg-zinc-50 dark:bg-zinc-800/70 border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+                                            )}
+                                            title="Click to toggle required"
+                                          >
+                                            {field.required ? 'Required' : 'Optional'}
+                                          </button>
                                         </td>
                                         <td className="px-4 py-3">
                                           <div className="flex items-center gap-2">
@@ -10021,6 +10677,12 @@ export const ModuleEditor = () => {
                                             {field.calculationLogic && <div title="Calculated field"><Calculator size={13} className="text-emerald-500" /></div>}
                                             {field.options && <div title={`${field.options.length} options`}><ListPlus size={13} className="text-amber-500" /></div>}
                                           </div>
+                                        </td>
+                                        <td className="px-4 py-3 text-right">
+                                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-indigo-600 dark:text-indigo-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            Inspect
+                                            <ArrowRight size={12} />
+                                          </span>
                                         </td>
                                       </tr>
                                     );
@@ -10067,6 +10729,472 @@ export const ModuleEditor = () => {
                             )}
                           </div>
                         )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {detailsTab === 'security' && (() => {
+                  const standardRoles = [
+                    { id: 'admin', label: 'Administrator', icon: ShieldCheck },
+                    { id: 'manager', label: 'Department Manager', icon: Settings },
+                    { id: 'staff', label: 'Standard Staff', icon: Type },
+                    { id: 'guest', label: 'External Guest', icon: Globe }
+                  ];
+                  const allSecurityFields = flattenFields(layout);
+                  const displayedFields = fieldSecuritySearchQuery.trim()
+                    ? allSecurityFields.filter((f: any) =>
+                        (f.label || '').toLowerCase().includes(fieldSecuritySearchQuery.toLowerCase()) ||
+                        (f.id || '').toLowerCase().includes(fieldSecuritySearchQuery.toLowerCase()) ||
+                        (f.type || '').toLowerCase().includes(fieldSecuritySearchQuery.toLowerCase())
+                      )
+                    : allSecurityFields;
+
+                  const toggleAllColumn = (key: 'read' | 'write' | 'masked' | 'hidden') => {
+                    if (displayedFields.length === 0) return;
+                    const allEnabled = displayedFields.every((f: any) => {
+                      const cfg = fieldSecurity[selectedSecurityRoleId]?.[f.id] || {
+                        read: true,
+                        write: selectedSecurityRoleId !== 'guest',
+                        masked: false,
+                        hidden: false
+                      };
+                      return cfg[key];
+                    });
+
+                    setFieldSecurity(prev => {
+                      const roleObj = { ...(prev[selectedSecurityRoleId] || {}) };
+                      displayedFields.forEach((f: any) => {
+                        const current = roleObj[f.id] || {
+                          read: true,
+                          write: selectedSecurityRoleId !== 'guest',
+                          masked: false,
+                          hidden: false
+                        };
+                        roleObj[f.id] = { ...current, [key]: !allEnabled };
+                      });
+                      return { ...prev, [selectedSecurityRoleId]: roleObj };
+                    });
+                  };
+
+                  return (
+                    <div className="flex-1 overflow-y-auto p-6 lg:p-8 custom-scrollbar">
+                      <div className="w-full space-y-6 pb-16">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div>
+                            <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">Security & Permissions</h2>
+                            <p className="text-xs text-zinc-500 mt-0.5">Control module visibility, role access, and field-level privacy masking.</p>
+                          </div>
+                          <span className={cn(
+                            "px-2.5 py-1 rounded-md text-xs font-medium border self-start sm:self-auto",
+                            moduleAccessControl.mode === 'all'
+                              ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20"
+                              : "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-500/20"
+                          )}>
+                            {moduleAccessControl.mode === 'all' ? 'Open to all' : `Restricted (${moduleAccessControl.allowedGroupIds?.length || 0} groups)`}
+                          </span>
+                        </div>
+
+                        {/* Card 1: Module Access Policy */}
+                        <section className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 space-y-4">
+                          <div className="pb-3 border-b border-zinc-100 dark:border-zinc-800">
+                            <h3 className="text-sm font-semibold text-zinc-900 dark:text-white flex items-center gap-2">
+                              <ShieldCheck size={15} className="text-indigo-600 dark:text-indigo-400" />
+                              Module access policy
+                            </h3>
+                            <p className="text-xs text-zinc-500 mt-0.5">Control who can discover, view, and open this module in their workspace launcher.</p>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setModuleAccessControl(prev => ({ ...prev, mode: 'all' }))}
+                              className={cn(
+                                "p-4 rounded-xl border text-left transition-all flex items-start justify-between gap-3 cursor-pointer",
+                                moduleAccessControl.mode === 'all'
+                                  ? "border-indigo-600 bg-indigo-50/40 dark:bg-indigo-950/20 ring-1 ring-indigo-500"
+                                  : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900"
+                              )}
+                            >
+                              <div>
+                                <div className="text-xs font-semibold text-zinc-900 dark:text-white">All workspace members</div>
+                                <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
+                                  Visible to all members with standard records access. Field privacy and masking rules still apply.
+                                </p>
+                              </div>
+                              <div className={cn(
+                                "w-4 h-4 rounded-full border flex items-center justify-center shrink-0 mt-0.5",
+                                moduleAccessControl.mode === 'all'
+                                  ? "border-indigo-600 bg-indigo-600 text-white"
+                                  : "border-zinc-300 dark:border-zinc-600"
+                              )}>
+                                {moduleAccessControl.mode === 'all' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                              </div>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setModuleAccessControl(prev => ({ ...prev, mode: 'restricted' }))}
+                              className={cn(
+                                "p-4 rounded-xl border text-left transition-all flex items-start justify-between gap-3 cursor-pointer",
+                                moduleAccessControl.mode === 'restricted'
+                                  ? "border-indigo-600 bg-indigo-50/40 dark:bg-indigo-950/20 ring-1 ring-indigo-500"
+                                  : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900"
+                              )}
+                            >
+                              <div>
+                                <div className="text-xs font-semibold text-zinc-900 dark:text-white">Restricted to selected security groups</div>
+                                <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
+                                  Only users belonging to explicitly authorized security groups can launch or interact with this module.
+                                </p>
+                              </div>
+                              <div className={cn(
+                                "w-4 h-4 rounded-full border flex items-center justify-center shrink-0 mt-0.5",
+                                moduleAccessControl.mode === 'restricted'
+                                  ? "border-indigo-600 bg-indigo-600 text-white"
+                                  : "border-zinc-300 dark:border-zinc-600"
+                              )}>
+                                {moduleAccessControl.mode === 'restricted' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                              </div>
+                            </button>
+                          </div>
+
+                          {moduleAccessControl.mode === 'restricted' && (
+                            <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-2.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Authorized security groups</span>
+                                <span className="text-xs text-zinc-400">Click to grant or revoke access</span>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {(permissionGroups || []).length === 0 ? (
+                                  <p className="text-xs text-zinc-400 italic">No custom security groups created yet. Configure them under Workforce &gt; Security Groups.</p>
+                                ) : (
+                                  (permissionGroups || []).map((grp: any) => {
+                                    const isSelected = (moduleAccessControl.allowedGroupIds || []).includes(grp.id);
+                                    return (
+                                      <button
+                                        key={grp.id}
+                                        type="button"
+                                        onClick={() => {
+                                          setModuleAccessControl(prev => {
+                                            const current = prev.allowedGroupIds || [];
+                                            const next = current.includes(grp.id)
+                                              ? current.filter(gid => gid !== grp.id)
+                                              : [...current, grp.id];
+                                            return { ...prev, allowedGroupIds: next };
+                                          });
+                                        }}
+                                        className={cn(
+                                          "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 border cursor-pointer",
+                                          isSelected
+                                            ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                                            : "bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600"
+                                        )}
+                                      >
+                                        <ShieldCheck size={13} className={isSelected ? "text-white" : "text-zinc-400"} />
+                                        <span>{grp.name}</span>
+                                        {isSelected && <Check size={12} strokeWidth={2.5} />}
+                                      </button>
+                                    );
+                                  })
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </section>
+
+                        {/* Card 2: Field-Level Security Matrix */}
+                        <section className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 space-y-4">
+                          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-zinc-100 dark:border-zinc-800">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Field security & privacy</h3>
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
+                                  {displayedFields.length} {displayedFields.length === 1 ? 'field' : 'fields'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-zinc-500 mt-0.5">Select a role or group below to configure read, write, masking, and visibility per field.</p>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setFieldSecurity(prev => {
+                                    const updated = { ...(prev[selectedSecurityRoleId] || {}) };
+                                    allSecurityFields.forEach((f: any) => {
+                                      updated[f.id] = { read: true, write: true, masked: false, hidden: false };
+                                    });
+                                    return { ...prev, [selectedSecurityRoleId]: updated };
+                                  });
+                                  toast.success('Applied Full Access preset');
+                                }}
+                                className="px-2.5 py-1 rounded-md text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 transition-colors cursor-pointer"
+                              >
+                                Allow all
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setFieldSecurity(prev => {
+                                    const updated = { ...(prev[selectedSecurityRoleId] || {}) };
+                                    allSecurityFields.forEach((f: any) => {
+                                      updated[f.id] = { read: true, write: false, masked: false, hidden: false };
+                                    });
+                                    return { ...prev, [selectedSecurityRoleId]: updated };
+                                  });
+                                  toast.success('Applied Read Only preset');
+                                }}
+                                className="px-2.5 py-1 rounded-md text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 transition-colors cursor-pointer"
+                              >
+                                Read only
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setFieldSecurity(prev => {
+                                    const updated = { ...(prev[selectedSecurityRoleId] || {}) };
+                                    allSecurityFields.forEach((f: any) => {
+                                      const label = (f.label || '').toLowerCase();
+                                      const isSensitive = ['email', 'phone', 'tel', 'currency', 'money', 'number'].includes(f.type) || label.includes('ssn') || label.includes('tax') || label.includes('salary');
+                                      updated[f.id] = { read: true, write: !isSensitive, masked: isSensitive, hidden: false };
+                                    });
+                                    return { ...prev, [selectedSecurityRoleId]: updated };
+                                  });
+                                  toast.success('Applied Mask Sensitive preset');
+                                }}
+                                className="px-2.5 py-1 rounded-md text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 border border-amber-200 dark:border-amber-500/30 transition-colors cursor-pointer"
+                              >
+                                Mask sensitive
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setFieldSecurity(prev => {
+                                    const updated = { ...(prev[selectedSecurityRoleId] || {}) };
+                                    allSecurityFields.forEach((f: any) => {
+                                      updated[f.id] = { read: false, write: false, masked: false, hidden: true };
+                                    });
+                                    return { ...prev, [selectedSecurityRoleId]: updated };
+                                  });
+                                  toast.success('Applied Hide All preset');
+                                }}
+                                className="px-2.5 py-1 rounded-md text-xs font-medium text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 border border-rose-200 dark:border-rose-500/30 transition-colors cursor-pointer"
+                              >
+                                Hide all
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Role / Group Selector Pills + Field Search */}
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {standardRoles.map((role) => {
+                                const isSelected = selectedSecurityRoleId === role.id;
+                                return (
+                                  <button
+                                    key={role.id}
+                                    type="button"
+                                    onClick={() => setSelectedSecurityRoleId(role.id)}
+                                    className={cn(
+                                      "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer",
+                                      isSelected
+                                        ? "bg-indigo-50 dark:bg-indigo-500/15 border-indigo-300 dark:border-indigo-500/40 text-indigo-700 dark:text-indigo-300"
+                                        : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
+                                    )}
+                                  >
+                                    <role.icon size={12} />
+                                    <span>{role.label}</span>
+                                  </button>
+                                );
+                              })}
+                              {(permissionGroups || []).map((grp: any) => {
+                                const isSelected = selectedSecurityRoleId === grp.id;
+                                return (
+                                  <button
+                                    key={grp.id}
+                                    type="button"
+                                    onClick={() => setSelectedSecurityRoleId(grp.id)}
+                                    className={cn(
+                                      "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer",
+                                      isSelected
+                                        ? "bg-indigo-50 dark:bg-indigo-500/15 border-indigo-300 dark:border-indigo-500/40 text-indigo-700 dark:text-indigo-300"
+                                        : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
+                                    )}
+                                  >
+                                    <ShieldCheck size={12} />
+                                    <span>{grp.name}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            <div className="relative w-full md:w-56 shrink-0">
+                              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+                              <input
+                                type="text"
+                                value={fieldSecuritySearchQuery}
+                                onChange={(e) => setFieldSecuritySearchQuery(e.target.value)}
+                                placeholder="Filter fields..."
+                                className="w-full h-8 pl-8 pr-2.5 text-xs rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/50 text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:border-indigo-500 transition-colors"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Dense Table */}
+                          <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden">
+                            <table className="w-full text-left border-collapse table-fixed">
+                              <thead>
+                                <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-800/50 text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 select-none">
+                                  <th className="px-3 py-2 w-auto">Field</th>
+                                  <th className="px-2 py-2 w-28">Type</th>
+                                  <th className="px-2 py-2 w-20 text-center">
+                                    <button type="button" onClick={() => toggleAllColumn('read')} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer" title="Toggle Can Read for all displayed fields">
+                                      Can read
+                                    </button>
+                                  </th>
+                                  <th className="px-2 py-2 w-20 text-center">
+                                    <button type="button" onClick={() => toggleAllColumn('write')} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer" title="Toggle Can Write for all displayed fields">
+                                      Can write
+                                    </button>
+                                  </th>
+                                  <th className="px-2 py-2 w-20 text-center">
+                                    <button type="button" onClick={() => toggleAllColumn('masked')} className="hover:text-amber-600 dark:hover:text-amber-400 transition-colors cursor-pointer" title="Toggle Mask for all displayed fields">
+                                      Masked
+                                    </button>
+                                  </th>
+                                  <th className="px-2 py-2 w-20 text-center">
+                                    <button type="button" onClick={() => toggleAllColumn('hidden')} className="hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer" title="Toggle Hidden for all displayed fields">
+                                      Hidden
+                                    </button>
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800 text-xs">
+                                {displayedFields.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={6} className="px-3 py-6 text-center text-xs text-zinc-400">
+                                      {fieldSecuritySearchQuery.trim()
+                                        ? `No fields match "${fieldSecuritySearchQuery}"`
+                                        : 'No schema fields defined in layout.'}
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  displayedFields.map((field: any) => {
+                                    const roleConfig = fieldSecurity[selectedSecurityRoleId]?.[field.id] || {
+                                      read: true,
+                                      write: selectedSecurityRoleId !== 'guest',
+                                      masked: false,
+                                      hidden: false
+                                    };
+
+                                    const updatePerm = (key: 'read' | 'write' | 'masked' | 'hidden', val: boolean) => {
+                                      setFieldSecurity(prev => ({
+                                        ...prev,
+                                        [selectedSecurityRoleId]: {
+                                          ...(prev[selectedSecurityRoleId] || {}),
+                                          [field.id]: {
+                                            ...roleConfig,
+                                            [key]: val
+                                          }
+                                        }
+                                      }));
+                                    };
+
+                                    const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === field.type);
+                                    const Icon = fieldDef?.icon || GridIcon;
+
+                                    return (
+                                      <tr key={field.id} className="hover:bg-zinc-50/70 dark:hover:bg-zinc-800/35 transition-colors">
+                                        <td className="px-3 py-2 min-w-0">
+                                          <div className="flex items-center gap-2 min-w-0">
+                                            <div className="w-5 h-5 rounded bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 dark:text-zinc-400 shrink-0">
+                                              <Icon size={11} />
+                                            </div>
+                                            <span className="font-medium text-xs text-zinc-900 dark:text-white truncate">
+                                              {field.label || field.name || field.id}
+                                            </span>
+                                            <span className="text-[10px] text-zinc-400 font-mono truncate hidden sm:inline">
+                                              ({field.id})
+                                            </span>
+                                          </div>
+                                        </td>
+                                        <td className="px-2 py-2">
+                                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 truncate max-w-full">
+                                            {field.type}
+                                          </span>
+                                        </td>
+                                        <td className="px-2 py-2 text-center">
+                                          <button
+                                            type="button"
+                                            onClick={() => updatePerm('read', !roleConfig.read)}
+                                            className={cn(
+                                              "w-4 h-4 rounded mx-auto flex items-center justify-center transition-colors cursor-pointer",
+                                              roleConfig.read
+                                                ? "bg-indigo-600 text-white"
+                                                : "border border-zinc-300 dark:border-zinc-600 hover:border-zinc-400"
+                                            )}
+                                          >
+                                            {roleConfig.read && <Check size={10} strokeWidth={3} />}
+                                          </button>
+                                        </td>
+                                        <td className="px-2 py-2 text-center">
+                                          <button
+                                            type="button"
+                                            onClick={() => updatePerm('write', !roleConfig.write)}
+                                            className={cn(
+                                              "w-4 h-4 rounded mx-auto flex items-center justify-center transition-colors cursor-pointer",
+                                              roleConfig.write
+                                                ? "bg-indigo-600 text-white"
+                                                : "border border-zinc-300 dark:border-zinc-600 hover:border-zinc-400"
+                                            )}
+                                          >
+                                            {roleConfig.write && <Check size={10} strokeWidth={3} />}
+                                          </button>
+                                        </td>
+                                        <td className="px-2 py-2 text-center">
+                                          <button
+                                            type="button"
+                                            onClick={() => updatePerm('masked', !roleConfig.masked)}
+                                            className={cn(
+                                              "w-4 h-4 rounded mx-auto flex items-center justify-center transition-colors cursor-pointer",
+                                              roleConfig.masked
+                                                ? "bg-amber-600 text-white"
+                                                : "border border-zinc-300 dark:border-zinc-600 hover:border-zinc-400"
+                                            )}
+                                          >
+                                            {roleConfig.masked && <Check size={10} strokeWidth={3} />}
+                                          </button>
+                                        </td>
+                                        <td className="px-2 py-2 text-center">
+                                          <button
+                                            type="button"
+                                            onClick={() => updatePerm('hidden', !roleConfig.hidden)}
+                                            className={cn(
+                                              "w-4 h-4 rounded mx-auto flex items-center justify-center transition-colors cursor-pointer",
+                                              roleConfig.hidden
+                                                ? "bg-rose-600 text-white"
+                                                : "border border-zinc-300 dark:border-zinc-600 hover:border-zinc-400"
+                                            )}
+                                          >
+                                            {roleConfig.hidden && <Check size={10} strokeWidth={3} />}
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+
+                          <div className="flex items-start gap-2 p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 text-[11px] text-zinc-500 dark:text-zinc-400">
+                            <Info size={14} className="text-zinc-400 shrink-0 mt-0.5" />
+                            <div>
+                              <span className="font-medium text-zinc-700 dark:text-zinc-300">Privacy & Sanitization Note:</span> Masked fields are automatically sanitized on the server before reaching clients and LLM agent contexts. Hidden fields are completely stripped from API responses for this role.
+                            </div>
+                          </div>
+                        </section>
                       </div>
                     </div>
                   );
@@ -10490,6 +11618,22 @@ export const ModuleEditor = () => {
                     </div>
                   );
                 })()}
+
+                {detailsTab === 'versions' && (
+                  <VersionsSetupTab
+                    moduleId={id || 'new'}
+                    moduleName={moduleSettings.name}
+                    isDirty={isDirty}
+                    onSaveNewVersion={() => {
+                      handleSave();
+                    }}
+                    onOpenDeployModal={(targetVerId) => {
+                      setDeployTargetVersionId(targetVerId || null);
+                      setIsDeployModalOpen(true);
+                    }}
+                    onRestoreToDraft={handleRestoreToDraft}
+                  />
+                )}
               </div>
             </div>
           ) : activeTab === 'validations' ? (
@@ -10532,137 +11676,6 @@ export const ModuleEditor = () => {
               setDeletedAutomationIds={setDeletedAutomationIds}
             />
 
-          ) : activeTab === 'deployment' ? (
-            <div className="flex h-full w-full overflow-hidden">
-              {/* Deployment Sidebar */}
-              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 space-y-2">
-                <div className="mb-6 px-2">
-                  <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Release Management</h3>
-                </div>
-                <button className="w-full flex items-center gap-3 px-4 py-2.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl text-xs font-bold transition-all text-left">
-                  <Rocket size={14} />
-                  Deploy Module
-                </button>
-                <button className="w-full flex items-center gap-3 px-4 py-2.5 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl text-xs font-bold transition-all text-left">
-                  <History size={14} />
-                  Release History
-                </button>
-                <button className="w-full flex items-center gap-3 px-4 py-2.5 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl text-xs font-bold transition-all text-left">
-                  <Globe size={14} />
-                  Environments
-                </button>
-                <button className="w-full flex items-center gap-3 px-4 py-2.5 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl text-xs font-bold transition-all text-left">
-                  <Webhook size={14} />
-                  API & Webhooks
-                </button>
-                <button className="w-full flex items-center gap-3 px-4 py-2.5 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 rounded-xl text-xs font-bold transition-all text-left">
-                  <ClipboardList size={14} />
-                  Audit Log
-                </button>
-              </aside>
-
-              {/* Deployment Content */}
-              <div className="flex-1 overflow-y-auto bg-transparent p-12 custom-scrollbar">
-                <div className="max-w-none mx-auto space-y-12 pb-20">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Deployment & Releases</h2>
-                      <p className="text-zinc-500 text-sm">Manage the lifecycle and external availability of this module.</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-full text-[10px] font-black uppercase tracking-widest border border-emerald-500/20">
-                        <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                        Live: v1.0.4
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Primary Action Card */}
-                    <div className="lg:col-span-2 bg-indigo-600 rounded-[2.5rem] p-10 relative overflow-hidden shadow-2xl shadow-indigo-500/20">
-                      <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 blur-3xl -mr-32 -mt-32" />
-                      <div className="relative z-10 flex flex-col h-full justify-between gap-12">
-                        <div className="space-y-4">
-                          <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center text-white backdrop-blur-md">
-                            <Rocket size={24} />
-                          </div>
-                          <div className="space-y-2">
-                            <h3 className="text-2xl font-black text-white tracking-tight">Deploy to Production</h3>
-                            <p className="text-white/70 text-sm max-w-md">There are 12 unreleased changes in your current draft. Publishing will update the module for all users across the organization.</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <button className="px-8 py-4 bg-white text-indigo-600 rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-indigo-50 transition-all shadow-xl">
-                            Publish v1.0.5
-                          </button>
-                          <button className="px-6 py-4 bg-white/10 text-white border border-white/20 rounded-2xl font-bold text-sm uppercase tracking-widest hover:bg-white/20 transition-all">
-                            View Changelog
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Quick Stats Card */}
-                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] p-8 space-y-8 shadow-xl shadow-indigo-500/5">
-                      <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Global Status</h4>
-                      <div className="space-y-6">
-                        {[
-                          { label: 'Active Users', value: '1,284', icon: Smartphone, color: 'text-indigo-500' },
-                          { label: 'Avg Latency', value: '142ms', icon: Activity, color: 'text-emerald-500' },
-                          { label: 'Error Rate', value: '0.02%', icon: AlertCircle, color: 'text-rose-500' }
-                        ].map((stat, i) => (
-                          <div key={i} className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className={cn("w-8 h-8 rounded-lg bg-zinc-50 dark:bg-zinc-800 flex items-center justify-center", stat.color)}>
-                                <stat.icon size={14} />
-                              </div>
-                              <span className="text-xs font-bold text-zinc-600 dark:text-zinc-400">{stat.label}</span>
-                            </div>
-                            <span className="text-sm font-black text-zinc-900 dark:text-white">{stat.value}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* History Section */}
-                  <section className="space-y-6">
-                    <div className="flex items-center justify-between px-2">
-                      <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Recent Activity</h3>
-                      <button className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">Full Audit Log</button>
-                    </div>
-                    <div className="space-y-3">
-                      {[
-                        { v: 'v1.0.4', user: 'Scott V.', date: '2 hours ago', msg: 'Updated validation logic for financial fields', type: 'Production' },
-                        { v: 'v1.0.3', user: 'Alex M.', date: '1 day ago', msg: 'Refactored layout density and primary colors', type: 'Production' },
-                        { v: 'v1.0.2', user: 'System', date: '3 days ago', msg: 'Automated database schema synchronization', type: 'Staging' }
-                      ].map((item, i) => (
-                        <div key={i} className="flex items-center justify-between p-5 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-2xl hover:border-indigo-500/30 transition-all cursor-pointer">
-                          <div className="flex items-center gap-6">
-                            <div className="flex flex-col">
-                              <span className="text-xs font-black text-zinc-900 dark:text-white">{item.v}</span>
-                              <span className="text-[9px] text-zinc-400 uppercase font-bold tracking-tight">{item.type}</span>
-                            </div>
-                            <div className="h-8 w-px bg-zinc-100 dark:bg-zinc-800" />
-                            <div className="flex flex-col">
-                              <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{item.msg}</span>
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] text-zinc-400 font-bold">{item.user}</span>
-                                <span className="text-[10px] text-zinc-300 dark:text-zinc-600">â€¢</span>
-                                <span className="text-[10px] text-zinc-400">{item.date}</span>
-                              </div>
-                            </div>
-                          </div>
-                          <button className="p-2 text-zinc-400 hover:text-indigo-500 transition-colors">
-                            <ArrowRightLeft size={14} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                </div>
-              </div>
-            </div>
           ) : activeTab === 'workflow' ? (
             <div className="w-full h-full">
               <WorkflowGraphEditor 
@@ -10677,268 +11690,11 @@ export const ModuleEditor = () => {
                 rightSidebarTab={rightSidebarTabWorkflow}
                 setRightSidebarTab={setRightSidebarTabWorkflow}
                 fields={layout}
+                onUndo={undo}
+                onRedo={redo}
+                canUndo={canUndo}
+                canRedo={canRedo}
               />
-            </div>
-          ) : activeTab === 'security' ? (
-            <div className="flex h-full w-full bg-transparent">
-              {/* Roles Sidebar */}
-              <aside className="w-72 flex-shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 space-y-2 flex flex-col">
-                <div className="mb-6 px-2">
-                  <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Access Roles</h3>
-                  <p className="text-[11px] text-zinc-500 mt-1">Select a role to configure field permissions.</p>
-                </div>
-                <div className="space-y-2 flex-1 overflow-y-auto custom-scrollbar">
-                  {[
-                    { id: 'admin', label: 'Administrator', icon: ShieldCheck, desc: 'Full governance & write access' },
-                    { id: 'manager', label: 'Department Manager', icon: Settings, desc: 'Operational record manager' },
-                    { id: 'staff', label: 'Standard Staff', icon: Type, desc: 'Daily execution & intake' },
-                    { id: 'guest', label: 'External Guest', icon: Globe, desc: 'Restricted external collaborator' }
-                  ].map((role) => (
-                    <button 
-                      key={role.id}
-                      type="button"
-                      onClick={() => setSelectedSecurityRoleId(role.id)}
-                      className={cn(
-                        "w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-xs font-bold transition-all text-left",
-                        selectedSecurityRoleId === role.id 
-                          ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 shadow-sm"
-                          : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900 border border-transparent"
-                      )}
-                    >
-                      <div className={cn(
-                        "w-7 h-7 rounded-xl flex items-center justify-center shrink-0",
-                        selectedSecurityRoleId === role.id ? "bg-indigo-600 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500"
-                      )}>
-                        <role.icon size={13} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="font-bold truncate">{role.label}</div>
-                        <div className="text-[10px] text-zinc-400 font-normal truncate">{role.desc}</div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-auto pt-4 border-t border-zinc-100 dark:border-zinc-800">
-                  <div className="p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-zinc-200/60 dark:border-zinc-800">
-                    <span className="text-[10px] font-black uppercase text-zinc-400 tracking-wider block mb-1">Active Simulator Role</span>
-                    <div className="text-xs font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
-                      <ShieldCheck size={13} />
-                      <span className="capitalize">{previewRole}</span>
-                    </div>
-                  </div>
-                </div>
-              </aside>
-
-              {/* Permissions Content */}
-              <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
-                <div className="max-w-none mx-auto space-y-12">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">Security & Governance</h2>
-                        <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
-                          Role: {selectedSecurityRoleId}
-                        </span>
-                      </div>
-                      <p className="text-zinc-500 text-sm">Define access policies, visibility, and data masking for the <strong className="text-zinc-700 dark:text-zinc-300 capitalize">{selectedSecurityRoleId}</strong> role.</p>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFieldSecurity(prev => {
-                            const updated = { ...(prev[selectedSecurityRoleId] || {}) };
-                            flattenFields(layout).forEach((f: any) => {
-                              updated[f.id] = { read: true, write: true, masked: false, hidden: false };
-                            });
-                            return { ...prev, [selectedSecurityRoleId]: updated };
-                          });
-                          toast.success(`Applied Full Access preset to ${selectedSecurityRoleId}`);
-                        }}
-                        className="px-3 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-[10px] font-black uppercase tracking-wider text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all"
-                      >
-                        Allow All
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFieldSecurity(prev => {
-                            const updated = { ...(prev[selectedSecurityRoleId] || {}) };
-                            flattenFields(layout).forEach((f: any) => {
-                              updated[f.id] = { read: true, write: false, masked: false, hidden: false };
-                            });
-                            return { ...prev, [selectedSecurityRoleId]: updated };
-                          });
-                          toast.success(`Applied Read Only preset to ${selectedSecurityRoleId}`);
-                        }}
-                        className="px-3 py-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 text-[10px] font-black uppercase tracking-wider text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all"
-                      >
-                        Read Only
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFieldSecurity(prev => {
-                            const updated = { ...(prev[selectedSecurityRoleId] || {}) };
-                            flattenFields(layout).forEach((f: any) => {
-                              const label = (f.label || '').toLowerCase();
-                              const isSensitive = ['email', 'phone', 'tel', 'currency', 'money', 'number'].includes(f.type) || label.includes('ssn') || label.includes('tax') || label.includes('salary');
-                              updated[f.id] = {
-                                read: true,
-                                write: !isSensitive,
-                                masked: isSensitive,
-                                hidden: false
-                              };
-                            });
-                            return { ...prev, [selectedSecurityRoleId]: updated };
-                          });
-                          toast.success(`Applied Sensitive Data Masking to ${selectedSecurityRoleId}`);
-                        }}
-                        className="px-3 py-1.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[10px] font-black uppercase tracking-wider hover:bg-amber-500/20 transition-all"
-                      >
-                        Mask Sensitive
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Field Level Security Matrix */}
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-black text-zinc-900 dark:text-white uppercase tracking-widest">Field-Level Security Matrix</h3>
-                      <span className="text-xs text-zinc-400">{flattenFields(layout).length} Schema Fields</span>
-                    </div>
-
-                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] overflow-hidden shadow-xl shadow-indigo-500/5">
-                      <table className="w-full text-left border-collapse">
-                        <thead>
-                          <tr className="border-b border-zinc-100 dark:border-zinc-800/50 bg-zinc-50/50 dark:bg-zinc-800/30">
-                            <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Field Name</th>
-                            <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest">Type</th>
-                            <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Can Read</th>
-                            <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Can Write</th>
-                            <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Mask Value</th>
-                            <th className="px-6 py-5 text-[10px] font-black text-zinc-400 uppercase tracking-widest text-center">Hidden</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/50 text-xs">
-                          {flattenFields(layout).map((field: any) => {
-                            const roleConfig = fieldSecurity[selectedSecurityRoleId]?.[field.id] || {
-                              read: true,
-                              write: selectedSecurityRoleId !== 'guest',
-                              masked: false,
-                              hidden: false
-                            };
-
-                            const updatePerm = (key: 'read' | 'write' | 'masked' | 'hidden', val: boolean) => {
-                              setFieldSecurity(prev => ({
-                                ...prev,
-                                [selectedSecurityRoleId]: {
-                                  ...(prev[selectedSecurityRoleId] || {}),
-                                  [field.id]: {
-                                    ...roleConfig,
-                                    [key]: val
-                                  }
-                                }
-                              }));
-                            };
-
-                            return (
-                              <tr key={field.id} className="group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
-                                <td className="px-6 py-4">
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-lg bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 dark:text-zinc-400 group-hover:bg-indigo-500/10 group-hover:text-indigo-500 transition-colors">
-                                      {(() => {
-                                        const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === field.type);
-                                        const Icon = fieldDef?.icon || GridIcon;
-                                        return <Icon size={14} />;
-                                      })()}
-                                    </div>
-                                    <div>
-                                      <span className="text-xs font-bold text-zinc-900 dark:text-white block">{field.label || field.name}</span>
-                                      <span className="text-[10px] text-zinc-400 font-mono">{field.id}</span>
-                                    </div>
-                                  </div>
-                                </td>
-
-                                <td className="px-6 py-4">
-                                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800">
-                                    {field.type}
-                                  </span>
-                                </td>
-
-                                {/* Read Toggle */}
-                                <td className="px-6 py-4 text-center">
-                                  <button
-                                    type="button"
-                                    onClick={() => updatePerm('read', !roleConfig.read)}
-                                    className={cn(
-                                      "w-6 h-6 rounded-lg mx-auto flex items-center justify-center transition-all",
-                                      roleConfig.read
-                                        ? "bg-emerald-500/10 border-2 border-emerald-500 text-emerald-600 dark:text-emerald-400"
-                                        : "border-2 border-zinc-200 dark:border-zinc-700 text-transparent"
-                                    )}
-                                  >
-                                    {roleConfig.read && <Check size={13} strokeWidth={3} />}
-                                  </button>
-                                </td>
-
-                                {/* Write Toggle */}
-                                <td className="px-6 py-4 text-center">
-                                  <button
-                                    type="button"
-                                    onClick={() => updatePerm('write', !roleConfig.write)}
-                                    className={cn(
-                                      "w-6 h-6 rounded-lg mx-auto flex items-center justify-center transition-all",
-                                      roleConfig.write
-                                        ? "bg-indigo-500/10 border-2 border-indigo-500 text-indigo-600 dark:text-indigo-400"
-                                        : "border-2 border-zinc-200 dark:border-zinc-700 text-transparent"
-                                    )}
-                                  >
-                                    {roleConfig.write && <Check size={13} strokeWidth={3} />}
-                                  </button>
-                                </td>
-
-                                {/* Masked Toggle */}
-                                <td className="px-6 py-4 text-center">
-                                  <button
-                                    type="button"
-                                    onClick={() => updatePerm('masked', !roleConfig.masked)}
-                                    className={cn(
-                                      "w-6 h-6 rounded-lg mx-auto flex items-center justify-center transition-all",
-                                      roleConfig.masked
-                                        ? "bg-amber-500/10 border-2 border-amber-500 text-amber-600 dark:text-amber-400"
-                                        : "border-2 border-zinc-200 dark:border-zinc-700 text-transparent"
-                                    )}
-                                  >
-                                    {roleConfig.masked && <Check size={13} strokeWidth={3} />}
-                                  </button>
-                                </td>
-
-                                {/* Hidden Toggle */}
-                                <td className="px-6 py-4 text-center">
-                                  <button
-                                    type="button"
-                                    onClick={() => updatePerm('hidden', !roleConfig.hidden)}
-                                    className={cn(
-                                      "w-6 h-6 rounded-lg mx-auto flex items-center justify-center transition-all",
-                                      roleConfig.hidden
-                                        ? "bg-rose-500/10 border-2 border-rose-500 text-rose-600 dark:text-rose-400"
-                                        : "border-2 border-zinc-200 dark:border-zinc-700 text-transparent"
-                                    )}
-                                  >
-                                    {roleConfig.hidden && <Check size={13} strokeWidth={3} />}
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
           ) : activeTab === 'forms' ? (
             <FormBuilder
@@ -10955,6 +11711,10 @@ export const ModuleEditor = () => {
               moduleLayout={layout}
               workflow={workflow}
               isRestricted={isRestricted}
+              onUndo={undo}
+              onRedo={redo}
+              canUndo={canUndo}
+              canRedo={canRedo}
               onPromoteFieldToModule={(newField) =>
                 setLayout((prev: any[]) =>
                   prev.some((f: any) => f.id === newField.id) ? prev : [...prev, newField]
@@ -16307,6 +17067,7 @@ export const ModuleEditor = () => {
           activeTab={activeTab}
           width={copilotWidth}
           isResizing={resizingPanel === 'copilot'}
+          overlayMode={!isWideViewport && activeTab !== 'builder' && activeTab !== 'details' && activeTab !== 'preview'}
           onStartResize={(e) => startPanelResize('copilot', e)}
           onRefreshModule={() => refreshModules?.()}
           onApplyChanges={(newLayout, description) => {
@@ -16535,46 +17296,57 @@ export const ModuleEditor = () => {
           />
         )}
 
-        {/* Safe Schema Diff & Migration Deployment Modal */}
-        <SchemaDiffModal
-          isOpen={isSchemaDiffModalOpen}
-          onClose={() => setIsSchemaDiffModalOpen(false)}
-          currentFields={flattenFields(layout)}
-          persistedFields={flattenFields(persistedLayout)}
-          moduleName={moduleSettings.name}
+        {/* Full-Studio Real-Workspace Preview Sandbox Modal */}
+        {isPreviewModalOpen && (
+          <ModulePreviewModal
+            isOpen={isPreviewModalOpen}
+            onClose={() => setIsPreviewModalOpen(false)}
+            draftModule={draftModuleForPreview}
+            permissionGroups={permissionGroups}
+            initialFormId={selectedFormId || forms[0]?.id || null}
+            openedFromFormsTab={previewOpenedFromForms}
+            versionTag={latestVersionTag}
+            isDirty={isDirty}
+            isLiveVersion={!hasUnpublishedVersion && !isDirty}
+            onOpenVersions={() => setIsVersionsModalOpen(true)}
+          />
+        )}
+
+        {/* Streamlined Deploy to Production Modal */}
+        <DeployModuleModal
+          isOpen={isDeployModalOpen}
+          onClose={() => {
+            setIsDeployModalOpen(false);
+            setDeployTargetVersionId(null);
+          }}
           moduleId={id || 'new'}
-          currentVersion={schemaVersion}
-          onOpenQueue={() => {
-            setIsSchemaDiffModalOpen(false);
-            setIsScheduledDeploymentsOpen(true);
+          moduleName={moduleSettings.name}
+          isDirty={isDirty}
+          initialTargetVersionId={deployTargetVersionId}
+          getCurrentState={buildCurrentSnapshotState}
+          onSaveCurrentAsVersion={handleSave}
+          onPromoteVersion={handlePromoteVersion}
+          onViewAllVersions={() => {
+            setIsDeployModalOpen(false);
+            setIsVersionsModalOpen(true);
           }}
-          onScheduled={() => {
-            setIsScheduledDeploymentsOpen(true);
+        />
+
+        {/* Standalone Large Versions & Releases Modal */}
+        <VersionsModal
+          isOpen={isVersionsModalOpen}
+          onClose={() => setIsVersionsModalOpen(false)}
+          moduleId={id || 'new'}
+          moduleName={moduleSettings.name}
+          isDirty={isDirty}
+          onSaveNewVersion={() => {
+            handleSave();
           }}
-          onDeploy={async ({ versionTag, releaseNotes }) => {
-            versionControlService.createSnapshot({
-              moduleId: id || 'new',
-              moduleName: moduleSettings.name,
-              versionTag,
-              name: `Release v${versionTag.replace('v', '')}`,
-              description: releaseNotes || 'Database schema migration executed and deployed to production.',
-              author: 'Developer / Admin',
-              isDeployed: true,
-              state: {
-                layout,
-                tabs,
-                moduleSettings,
-                interfaceSettings,
-                forms,
-                validationRules,
-                fieldSecurity
-              },
-              previousFields: persistedLayout
-            });
-            setSchemaVersion(versionTag.replace('v', ''));
-            setPersistedLayout([...layout]);
-            await handleSave();
+          onOpenDeployModal={(targetVerId) => {
+            setDeployTargetVersionId(targetVerId || null);
+            setIsDeployModalOpen(true);
           }}
+          onRestoreToDraft={handleRestoreToDraft}
         />
 
         {/* Public Form Publish & Embed Studio Modal */}
@@ -16585,54 +17357,6 @@ export const ModuleEditor = () => {
           moduleName={moduleSettings.name}
           formId={selectedFormId || undefined}
           formName={forms.find(f => f.id === selectedFormId)?.name || 'Standard Intake Form'}
-        />
-
-        {/* Scheduled Deployments Manager Drawer */}
-        <ScheduledDeploymentsDrawer
-          isOpen={isScheduledDeploymentsOpen}
-          onClose={() => setIsScheduledDeploymentsOpen(false)}
-          moduleId={id || undefined}
-          moduleName={moduleSettings.name}
-          onDeployExecuted={async (dep) => {
-            setSchemaVersion(dep.versionTag.replace(/^v/, ''));
-            setPersistedLayout([...layout]);
-            await handleSave();
-          }}
-          onOpenDeployModal={() => {
-            setIsScheduledDeploymentsOpen(false);
-            setIsSchemaDiffModalOpen(true);
-          }}
-        />
-
-        {/* Version Control & Rollback History Drawer */}
-        <VersionHistoryDrawer
-          isOpen={isVersionHistoryOpen}
-          onClose={() => setIsVersionHistoryOpen(false)}
-          moduleId={id || 'new'}
-          moduleName={moduleSettings.name}
-          currentVersionTag={schemaVersion}
-          currentFields={flattenFields(layout)}
-          getCurrentState={() => ({
-            layout,
-            tabs,
-            moduleSettings,
-            interfaceSettings,
-            forms,
-            validationRules,
-            fieldSecurity
-          })}
-          onRollbackApplied={async (restoredState, newTag) => {
-            setLayout((restoredState.layout || []) as any);
-            setTabs(restoredState.tabs || []);
-            if (restoredState.moduleSettings) setModuleSettings(restoredState.moduleSettings);
-            if (restoredState.interfaceSettings) setInterfaceSettings(restoredState.interfaceSettings);
-            if (restoredState.forms) setForms(restoredState.forms);
-            if (restoredState.validationRules) setValidationRules(restoredState.validationRules);
-            if (restoredState.fieldSecurity) setFieldSecurity(restoredState.fieldSecurity);
-            setPersistedLayout((restoredState.layout || []) as any);
-            setSchemaVersion(newTag.replace('v', ''));
-            await handleSave();
-          }}
         />
 
         {/* Command Palette */}
@@ -16654,7 +17378,16 @@ export const ModuleEditor = () => {
             if (action === 'save') handleSave();
             if (action === 'console') setShowConsole(!showConsole);
             if (action.startsWith('tab:')) {
-              setActiveTab(action.split(':')[1] as any);
+              const targetTab = action.split(':')[1];
+              if (targetTab === 'security') {
+                setActiveTab('details');
+                setDetailsTab('security');
+              } else if (targetTab === 'schema') {
+                setActiveTab('details');
+                setDetailsTab('schema');
+              } else {
+                setActiveTab(targetTab as any);
+              }
             }
             if (layout.find(f => f.id === action)) {
               setSelectedId(action);
@@ -17203,7 +17936,7 @@ export const ModuleEditor = () => {
                           style={{ paddingLeft: tab.depth === 1 ? '1.5rem' : '0.75rem' }}
                         >
                           <span className="flex items-center gap-1">
-                            {tab.depth === 1 && <span className="opacity-40">â†³</span>}
+                            {tab.depth === 1 && <span className="opacity-40">↳</span>}
                             <span>{tab.label || tab.id}</span>
                           </span>
                           <span className="text-[9px] opacity-60 font-mono">ID: {tab.id}</span>

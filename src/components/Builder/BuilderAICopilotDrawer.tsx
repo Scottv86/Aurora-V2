@@ -14,6 +14,7 @@ interface BuilderAICopilotDrawerProps {
   activeTab?: string;
   width?: number;
   isResizing?: boolean;
+  overlayMode?: boolean;
   onStartResize?: (e: React.MouseEvent) => void;
   onApplyChanges?: (newLayout: Field[], description?: string) => void;
   onRefreshModule?: () => void;
@@ -27,8 +28,6 @@ const TAB_CONTEXT_LABELS: Record<string, string> = {
   validations: 'Rules',
   connectors: 'Integrations',
   automation: 'Automations',
-  security: 'Security',
-  deployment: 'Deployment',
   preview: 'Preview',
 };
 
@@ -42,6 +41,7 @@ export const BuilderAICopilotDrawer: React.FC<BuilderAICopilotDrawerProps> = ({
   activeTab = 'builder',
   width = 360,
   isResizing = false,
+  overlayMode = false,
   onStartResize,
 }) => {
   const activeContextLabel = TAB_CONTEXT_LABELS[activeTab] || 'Module';
@@ -84,7 +84,11 @@ export const BuilderAICopilotDrawer: React.FC<BuilderAICopilotDrawerProps> = ({
           animate={{ width, opacity: 1 }}
           exit={{ width: 0, opacity: 0 }}
           transition={isResizing ? { duration: 0 } : { duration: 0.2, ease: 'easeOut' }}
-          className="relative shrink-0 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col h-full overflow-hidden"
+          className={
+            overlayMode
+              ? "absolute right-0 top-0 bottom-0 z-30 shrink-0 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col h-full overflow-hidden shadow-2xl shadow-black/15 dark:shadow-black/50"
+              : "relative shrink-0 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col h-full overflow-hidden"
+          }
         >
           {onStartResize && (
             <div

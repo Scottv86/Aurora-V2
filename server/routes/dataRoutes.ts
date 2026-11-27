@@ -7,6 +7,7 @@ import { WorkflowEngine } from '../services/workflowEngine';
 import { AutomationEngine } from '../services/automationEngine';
 import { triggerWebhooks } from '../services/webhookService';
 import { logRecordActivity, computeFieldDiff } from '../lib/audit';
+import { resolveTenantAIClient, executeAICompletion } from '../services/aiProviderService';
 import {
   ensureTenantBuilderEntitiesMigrated,
   formatFormRowForModule,
@@ -20,11 +21,29 @@ const router = express.Router();
 function resolveSecurityRoleKey(userOrReq: any, fieldSecurity: Record<string, any>): string | null {
   if (!fieldSecurity || typeof fieldSecurity !== 'object') return null;
   const user = userOrReq?.user ? userOrReq.user : userOrReq;
-  const rawRole = String(user?.role || '').toLowerCase();
+  const rawRole = String(user?.role || user?.roleId || '').toLowerCase();
+
+  // 1. SuperAdmin / Tenant Admin check
   if (user?.isSuperAdmin || rawRole.includes('admin') || rawRole.includes('owner') || rawRole === 'tenant_admin') {
-    return fieldSecurity.admin ? 'admin' : null;
+    return fieldSecurity.admin ? 'admin' : (fieldSecurity[rawRole] ? rawRole : null);
   }
-  if (user?.role && fieldSecurity[user.role]) return user.role;
+
+  // 2. Dynamic permission group matching (check user's permissionGroupIds against fieldSecurity keys)
+  const groupIds: string[] = Array.isArray(user?.permissionGroupIds)
+    ? user.permissionGroupIds
+    : (Array.isArray(user?.permissionGroups)
+        ? user.permissionGroups.map((g: any) => typeof g === 'string' ? g : g.id || g.permissionGroupId)
+        : []);
+
+  for (const gid of groupIds) {
+    if (gid && fieldSecurity[gid]) return gid;
+  }
+
+  // 3. Direct role string match
+  const directRole = user?.role || user?.roleId;
+  if (directRole && fieldSecurity[directRole]) return directRole;
+
+  // 4. Archetype fallbacks
   if (rawRole.includes('manager') || rawRole.includes('lead')) {
     return fieldSecurity.manager ? 'manager' : null;
   }
@@ -32,6 +51,50 @@ function resolveSecurityRoleKey(userOrReq: any, fieldSecurity: Record<string, an
     return fieldSecurity.guest ? 'guest' : null;
   }
   return fieldSecurity.staff ? 'staff' : null;
+}
+
+export function isUserAuthorizedForModule(userOrReq: any, moduleConfigOrModule: any): boolean {
+  const user = userOrReq?.user ? userOrReq.user : userOrReq;
+  if (!user || user.isSuperAdmin) return true;
+  const rawRole = String(user?.role || user?.roleId || '').toLowerCase();
+  if (rawRole.includes('admin') || rawRole.includes('owner') || rawRole === 'tenant_admin') {
+    return true;
+  }
+
+  const config = moduleConfigOrModule?.config && typeof moduleConfigOrModule.config === 'object' 
+    ? moduleConfigOrModule.config 
+    : (moduleConfigOrModule || {});
+
+  const accessControl = config.accessControl;
+  if (!accessControl || accessControl.mode !== 'restricted') {
+    // If not restricted, check legacy requiredCapability if present
+    if (config.requiredCapability) {
+      const userCaps: string[] = Array.isArray(user.capabilities) ? user.capabilities : [];
+      if (!userCaps.includes(config.requiredCapability) && !userCaps.includes('*:*')) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // Restricted mode
+  const allowedGroups: string[] = Array.isArray(accessControl.allowedGroupIds) ? accessControl.allowedGroupIds : [];
+  const allowedRoles: string[] = Array.isArray(accessControl.allowedRoles) ? accessControl.allowedRoles : [];
+
+  if (allowedGroups.length === 0 && allowedRoles.length === 0) {
+    return true;
+  }
+
+  const userGroupIds: string[] = Array.isArray(user.permissionGroupIds)
+    ? user.permissionGroupIds
+    : (Array.isArray(user.permissionGroups)
+        ? user.permissionGroups.map((g: any) => typeof g === 'string' ? g : g.id || g.permissionGroupId)
+        : []);
+
+  const hasGroup = allowedGroups.some((gId: string) => userGroupIds.includes(gId));
+  const hasRole = allowedRoles.some((r: string) => r.toLowerCase() === rawRole);
+
+  return hasGroup || hasRole;
 }
 
 function applyFieldSecurityRead(data: Record<string, any>, moduleConfig: any, user: any): Record<string, any> {
@@ -261,7 +324,8 @@ router.get('/modules', async (req: TenantRequest, res) => {
         createdAt: m.createdAt,
       };
     });
-    res.json(formatted);
+    const authorizedModules = formatted.filter(m => isUserAuthorizedForModule((req as any).user, m));
+    res.json(authorizedModules);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -289,6 +353,9 @@ router.get('/modules/:id', async (req: TenantRequest, res) => {
     const module = await findModuleByIdOrSlug(db, tenantId, id);
     if (!module) {
       return res.status(404).json({ error: 'Module not found' });
+    }
+    if (!isUserAuthorizedForModule((req as any).user, module)) {
+      return res.status(403).json({ error: 'Access denied: You do not have permission to access this module' });
     }
     await ensureTenantBuilderEntitiesMigrated(db, tenantId);
     const [modFormsRows, modWfs, modRulesets] = await Promise.all([
@@ -448,7 +515,11 @@ router.get('/records', async (req: TenantRequest, res) => {
 
     const whereClause: any = {};
     if (moduleId) {
-      whereClause.moduleId = moduleId as string;
+      const targetModule = await findModuleByIdOrSlug(db, req.tenantId!, moduleId as string);
+      if (targetModule && !isUserAuthorizedForModule((req as any).user, targetModule)) {
+        return res.status(403).json({ error: 'Access denied: You do not have permission to view records in this module' });
+      }
+      whereClause.moduleId = targetModule ? targetModule.id : (moduleId as string);
     }
     
     // Total count for pagination
@@ -559,6 +630,9 @@ router.get('/records/:id', async (req: TenantRequest, res) => {
     if (!record) {
       return res.status(404).json({ error: 'Record not found' });
     }
+    if ((record as any).module && !isUserAuthorizedForModule((req as any).user, (record as any).module)) {
+      return res.status(403).json({ error: 'Access denied: You do not have permission to view this record' });
+    }
     const safeData = applyFieldSecurityRead((record.data as any) || {}, (record as any).module?.config, (req as any).user);
     res.json({
       id: record.id,
@@ -588,6 +662,10 @@ router.post('/records', async (req: TenantRequest, res) => {
     
     const module = await db.module.findUnique({ where: { id: moduleId } });
     if (!module) return res.status(404).json({ error: 'Module not found' });
+
+    if (!isUserAuthorizedForModule((req as any).user, module)) {
+      return res.status(403).json({ error: 'Access denied: You do not have permission to create records in this module' });
+    }
 
     // Validation for required fields
     const config = module.config as any;
@@ -648,6 +726,9 @@ router.post('/records', async (req: TenantRequest, res) => {
     let finalData = { ...data };
     
     if (module) {
+      if (!isUserAuthorizedForModule((req as any).user, module)) {
+        return res.status(403).json({ error: 'Access denied: You do not have permission to modify records in this module' });
+      }
       const config = module.config as any;
       let configChanged = false;
       let updatedConfig = { ...config };
@@ -834,6 +915,10 @@ router.post('/records/bulk', async (req: TenantRequest, res) => {
 
     const module = await db.module.findUnique({ where: { id: moduleId } });
     if (!module) return res.status(404).json({ error: 'Module not found' });
+
+    if (!isUserAuthorizedForModule((req as any).user, module)) {
+      return res.status(403).json({ error: 'Access denied: You do not have permission to create records in this module' });
+    }
 
     const config = (module.config as any) || {};
     const flattenFields = (fields: any[]): any[] => {
@@ -1374,6 +1459,9 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
     });
     
     if (module) {
+      if (!isUserAuthorizedForModule((req as any).user, module)) {
+        return res.status(403).json({ error: 'Access denied: You do not have permission to modify records in this module' });
+      }
       const config = module.config as any;
 
       // Enforce Field-Level Security for write
@@ -1451,6 +1539,9 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
 
     let workflow: any = null;
     if (module) {
+      if (!isUserAuthorizedForModule((req as any).user, module)) {
+        return res.status(403).json({ error: 'Access denied: You do not have permission to modify records in this module' });
+      }
       const config = module.config as any;
       workflow = await getActiveWorkflowForModule(db, tenantId, module.id, config);
       
@@ -1972,6 +2063,9 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
     });
 
     if (module) {
+      if (!isUserAuthorizedForModule((req as any).user, module)) {
+        return res.status(403).json({ error: 'Access denied: You do not have permission to modify records in this module' });
+      }
       const config = module.config as any;
 
       // Enforce Field-Level Security for write
@@ -2042,6 +2136,9 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
 
     let workflow: any = null;
     if (module) {
+      if (!isUserAuthorizedForModule((req as any).user, module)) {
+        return res.status(403).json({ error: 'Access denied: You do not have permission to modify records in this module' });
+      }
       const config = module.config as any;
       workflow = await getActiveWorkflowForModule(db, tenantId, module.id, config);
       
@@ -2402,6 +2499,9 @@ router.delete('/records/:id', async (req: TenantRequest, res) => {
       where: { id },
       include: { module: true }
     });
+    if (existing && existing.module && !isUserAuthorizedForModule((req as any).user, existing.module)) {
+      return res.status(403).json({ error: 'Access denied: You do not have permission to delete records in this module' });
+    }
     if (existing) {
       const recData = (existing.data || {}) as any;
       const recordKey = recData._record_key || recData.recordKey || recData.key || recData.record_key || recData.code || `#${String(id).slice(-6)}`;
@@ -2739,6 +2839,9 @@ router.post('/nexus/execute', async (req: TenantRequest, res) => {
     if (!record) {
       return res.status(404).json({ error: 'Record not found' });
     }
+    if ((record as any).module && !isUserAuthorizedForModule((req as any).user, (record as any).module)) {
+      return res.status(403).json({ error: 'Access denied: You do not have permission to view this record' });
+    }
 
     // 2. Fetch module
     const module = await db.module.findUnique({ where: { id: moduleId } });
@@ -2969,6 +3072,9 @@ router.get('/:recordId/comments', async (req: TenantRequest, res) => {
     if (!record) {
       return res.status(404).json({ error: 'Record not found' });
     }
+    if ((record as any).module && !isUserAuthorizedForModule((req as any).user, (record as any).module)) {
+      return res.status(403).json({ error: 'Access denied: You do not have permission to view this record' });
+    }
 
     const dataObj = (record.data as Record<string, any>) || {};
     const comments = dataObj._comments || [];
@@ -2998,6 +3104,9 @@ router.post('/:recordId/comments', async (req: TenantRequest, res) => {
 
     if (!record) {
       return res.status(404).json({ error: 'Record not found' });
+    }
+    if ((record as any).module && !isUserAuthorizedForModule((req as any).user, (record as any).module)) {
+      return res.status(403).json({ error: 'Access denied: You do not have permission to view this record' });
     }
 
     const dataObj = { ...(record.data as Record<string, any> || {}) };
@@ -3056,6 +3165,9 @@ router.post('/records/:recordId/share', async (req: TenantRequest, res) => {
 
     if (!record) {
       return res.status(404).json({ error: 'Record not found' });
+    }
+    if ((record as any).module && !isUserAuthorizedForModule((req as any).user, (record as any).module)) {
+      return res.status(403).json({ error: 'Access denied: You do not have permission to view this record' });
     }
 
     const dataObj = { ...(record.data as Record<string, any> || {}) };
@@ -3148,6 +3260,284 @@ router.put('/module-versions', async (req: TenantRequest, res) => {
     res.json({ success: true, count: versions.length });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// SAVE MODULE WORKING DRAFT (Does NOT overwrite live workspace config or emit module_updated)
+router.post('/modules/:id/draft', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { id } = req.params;
+    const targetModule = await findModuleByIdOrSlug(db, tenantId, id);
+    if (!targetModule) {
+      return res.status(404).json({ error: 'Module not found' });
+    }
+    const { draftConfig, versionId, versionTag } = req.body || {};
+    if (!draftConfig || typeof draftConfig !== 'object') {
+      return res.status(400).json({ error: 'draftConfig object is required' });
+    }
+
+    const existingConfig = (targetModule.config && typeof targetModule.config === 'object')
+      ? (targetModule.config as Record<string, any>)
+      : {};
+
+    const updatedConfig = {
+      ...existingConfig,
+      __draftConfig: draftConfig,
+      __draftUpdatedAt: new Date().toISOString(),
+      ...(versionId ? { __draftVersionId: versionId } : {}),
+      ...(versionTag ? { __draftVersionTag: versionTag } : {}),
+    };
+
+    await db.module.update({
+      where: { id: targetModule.id },
+      data: {
+        config: updatedConfig as any
+      }
+    });
+
+    res.json({
+      success: true,
+      moduleId: targetModule.id,
+      draftUpdatedAt: updatedConfig.__draftUpdatedAt,
+      draftVersionId: updatedConfig.__draftVersionId,
+      draftVersionTag: updatedConfig.__draftVersionTag,
+    });
+  } catch (err: any) {
+    console.error('[DataAPI] POST /modules/:id/draft error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PROMOTE A SAVED VERSION TO LIVE PRODUCTION (Updates live workspace & broadcasts module_updated)
+router.post('/modules/:id/promote', async (req: TenantRequest, res) => {
+  try {
+    const db = req.db!;
+    const tenantId = req.tenantId!;
+    const { id } = req.params;
+    const targetModule = await findModuleByIdOrSlug(db, tenantId, id);
+    if (!targetModule) {
+      return res.status(404).json({ error: 'Module not found' });
+    }
+    const { snapshot, versionId, versionTag, syncDraft = true } = req.body || {};
+    if (!snapshot || typeof snapshot !== 'object') {
+      return res.status(400).json({ error: 'snapshot object is required' });
+    }
+
+    const existingConfig = (targetModule.config && typeof targetModule.config === 'object')
+      ? (targetModule.config as Record<string, any>)
+      : {};
+
+    const ms = snapshot.moduleSettings || {};
+    const nextName = ms.name || targetModule.name;
+    const nextCategory = ms.category || targetModule.category;
+    const nextIcon = ms.iconName || targetModule.icon;
+    const nextType = ms.type || targetModule.type;
+    const nextEnabled = ms.status !== undefined ? ms.status === 'ACTIVE' : targetModule.enabled;
+
+    const promotedConfig: Record<string, any> = {
+      ...existingConfig,
+      ...ms,
+      config: {
+        titleFieldId: ms.titleFieldId ?? existingConfig?.config?.titleFieldId,
+        subtitleFieldIds: ms.subtitleFieldIds ?? existingConfig?.config?.subtitleFieldIds,
+      },
+      layout: snapshot.layout ?? existingConfig.layout ?? [],
+      tabs: snapshot.tabs ?? existingConfig.tabs ?? [],
+      forms: snapshot.forms ?? existingConfig.forms ?? [],
+      validationRules: snapshot.validationRules ?? existingConfig.validationRules ?? [],
+      fieldSecurity: snapshot.fieldSecurity ?? existingConfig.fieldSecurity ?? {},
+      connectorMappings: snapshot.connectorMappings ?? existingConfig.connectorMappings ?? {},
+      interfaceSettings: snapshot.interfaceSettings ?? existingConfig.interfaceSettings ?? {},
+      ...(snapshot.dataPopulationRules !== undefined ? { dataPopulationRules: snapshot.dataPopulationRules } : {}),
+      ...(snapshot.workflows !== undefined ? { workflows: snapshot.workflows } : {}),
+      ...(snapshot.accessControl !== undefined ? { accessControl: snapshot.accessControl } : {}),
+      __liveVersionId: versionId || existingConfig.__liveVersionId,
+      __liveVersionTag: versionTag || existingConfig.__liveVersionTag,
+      __lastPromotedAt: new Date().toISOString(),
+    };
+
+    if (syncDraft) {
+      promotedConfig.__draftConfig = {
+        ...snapshot,
+      };
+      promotedConfig.__draftVersionId = versionId || existingConfig.__draftVersionId;
+      promotedConfig.__draftVersionTag = versionTag || existingConfig.__draftVersionTag;
+      promotedConfig.__draftUpdatedAt = new Date().toISOString();
+    }
+
+    const updatedModule = await db.module.update({
+      where: { id: targetModule.id },
+      data: {
+        name: nextName,
+        category: nextCategory,
+        icon: nextIcon,
+        type: nextType,
+        enabled: nextEnabled,
+        config: promotedConfig as any
+      }
+    });
+
+    const configData = updatedModule.config as any;
+    await syncModuleBuilderEntities(db, tenantId, updatedModule.id, updatedModule.name, configData);
+
+    const formatted = {
+      ...configData,
+      id: updatedModule.id,
+      templateId: configData.id,
+      name: updatedModule.name,
+      createdAt: updatedModule.createdAt,
+    };
+
+    emitTenantUpdate(tenantId, 'module_updated', formatted);
+
+    res.json({
+      success: true,
+      module: formatted,
+      liveVersionId: promotedConfig.__liveVersionId,
+      liveVersionTag: promotedConfig.__liveVersionTag,
+    });
+  } catch (err: any) {
+    console.error('[DataAPI] POST /modules/:id/promote error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// AI-GENERATED VERSION COMMIT & RELEASE NOTES
+router.post('/modules/:id/generate-commit', async (req: TenantRequest, res) => {
+  const {
+    moduleName = 'Module',
+    fromVersion = 'v1.0',
+    toVersion = 'v1.1',
+    mode = 'commit',
+    diffs = [],
+    sectionChanges = [],
+    isRollback = false,
+    rollbackTargetVersion = ''
+  } = req.body || {};
+
+  const buildDeterministicFallback = () => {
+    if (isRollback && rollbackTargetVersion) {
+      return {
+        title: `Rollback ${moduleName} to ${rollbackTargetVersion}`,
+        summary: [
+          `Restored module schema and configuration to ${rollbackTargetVersion}.`,
+          diffs.length > 0 ? `Reverted ${diffs.length} field change${diffs.length === 1 ? '' : 's'} cleanly.` : 'Configuration aligned with target snapshot.'
+        ],
+        releaseNotes: `Rolled back ${moduleName} from ${fromVersion} to ${rollbackTargetVersion}.`,
+        aiGenerated: false
+      };
+    }
+
+    const added = diffs.filter((d: any) => d.type === 'added');
+    const modified = diffs.filter((d: any) => d.type === 'modified' || d.type === 'renamed');
+    const removed = diffs.filter((d: any) => d.type === 'removed');
+
+    const titleParts: string[] = [];
+    if (added.length === 1) titleParts.push(`Add ${added[0].fieldLabel || added[0].fieldName}`);
+    else if (added.length > 1) titleParts.push(`Add ${added.length} fields`);
+    if (modified.length === 1) titleParts.push(`update ${modified[0].fieldLabel || modified[0].fieldName}`);
+    else if (modified.length > 1) titleParts.push(`update ${modified.length} fields`);
+    if (removed.length === 1) titleParts.push(`remove ${removed[0].fieldLabel || removed[0].fieldName}`);
+    else if (removed.length > 1) titleParts.push(`remove ${removed.length} fields`);
+    if (titleParts.length === 0 && sectionChanges.length > 0) {
+      titleParts.push(`Update ${sectionChanges.slice(0, 2).join(' & ')}`);
+    }
+
+    const rawTitle = titleParts.length > 0 ? titleParts.join(', ') : `Save ${moduleName} configuration`;
+    const title = rawTitle.charAt(0).toUpperCase() + rawTitle.slice(1);
+
+    const summary: string[] = [];
+    if (added.length > 0) {
+      summary.push(`Added ${added.map((d: any) => d.fieldLabel || d.fieldName).slice(0, 4).join(', ')}${added.length > 4 ? ` and ${added.length - 4} more` : ''}.`);
+    }
+    if (modified.length > 0) {
+      summary.push(`Updated ${modified.map((d: any) => `${d.fieldLabel || d.fieldName}${d.details ? ` (${d.details})` : ''}`).slice(0, 3).join('; ')}.`);
+    }
+    if (removed.length > 0) {
+      summary.push(`Removed ${removed.map((d: any) => d.fieldLabel || d.fieldName).slice(0, 4).join(', ')}.`);
+    }
+    if (sectionChanges.length > 0) {
+      summary.push(`Updated module configuration: ${sectionChanges.join(', ')}.`);
+    }
+    if (summary.length === 0) {
+      summary.push(`Saved layout and configuration snapshot for ${moduleName}.`);
+    }
+
+    return {
+      title: title.slice(0, 72),
+      summary,
+      releaseNotes: summary.join('\n'),
+      aiGenerated: false
+    };
+  };
+
+  try {
+    const tenantId = req.tenantId!;
+    const client = await resolveTenantAIClient(tenantId, 'fast');
+    if (!client || !client.apiKey) {
+      return res.json(buildDeterministicFallback());
+    }
+
+    const diffLines = [
+      ...diffs.slice(0, 30).map((d: any) => `- [${String(d.type || 'changed').toUpperCase()}] ${d.fieldLabel || d.fieldName} (${d.fieldName || ''}): ${d.details || ''}`),
+      ...sectionChanges.slice(0, 15).map((s: string) => `- [CONFIG] ${s}`)
+    ].join('\n') || '- Minor layout or metadata update';
+
+    const systemInstruction = `You are an enterprise release engineer writing concise, specific, Google-style version commit messages and release notes for a low-code Module Builder.
+Rules:
+- Name the EXACT fields, groups, forms, validation rules, or workflow stages that were added, modified, renamed, or removed.
+- NEVER write vague filler like "Update internal module identity settings" or "Refine configuration" unless an explicit change was listed in the diff.
+- Only describe changes that actually appear in the "Detected changes" list. Do not invent or embellish changes.
+- Be clear, direct, and human-readable for business admins (no SQL jargon, no AST jargon, no emojis).
+- Return ONLY valid JSON with keys: "title" (string, max 65 chars, specific imperative tense like "Add Budget field to Request Details and rename Description"), "summary" (array of 1 to 5 concise plain-English bullet strings naming the exact items changed, without leading dashes), and "releaseNotes" (a short 1-2 sentence plain-English summary).`;
+
+    const prompt = `Module: ${moduleName}
+Mode: ${mode === 'release' ? 'Production Release Notes' : 'Version Save Commit'}
+Transition: ${fromVersion} -> ${toVersion}
+${isRollback ? `This is a ROLLBACK to ${rollbackTargetVersion}.` : ''}
+Detected changes:
+${diffLines}
+
+Respond with JSON only.`;
+
+    const aiResponse = await executeAICompletion(client, {
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      systemInstruction,
+      config: { temperature: 0.2, maxOutputTokens: 350 }
+    });
+
+    const rawText = aiResponse?.text
+      || aiResponse?.candidates?.[0]?.content?.parts?.map((p: any) => p.text || '').join('')
+      || '';
+
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return res.json(buildDeterministicFallback());
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    const fallback = buildDeterministicFallback();
+    const title = typeof parsed.title === 'string' && parsed.title.trim()
+      ? parsed.title.trim().slice(0, 72)
+      : fallback.title;
+    const summary = Array.isArray(parsed.summary) && parsed.summary.length > 0
+      ? parsed.summary.filter((s: any) => typeof s === 'string' && s.trim()).slice(0, 5)
+      : fallback.summary;
+    const releaseNotes = typeof parsed.releaseNotes === 'string' && parsed.releaseNotes.trim()
+      ? parsed.releaseNotes.trim()
+      : summary.join(' ');
+
+    return res.json({
+      title,
+      summary,
+      releaseNotes,
+      aiGenerated: true
+    });
+  } catch (err: any) {
+    console.warn('[DataAPI] AI commit generation fallback:', err?.message || err);
+    return res.json(buildDeterministicFallback());
   }
 });
 

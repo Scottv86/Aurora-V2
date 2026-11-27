@@ -255,7 +255,11 @@ export interface ModuleField {
 }
 
 
-export type ModuleType = 'RECORD' | 'WORK_ITEM' | 'REGISTRY' | 'LOG' | 'FINANCIAL';
+// Primary module classifications:
+// 'REGISTRY' (long-term master entities, objects, accounts)
+// 'WORK_ITEM' (short-term transactional lifecycle records, requests, tasks)
+// Legacy types ('RECORD', 'LOG', 'FINANCIAL') retained for backward-compatibility
+export type ModuleType = 'REGISTRY' | 'WORK_ITEM' | 'RECORD' | 'LOG' | 'FINANCIAL';
 
 export interface LookupFilter {
   id: string;

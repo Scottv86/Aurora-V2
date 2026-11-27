@@ -29,19 +29,15 @@ export const CommandPalette = ({ isOpen, onClose, onSelectBlock, onAction, tabs:
   }));
 
   const navigationActions = [
-    { id: 'tab:details', label: 'Go to Setup', icon: Settings, shortcut: 'G D', type: 'nav' },
-    { id: 'tab:schema', label: 'Go to Schema', icon: Play, shortcut: 'G S', type: 'nav' },
-    { id: 'tab:builder', label: 'Go to Interface', icon: Zap, shortcut: 'G B', type: 'nav' },
+    { id: 'tab:details', label: 'Go to Setup', icon: Settings, shortcut: 'G S', type: 'nav' },
+    { id: 'tab:schema', label: 'Go to Setup → Schema', icon: Settings, shortcut: 'G D', type: 'nav' },
+    { id: 'tab:security', label: 'Go to Setup → Security', icon: ShieldCheck, shortcut: 'G P', type: 'nav' },
+    { id: 'tab:builder', label: 'Go to Interface', icon: Zap, shortcut: 'G I', type: 'nav' },
+    { id: 'tab:forms', label: 'Go to Forms', icon: Play, shortcut: 'G F', type: 'nav' },
     { id: 'tab:workflow', label: 'Go to Workflow', icon: Play, shortcut: 'G W', type: 'nav' },
     { id: 'tab:validations', label: 'Go to Rules', icon: ShieldCheck, shortcut: 'G R', type: 'nav' },
-    { id: 'tab:automation', label: 'Go to Automation', icon: Zap, shortcut: 'G A', type: 'nav' },
-    { id: 'tab:experience', label: 'Go to Experience', icon: Play, shortcut: 'G E', type: 'nav' },
-    { id: 'tab:security', label: 'Go to Security', icon: Play, shortcut: 'G SEC', type: 'nav' },
-    { id: 'tab:localization', label: 'Go to Localization', icon: Play, shortcut: 'G LOC', type: 'nav' },
-    { id: 'tab:map', label: 'Go to Dependency Map', icon: Play, shortcut: 'G M', type: 'nav' },
-    { id: 'tab:assets', label: 'Go to Assets', icon: Play, shortcut: 'G AST', type: 'nav' },
-    { id: 'tab:forms', label: 'Go to Forms', icon: Play, shortcut: 'G F', type: 'nav' },
-    { id: 'tab:deployment', label: 'Go to Deployment', icon: Play, shortcut: 'G P', type: 'nav' },
+    { id: 'tab:automation', label: 'Go to Automations', icon: Zap, shortcut: 'G A', type: 'nav' },
+    { id: 'tab:connectors', label: 'Go to Integrations', icon: Zap, shortcut: 'G C', type: 'nav' },
   ];
 
   const systemActions = [

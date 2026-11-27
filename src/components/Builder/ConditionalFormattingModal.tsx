@@ -1,20 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  X, 
-  Layers, 
-  Palette, 
-  Check, 
-  AlertTriangle, 
-  CheckCircle2, 
-  Clock, 
-  Flame, 
-  ShieldAlert, 
-  Star, 
-  Zap, 
-  XCircle, 
+import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { motion, AnimatePresence } from 'motion/react';
+import {
+  X,
+  Layers,
+  Palette,
+  Check,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  Flame,
+  ShieldAlert,
+  Star,
+  Zap,
+  XCircle,
   Info,
   Sliders,
-  Table as TableIcon
+  Table as TableIcon,
+  ChevronDown,
+  GitBranch
 } from 'lucide-react';
 import { cn, PRESET_FORMATTING_MAP } from '../../lib/utils';
 import { ConditionalFormattingRule, FormattingPreset, VisibilityRule } from '../../types/platform';
@@ -35,12 +39,12 @@ export interface ConditionalFormattingModalProps {
 const AVAILABLE_ICONS = [
   { name: 'AlertTriangle', label: 'Alert', icon: AlertTriangle },
   { name: 'CheckCircle2', label: 'Check', icon: CheckCircle2 },
-  { name: 'Flame', label: 'Flame / Hot', icon: Flame },
-  { name: 'ShieldAlert', label: 'Shield Warning', icon: ShieldAlert },
-  { name: 'Clock', label: 'Time / Clock', icon: Clock },
+  { name: 'Flame', label: 'Urgent', icon: Flame },
+  { name: 'ShieldAlert', label: 'Warning', icon: ShieldAlert },
+  { name: 'Clock', label: 'Overdue', icon: Clock },
   { name: 'Star', label: 'Star', icon: Star },
-  { name: 'Zap', label: 'Lightning', icon: Zap },
-  { name: 'XCircle', label: 'Stop / Error', icon: XCircle },
+  { name: 'Zap', label: 'Active', icon: Zap },
+  { name: 'XCircle', label: 'Error', icon: XCircle },
   { name: 'Info', label: 'Info', icon: Info },
 ];
 
@@ -53,15 +57,17 @@ export const ConditionalFormattingModal: React.FC<ConditionalFormattingModalProp
   tabs = [],
   allowedTargetTypes = ['row', 'column'],
   availableColumns = [],
-  title = "Conditional Formatting Rule"
+  title = 'Conditional Formatting'
 }) => {
   const [name, setName] = useState(initialRule?.name || '');
   const [targetType, setTargetType] = useState<'row' | 'column' | 'field'>(
     initialRule?.targetType || allowedTargetTypes[0] || 'row'
   );
-  const [targetId, setTargetId] = useState(initialRule?.targetId || (availableColumns[0]?.id || availableFields[0]?.id || ''));
+  const [targetId, setTargetId] = useState(
+    initialRule?.targetId || availableColumns[0]?.id || availableFields[0]?.id || ''
+  );
   const [enabled, setEnabled] = useState(initialRule?.enabled ?? true);
-  
+
   // Style states
   const [preset, setPreset] = useState<FormattingPreset>(initialRule?.style?.preset || 'danger');
   const [isBold, setIsBold] = useState(initialRule?.style?.isBold ?? false);
@@ -69,12 +75,14 @@ export const ConditionalFormattingModal: React.FC<ConditionalFormattingModalProp
   const [isStrikethrough, setIsStrikethrough] = useState(initialRule?.style?.isStrikethrough ?? false);
   const [selectedIcon, setSelectedIcon] = useState<string | undefined>(initialRule?.style?.iconName);
   const [badgeLabel, setBadgeLabel] = useState(initialRule?.style?.badgeLabel || '');
-  
+
+  // Custom column picker state
+  const [isColPickerOpen, setIsColPickerOpen] = useState(false);
+  const colPickerRef = useRef<HTMLDivElement>(null);
+
   // Condition state
   const [condition, setCondition] = useState<VisibilityRule>(() => {
-    if (initialRule?.condition) {
-      return initialRule.condition;
-    }
+    if (initialRule?.condition) return initialRule.condition;
     return {
       id: `rule-${Math.random().toString(36).substring(2, 9)}`,
       type: 'rule',
@@ -87,35 +95,65 @@ export const ConditionalFormattingModal: React.FC<ConditionalFormattingModalProp
 
   const [showConditionEditor, setShowConditionEditor] = useState(false);
 
-  // Sync initial rule when modal opens or initialRule changes
+  // Sync initial rule when modal opens
   useEffect(() => {
-    if (isOpen) {
-      setName(initialRule?.name || '');
-      setTargetType(initialRule?.targetType || allowedTargetTypes[0] || 'row');
-      setTargetId(initialRule?.targetId || (availableColumns[0]?.id || availableFields[0]?.id || ''));
-      setEnabled(initialRule?.enabled ?? true);
-      setPreset(initialRule?.style?.preset || 'danger');
-      setIsBold(initialRule?.style?.isBold ?? false);
-      setIsItalic(initialRule?.style?.isItalic ?? false);
-      setIsStrikethrough(initialRule?.style?.isStrikethrough ?? false);
-      setSelectedIcon(initialRule?.style?.iconName);
-      setBadgeLabel(initialRule?.style?.badgeLabel || '');
-      if (initialRule?.condition) {
-        setCondition(initialRule.condition);
-      } else {
-        setCondition({
-          id: `rule-${Math.random().toString(36).substring(2, 9)}`,
-          type: 'rule',
-          fieldId: availableFields[0]?.id || 'status',
-          operator: 'equals',
-          value: '',
-          valueType: 'literal'
-        });
-      }
+    if (!isOpen) return;
+    setName(initialRule?.name || '');
+    setTargetType(initialRule?.targetType || allowedTargetTypes[0] || 'row');
+    setTargetId(initialRule?.targetId || availableColumns[0]?.id || availableFields[0]?.id || '');
+    setEnabled(initialRule?.enabled ?? true);
+    setPreset(initialRule?.style?.preset || 'danger');
+    setIsBold(initialRule?.style?.isBold ?? false);
+    setIsItalic(initialRule?.style?.isItalic ?? false);
+    setIsStrikethrough(initialRule?.style?.isStrikethrough ?? false);
+    setSelectedIcon(initialRule?.style?.iconName);
+    setBadgeLabel(initialRule?.style?.badgeLabel || '');
+    setIsColPickerOpen(false);
+    if (initialRule?.condition) {
+      setCondition(initialRule.condition);
+    } else {
+      setCondition({
+        id: `rule-${Math.random().toString(36).substring(2, 9)}`,
+        type: 'rule',
+        fieldId: availableFields[0]?.id || 'status',
+        operator: 'equals',
+        value: '',
+        valueType: 'literal'
+      });
     }
   }, [isOpen, initialRule]);
 
+  // Escape & click-outside handlers
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isColPickerOpen) setIsColPickerOpen(false);
+        else if (!showConditionEditor) onClose();
+      }
+    };
+    const handleOutside = (e: MouseEvent) => {
+      if (colPickerRef.current && !colPickerRef.current.contains(e.target as Node)) {
+        setIsColPickerOpen(false);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('mousedown', handleOutside);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('mousedown', handleOutside);
+    };
+  }, [isOpen, isColPickerOpen, showConditionEditor, onClose]);
+
   const activePresetConfig = PRESET_FORMATTING_MAP[preset] || PRESET_FORMATTING_MAP.danger;
+
+  const resolveFieldLabel = (fieldId?: string) => {
+    if (!fieldId) return 'Field';
+    const found = availableFields.find(f => f.id === fieldId);
+    return found?.label || fieldId;
+  };
+
+  const selectedColumn = availableColumns.find(c => c.id === targetId) || availableColumns[0];
 
   const handleSave = () => {
     const rule: ConditionalFormattingRule = {
@@ -138,374 +176,456 @@ export const ConditionalFormattingModal: React.FC<ConditionalFormattingModalProp
     onClose();
   };
 
-  if (!isOpen) return null;
+  if (typeof document === 'undefined') return null;
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-950/30">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center border border-indigo-500/20">
-              <Palette size={18} />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-zinc-900 dark:text-white">{title}</h2>
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Configure trigger conditions and dynamic styling</p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl transition-colors"
-          >
-            <X size={16} />
-          </button>
-        </div>
+  return createPortal(
+    <>
+      <AnimatePresence>
+        {isOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            {/* Calm Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.16 }}
+              onClick={onClose}
+              className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
+            />
 
-        {/* Content Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar text-xs">
-          
-          {/* Rule Name & Target Scope */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300">Rule Name (Optional)</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => e.stopPropagation()}
-                placeholder="e.g. Overdue Case Highlight"
-                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white outline-none focus:border-indigo-500 transition-colors"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300">Target Scope</label>
-              <div className="flex gap-2">
-                {allowedTargetTypes.includes('row') && (
-                  <button
-                    type="button"
-                    onClick={() => setTargetType('row')}
-                    className={cn(
-                      "flex-1 py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all",
-                      targetType === 'row'
-                        ? "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-500 text-indigo-600 dark:text-indigo-400 shadow-sm"
-                        : "border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 text-zinc-600 dark:text-zinc-400"
-                    )}
-                  >
-                    <TableIcon size={13} />
-                    Entire Row
-                  </button>
-                )}
-
-                {allowedTargetTypes.includes('column') && (
-                  <button
-                    type="button"
-                    onClick={() => setTargetType('column')}
-                    className={cn(
-                      "flex-1 py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all",
-                      targetType === 'column'
-                        ? "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-500 text-indigo-600 dark:text-indigo-400 shadow-sm"
-                        : "border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 text-zinc-600 dark:text-zinc-400"
-                    )}
-                  >
-                    <Layers size={13} />
-                    Specific Column
-                  </button>
-                )}
-
-                {allowedTargetTypes.includes('field') && (
-                  <button
-                    type="button"
-                    onClick={() => setTargetType('field')}
-                    className={cn(
-                      "flex-1 py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all",
-                      targetType === 'field'
-                        ? "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-500 text-indigo-600 dark:text-indigo-400 shadow-sm"
-                        : "border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 text-zinc-600 dark:text-zinc-400"
-                    )}
-                  >
-                    <Sliders size={13} />
-                    Current Field
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Target Column Selector if Column Scope */}
-          {targetType === 'column' && availableColumns.length > 0 && (
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300">Target Column</label>
-              <select
-                value={targetId}
-                onChange={(e) => setTargetId(e.target.value)}
-                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white outline-none focus:border-indigo-500"
-              >
-                {availableColumns.map(col => (
-                  <option key={col.id} value={col.id}>
-                    {col.label} {col.group ? `(${col.group})` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Condition Trigger Summary / Trigger Action */}
-          <div className="bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200 dark:border-zinc-800/80 rounded-2xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-indigo-500" />
-                <span className="font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider text-[10px]">
-                  Condition Logic
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowConditionEditor(true)}
-                className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
-              >
-                Configure Condition →
-              </button>
-            </div>
-
-            <div className="p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl flex items-center justify-between">
-              <div className="space-y-0.5">
-                <span className="text-zinc-500 text-[10px] block">Trigger when condition is met:</span>
-                <span className="font-semibold text-zinc-800 dark:text-zinc-200 font-mono text-[11px]">
-                  {condition.type === 'group' 
-                    ? `Group (${condition.rules?.length || 0} conditions, ${condition.logicalOperator || 'AND'})`
-                    : `${condition.fieldId || 'Field'} ${condition.operator || 'equals'} "${condition.value ?? ''}"`
-                  }
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowConditionEditor(true)}
-                className="px-2.5 py-1 text-[10px] font-bold bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-lg transition-colors cursor-pointer"
-              >
-                Edit Logic
-              </button>
-            </div>
-          </div>
-
-          {/* Style Configuration Section */}
-          <div className="space-y-4">
-            <h3 className="text-xs font-bold text-zinc-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-              <Palette size={14} className="text-indigo-500" />
-              Style & Appearance
-            </h3>
-
-            {/* Color Presets */}
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">Color Palette Preset</label>
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                {(['danger', 'warning', 'success', 'info', 'purple', 'slate'] as FormattingPreset[]).map((pKey) => {
-                  const cfg = PRESET_FORMATTING_MAP[pKey];
-                  const isSel = preset === pKey;
-                  return (
-                    <button
-                      key={pKey}
-                      type="button"
-                      onClick={() => setPreset(pKey)}
-                      className={cn(
-                        "p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1.5 cursor-pointer relative",
-                        isSel 
-                          ? "ring-2 ring-indigo-500 border-indigo-500 shadow-sm" 
-                          : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700"
-                      )}
-                    >
-                      <div className={cn("w-5 h-5 rounded-full border flex items-center justify-center", cfg.cellBadgeClass)}>
-                        {isSel && <Check size={11} className={cfg.iconColor} />}
-                      </div>
-                      <span className="text-[10px] font-bold capitalize text-zinc-700 dark:text-zinc-300">
-                        {pKey}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Typography & Badge Customization */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              
-              {/* Typography toggles */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">Text Style</label>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsBold(!isBold)}
-                    className={cn(
-                      "flex-1 py-2 px-3 rounded-xl border font-bold text-xs transition-colors cursor-pointer",
-                      isBold 
-                        ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 border-transparent shadow-sm" 
-                        : "border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                    )}
-                  >
-                    B
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsItalic(!isItalic)}
-                    className={cn(
-                      "flex-1 py-2 px-3 rounded-xl border italic font-serif text-xs transition-colors cursor-pointer",
-                      isItalic 
-                        ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 border-transparent shadow-sm" 
-                        : "border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                    )}
-                  >
-                    I
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsStrikethrough(!isStrikethrough)}
-                    className={cn(
-                      "flex-1 py-2 px-3 rounded-xl border line-through text-xs transition-colors cursor-pointer",
-                      isStrikethrough 
-                        ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 border-transparent shadow-sm" 
-                        : "border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                    )}
-                  >
-                    S
-                  </button>
+            {/* Google-Style Modal */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.97, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.97, y: 8 }}
+              transition={{ duration: 0.16, ease: 'easeOut' }}
+              className="relative z-10 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh]"
+            >
+              {/* Header */}
+              <div className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                    <Palette size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-sm font-semibold text-zinc-900 dark:text-white truncate">{title}</h2>
+                    <p className="text-xs text-zinc-500 truncate">
+                      Highlight rows, columns, or fields dynamically when conditions match
+                    </p>
+                  </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
+                  title="Close (Esc)"
+                >
+                  <X size={16} />
+                </button>
               </div>
 
-              {/* Custom Badge Pill Label */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">Custom Badge Tag (Optional)</label>
-                <input
-                  type="text"
-                  value={badgeLabel}
-                  onChange={(e) => setBadgeLabel(e.target.value)}
-                  onKeyDown={(e) => e.stopPropagation()}
-                  placeholder="e.g. OVERDUE, HIGH PRIORITY"
-                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white outline-none focus:border-indigo-500"
-                />
-              </div>
-            </div>
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar">
+                {/* Rule Name & Target Scope */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 block">
+                      Rule name <span className="text-zinc-400 font-normal">(optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      placeholder="e.g. Overdue request highlight"
+                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                    />
+                  </div>
 
-            {/* Status Icon Picker */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400">Status Icon Indicator</label>
-                {selectedIcon && (
-                  <button
-                    type="button"
-                    onClick={() => setSelectedIcon(undefined)}
-                    className="text-[10px] text-zinc-400 hover:text-rose-500 transition-colors cursor-pointer"
-                  >
-                    Clear icon
-                  </button>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {AVAILABLE_ICONS.map((ico) => {
-                  const IconComp = ico.icon;
-                  const isSel = selectedIcon === ico.name;
-                  return (
-                    <button
-                      key={ico.name}
-                      type="button"
-                      onClick={() => setSelectedIcon(isSel ? undefined : ico.name)}
-                      className={cn(
-                        "p-2 rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer",
-                        isSel
-                          ? "bg-indigo-500 text-white border-indigo-400 shadow-sm"
-                          : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700"
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 block">
+                      Apply formatting to
+                    </label>
+                    <div className="flex bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-xl">
+                      {allowedTargetTypes.includes('row') && (
+                        <button
+                          type="button"
+                          onClick={() => setTargetType('row')}
+                          className={cn(
+                            'flex-1 py-1.5 px-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer',
+                            targetType === 'row'
+                              ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs'
+                              : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                          )}
+                        >
+                          <TableIcon size={13} />
+                          <span>Row</span>
+                        </button>
                       )}
-                      title={ico.label}
-                    >
-                      <IconComp size={14} />
-                      <span className="text-[10px] font-medium">{ico.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Live Visual Preview */}
-            <div className="bg-zinc-100 dark:bg-zinc-950 rounded-2xl p-4 border border-zinc-200 dark:border-zinc-800 space-y-2">
-              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest block">Live Visual Preview</span>
-              <div className={cn(
-                "p-3 rounded-xl border transition-all flex items-center justify-between",
-                targetType === 'row' ? activePresetConfig.rowClass : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800"
-              )}>
-                <div className="flex items-center gap-2.5">
-                  {selectedIcon && (
-                    <div className={cn("shrink-0", activePresetConfig.iconColor)}>
-                      {React.createElement(
-                        AVAILABLE_ICONS.find(i => i.name === selectedIcon)?.icon || AlertTriangle,
-                        { size: 16 }
+                      {allowedTargetTypes.includes('column') && (
+                        <button
+                          type="button"
+                          onClick={() => setTargetType('column')}
+                          className={cn(
+                            'flex-1 py-1.5 px-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer',
+                            targetType === 'column'
+                              ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs'
+                              : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                          )}
+                        >
+                          <Layers size={13} />
+                          <span>Column</span>
+                        </button>
+                      )}
+                      {allowedTargetTypes.includes('field') && (
+                        <button
+                          type="button"
+                          onClick={() => setTargetType('field')}
+                          className={cn(
+                            'flex-1 py-1.5 px-2.5 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer',
+                            targetType === 'field'
+                              ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs'
+                              : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                          )}
+                        >
+                          <Sliders size={13} />
+                          <span>Field</span>
+                        </button>
                       )}
                     </div>
-                  )}
-                  <span className={cn(
-                    "text-xs",
-                    targetType === 'row' || targetType === 'field' ? activePresetConfig.textClass : "text-zinc-800 dark:text-zinc-200",
-                    isBold && "font-bold",
-                    isItalic && "italic",
-                    isStrikethrough && "line-through opacity-70"
-                  )}>
-                    Sample Record / Item Title
-                  </span>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  {badgeLabel && (
-                    <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider", activePresetConfig.cellBadgeClass)}>
-                      {badgeLabel}
+                {/* Custom Target Column Combobox */}
+                {targetType === 'column' && availableColumns.length > 0 && (
+                  <div className="space-y-1.5 relative" ref={colPickerRef}>
+                    <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 block">
+                      Target column
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsColPickerOpen(v => !v)}
+                      className={cn(
+                        'w-full px-3.5 py-2 rounded-xl border bg-white dark:bg-zinc-950 text-left flex items-center justify-between gap-2 text-xs font-medium text-zinc-900 dark:text-white transition-all cursor-pointer',
+                        isColPickerOpen
+                          ? 'border-indigo-500 ring-2 ring-indigo-500/20'
+                          : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600'
+                      )}
+                    >
+                      <span className="truncate">
+                        {selectedColumn?.label || 'Select column'}
+                        {selectedColumn?.group && (
+                          <span className="text-zinc-400 font-normal ml-1.5">({selectedColumn.group})</span>
+                        )}
+                      </span>
+                      <ChevronDown
+                        size={14}
+                        className={cn('text-zinc-400 shrink-0 transition-transform', isColPickerOpen && 'rotate-180')}
+                      />
+                    </button>
+
+                    {isColPickerOpen && (
+                      <div className="absolute left-0 right-0 mt-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-xl py-1 z-50 max-h-52 overflow-y-auto custom-scrollbar">
+                        {availableColumns.map(col => (
+                          <button
+                            key={col.id}
+                            type="button"
+                            onClick={() => {
+                              setTargetId(col.id);
+                              setIsColPickerOpen(false);
+                            }}
+                            className={cn(
+                              'w-full px-3.5 py-2 text-left text-xs font-medium flex items-center justify-between transition-colors cursor-pointer',
+                              targetId === col.id
+                                ? 'bg-indigo-50/70 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                                : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                            )}
+                          >
+                            <span className="truncate">
+                              {col.label}
+                              {col.group && <span className="text-zinc-400 font-normal ml-1.5">({col.group})</span>}
+                            </span>
+                            {targetId === col.id && <Check size={13} className="shrink-0" />}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Condition Trigger Card */}
+                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-950/40 p-4 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
+                      <GitBranch size={13} className="text-indigo-500" />
+                      <span>When condition matches</span>
                     </span>
-                  )}
-                  <span className={cn(
-                    "px-2 py-0.5 rounded-full text-[10px] font-bold border",
-                    targetType === 'column' ? activePresetConfig.cellBadgeClass : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700"
-                  )}>
-                    {targetType === 'column' ? 'Formatted Cell' : 'Normal Cell'}
-                  </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowConditionEditor(true)}
+                      className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                    >
+                      Edit condition
+                    </button>
+                  </div>
+
+                  <div
+                    onClick={() => setShowConditionEditor(true)}
+                    className="px-3.5 py-2.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-indigo-300 dark:hover:border-indigo-500/40 rounded-xl flex items-center justify-between gap-3 cursor-pointer transition-colors"
+                  >
+                    <span className="text-xs text-zinc-800 dark:text-zinc-200 truncate">
+                      {condition.type === 'group' ? (
+                        <>
+                          Match <strong className="font-semibold">{condition.logicalOperator || 'AND'}</strong> group ({condition.rules?.length || 0} conditions)
+                        </>
+                      ) : (
+                        <>
+                          <strong className="font-semibold">{resolveFieldLabel(condition.fieldId)}</strong>{' '}
+                          <span className="text-zinc-500">{String(condition.operator || 'equals').replace(/_/g, ' ')}</span>{' '}
+                          {condition.value !== undefined && condition.value !== '' && (
+                            <span className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200">
+                              {String(condition.value)}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </span>
+                    <span className="text-[11px] font-medium text-zinc-400 shrink-0">Configure →</span>
+                  </div>
+                </div>
+
+                {/* Appearance Section */}
+                <div className="space-y-4">
+                  {/* Color Presets */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 block">
+                      Color theme
+                    </label>
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                      {(['danger', 'warning', 'success', 'info', 'purple', 'slate'] as FormattingPreset[]).map((pKey) => {
+                        const cfg = PRESET_FORMATTING_MAP[pKey];
+                        const isSel = preset === pKey;
+                        return (
+                          <button
+                            key={pKey}
+                            type="button"
+                            onClick={() => setPreset(pKey)}
+                            className={cn(
+                              'py-2 px-2 rounded-xl border text-center transition-all flex flex-col items-center gap-1.5 cursor-pointer',
+                              isSel
+                                ? 'ring-2 ring-indigo-500/30 border-indigo-500 bg-indigo-50/30 dark:bg-indigo-500/10'
+                                : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900'
+                            )}
+                          >
+                            <div className={cn('w-5 h-5 rounded-full border flex items-center justify-center', cfg.cellBadgeClass)}>
+                              {isSel && <Check size={11} className={cfg.iconColor} />}
+                            </div>
+                            <span className="text-[11px] font-medium capitalize text-zinc-700 dark:text-zinc-300">
+                              {pKey}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Text Style & Badge Label */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 block">
+                        Text emphasis
+                      </label>
+                      <div className="flex bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-xl">
+                        <button
+                          type="button"
+                          onClick={() => setIsBold(!isBold)}
+                          className={cn(
+                            'flex-1 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer',
+                            isBold
+                              ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs'
+                              : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                          )}
+                        >
+                          B
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsItalic(!isItalic)}
+                          className={cn(
+                            'flex-1 py-1.5 rounded-lg italic font-serif text-xs transition-all cursor-pointer',
+                            isItalic
+                              ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs'
+                              : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                          )}
+                        >
+                          I
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsStrikethrough(!isStrikethrough)}
+                          className={cn(
+                            'flex-1 py-1.5 rounded-lg line-through text-xs transition-all cursor-pointer',
+                            isStrikethrough
+                              ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white shadow-xs'
+                              : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                          )}
+                        >
+                          S
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300 block">
+                        Badge pill <span className="text-zinc-400 font-normal">(optional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={badgeLabel}
+                        onChange={(e) => setBadgeLabel(e.target.value)}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        placeholder="e.g. Overdue, High Priority"
+                        className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3 py-1.5 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Status Icon Picker */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                        Status icon <span className="text-zinc-400 font-normal">(optional)</span>
+                      </label>
+                      {selectedIcon && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedIcon(undefined)}
+                          className="text-[11px] font-medium text-zinc-400 hover:text-rose-500 transition-colors cursor-pointer"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {AVAILABLE_ICONS.map((ico) => {
+                        const IconComp = ico.icon;
+                        const isSel = selectedIcon === ico.name;
+                        return (
+                          <button
+                            key={ico.name}
+                            type="button"
+                            onClick={() => setSelectedIcon(isSel ? undefined : ico.name)}
+                            className={cn(
+                              'px-2.5 py-1.5 rounded-lg border transition-colors flex items-center gap-1.5 text-xs font-medium cursor-pointer',
+                              isSel
+                                ? 'bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-300 dark:border-indigo-500/40'
+                                : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                            )}
+                          >
+                            <IconComp size={13} />
+                            <span>{ico.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Live Preview */}
+                  <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-950/50 p-3.5 space-y-2">
+                    <span className="text-[11px] font-medium text-zinc-500 block">Live preview</span>
+                    <div
+                      className={cn(
+                        'px-3.5 py-2.5 rounded-xl border transition-all flex items-center justify-between',
+                        targetType === 'row'
+                          ? activePresetConfig.rowClass
+                          : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800'
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        {selectedIcon && (
+                          <div className={cn('shrink-0', activePresetConfig.iconColor)}>
+                            {React.createElement(
+                              AVAILABLE_ICONS.find(i => i.name === selectedIcon)?.icon || AlertTriangle,
+                              { size: 15 }
+                            )}
+                          </div>
+                        )}
+                        <span
+                          className={cn(
+                            'text-xs',
+                            targetType === 'row' || targetType === 'field'
+                              ? activePresetConfig.textClass
+                              : 'text-zinc-800 dark:text-zinc-200',
+                            isBold && 'font-bold',
+                            isItalic && 'italic',
+                            isStrikethrough && 'line-through opacity-70'
+                          )}
+                        >
+                          Sample Record Title
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        {badgeLabel && (
+                          <span
+                            className={cn(
+                              'px-2 py-0.5 rounded-full text-[10px] font-semibold',
+                              activePresetConfig.cellBadgeClass
+                            )}
+                          >
+                            {badgeLabel}
+                          </span>
+                        )}
+                        <span
+                          className={cn(
+                            'px-2 py-0.5 rounded-full text-[10px] font-medium border',
+                            targetType === 'column'
+                              ? activePresetConfig.cellBadgeClass
+                              : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700'
+                          )}
+                        >
+                          {targetType === 'column' ? 'Formatted cell' : 'Standard cell'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
 
+              {/* Footer */}
+              <div className="px-6 py-3.5 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-900/50 shrink-0">
+                <label className="flex items-center gap-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={enabled}
+                    onChange={(e) => setEnabled(e.target.checked)}
+                    className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span>Rule active</span>
+                </label>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-3.5 py-2 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    className="px-4 py-2 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Check size={14} />
+                    <span>Save Rule</span>
+                  </button>
+                </div>
+              </div>
+            </motion.div>
           </div>
-
-        </div>
-
-        {/* Footer Actions */}
-        <div className="px-6 py-4 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-50/50 dark:bg-zinc-950/30">
-          <label className="flex items-center gap-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={enabled}
-              onChange={(e) => setEnabled(e.target.checked)}
-              className="rounded border-zinc-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500"
-            />
-            Rule is active
-          </label>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-xs font-bold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white rounded-xl transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              className="px-5 py-2 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-lg shadow-indigo-500/20 transition-all flex items-center gap-1.5 cursor-pointer"
-            >
-              <Check size={14} />
-              Save Formatting Rule
-            </button>
-          </div>
-        </div>
-
-      </div>
+        )}
+      </AnimatePresence>
 
       {/* Submodal for Condition Logic Builder */}
       {showConditionEditor && (
@@ -513,18 +633,18 @@ export const ConditionalFormattingModal: React.FC<ConditionalFormattingModalProp
           isOpen={showConditionEditor}
           onClose={() => setShowConditionEditor(false)}
           onSave={(newRule) => {
-            if (newRule) {
-              setCondition(newRule);
-            }
+            if (newRule) setCondition(newRule);
             setShowConditionEditor(false);
           }}
           initialRule={condition}
           availableFields={availableFields as any}
           tabs={tabs as any}
-          targetLabel={name || "Conditional Formatting Rule"}
-          title="Configure Trigger Condition"
+          targetLabel={name || 'Conditional Formatting'}
+          title="Formatting Trigger Condition"
+          hideActionSelector={true}
         />
       )}
-    </div>
+    </>,
+    document.body
   );
 };

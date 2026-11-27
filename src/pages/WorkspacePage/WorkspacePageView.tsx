@@ -24,6 +24,7 @@ import { FormRenderer } from '../../components/Builders/FormBuilder/FormRenderer
 import { QueueRenderer } from '../../components/Builders/QueueBuilder/QueueRenderer';
 import { SearchRenderer } from '../../components/Search/SearchRenderer';
 import { Table, Column } from '../../components/UI/Table';
+import { isUserAuthorizedForModule } from '../../utils/fieldSecurity';
 import { createFormulaContext } from '../../lib/formulaEngine';
 
 export const getWidgetDefaultDimensions = (type: string) => {
@@ -535,7 +536,7 @@ const AccessibleModulesWidget: React.FC<{ widget: any; tenant: any; session: any
         user?.role === 'SUPER_ADMIN' || user?.role === 'TENANT_ADMIN' || 
         user?.role?.toLowerCase() === 'admin' || user?.isSuperAdmin === true;
       if (!isAdminOrDev) {
-        if (m.config?.requiredCapability && !hasCapability(m.config.requiredCapability)) {
+        if (!isUserAuthorizedForModule(user, m)) {
           return false;
         }
       }

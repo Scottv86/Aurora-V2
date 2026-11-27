@@ -76,6 +76,7 @@ import { useRegisterActiveEntity } from '../../context/ActiveEntityContext';
 import { sanitizeRecordKeyAttributes, resolveRecordTitle } from '../../utils/activeContextSanitizer';
 import { useRecordPresence, getDeterministicColor } from '../../hooks/useRecordPresence';
 import { RecordPresenceStack } from '../../components/Record/RecordPresenceStack';
+import { ModulePreviewConfig } from '../../types/preview';
 
 
 interface WorkflowState {
@@ -99,6 +100,7 @@ export const RecordDetailView = ({
   initialRecordProp,
   isModal = false,
   isEmbedded = false,
+  previewConfig,
   onRecordUpdate,
   onClose
 }: {
@@ -107,15 +109,31 @@ export const RecordDetailView = ({
   initialRecordProp?: Record<string, any> | null;
   isModal?: boolean;
   isEmbedded?: boolean;
+  previewConfig?: ModulePreviewConfig;
   onRecordUpdate?: (record: any) => void;
   onClose?: () => void;
 } = {}) => {
+  const isPreview = Boolean(previewConfig?.enabled);
   const { pageId, queueId, moduleId: routeModuleId, recordId: routeRecordId, parentModuleId, parentRecordId } = useParams();
   const navigate = useNavigate();
   const auth = useAuth();
   const queryClient = useQueryClient();
   const { session, user: supabaseUser } = auth;
   const { tenant, user: platformUser, isLoading: platformLoading, setBreadcrumbOverride, members, modules } = usePlatform();
+  const effectiveDetailSecurityUser = useMemo(() => {
+    if (isPreview && previewConfig?.simulatedUser) return previewConfig.simulatedUser;
+    if (isPreview && previewConfig?.simulatedRole) {
+      const role = previewConfig.simulatedRole;
+      return {
+        ...(platformUser || supabaseUser || {}),
+        role,
+        roleId: role,
+        isSuperAdmin: role === 'admin',
+        permissionGroupIds: [role]
+      };
+    }
+    return platformUser || supabaseUser;
+  }, [isPreview, previewConfig?.simulatedUser, previewConfig?.simulatedRole, platformUser, supabaseUser]);
   const [externalRulesets, setExternalRulesets] = useState<any[]>([]);
 
   useEffect(() => {
@@ -412,7 +430,7 @@ export const RecordDetailView = ({
     user: currentPresenceUser,
     tenantId: tenant?.id,
     token: session?.access_token || localStorage.getItem('aurora_token') || undefined,
-    enabled: Boolean(canonicalRecordId && tenant?.id),
+    enabled: Boolean(canonicalRecordId && tenant?.id) && !isPreview,
     onRemoteFieldChange: (fieldId: string, value: any) => {
       // If current user is actively editing this exact field, don't interrupt their cursor
       if (activeFieldId === fieldId) return;
@@ -1082,7 +1100,7 @@ export const RecordDetailView = ({
         map.set(f.id, f);
       }
     });
-    return Array.from(map.values()).filter((f: ModuleField) => !isFieldHiddenBySecurity(f.id, moduleData, platformUser || supabaseUser));
+    return Array.from(map.values()).filter((f: ModuleField) => !isFieldHiddenBySecurity(f.id, moduleData, effectiveDetailSecurityUser));
   }, [moduleData, platformUser, supabaseUser]);
 
   // Real-time AI Assistant active entity registration
@@ -1876,7 +1894,42 @@ export const RecordDetailView = ({
     return ['Draft', 'In Progress', 'Under Review', 'Approved', 'Completed', 'Archived'].map(s => ({ id: s, name: s }));
   }, [activeWorkflow, allFields]);
 
+  const previewLoadedRecordIdRef = useRef<string | null>(null);
   useEffect(() => {
+    if (isPreview && previewConfig) {
+      const mod = previewConfig.moduleOverride as any;
+      const rec =
+        initialRecordProp ||
+        previewConfig.records.find(r => r.id === recordId) ||
+        previewConfig.records[0] ||
+        null;
+      const loadKey = `${rec?.id || ''}_${mod?.id || ''}`;
+      if (previewLoadedRecordIdRef.current === loadKey) {
+        return;
+      }
+      previewLoadedRecordIdRef.current = loadKey;
+      setModuleData(mod);
+      if (rec) {
+        setRecord(rec);
+        recordRef.current = rec;
+        const currentFlatFields = flattenFields(mod?.layout || []) as ModuleField[];
+        const dataWithDefaults = { ...rec };
+        currentFlatFields.forEach(f => {
+          if (dataWithDefaults[f.id] === undefined || dataWithDefaults[f.id] === null) {
+            const defaultValue = calculateDefaultValue(f, rec);
+            if (defaultValue !== undefined && defaultValue !== null) {
+              dataWithDefaults[f.id] = defaultValue;
+            }
+          }
+        });
+        const withCalculations = evaluateCalculations(dataWithDefaults, currentFlatFields, lookupData);
+        editDataRef.current = withCalculations;
+        setEditData(withCalculations);
+      }
+      setLoading(false);
+      return;
+    }
+
     if (platformLoading) return;
     if (!tenant?.id || !recordId) {
       setLoading(false);
@@ -2682,6 +2735,34 @@ export const RecordDetailView = ({
       const token = (import.meta as any).env.VITE_DEV_TOKEN || (session as any)?.access_token || localStorage.getItem('aurora_token');
       const method = fieldIdBeingSaved ? 'PATCH' : 'PUT';
       
+      if (isPreview && previewConfig) {
+        const updatedRecord = {
+          ...(record || {}),
+          ...payload,
+          data: { ...((record as any)?.data || {}), ...payload },
+          updatedAt: new Date().toISOString()
+        };
+        previewConfig.onRecordsChange(
+          prev => prev.map(r => (r.id === recordId ? updatedRecord : r)),
+          'Edited record'
+        );
+        onRecordUpdate?.(updatedRecord);
+        setRecord(updatedRecord);
+        recordRef.current = updatedRecord;
+        setEditData(prev => {
+          const nextState = fieldIdBeingSaved
+            ? { ...updatedRecord, ...prev, [fieldIdBeingSaved]: updatedRecord[fieldIdBeingSaved] }
+            : updatedRecord;
+          editDataRef.current = nextState;
+          return nextState;
+        });
+        setActiveFieldId(prev => (prev === fieldIdBeingSaved ? null : prev));
+        if (!silent) {
+          toast.success('Record updated (Sandbox)');
+        }
+        return;
+      }
+
       const res = await fetch(`${DATA_API_URL}/records/${recordId}`, {
         method,
         headers: {
@@ -3502,7 +3583,7 @@ export const RecordDetailView = ({
   };
 
   const renderNestedField = (nestedField: any) => {
-    const currentUserObj = platformUser || supabaseUser;
+    const currentUserObj = effectiveDetailSecurityUser;
     if (isFieldHiddenBySecurity(nestedField.id, moduleData, currentUserObj)) return null;
     if (!isFieldVisible(nestedField, editData || record || {}, visibilityContext)) return null;
     const isSecReadOnly = isFieldReadOnlyBySecurity(nestedField.id, moduleData, currentUserObj);
@@ -3664,7 +3745,7 @@ export const RecordDetailView = ({
 
   const renderFieldsGrid = (tabId: string) => {
     if (!moduleData) return null;
-    const currentUserObj = platformUser || supabaseUser;
+    const currentUserObj = effectiveDetailSecurityUser;
 
     if (editForm) {
       const currentStep = editForm.isMultistep 

@@ -111,7 +111,7 @@ export const AIBuilder = () => {
           name: m.name,
           category: 'Custom',
           iconName: 'Box',
-          type: 'RECORD',
+          type: m.type || 'REGISTRY',
           layout: m.layout || [],
           // Convert simpler AI steps to a more formal structure if needed
           workflows: result.workflows

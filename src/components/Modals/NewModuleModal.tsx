@@ -137,7 +137,7 @@ export const NewModuleModal: React.FC = () => {
           description: template.description || '',
           category: template.category || modData.category || 'Custom',
           iconName: template.icon?.name || modData.iconName || 'Layers',
-          type: modData.type || 'RECORD',
+          type: modData.type || 'REGISTRY',
           fields: resolvedFields,
           layout: resolvedFields,
           tabs: modData.tabs || [],

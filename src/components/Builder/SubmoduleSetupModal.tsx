@@ -139,7 +139,7 @@ export const SubmoduleSetupModal: React.FC<SubmoduleSetupModalProps> = ({
           description: `Nested collection created via parent module`,
           category: 'Custom',
           iconName: newModuleIcon,
-          type: 'RECORD',
+          type: 'REGISTRY',
           status: 'ACTIVE',
           enabled: true,
           recordKeyPrefix: newModulePrefix.trim().toUpperCase() || 'SUB',

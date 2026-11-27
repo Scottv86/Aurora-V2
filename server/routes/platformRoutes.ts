@@ -108,6 +108,8 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
         positionId: primaryMembership?.positionId,
         teamId: primaryMembership?.teamId,
         team: primaryMembership?.team?.name,
+        permissionGroupIds: groupIds,
+        permissionGroups: groupIds,
         capabilities: user.isSuperAdmin ? ['platform:manage', 'manage:staff', 'view:billing', 'admin:access'] : capabilities
       },
       tenant: tenant ? {

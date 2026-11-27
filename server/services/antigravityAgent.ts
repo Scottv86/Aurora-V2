@@ -317,7 +317,7 @@ const agentTools = [
             id: { type: Type.STRING, description: "If provided, updates the module with this ID. Otherwise creates a new one." },
             name: { type: Type.STRING, description: "Display name of the module." },
             icon: { type: Type.STRING, description: "Lucide icon name (e.g. Box, Users, Inbox, tag, BookOpen)." },
-            type: { type: Type.STRING, description: "Module functional type: RECORD, WORK_ITEM, REGISTRY, LOG, FINANCIAL, or PAGE." },
+            type: { type: Type.STRING, description: "Module functional type: REGISTRY (for long-term master data/entities), WORK_ITEM (for transactional lifecycle/process records), or PAGE." },
             category: { type: Type.STRING, description: "Module category tab (default is Custom)." },
             config: { 
               type: Type.OBJECT, 

@@ -11,7 +11,9 @@ export interface AuthRequest extends Request {
     isSuperAdmin: boolean;
     tenantIds: string[];
     memberId?: string;
+    role?: string;
     roleId?: string;
+    permissionGroupIds?: string[];
     avatarUrl?: string;
   };
 }
@@ -108,7 +110,11 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
         ]
       },
       include: {
-        memberships: true
+        memberships: {
+          include: {
+            permissionGroups: true
+          }
+        }
       }
     });
 
@@ -148,6 +154,9 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
             { userId: dbUser.id },
             ...(email ? [{ user: { email } }] : [])
           ]
+        },
+        include: {
+          permissionGroups: true
         }
       });
     }
@@ -186,6 +195,11 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
 
     const avatarUrl = membership?.avatarUrl || (supabaseUser as any).user_metadata?.avatar_url || (supabaseUser as any).user_metadata?.picture;
 
+    const userRole = membership?.roleId || (isSuperAdmin ? 'SUPERADMIN' : 'member');
+    const groupIds = (membership?.permissionGroups || [])
+      .map((pg: any) => pg.permissionGroupId || pg.id)
+      .filter(Boolean);
+
     req.user = {
       id: dbUser.id,
       uid: dbUser.id,
@@ -194,7 +208,9 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
       isSuperAdmin: isSuperAdmin,
       tenantIds: verifiedTenantIds,
       memberId: membership?.id || dbUser.id,
-      roleId: membership?.roleId || (isSuperAdmin ? 'SUPERADMIN' : 'member'),
+      role: userRole,
+      roleId: userRole,
+      permissionGroupIds: groupIds,
       avatarUrl: avatarUrl || undefined
     };
 

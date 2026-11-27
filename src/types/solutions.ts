@@ -41,7 +41,7 @@ export interface ContextSource {
 export interface ConnectedModule {
   id: string;
   name: string;
-  type: 'RECORD' | 'WORK_ITEM' | 'REGISTRY' | 'LOG' | 'FINANCIAL' | 'CUSTOM';
+  type: 'REGISTRY' | 'WORK_ITEM' | 'RECORD' | 'LOG' | 'FINANCIAL' | 'CUSTOM';
   description?: string;
   fieldsCount: number;
   linked: boolean;

@@ -1221,41 +1221,49 @@ export const ConditionModal = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.16 }}
             onClick={onClose}
-            className="absolute inset-0 bg-white/60 dark:bg-black/80 backdrop-blur-xl"
+            className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
           />
           
           <motion.div 
-            initial={{ opacity: 0, scale: 0.95, y: 40 }}
+            initial={{ opacity: 0, scale: 0.97, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 40 }}
-            className="relative z-50 w-full max-w-5xl bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-[3rem] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.3)] overflow-hidden flex flex-col max-h-[90vh] font-sans"
+            exit={{ opacity: 0, scale: 0.97, y: 8 }}
+            transition={{ duration: 0.16, ease: 'easeOut' }}
+            className="relative z-50 w-full max-w-4xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh] font-sans"
           >
             {/* Modal Header */}
-            <div className="px-8 py-5 border-b border-zinc-100 dark:border-zinc-900/50 flex items-center justify-between bg-zinc-50/30 dark:bg-zinc-900/20">
-              <div className="flex items-center gap-5">
-                <div className="w-12 h-12 bg-indigo-600 rounded-[1.25rem] flex items-center justify-center shadow-2xl shadow-indigo-500/30">
-                  <BrainCircuit size={24} className="text-white" />
+            <div className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between bg-white dark:bg-zinc-900 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl flex items-center justify-center shrink-0">
+                  <BrainCircuit size={18} />
                 </div>
-                <div className="space-y-0.5">
-                  <h2 className="text-xl font-black text-zinc-900 dark:text-white tracking-tight">{title}</h2>
+                <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Editing Logic for:</span>
-                    <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-500 rounded-md text-[10px] font-bold uppercase tracking-tight">{targetLabel}</span>
+                    <h2 className="text-sm font-semibold text-zinc-900 dark:text-white truncate">{title}</h2>
+                    <span className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-md text-[11px] font-medium truncate max-w-[200px]">
+                      {targetLabel}
+                    </span>
                   </div>
+                  <p className="text-xs text-zinc-500 truncate mt-0.5">
+                    Define rules and logic groups to control when this condition applies
+                  </p>
                 </div>
               </div>
               <button 
+                type="button"
                 onClick={onClose}
-                className="w-12 h-12 flex items-center justify-center text-zinc-400 hover:text-zinc-600 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900 rounded-2xl transition-all"
+                className="w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
+                title="Close"
               >
-                <X size={24} />
+                <X size={16} />
               </button>
             </div>
 
             {/* Modal Content */}
-            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-              <div className="max-w-4xl mx-auto">
+            <div className="flex-1 overflow-y-auto p-6 bg-zinc-50/40 dark:bg-zinc-950/30 custom-scrollbar">
+              <div className="w-full">
                 <DndContext
                   sensors={sensors}
                   collisionDetection={closestCenter}
@@ -1263,64 +1271,68 @@ export const ConditionModal = ({
                   onDragEnd={handleDragEnd}
                 >
                 {!rule ? (
-                  <div className="h-56 flex flex-col items-center justify-center gap-5 p-12 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] bg-zinc-50/50 dark:bg-zinc-900/30">
-                    <div className="w-16 h-16 bg-white dark:bg-zinc-950 rounded-3xl flex items-center justify-center shadow-xl border border-zinc-100 dark:border-zinc-800">
-                      <Split size={24} className="text-zinc-300 dark:text-zinc-700" />
+                  <div className="py-14 px-6 flex flex-col items-center justify-center gap-4 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl bg-white dark:bg-zinc-900">
+                    <div className="w-11 h-11 bg-zinc-100 dark:bg-zinc-800 rounded-xl flex items-center justify-center">
+                      <Split size={20} className="text-zinc-400" />
                     </div>
-                    <div className="text-center space-y-2">
-                      <p className="font-bold text-zinc-900 dark:text-white">No conditions defined yet</p>
-                      <p className="text-sm text-zinc-500 max-w-[280px]">Add your first rule or group to control when this element should be visible.</p>
+                    <div className="text-center space-y-1">
+                      <p className="text-sm font-semibold text-zinc-900 dark:text-white">No conditions defined yet</p>
+                      <p className="text-xs text-zinc-500 max-w-xs">Add your first rule or group to control when this element should be active.</p>
                     </div>
-                    <div className="flex gap-3">
+                    <div className="flex items-center gap-2 pt-1">
                       <button 
+                        type="button"
                         onClick={handleAddRootRule}
-                        className="px-6 py-3 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-500/20 flex items-center gap-2"
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-500 transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
                       >
-                        <Plus size={16} />
+                        <Plus size={14} />
                         Add First Rule
                       </button>
                       <button 
+                        type="button"
                         onClick={handleAddRootGroup}
-                        className="px-6 py-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all flex items-center gap-2"
+                        className="px-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 rounded-lg text-xs font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors flex items-center gap-1.5 cursor-pointer"
                       >
-                        <Layers size={16} />
+                        <Layers size={14} />
                         Add Group
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <div className="flex items-center justify-between px-4">
+                  <div className="space-y-5">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
                       <div className="flex items-center gap-2">
-                        <CircleDot size={12} className="text-indigo-500 animate-pulse" />
-                        <h3 className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.25em]">Logic Configuration Tree</h3>
+                        <CircleDot size={12} className="text-indigo-500" />
+                        <h3 className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Condition Logic</h3>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex items-center gap-2">
                         <button 
+                          type="button"
                           onClick={() => setShowSummary(!showSummary)}
                           className={cn(
-                            "flex items-center gap-2 px-4 py-2 border rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all",
+                            "flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors cursor-pointer",
                             showSummary 
-                              ? "bg-indigo-500 text-white border-indigo-500 shadow-lg shadow-indigo-500/20" 
-                              : "bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-800 hover:border-indigo-500/50"
+                              ? "bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-500/30" 
+                              : "bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800"
                           )}
                         >
-                          <MessageSquareQuote size={14} />
-                          {showSummary ? 'Hide Summary' : 'View Summary'}
+                          <MessageSquareQuote size={13} />
+                          {showSummary ? 'Hide Summary' : 'Summary'}
                         </button>
-                        <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-800 mx-1" />
                         <button 
+                          type="button"
                           onClick={handleAddRootRule}
-                          className="flex items-center gap-2 px-4 py-2 bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-indigo-500 hover:text-white transition-all"
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-200/80 dark:border-indigo-500/20 rounded-lg text-xs font-medium hover:bg-indigo-100/80 dark:hover:bg-indigo-500/20 transition-colors cursor-pointer"
                         >
-                          <Plus size={14} />
+                          <Plus size={13} />
                           Add Rule
                         </button>
                         <button 
+                          type="button"
                           onClick={handleAddRootGroup}
-                          className="flex items-center gap-2 px-4 py-2 bg-zinc-100 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-800 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-all"
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
                         >
-                          <Layers size={14} />
+                          <Layers size={13} />
                           Add Group
                         </button>
                       </div>
@@ -1328,34 +1340,36 @@ export const ConditionModal = ({
 
                     {/* Action Selector */}
                     {!hideActionSelector && (
-                      <div className="bg-zinc-50 dark:bg-zinc-900/50 p-6 rounded-[2rem] border border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-500">
-                            <Settings2 size={18} />
+                      <div className="bg-white dark:bg-zinc-900 px-4 py-3 rounded-xl border border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-zinc-100 dark:bg-zinc-800 rounded-lg flex items-center justify-center text-zinc-500 shrink-0">
+                            <Settings2 size={15} />
                           </div>
                           <div>
-                            <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Logic Action</p>
-                            <p className="text-xs font-bold text-zinc-900 dark:text-white">Determine the outcome when conditions are met</p>
+                            <p className="text-xs font-semibold text-zinc-900 dark:text-white">Visibility Action</p>
+                            <p className="text-[11px] text-zinc-500">Choose whether to show or hide when conditions match</p>
                           </div>
                         </div>
-                        <div className="flex bg-white dark:bg-zinc-950 p-1.5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
+                        <div className="flex bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg shrink-0">
                           <button
+                            type="button"
                             onClick={() => setRule(prev => prev ? ({ ...prev, action: 'show' }) : undefined)}
                             className={cn(
-                              "px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                              "px-3.5 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer",
                               (!rule?.action || rule?.action === 'show')
-                                ? "bg-indigo-600 text-white shadow-xl shadow-indigo-500/20"
+                                ? "bg-white dark:bg-zinc-900 text-indigo-600 dark:text-indigo-400 shadow-xs"
                                 : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
                             )}
                           >
                             Show
                           </button>
                           <button
+                            type="button"
                             onClick={() => setRule(prev => prev ? ({ ...prev, action: 'hide' }) : undefined)}
                             className={cn(
-                              "px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                              "px-3.5 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer",
                               rule?.action === 'hide'
-                                ? "bg-rose-600 text-white shadow-xl shadow-rose-500/20"
+                                ? "bg-white dark:bg-zinc-900 text-rose-600 dark:text-rose-400 shadow-xs"
                                 : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
                             )}
                           >
@@ -1365,29 +1379,27 @@ export const ConditionModal = ({
                       </div>
                     )}
 
-                    <div className="space-y-6">
+                    <div className="space-y-4">
                       <AnimatePresence>
                         {showSummary && rule && (
                           <motion.div 
                             initial={{ opacity: 0, height: 0, marginBottom: 0 }}
-                            animate={{ opacity: 1, height: 'auto', marginBottom: 24 }}
+                            animate={{ opacity: 1, height: 'auto', marginBottom: 16 }}
                             exit={{ opacity: 0, height: 0, marginBottom: 0 }}
                             className="overflow-hidden"
                           >
-                            <div className="p-8 bg-indigo-500/[0.03] dark:bg-indigo-500/[0.02] border border-indigo-500/10 rounded-[2.5rem] space-y-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-500">
-                                  <MessageSquareQuote size={16} />
-                                </div>
-                                <h4 className="text-[10px] font-black text-indigo-500 uppercase tracking-[0.2em]">Logic Summary</h4>
+                            <div className="p-4 bg-indigo-50/50 dark:bg-indigo-500/[0.06] border border-indigo-200/60 dark:border-indigo-500/20 rounded-xl space-y-2.5">
+                              <div className="flex items-center gap-2">
+                                <MessageSquareQuote size={14} className="text-indigo-500" />
+                                <h4 className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">Logic Summary</h4>
                               </div>
                               <div className="space-y-1">
-                                <p className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-3">
+                                <p className="text-xs text-zinc-600 dark:text-zinc-400 mb-2">
                                   {hideActionSelector ? (
-                                    "This integration will execute if:"
+                                    "This rule will trigger if:"
                                   ) : (
                                     <>
-                                      This element will be <span className={cn("font-black", rule.action === 'hide' ? "text-rose-500" : "text-indigo-500")}>{rule.action === 'hide' ? 'HIDDEN' : 'VISIBLE'}</span> if:
+                                      This element will be <span className={cn("font-semibold", rule.action === 'hide' ? "text-rose-600 dark:text-rose-400" : "text-indigo-600 dark:text-indigo-400")}>{rule.action === 'hide' ? 'hidden' : 'visible'}</span> if:
                                     </>
                                   )}
                                 </p>
@@ -1412,28 +1424,27 @@ export const ConditionModal = ({
             </div>
 
             {/* Modal Footer */}
-            <div className="px-8 py-5 border-t border-zinc-100 dark:border-zinc-900/50 bg-zinc-50/50 dark:bg-zinc-900/50 flex items-center justify-between">
-              <div className="flex items-center gap-4 text-zinc-500">
-                <Settings2 size={14} />
-                <span className="text-[10px] font-medium uppercase tracking-[0.1em]">All changes are staged until saved</span>
-              </div>
-              <div className="flex gap-4">
+            <div className="px-6 py-3.5 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-900/60 flex items-center justify-between shrink-0">
+              <button 
+                type="button"
+                onClick={() => setRule(undefined)}
+                disabled={!rule}
+                className="px-3 py-1.5 text-zinc-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg text-xs font-medium transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+              >
+                Clear All
+              </button>
+              <div className="flex items-center gap-2">
                 <button 
-                  onClick={() => setRule(undefined)}
-                  className="px-6 py-3 text-zinc-500 hover:text-rose-500 text-[10px] font-black uppercase tracking-widest transition-all"
-                >
-                  Clear All
-                </button>
-                <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-800 mx-2" />
-                <button 
+                  type="button"
                   onClick={onClose}
-                  className="px-6 py-3.5 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all"
+                  className="px-3.5 py-2 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg text-xs font-medium transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button 
+                  type="button"
                   onClick={() => onSave(rule)}
-                  className="px-8 py-3.5 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-2xl shadow-indigo-500/20"
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-500 transition-colors shadow-xs cursor-pointer"
                 >
                   Apply Logic
                 </button>

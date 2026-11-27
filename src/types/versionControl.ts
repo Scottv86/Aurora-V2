@@ -32,16 +32,29 @@ export interface ModuleVersionSnapshotState {
   validationRules?: any[];
   fieldSecurity?: Record<string, Record<string, any>>;
   connectorMappings?: Record<string, Record<string, string>>;
+  dataPopulationRules?: any[];
+  workflows?: any[];
+  accessControl?: any;
 }
 
 export interface VersionFieldDiff {
-  type: 'added' | 'removed' | 'modified' | 'unchanged';
+  type: 'added' | 'removed' | 'modified' | 'renamed' | 'unchanged';
   fieldId: string;
   fieldName: string;
   fieldLabel: string;
   oldField?: Partial<Field>;
   newField?: Partial<Field>;
   details?: string;
+  riskLevel?: 'safe' | 'warning' | 'critical';
+  riskMessage?: string;
+  suggestedSql?: string;
+}
+
+export interface AICommitResult {
+  title: string;
+  summary: string[];
+  releaseNotes: string;
+  aiGenerated: boolean;
 }
 
 export interface ModuleVersionSnapshot {
@@ -51,14 +64,22 @@ export interface ModuleVersionSnapshot {
   versionTag: string;
   name: string;
   description?: string;
+  commitSummary?: string[];
+  aiGenerated?: boolean;
+  isGeneratingAI?: boolean;
   author: string;
+  authorId?: string;
   createdAt: string;
   isDeployed: boolean;
+  deployedAt?: string;
+  promotedBy?: string;
   isRollback?: boolean;
   rollbackFromVersion?: string;
+  rollbackTargetVersion?: string;
   snapshot: ModuleVersionSnapshotState;
   migrationSql?: string;
   downMigrationSql?: string;
+  sectionChanges?: string[];
   changesSummary: {
     added: number;
     removed: number;

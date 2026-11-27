@@ -780,7 +780,7 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
     const platformEntries = PLATFORM_MODULES.filter(pm => !existingIds.has(pm.id)).map(pm => ({
       id: pm.id,
       name: `${pm.name} (Platform)`,
-      type: 'RECORD',
+      type: 'REGISTRY',
       isPlatformModule: true,
       layout: [
         { id: 'name', name: 'name', label: 'Name / Title', type: 'text' },
@@ -870,6 +870,35 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false);
   const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false);
+  const [leftSidebarWidth, setLeftSidebarWidth] = useState(256);
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(320);
+
+  const startSidebarResize = (side: 'left' | 'right', e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = side === 'left' ? leftSidebarWidth : rightSidebarWidth;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientX - startX;
+      if (side === 'left') {
+        setLeftSidebarWidth(Math.max(220, Math.min(380, startWidth + delta)));
+      } else {
+        setRightSidebarWidth(Math.max(260, Math.min(460, startWidth - delta)));
+      }
+    };
+
+    const onMouseUp = () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
   const [isTestingRun, setIsTestingRun] = useState(false);
   const [ruleToDelete, setRuleToDelete] = useState<any | null>(null);
   const [showTriggerModal, setShowTriggerModal] = useState(false);
@@ -1277,7 +1306,15 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
       
       {/* COLUMN 1: Rules Directory Sidebar */}
       {!leftSidebarCollapsed && (
-      <aside className="w-64 flex-shrink-0 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 flex flex-col">
+      <aside
+        style={{ width: leftSidebarWidth }}
+        className="relative flex-shrink-0 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-800 flex flex-col"
+      >
+        <div
+          onMouseDown={(e) => startSidebarResize('left', e)}
+          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-500/40 active:bg-indigo-500/60 transition-colors z-30"
+          title="Drag to resize automations panel"
+        />
         <div className="h-11 px-3 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-2 shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <Zap size={14} className="text-indigo-500 shrink-0" />
@@ -2760,7 +2797,15 @@ export const AutomationsTab: React.FC<AutomationsTabProps> = ({
 
           {/* COLUMN 4: Properties Sidebar & Logs History */}
           {!rightSidebarCollapsed && (
-          <aside className="w-80 flex-shrink-0 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 flex flex-col">
+          <aside
+            style={{ width: rightSidebarWidth }}
+            className="relative flex-shrink-0 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 flex flex-col"
+          >
+            <div
+              onMouseDown={(e) => startSidebarResize('right', e)}
+              className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-500/40 active:bg-indigo-500/60 transition-colors z-30"
+              title="Drag to resize properties panel"
+            />
             
             {/* Aligned h-11 Header Settings vs Runs History Tabs */}
             <div className="h-11 px-2.5 border-b border-zinc-200 dark:border-zinc-800 flex items-center gap-1.5 shrink-0">

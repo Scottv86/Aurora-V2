@@ -161,7 +161,7 @@ Design a comprehensive solution including:
 2. For each module, define a set of tabs (e.g., "General", "Details", "Settings") to organize the data.
 3. For each module, define the visual layout organized into rows and columns.
 4. Use appropriate field types.
-5. For each module, suggest a "Module Type" based on its function: "RECORD" (for data entries like Licences), "WORK_ITEM" (for actionable items like Applications), "REGISTRY" (for reference data), "LOG" (for audit/event data), or "FINANCIAL" (for monetary tracking).
+5. For each module, suggest a "Module Type" based on its function: "REGISTRY" (for enduring master entities, objects, assets, or long-term accounts) or "WORK_ITEM" (for actionable transactional items, lifecycle-driven requests, cases, or tasks).
 6. Workflows with specific steps bound to a module.
 7. Automations bound to a module.
 
@@ -515,7 +515,7 @@ export interface SolutionOrchestrationResult {
   summaryText: string;
   suggestedActions: string[];
   groundedSources?: string[];
-  modules: { id: string; name: string; type: 'RECORD' | 'WORK_ITEM' | 'REGISTRY' | 'LOG' | 'FINANCIAL' | 'CUSTOM'; description?: string; fieldsCount: number; linked: boolean }[];
+  modules: { id: string; name: string; type: 'REGISTRY' | 'WORK_ITEM' | 'RECORD' | 'LOG' | 'FINANCIAL' | 'CUSTOM'; description?: string; fieldsCount: number; linked: boolean }[];
   specArtifact?: {
     id: string;
     name: string;
@@ -756,7 +756,7 @@ export const buildDynamicSolutionFromPrompt = (
     {
       id: `mod_${Date.now()}_1`,
       name: topic,
-      type: 'RECORD' as const,
+      type: 'REGISTRY' as const,
       description: `Primary record collection for ${topic}`,
       fieldsCount: 10,
       linked: true
@@ -1203,7 +1203,7 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this schema:
   "summaryText": "Concise natural language explanation of what was created or updated.",
   "suggestedActions": ["Action 1", "Action 2", "Action 3"],
   "modules": [
-    { "id": "mod_clients", "name": "Clients", "type": "RECORD", "description": "Client records", "fieldsCount": 8, "linked": true }
+    { "id": "mod_clients", "name": "Clients", "type": "REGISTRY", "description": "Client records", "fieldsCount": 8, "linked": true }
   ],
   "moduleArtifact": {
     "id": "art_mod_1",

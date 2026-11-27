@@ -15,10 +15,28 @@ const DEFAULT_PERM: FieldSecurityPermission = {
 export function resolveSecurityRoleKey(user: any, fieldSecurity?: Record<string, any> | null): string | null {
   if (!fieldSecurity || typeof fieldSecurity !== 'object') return null;
   const rawRole = String(user?.role || user?.roleId || '').toLowerCase();
+  
+  // 1. SuperAdmin / TenantAdmin
   if (user?.isSuperAdmin || rawRole.includes('admin') || rawRole.includes('owner') || rawRole === 'tenant_admin') {
-    return fieldSecurity.admin ? 'admin' : null;
+    return fieldSecurity.admin ? 'admin' : (fieldSecurity[rawRole] ? rawRole : null);
   }
-  if (user?.role && fieldSecurity[user.role]) return user.role;
+
+  // 2. Permission group matching
+  const groupIds: string[] = Array.isArray(user?.permissionGroupIds)
+    ? user.permissionGroupIds
+    : (Array.isArray(user?.permissionGroups)
+        ? user.permissionGroups.map((g: any) => typeof g === 'string' ? g : g.id || g.permissionGroupId)
+        : []);
+
+  for (const gid of groupIds) {
+    if (gid && fieldSecurity[gid]) return gid;
+  }
+
+  // 3. Direct role key
+  const directRole = user?.role || user?.roleId;
+  if (directRole && fieldSecurity[directRole]) return directRole;
+
+  // 4. Archetype fallbacks
   if (rawRole.includes('manager') || rawRole.includes('lead')) {
     return fieldSecurity.manager ? 'manager' : null;
   }
@@ -26,6 +44,47 @@ export function resolveSecurityRoleKey(user: any, fieldSecurity?: Record<string,
     return fieldSecurity.guest ? 'guest' : null;
   }
   return fieldSecurity.staff ? 'staff' : null;
+}
+
+export function isUserAuthorizedForModule(user: any, moduleOrConfig: any): boolean {
+  if (!user || user.isSuperAdmin) return true;
+  const rawRole = String(user?.role || user?.roleId || '').toLowerCase();
+  if (rawRole.includes('admin') || rawRole.includes('owner') || rawRole === 'tenant_admin') {
+    return true;
+  }
+
+  const config = moduleOrConfig?.config && typeof moduleOrConfig.config === 'object'
+    ? moduleOrConfig.config
+    : (moduleOrConfig || {});
+
+  const accessControl = config.accessControl;
+  if (!accessControl || accessControl.mode !== 'restricted') {
+    if (config.requiredCapability && user.capabilities) {
+      const caps = Array.isArray(user.capabilities) ? user.capabilities : [];
+      if (!caps.includes(config.requiredCapability) && !caps.includes('*:*')) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  const allowedGroups: string[] = Array.isArray(accessControl.allowedGroupIds) ? accessControl.allowedGroupIds : [];
+  const allowedRoles: string[] = Array.isArray(accessControl.allowedRoles) ? accessControl.allowedRoles : [];
+
+  if (allowedGroups.length === 0 && allowedRoles.length === 0) {
+    return true;
+  }
+
+  const userGroupIds: string[] = Array.isArray(user?.permissionGroupIds)
+    ? user.permissionGroupIds
+    : (Array.isArray(user?.permissionGroups)
+        ? user.permissionGroups.map((g: any) => typeof g === 'string' ? g : g.id || g.permissionGroupId)
+        : []);
+
+  const hasGroup = allowedGroups.some((gId: string) => userGroupIds.includes(gId));
+  const hasRole = allowedRoles.some((r: string) => r.toLowerCase() === rawRole);
+
+  return hasGroup || hasRole;
 }
 
 export function extractFieldSecurityMap(moduleOrConfig: any): Record<string, any> | null {
