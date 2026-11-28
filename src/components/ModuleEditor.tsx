@@ -197,6 +197,7 @@ import { CommandPalette } from './CommandPalette';
 import { extractPaletteFields, getSystemMetaFields, getUnifiedFieldDefinition, GroupedModuleFields } from '../lib/formFieldUtils';
 import { FormBuilder } from './Builders/FormBuilder/FormBuilder';
 import { FormRenderer } from './Builders/FormBuilder/FormRenderer';
+import { InContextBuilderModal } from './Builders/Common/InContextBuilderModal';
 import { cn, calculateHeight, flattenFields, isFieldVisible, isContainerField } from '../lib/utils';
 import { compactLayout } from '../lib/layoutEngine';
 import { usePlatform } from '../hooks/usePlatform';
@@ -479,15 +480,23 @@ const SectionRglContainer: React.FC<SectionRglContainerProps> = ({
       };
       activeFields = [...fields, placeholderField];
     }
-    return activeFields.map(f => ({
-      i: f.id,
-      x: Math.max(0, Math.min(11, (f.startCol ? f.startCol - 1 : 0))),
-      y: typeof f.rowIndex === 'number' ? f.rowIndex : 0,
-      w: Math.max(1, Math.min(12, f.colSpan || 6)),
-      h: calculateHeight(f),
-      minW: isContainerField(f.type) ? 4 : 2,
-      minH: 1
-    }));
+    const WIDE_DEFAULT_TYPES = new Set([
+      'textarea', 'longText', 'richtext', 'html', 'address', 'datatable',
+      'sub_module', 'relationship_m2m', 'divider', 'heading', 'alert',
+      'ai_summary', 'map', 'canvas', 'chat', 'signature', 'timeline', 'stepper',
+    ]);
+    return activeFields.map(f => {
+      const defaultSpan = (isContainerField(f.type) || WIDE_DEFAULT_TYPES.has(f.type)) ? 12 : 6;
+      return {
+        i: f.id,
+        x: Math.max(0, Math.min(11, (f.startCol ? f.startCol - 1 : 0))),
+        y: typeof f.rowIndex === 'number' ? f.rowIndex : 0,
+        w: Math.max(1, Math.min(12, f.colSpan || defaultSpan)),
+        h: calculateHeight(f),
+        minW: isContainerField(f.type) ? 4 : 2,
+        minH: 1
+      };
+    });
   }, [fields, dragOverInfo, sectionTabId]);
 
   const isDraggingCross = Boolean(
@@ -2097,7 +2106,23 @@ const FormCanvasItem = ({ fObj, isSelected, onSelect, onDelete, layout, isRestri
 };
 
 
-export const ModuleEditor = () => {
+export interface ModuleEditorProps {
+  draftMode?: boolean;
+  coreExtensionOnly?: boolean;
+  lockedFieldIds?: string[];
+  initialDraftModule?: any;
+  onSaveDraft?: (mod: any) => void;
+  onDirtyChange?: (isDirty: boolean) => void;
+}
+
+export const ModuleEditor: React.FC<ModuleEditorProps> = ({
+  draftMode = false,
+  coreExtensionOnly = false,
+  lockedFieldIds = [],
+  initialDraftModule,
+  onSaveDraft,
+  onDirtyChange,
+} = {}) => {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -2111,7 +2136,7 @@ export const ModuleEditor = () => {
 
 
   const { id: routeId } = useParams();
-  const id = routeId || 'new';
+  const id = draftMode ? 'new' : (routeId || 'new');
   const navigate = useNavigate();
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
@@ -2120,11 +2145,12 @@ export const ModuleEditor = () => {
   const { session, user } = useAuth();
 
   useEffect(() => {
+    if (draftMode) return;
     setIsBuilderFullscreen(true);
     return () => {
       setIsBuilderFullscreen(false);
     };
-  }, [setIsBuilderFullscreen]);
+  }, [setIsBuilderFullscreen, draftMode]);
   const { lists: globalLists } = useGlobalLists();
   const { teams } = useTeams();
   const { positions } = usePositions();
@@ -2162,11 +2188,49 @@ export const ModuleEditor = () => {
     schedulingBufferMinutes: 30,
   });
   const [isFieldSelectorOpen, setIsFieldSelectorOpen] = useState(false);
+  const [specialistModal, setSpecialistModal] = useState<'forms' | 'workflow' | 'validations' | 'automation' | null>(null);
   const [localAutomations, setLocalAutomations] = useState<any[]>([]);
   const [allTenantAutomations, setAllTenantAutomations] = useState<any[]>([]);
   const [deletedAutomationIds, setDeletedAutomationIds] = useState<string[]>([]);
   
   const [layout, setLayout] = useState<Layout>([]);
+
+  // Hydrate draft module when opened in-context from Solution Studio
+  useEffect(() => {
+    if (!draftMode || !initialDraftModule) return;
+    setModuleSettings(prev => ({
+      ...prev,
+      name: initialDraftModule.name || prev.name,
+      description: initialDraftModule.description || prev.description,
+      category: initialDraftModule.category || prev.category,
+      iconName: initialDraftModule.iconName || prev.iconName,
+      type: initialDraftModule.type || prev.type,
+    }));
+    const rawLayout = Array.isArray(initialDraftModule.layout)
+      ? initialDraftModule.layout
+      : Array.isArray(initialDraftModule.fields)
+      ? initialDraftModule.fields.map((f: any, idx: number) => ({
+          id: f.id || `field_${idx}`,
+          label: f.label || f.name || `Field ${idx + 1}`,
+          type: (f.type || 'text').toLowerCase().includes('date')
+            ? 'date'
+            : (f.type || 'text').toLowerCase().includes('email')
+            ? 'email'
+            : (f.type || 'text').toLowerCase().includes('num') || (f.type || 'text').toLowerCase().includes('int')
+            ? 'number'
+            : (f.type || 'text').toLowerCase().includes('enum') || (f.type || 'text').toLowerCase().includes('select')
+            ? 'select'
+            : 'text',
+          required: Boolean(f.required),
+          x: (idx % 2) * 6,
+          y: Math.floor(idx / 2) * 2,
+          w: 6,
+          h: 2,
+        }))
+      : [];
+    if (rawLayout.length > 0) setLayout(rawLayout);
+    setIsLoading(false);
+  }, [draftMode, initialDraftModule?.id]);
   const allFields = React.useMemo(() => flattenFields(layout), [layout]);
   const displayFields = React.useMemo(() => {
     return allFields.filter(f => !['heading', 'divider', 'spacer', 'alert', 'fieldGroup', 'repeatableGroup', 'group', 'card', 'accordion', 'tabs_nested', 'stepper', 'timeline'].includes(f.type));
@@ -3459,6 +3523,23 @@ export const ModuleEditor = () => {
   }), [draftModuleForPreview, masterDesignRecords]);
 
   const handleSave = useCallback(async (): Promise<ModuleVersionSnapshot | null> => {
+    if (draftMode) {
+      const draftPayload = {
+        ...(initialDraftModule || {}),
+        ...moduleSettings,
+        id: initialDraftModule?.id || `mod_${Date.now()}`,
+        layout,
+        tabs,
+        forms,
+        workflows: workflow ? [workflow] : [],
+        validationRules,
+        interfaceSettings,
+      };
+      onSaveDraft?.(draftPayload);
+      onDirtyChange?.(false);
+      toast.success(`Module "${moduleSettings.name}" updated in Solution draft.`);
+      return null;
+    }
     if (!tenant?.id) return null;
     setIsSaving(true);
     try {
@@ -5387,6 +5468,10 @@ export const ModuleEditor = () => {
   };
 
   const removeFieldRecursive = (fields: Field[], id: string): Field[] => {
+    if (coreExtensionOnly && lockedFieldIds.includes(id)) {
+      toast.warning('Platform Core baseline fields are protected in Solution Studio. You can add new Solution extension fields instead.');
+      return fields;
+    }
     return fields
       .filter(f => f.id !== id && f.id !== 'placeholder' && f.id !== '__drop_zone_indicator__' && f.type !== 'placeholder')
       .map(f => f.fields ? { ...f, fields: removeFieldRecursive(f.fields, id) } : f);
@@ -11224,12 +11309,38 @@ export const ModuleEditor = () => {
               </div>
             </div>
           ) : activeTab === 'validations' ? (
-            <ValidationsTab 
-              validationRules={validationRules}
-              setValidationRules={setValidationRules}
-              fields={flattenFields(layout)}
-              showAiAssist={false}
-            />
+            <div className="h-full overflow-y-auto p-6 bg-zinc-50 dark:bg-zinc-950">
+              <div className="max-w-3xl mx-auto bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 space-y-4 shadow-xs">
+                <div className="flex items-center justify-between gap-4 border-b border-zinc-100 dark:border-zinc-800 pb-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Validation Rules ({validationRules.length})</h3>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                      Validation rules open in Aurora’s dedicated Rules Builder modal while staying synced with {moduleSettings.name}.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSpecialistModal('validations')}
+                    className="h-8 px-3.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium inline-flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0"
+                  >
+                    <Settings2 size={13} />
+                    <span>Open Rules Builder</span>
+                  </button>
+                </div>
+                {validationRules.length === 0 ? (
+                  <p className="text-xs text-zinc-400 py-6 text-center">No validation rules configured yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {validationRules.map((r: any, idx: number) => (
+                      <div key={r.id || idx} className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs">
+                        <span className="font-medium text-zinc-800 dark:text-zinc-100">{r.name || r.message || `Rule ${idx + 1}`}</span>
+                        <button type="button" onClick={() => setSpecialistModal('validations')} className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline cursor-pointer">Edit in Builder</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           ) : activeTab === 'connectors' ? (
             <ConnectorsTab 
               layout={layout}
@@ -11249,66 +11360,199 @@ export const ModuleEditor = () => {
               showAiAssist={false}
             />
           ) : activeTab === 'automation' ? (
-            <AutomationBuilder
-              builderContext={{
-                mode: 'in_context',
-                hostType: 'module',
-                hostId: routeId
-              }}
-              moduleId={routeId}
-              fields={flattenFields(layout)}
-              automations={localAutomations}
-              setAutomations={setLocalAutomations}
-              deletedAutomationIds={deletedAutomationIds}
-              setDeletedAutomationIds={setDeletedAutomationIds}
-            />
-
+            <div className="h-full overflow-y-auto p-6 bg-zinc-50 dark:bg-zinc-950">
+              <div className="max-w-3xl mx-auto bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 space-y-4 shadow-xs">
+                <div className="flex items-center justify-between gap-4 border-b border-zinc-100 dark:border-zinc-800 pb-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Automations ({localAutomations.length})</h3>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                      Event triggers, notifications, and SLA rules open in the dedicated Automation Builder modal.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSpecialistModal('automation')}
+                    className="h-8 px-3.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium inline-flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0"
+                  >
+                    <Settings2 size={13} />
+                    <span>Open Automation Builder</span>
+                  </button>
+                </div>
+                {localAutomations.length === 0 ? (
+                  <p className="text-xs text-zinc-400 py-6 text-center">No automations configured for this module yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {localAutomations.map((a: any, idx: number) => (
+                      <div key={a.id || idx} className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs">
+                        <span className="font-medium text-zinc-800 dark:text-zinc-100">{a.name || `Automation ${idx + 1}`}</span>
+                        <button type="button" onClick={() => setSpecialistModal('automation')} className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline cursor-pointer">Edit in Builder</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           ) : activeTab === 'workflow' ? (
-            <div className="w-full h-full">
-              <WorkflowGraphEditor 
+            <div className="h-full overflow-y-auto p-6 bg-zinc-50 dark:bg-zinc-950">
+              <div className="max-w-3xl mx-auto bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 space-y-4 shadow-xs">
+                <div className="flex items-center justify-between gap-4 border-b border-zinc-100 dark:border-zinc-800 pb-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">
+                      {workflow?.name || `${moduleSettings.name} Lifecycle Workflow`}
+                    </h3>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                      {(workflow?.nodes || []).length} stages · {(workflow?.edges || []).length} transitions. Edit visually in the Workflow Builder modal.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSpecialistModal('workflow')}
+                    className="h-8 px-3.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium inline-flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0"
+                  >
+                    <Settings2 size={13} />
+                    <span>Open Workflow Builder</span>
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(workflow?.nodes || []).map((n: any) => (
+                    <span key={n.id} className="px-2.5 py-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-xs font-medium text-zinc-700 dark:text-zinc-200">
+                      {n.name || n.label || n.id}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : activeTab === 'forms' ? (
+            <div className="h-full overflow-y-auto p-6 bg-zinc-50 dark:bg-zinc-950">
+              <div className="max-w-3xl mx-auto bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 space-y-4 shadow-xs">
+                <div className="flex items-center justify-between gap-4 border-b border-zinc-100 dark:border-zinc-800 pb-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Forms ({forms.length})</h3>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                      Forms open in Aurora’s dedicated Form Builder modal while staying bound to {moduleSettings.name}’s fields.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSpecialistModal('forms')}
+                    className="h-8 px-3.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium inline-flex items-center gap-1.5 shadow-xs cursor-pointer shrink-0"
+                  >
+                    <Settings2 size={13} />
+                    <span>Open Form Builder</span>
+                  </button>
+                </div>
+                {forms.length === 0 ? (
+                  <p className="text-xs text-zinc-400 py-6 text-center">No forms created for this module yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {forms.map((f: any) => (
+                      <div key={f.id} className="p-3 rounded-xl bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 flex items-center justify-between text-xs">
+                        <div>
+                          <div className="font-medium text-zinc-800 dark:text-zinc-100">{f.name || f.title || 'Untitled Form'}</div>
+                          <div className="text-[11px] text-zinc-400">{(f.fields || []).length} fields · {f.usage || 'workspace_create'}</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedFormId(f.id);
+                            setSpecialistModal('forms');
+                          }}
+                          className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline cursor-pointer"
+                        >
+                          Edit in Builder
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Contextual Specialist Builder Modal (shared pattern with Solution Studio) */}
+          <InContextBuilderModal
+            isOpen={Boolean(specialistModal)}
+            onClose={() => setSpecialistModal(null)}
+            title={
+              specialistModal === 'forms'
+                ? `${moduleSettings.name} — Forms`
+                : specialistModal === 'workflow'
+                ? workflow?.name || `${moduleSettings.name} — Workflow`
+                : specialistModal === 'validations'
+                ? `${moduleSettings.name} — Validation Rules`
+                : `${moduleSettings.name} — Automations`
+            }
+            subtitle={specialistModal ? specialistModal.toUpperCase() : undefined}
+            backLabel="Back to Module"
+            builderContext={{ mode: 'in_context', hostType: 'module', hostId: routeId }}
+          >
+            {specialistModal === 'validations' && (
+              <ValidationsTab
+                validationRules={validationRules}
+                setValidationRules={setValidationRules}
+                fields={flattenFields(layout)}
+                showAiAssist={false}
+              />
+            )}
+            {specialistModal === 'automation' && (
+              <AutomationBuilder
+                builderContext={{ mode: 'in_context', hostType: 'module', hostId: routeId }}
+                moduleId={routeId}
+                fields={flattenFields(layout)}
+                automations={localAutomations}
+                setAutomations={setLocalAutomations}
+                deletedAutomationIds={deletedAutomationIds}
+                setDeletedAutomationIds={setDeletedAutomationIds}
+              />
+            )}
+            {specialistModal === 'workflow' && (
+              <div className="w-full h-full">
+                <WorkflowGraphEditor
+                  workflow={workflow}
+                  onChange={setWorkflow}
+                  showDebugger={showDebugger}
+                  setShowDebugger={setShowDebugger}
+                  selectedNodeId={selectedNodeId}
+                  onNodeSelect={setSelectedNodeId}
+                  selectedEdgeId={selectedEdgeId}
+                  onEdgeSelect={setSelectedEdgeId}
+                  rightSidebarTab={rightSidebarTabWorkflow}
+                  setRightSidebarTab={setRightSidebarTabWorkflow}
+                  fields={layout}
+                  onUndo={undo}
+                  onRedo={redo}
+                  canUndo={canUndo}
+                  canRedo={canRedo}
+                />
+              </div>
+            )}
+            {specialistModal === 'forms' && (
+              <FormBuilder
+                mode="module_embedded"
+                forms={forms}
+                onFormsChange={setForms}
+                selectedFormId={selectedFormId}
+                onSelectFormId={(nextId) => {
+                  setSelectedFormId(nextId);
+                  setSelectedFieldInFormId(null);
+                }}
+                moduleId={id !== 'new' ? id : undefined}
+                moduleName={moduleSettings.name}
+                moduleLayout={layout}
                 workflow={workflow}
-                onChange={setWorkflow}
-                showDebugger={showDebugger}
-                setShowDebugger={setShowDebugger}
-                selectedNodeId={selectedNodeId}
-                onNodeSelect={setSelectedNodeId}
-                selectedEdgeId={selectedEdgeId}
-                onEdgeSelect={setSelectedEdgeId}
-                rightSidebarTab={rightSidebarTabWorkflow}
-                setRightSidebarTab={setRightSidebarTabWorkflow}
-                fields={layout}
+                isRestricted={isRestricted}
                 onUndo={undo}
                 onRedo={redo}
                 canUndo={canUndo}
                 canRedo={canRedo}
+                onPromoteFieldToModule={(newField) =>
+                  setLayout((prev: any[]) =>
+                    prev.some((f: any) => f.id === newField.id) ? prev : [...prev, newField]
+                  )
+                }
               />
-            </div>
-          ) : activeTab === 'forms' ? (
-            <FormBuilder
-              mode="module_embedded"
-              forms={forms}
-              onFormsChange={setForms}
-              selectedFormId={selectedFormId}
-              onSelectFormId={(nextId) => {
-                setSelectedFormId(nextId);
-                setSelectedFieldInFormId(null);
-              }}
-              moduleId={id !== 'new' ? id : undefined}
-              moduleName={moduleSettings.name}
-              moduleLayout={layout}
-              workflow={workflow}
-              isRestricted={isRestricted}
-              onUndo={undo}
-              onRedo={redo}
-              canUndo={canUndo}
-              canRedo={canRedo}
-              onPromoteFieldToModule={(newField) =>
-                setLayout((prev: any[]) =>
-                  prev.some((f: any) => f.id === newField.id) ? prev : [...prev, newField]
-                )
-              }
-            />
-          ) : null}
+            )}
+          </InContextBuilderModal>
           </div>
         </main>
         {/* Right Sidebar - Properties */}

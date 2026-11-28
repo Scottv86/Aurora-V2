@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { 
-  Boxes, Plus, Search, Trash2, ArrowRight, Sparkles, FileText
+  Boxes, Plus, Search, Trash2, ArrowRight, Sparkles, FileText, Upload
 } from 'lucide-react';
 
 import { PageHeader } from '../../components/UI/PageHeader';
@@ -204,13 +204,55 @@ export const SolutionsPage: React.FC = () => {
         title="Solutions"
         description="Package, deploy, and manage end-to-end solution blueprints, application bundles, and multi-module configurations."
         actions={
-          <Button
-            onClick={handleCreateNewClick}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
-          >
-            <Plus size={16} />
-            <span>Create</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-1.5 bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200 font-medium text-xs px-3.5 py-2.5 rounded-xl transition-all cursor-pointer">
+              <Upload size={14} />
+              <span>Import JSON</span>
+              <input
+                type="file"
+                accept=".json,.aurora-solution.json"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    try {
+                      const parsed = JSON.parse(String(reader.result || '{}'));
+                      if (!Array.isArray(parsed.artifacts)) {
+                        throw new Error('Invalid Solution package (missing artifacts array).');
+                      }
+                      const importedSol = {
+                        id: `sol_import_${Date.now()}`,
+                        name: parsed.name || file.name.replace(/\.json$/i, ''),
+                        description: parsed.description || 'Imported Solution package',
+                        category: parsed.category || 'Operations',
+                        version: parsed.version || '1.0.0',
+                        status: 'DRAFT',
+                        artifacts: parsed.artifacts,
+                        connectedModules: [],
+                        chatMessages: [],
+                      } as unknown as SolutionBlueprint;
+                      setSolutions((prev) => [importedSol, ...prev]);
+                      setSearchParams({ mode: 'studio', id: importedSol.id });
+                      toast.success(`Imported "${importedSol.name}" into Solution Studio.`);
+                    } catch (err: any) {
+                      toast.error(err?.message || 'Failed to import Solution JSON.');
+                    }
+                  };
+                  reader.readAsText(file);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+            <Button
+              onClick={handleCreateNewClick}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
+            >
+              <Plus size={16} />
+              <span>Create</span>
+            </Button>
+          </div>
         }
       />
 

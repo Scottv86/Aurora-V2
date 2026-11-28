@@ -48,13 +48,15 @@ export interface SearchBuilderProps {
   onClose: () => void;
   onSaveSuccess?: (saved: SavedSearchEntity) => void;
   onOpenInQueryBuilder?: (sql: string, search: SavedSearchEntity) => void;
+  draftMode?: boolean;
 }
 
 export const SearchBuilder: React.FC<SearchBuilderProps> = ({
   initialSearch,
   onClose,
   onSaveSuccess,
-  onOpenInQueryBuilder
+  onOpenInQueryBuilder,
+  draftMode = false
 }) => {
   const { tenant, modules } = usePlatform();
   const { session } = useAuth();
@@ -531,6 +533,13 @@ export const SearchBuilder: React.FC<SearchBuilderProps> = ({
     };
 
     try {
+      if (draftMode) {
+        const draftSaved = { ...payload, id: searchId || `search_${Date.now()}` } as SavedSearchEntity;
+        toast.success(`Search "${draftSaved.name}" updated in Solution draft.`);
+        if (onSaveSuccess) onSaveSuccess(draftSaved);
+        onClose();
+        return;
+      }
       const saved = await saveSavedSearch(payload, tenantId, token);
       setSearchId(saved.id);
       toast.success('Search successfully published for business users!');

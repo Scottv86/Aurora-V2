@@ -6,11 +6,15 @@ export type Environment = 'DEV' | 'QA' | 'UAT' | 'PROD';
 
 export type ToastPosition = 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
 
+export type ToastStylePreset = 'aurora-glass' | 'minimal-pill' | 'soft-tint' | 'editorial-sharp';
+
 export interface ToastNotificationConfig {
   position?: ToastPosition;
   duration?: number;
   closeButton?: boolean;
   expand?: boolean;
+  style?: ToastStylePreset;
+  showProgressBar?: boolean;
 }
 
 export type ChimeSoundId = 
@@ -644,7 +648,7 @@ export type FormUsageType =
 
 export interface StandaloneBuilderContext {
   mode: BuilderMode;
-  hostType?: 'site' | 'module' | 'workspace' | 'portal';
+  hostType?: 'site' | 'module' | 'workspace' | 'portal' | 'solution';
   hostId?: string;
   parentModuleId?: string;
   onSaveSuccess?: (entityId: string, entityData?: any) => void;

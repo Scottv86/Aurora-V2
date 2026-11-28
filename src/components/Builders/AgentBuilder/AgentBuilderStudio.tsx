@@ -28,12 +28,18 @@ export interface AgentBuilderStudioProps {
   initialAgent?: AgentBlueprint | null;
   onClose?: () => void;
   onDeploySuccess?: (agent: AgentBlueprint) => void;
+  draftMode?: boolean;
+  onSaveDraft?: (agent: AgentBlueprint) => void;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 export const AgentBuilderStudio: React.FC<AgentBuilderStudioProps> = ({
   initialAgent,
   onClose,
-  onDeploySuccess
+  onDeploySuccess,
+  draftMode = false,
+  onSaveDraft,
+  onDirtyChange
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -55,14 +61,16 @@ export const AgentBuilderStudio: React.FC<AgentBuilderStudioProps> = ({
   const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
 
   useEffect(() => {
+    if (draftMode) return;
     setIsBuilderFullscreen(true);
     return () => {
       setIsBuilderFullscreen(false);
     };
-  }, [setIsBuilderFullscreen]);
+  }, [setIsBuilderFullscreen, draftMode]);
 
   const handleUpdateBlueprint = (delta: Partial<AgentBlueprint>) => {
     setIsDirty(true);
+    onDirtyChange?.(true);
     setBlueprint(prev => ({
       ...prev,
       ...delta,
@@ -73,6 +81,13 @@ export const AgentBuilderStudio: React.FC<AgentBuilderStudioProps> = ({
   const handleSaveDraft = async () => {
     setIsSaving(true);
     try {
+      if (draftMode) {
+        onSaveDraft?.(blueprint);
+        setIsDirty(false);
+        onDirtyChange?.(false);
+        toast.success(`Agent "${blueprint.name}" updated in Solution draft.`);
+        return;
+      }
       localStorage.setItem(`agent_draft_${blueprint.id}`, JSON.stringify(blueprint));
       setIsDirty(false);
       toast.success(`Agent "${blueprint.name}" draft saved`);

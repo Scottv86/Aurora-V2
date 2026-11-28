@@ -908,8 +908,21 @@ const useMyContainerWidth = (loading: boolean) => {
   return { width, containerRef, mounted };
 };
 
-export const PageBuilder = () => {
-  const { id } = useParams();
+export interface PageBuilderProps {
+  draftMode?: boolean;
+  initialDraftPage?: any;
+  onSaveDraft?: (page: any) => void;
+  onDirtyChange?: (isDirty: boolean) => void;
+}
+
+export const PageBuilder: React.FC<PageBuilderProps> = ({
+  draftMode = false,
+  initialDraftPage,
+  onSaveDraft,
+  onDirtyChange,
+} = {}) => {
+  const { id: routeId } = useParams();
+  const id = draftMode ? (initialDraftPage?.id || 'draft_page') : routeId;
   const navigate = useNavigate();
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
@@ -918,6 +931,7 @@ export const PageBuilder = () => {
   const { session } = useAuth();
 
   useEffect(() => {
+    if (draftMode) return;
     setIsBuilderFullscreen(true);
     return () => {
       setIsBuilderFullscreen(false);
@@ -965,6 +979,23 @@ export const PageBuilder = () => {
 
   // Fetch existing layout
   useEffect(() => {
+    if (draftMode) {
+      setName(initialDraftPage?.name || initialDraftPage?.title || 'Solution Page');
+      setIconName(initialDraftPage?.iconName || initialDraftPage?.icon || 'Layout');
+      const draftWidgets = Array.isArray(initialDraftPage?.widgets)
+        ? initialDraftPage.widgets
+        : Array.isArray(initialDraftPage?.config?.widgets)
+        ? initialDraftPage.config.widgets
+        : [];
+      setWidgets(draftWidgets);
+      setLoading(false);
+      setTimeout(() => {
+        isInitializedRef.current = true;
+        setIsDirty(false);
+        onDirtyChange?.(false);
+      }, 80);
+      return;
+    }
     const loadPage = async () => {
       if (!tenant?.id || !id) return;
       setLoading(true);
@@ -1013,6 +1044,21 @@ export const PageBuilder = () => {
   const handleSave = async () => {
     if (!name.trim()) {
       toast.error('Page name cannot be empty.');
+      return;
+    }
+    if (draftMode) {
+      onSaveDraft?.({
+        ...(initialDraftPage || {}),
+        id: initialDraftPage?.id || id,
+        name: name.trim(),
+        title: name.trim(),
+        iconName,
+        widgets,
+        config: { widgets },
+      });
+      setIsDirty(false);
+      onDirtyChange?.(false);
+      toast.success(`Page "${name.trim()}" updated in Solution draft.`);
       return;
     }
     if (!tenant?.id || !id) return;

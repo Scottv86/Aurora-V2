@@ -51,7 +51,7 @@ ${targetModuleFields.map(f => `- ${f.id} (${f.label}, type: ${f.type})`).join('\
 Analyze the attached document carefully and return a JSON object ONLY with the following schema:
 
 {
-  "ocrText": "Full or comprehensive transcript of the text extracted from the document",
+  "ocrText": "Structured transcript of the key text, headings, tables, fields, requirements, and rules from the document (concise if very long, max ~12,000 characters)",
   "documentType": "TAX_INVOICE" | "LEGAL_CONTRACT" | "ID_VERIFICATION" | "EMPLOYMENT_AGREEMENT" | "OPERATIONAL_DOC" | "FINANCIAL_STATEMENT" | "GENERAL",
   "suggestedClassification": "PUBLIC" | "INTERNAL" | "CONFIDENTIAL" | "RESTRICTED",
   "detectedPii": ["BANK_ACCOUNT", "CREDIT_CARD", "TAX_FILE_NUMBER", "SSN", "PASSPORT", "SIGNATURE", "HEALTH_INFO"],
@@ -96,10 +96,21 @@ Guidelines:
         ];
       }
 
-      const response = await genAI.models.generateContent({
+      const aiPromise = genAI.models.generateContent({
         model: "gemini-2.5-flash",
-        contents
+        contents,
+        config: {
+          temperature: 0.1,
+          maxOutputTokens: 8192,
+          thinkingConfig: { thinkingBudget: 0 },
+        },
       });
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Document AI extraction timed out after 35s')), 35_000)
+      );
+
+      const response = await Promise.race([aiPromise, timeoutPromise]);
 
       const responseText = response.text || '';
       const cleanJson = responseText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
@@ -107,7 +118,16 @@ Guidelines:
       try {
         parsed = JSON.parse(cleanJson);
       } catch (e) {
-        console.warn('[DocumentAiService] JSON parse fallback');
+        console.warn('[DocumentAiService] JSON parse fallback — salvaging text');
+        // Salvage summary/ocrText if output was truncated mid-JSON
+        const ocrMatch = cleanJson.match(/"ocrText"\s*:\s*"([\s\S]*?)(?:"\s*,\s*"documentType"|"\s*\}|$)/);
+        const sumMatch = cleanJson.match(/"summary"\s*:\s*"([^"]*)"/);
+        if (ocrMatch?.[1]) {
+          parsed.ocrText = ocrMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+        } else if (cleanJson.length > 40) {
+          parsed.ocrText = cleanJson.slice(0, 15000);
+        }
+        if (sumMatch?.[1]) parsed.summary = sumMatch[1];
       }
 
       return {

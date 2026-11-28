@@ -177,36 +177,55 @@ const slugifyRole = (val: string) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
 
-export const RoleBuilderStudio: React.FC = () => {
-  const { id } = useParams<{ id?: string }>();
+export interface RoleBuilderStudioProps {
+  draftMode?: boolean;
+  initialDraftRole?: Partial<RolePolicy>;
+  draftModules?: any[];
+  onSaveDraft?: (role: Partial<RolePolicy>) => void;
+  onDirtyChange?: (isDirty: boolean) => void;
+}
+
+export const RoleBuilderStudio: React.FC<RoleBuilderStudioProps> = ({
+  draftMode = false,
+  initialDraftRole,
+  onSaveDraft,
+  onDirtyChange,
+}) => {
+  const { id: routeId } = useParams<{ id?: string }>();
+  const id = draftMode ? (initialDraftRole?.id || 'draft_role') : routeId;
   const navigate = useNavigate();
   const location = useLocation();
   const { tenant, modules } = usePlatform();
   const { session } = useAuth();
   const { groups, fetchRoleById, createGroup, updateGroup, simulateGroup } = usePermissionGroups();
 
-  const isNew = !id || id === 'new';
+  const isNew = draftMode ? false : (!id || id === 'new');
   const [activeTab, setActiveTab] = useState<StudioTab>('overview');
-  const [loading, setLoading] = useState(!isNew);
+  const [loading, setLoading] = useState(draftMode ? false : !isNew);
   const [saving, setSaving] = useState(false);
 
   // Role state
-  const [name, setName] = useState('');
-  const [slug, setSlug] = useState('');
-  const [description, setDescription] = useState('');
-  const [type, setType] = useState<RoleType>('CUSTOM');
-  const [status, setStatus] = useState<RoleStatus>('ACTIVE');
-  const [color, setColor] = useState('#4f46e5');
-  const [parentGroupId, setParentGroupId] = useState<string>('');
-  const [capabilities, setCapabilities] = useState<string[]>([]);
-  const [modulePolicies, setModulePolicies] = useState<Record<string, ModulePolicy>>({});
+  const [name, setName] = useState(initialDraftRole?.name || '');
+  const [slug, setSlug] = useState(initialDraftRole?.slug || '');
+  const [description, setDescription] = useState(initialDraftRole?.description || '');
+  const [type, setType] = useState<RoleType>(initialDraftRole?.type || (draftMode ? 'SOLUTION' : 'CUSTOM'));
+  const [status, setStatus] = useState<RoleStatus>(initialDraftRole?.status || (draftMode ? 'DRAFT' : 'ACTIVE'));
+  const [color, setColor] = useState(initialDraftRole?.color || '#4f46e5');
+  const [parentGroupId, setParentGroupId] = useState<string>(initialDraftRole?.parentGroupId || '');
+  const [capabilities, setCapabilities] = useState<string[]>(initialDraftRole?.capabilities || []);
+  const [modulePolicies, setModulePolicies] = useState<Record<string, ModulePolicy>>(initialDraftRole?.modulePolicies || {});
   const [workflowPolicies, setWorkflowPolicies] = useState<{
     canApprove?: boolean;
     maxApprovalAmount?: number | null;
     allowedQueueIds?: string[];
     allowedWorkflowIds?: string[];
-  }>({ canApprove: false, maxApprovalAmount: null, allowedQueueIds: [], allowedWorkflowIds: [] });
-  const [aiPolicies, setAiPolicies] = useState<Record<string, AIPolicyDecision>>({});
+  }>({
+    canApprove: initialDraftRole?.workflowPolicies?.canApprove ?? false,
+    maxApprovalAmount: initialDraftRole?.workflowPolicies?.maxApprovalAmount ?? null,
+    allowedQueueIds: initialDraftRole?.workflowPolicies?.allowedQueueIds || [],
+    allowedWorkflowIds: initialDraftRole?.workflowPolicies?.allowedWorkflowIds || [],
+  });
+  const [aiPolicies, setAiPolicies] = useState<Record<string, AIPolicyDecision>>(initialDraftRole?.aiPolicies || {});
 
   // Auxiliary data
   const [queues, setQueues] = useState<Array<{ id: string; name: string }>>([]);
@@ -439,6 +458,7 @@ export const RoleBuilderStudio: React.FC = () => {
     setSaving(true);
     try {
       const payload: Partial<RolePolicy> = {
+        id: initialDraftRole?.id || id,
         name: name.trim(),
         slug: slug.trim() || slugifyRole(name),
         description: description.trim(),
@@ -451,6 +471,13 @@ export const RoleBuilderStudio: React.FC = () => {
         workflowPolicies,
         aiPolicies,
       };
+
+      if (draftMode) {
+        onSaveDraft?.(payload);
+        onDirtyChange?.(false);
+        toast.success(`Role "${name}" updated in Solution draft.`);
+        return;
+      }
 
       if (isNew) {
         const created = await createGroup(payload);

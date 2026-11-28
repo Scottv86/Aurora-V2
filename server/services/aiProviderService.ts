@@ -114,8 +114,8 @@ export async function resolveTenantAIClient(
 
   if (targetModel.toLowerCase() === 'default' || targetModel.toLowerCase() === 'low' || targetModel.toLowerCase() === 'fast') {
     targetModel = mapping.lowModel || 'gemini-3.1-flash-lite';
-  } else if (targetModel.toLowerCase() === 'medium' || targetModel.toLowerCase() === 'balanced') {
-    targetModel = mapping.mediumModel || 'claude-3-5-sonnet';
+  } else if (targetModel.toLowerCase() === 'medium' || targetModel.toLowerCase() === 'balanced' || targetModel.toLowerCase() === 'smart') {
+    targetModel = mapping.mediumModel || mapping.lowModel || 'claude-3-5-sonnet';
   } else if (targetModel.toLowerCase() === 'high' || targetModel.toLowerCase() === 'pro') {
     targetModel = mapping.highModel || 'gpt-4o';
   }

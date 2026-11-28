@@ -11,11 +11,35 @@ import {
   Plus, 
   Check,
   Globe,
-  Link2
+  Link2,
+  Loader2,
+  ShieldCheck,
+  AlertCircle
 } from 'lucide-react';
 import { ContextSource } from '../../types/solutions';
 import { AppContextService, AppContextItem } from '../../services/appContextService';
+import { API_BASE_URL } from '../../config';
+import { supabase } from '../../lib/supabase';
+import { usePlatform } from '../../hooks/usePlatform';
 import { toast } from 'sonner';
+
+const getAuthToken = async (): Promise<string> => {
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (session?.access_token) return session.access_token;
+  } catch (_) {}
+
+  const authDataStr = localStorage.getItem('aurora_auth');
+  if (authDataStr) {
+    try {
+      const authData = JSON.parse(authDataStr);
+      return authData?.access_token || authData?.token || '';
+    } catch (_) {}
+  }
+  return '';
+};
 
 export interface AddContextSourceModalProps {
   isOpen: boolean;
@@ -30,15 +54,18 @@ export const AddContextSourceModal: React.FC<AddContextSourceModalProps> = ({
   onAddLocalFiles,
   onAddContextSource
 }) => {
+  const { tenant } = usePlatform();
   const [activeTab, setActiveTab] = useState<'upload' | 'website' | 'kb' | 'drive' | 'apps'>('kb');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [webUrl, setWebUrl] = useState('');
   const [webTitle, setWebTitle] = useState('');
+  const [isFetchingUrl, setIsFetchingUrl] = useState(false);
+  const [webError, setWebError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  const handleAddWebLink = () => {
+  const handleAddWebLink = async () => {
     if (!webUrl.trim()) {
       toast.error('Please enter a valid website URL.');
       return;
@@ -53,25 +80,68 @@ export const AddContextSourceModal: React.FC<AddContextSourceModalProps> = ({
     try {
       const urlObj = new URL(formattedUrl);
       defaultName = urlObj.hostname.replace(/^www\./, '');
-    } catch (err) {}
+    } catch {
+      setWebError('Please enter a valid http:// or https:// URL.');
+      return;
+    }
 
-    const newSource: ContextSource = {
-      id: `src_web_${Date.now()}`,
-      name: webTitle.trim() || defaultName,
-      type: 'other',
-      size: 'Web Link',
-      uploadedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      status: 'PROCESSED',
-      sourceOrigin: 'WEBSITE',
-      contentSummary: `Web Documentation URL: ${formattedUrl}`,
-      rawText: `Web Context Source URL: ${formattedUrl}\nTitle: ${webTitle.trim() || defaultName}\nIndexed Content: External web page documentation referenced as context ground for solution architecture.`
-    };
+    setIsFetchingUrl(true);
+    setWebError(null);
 
-    onAddContextSource(newSource);
-    toast.success(`Imported website context "${newSource.name}"!`);
-    setWebUrl('');
-    setWebTitle('');
-    onClose();
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 45_000);
+
+    try {
+      const token = await getAuthToken();
+      const tenantId = tenant?.id || localStorage.getItem('aurora_active_tenant_id') || 'default-tenant';
+      const res = await fetch(`${API_BASE_URL}/api/solutions/ingest-url`, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': tenantId,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ url: formattedUrl }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg = data?.error || `Failed to fetch webpage (HTTP ${res.status}).`;
+        setWebError(msg);
+        toast.error(msg);
+        return;
+      }
+
+      const newSource: ContextSource = {
+        id: `src_web_${Date.now()}`,
+        name: webTitle.trim() || data.title || defaultName,
+        type: data.contentType === 'application/pdf' ? 'pdf' : 'other',
+        size: data.size || 'Web Page',
+        uploadedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        status: 'PROCESSED',
+        sourceOrigin: 'WEBSITE',
+        contentSummary: data.contentSummary || `Extracted web content from ${data.url || formattedUrl}`,
+        rawText: data.rawText || '',
+      };
+
+      onAddContextSource(newSource);
+      toast.success(`Extracted "${newSource.name}" (${data.size || 'web page'}) into Sources.`);
+      setWebUrl('');
+      setWebTitle('');
+      setWebError(null);
+      onClose();
+    } catch (err: any) {
+      const msg =
+        err?.name === 'AbortError'
+          ? 'Fetching timed out after 45s. The page or PDF may be too large or slow to respond.'
+          : err?.message || 'Network error while fetching webpage.';
+      setWebError(msg);
+      toast.error(msg);
+    } finally {
+      window.clearTimeout(timeoutId);
+      setIsFetchingUrl(false);
+    }
   };
 
   const handleImportAction = (e?: React.FormEvent) => {
@@ -265,24 +335,41 @@ export const AddContextSourceModal: React.FC<AddContextSourceModalProps> = ({
                       <input
                         type="url"
                         required
+                        disabled={isFetchingUrl}
                         value={webUrl}
-                        onChange={(e) => setWebUrl(e.target.value)}
+                        onChange={(e) => {
+                          setWebUrl(e.target.value);
+                          if (webError) setWebError(null);
+                        }}
                         placeholder="https://docs.stripe.com/api or https://en.wikipedia.org/wiki/..."
-                        className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 outline-none focus:border-sky-500 transition-all shadow-xs"
+                        className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 outline-none focus:border-sky-500 transition-all shadow-xs disabled:opacity-60"
                       />
                     </div>
 
                     <div>
                       <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5">
-                        Source Name / Title <span className="text-zinc-400 font-normal">(Optional)</span>
+                        Source Name / Title <span className="text-zinc-400 font-normal">(Optional — auto-detected from page)</span>
                       </label>
                       <input
                         type="text"
+                        disabled={isFetchingUrl}
                         value={webTitle}
                         onChange={(e) => setWebTitle(e.target.value)}
                         placeholder="e.g. Stripe API Integration Reference"
-                        className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 outline-none focus:border-sky-500 transition-all shadow-xs"
+                        className="w-full px-4 py-2.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs text-zinc-900 dark:text-white placeholder:text-zinc-400 outline-none focus:border-sky-500 transition-all shadow-xs disabled:opacity-60"
                       />
+                    </div>
+
+                    {webError && (
+                      <div className="flex items-start gap-2 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 text-xs text-rose-700 dark:text-rose-300">
+                        <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                        <span>{webError}</span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-400 pt-1">
+                      <ShieldCheck size={13} className="text-emerald-500 shrink-0" />
+                      <span>Fetched read-only on the server with private-network blocking and prompt-injection isolation.</span>
                     </div>
                   </div>
                 </form>
@@ -403,11 +490,20 @@ export const AddContextSourceModal: React.FC<AddContextSourceModalProps> = ({
                 <button
                   type="button"
                   onClick={() => handleImportAction()}
-                  disabled={activeTab === 'website' ? !webUrl.trim() : selectedItemIds.length === 0}
+                  disabled={isFetchingUrl || (activeTab === 'website' ? !webUrl.trim() : selectedItemIds.length === 0)}
                   className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
                 >
-                  <Plus size={15} />
-                  <span>Import</span>
+                  {isFetchingUrl ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>Fetching...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={15} />
+                      <span>Import</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>

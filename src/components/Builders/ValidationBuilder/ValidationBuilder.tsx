@@ -16,6 +16,8 @@ export interface ValidationBuilderProps {
   validationRules?: any[];
   setValidationRules?: React.Dispatch<React.SetStateAction<any[]>>;
   onDirtyChange?: (isDirty: boolean) => void;
+  draftMode?: boolean;
+  onSave?: (ruleset: any) => void;
 }
 
 export const ValidationBuilder: React.FC<ValidationBuilderProps> = ({
@@ -24,7 +26,9 @@ export const ValidationBuilder: React.FC<ValidationBuilderProps> = ({
   fields = [],
   validationRules,
   setValidationRules,
-  onDirtyChange
+  onDirtyChange,
+  draftMode = false,
+  onSave
 }) => {
   const { tenant, modules } = usePlatform();
   const { session } = useAuth();
@@ -108,12 +112,20 @@ export const ValidationBuilder: React.FC<ValidationBuilderProps> = ({
       const isExistingPersistedId = Boolean(initialRuleset?.id && !initialRuleset.id.startsWith('val_'));
 
       const payload = {
+        id: initialRuleset?.id || `val_${Date.now()}`,
         name,
         description,
         scope: effectiveModuleId ? 'MODULE' : 'GLOBAL',
         moduleId: effectiveModuleId || null,
         rules: activeRules
       };
+
+      if (draftMode) {
+        onDirtyChange?.(false);
+        onSave?.(payload);
+        builderContext.onSaveSuccess?.(payload.id, payload);
+        return;
+      }
 
       const res = await fetch(`${API_BASE_URL}/api/validations${isExistingPersistedId ? `/${initialRuleset!.id}` : ''}`, {
         method: isExistingPersistedId ? 'PUT' : 'POST',

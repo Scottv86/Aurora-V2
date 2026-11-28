@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
+    "sync:ai-schemas": "tsx scripts/sync-ai-builder-manifest.ts",
     "server": "tsx watch server/index.ts",
     "test:security": "tsx --use-system-ca tests/security.test.ts",
     "test:workflow": "tsx --use-system-ca test_workflow_conditions.ts",

@@ -121,6 +121,8 @@ export interface FormBuilderProps {
   builderContext?: StandaloneBuilderContext;
   onSave?: (form: FormEntity) => void;
   onDirtyChange?: (isDirty: boolean) => void;
+  /** When true (e.g. inside Solution Studio), saves purely to draft state without hitting live REST API */
+  draftMode?: boolean;
 
   // Embedded Module Editor mode props (when inside ModuleEditor -> Forms tab)
   mode?: 'global' | 'in_context' | 'module_embedded';
@@ -637,6 +639,7 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
   builderContext = { mode: 'global' },
   onSave,
   onDirtyChange,
+  draftMode = false,
   mode: explicitMode,
   forms: externalForms,
   onFormsChange,
@@ -1775,6 +1778,16 @@ export const FormBuilder: React.FC<FormBuilderProps> = ({
         resolvedModuleLayout,
         resolvedWorkflow
       );
+
+      if (draftMode) {
+        const draftSaved = { ...payload, id: initialForm?.id || payload.id || `form_${Date.now()}` } as any;
+        toast.success(`Form "${draftSaved.name}" updated in Solution draft.`);
+        if (builderContext.onSaveSuccess) builderContext.onSaveSuccess(draftSaved.id, draftSaved);
+        if (onSave) onSave(draftSaved);
+        onDirtyChange?.(false);
+        return;
+      }
+
       const isExistingPersistedId = Boolean(
         initialForm?.id &&
           !String(initialForm.id).startsWith('form_') &&

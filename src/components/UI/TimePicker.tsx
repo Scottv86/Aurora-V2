@@ -66,22 +66,30 @@ export const TimePicker: React.FC<TimePickerProps> = ({
     }
   }, [isOpen, updatePosition]);
 
+  const safeMinuteStep = minuteStep && minuteStep > 0 ? minuteStep : 15;
+
   // Parse current value
-  const [hours, minutes] = useMemo(() => {
-    if (!value) return [12, 0];
-    const [h, m] = value.split(':').map(Number);
-    return [h, m];
+  const [hours, minutes, isValidTime] = useMemo(() => {
+    if (typeof value !== 'string' || !value.trim()) return [12, 0, false] as const;
+    const match = value.trim().match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?$/);
+    if (!match) return [12, 0, false] as const;
+    const h = Number(match[1]);
+    const m = Number(match[2]);
+    if (h < 0 || h > 23 || m < 0 || m > 59) return [12, 0, false] as const;
+    return [h, m, true] as const;
   }, [value]);
 
   const displayTime = useMemo(() => {
-    if (!value) return placeholder;
+    if (!isValidTime) {
+      return typeof value === 'string' && value.trim() ? value : placeholder;
+    }
     if (timeFormat === '24h') {
       return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
     }
     const h = hours % 12 || 12;
     const ampm = hours >= 12 ? 'PM' : 'AM';
     return `${h}:${minutes.toString().padStart(2, '0')} ${ampm}`;
-  }, [value, hours, minutes, placeholder, timeFormat]);
+  }, [value, hours, minutes, isValidTime, placeholder, timeFormat]);
 
   // Handle click outside
   useEffect(() => {
@@ -209,13 +217,13 @@ export const TimePicker: React.FC<TimePickerProps> = ({
 
                 {/* Minute */}
                 <div className="flex flex-col items-center">
-                  <button onClick={() => setMinute((minutes - minuteStep + 60) % 60)} className="p-1 text-zinc-400 hover:text-indigo-500 transition-colors">
+                  <button onClick={() => setMinute((minutes - safeMinuteStep + 60) % 60)} className="p-1 text-zinc-400 hover:text-indigo-500 transition-colors">
                     <ChevronUp size={20} />
                   </button>
                   <span className="text-3xl font-black text-zinc-900 dark:text-white w-12 text-center">
                     {minutes.toString().padStart(2, '0')}
                   </span>
-                  <button onClick={() => setMinute((minutes + minuteStep) % 60)} className="p-1 text-zinc-400 hover:text-indigo-500 transition-colors">
+                  <button onClick={() => setMinute((minutes + safeMinuteStep) % 60)} className="p-1 text-zinc-400 hover:text-indigo-500 transition-colors">
                     <ChevronDown size={20} />
                   </button>
                 </div>
@@ -237,7 +245,7 @@ export const TimePicker: React.FC<TimePickerProps> = ({
                 <div className="grid grid-cols-4 gap-2">
                   {(() => {
                     const steps = [];
-                    for (let i = 0; i < 60; i += minuteStep) {
+                    for (let i = 0; i < 60; i += safeMinuteStep) {
                       steps.push(i);
                     }
                     return steps.slice(0, 8).map(m => {

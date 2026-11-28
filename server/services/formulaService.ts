@@ -12,14 +12,17 @@ export class FormulaService {
 
     let expr = expression.trim();
 
-    // Replace @Record.field or @field tokens with actual values from context
-    expr = expr.replace(/@(?:Record\.)?([a-zA-Z0-9_-]+)/g, (_match, fieldName) => {
+    // Replace @Record.field, @field, {{field}}, or {field} tokens with actual values from context
+    const resolveToken = (_match: string, fieldName: string) => {
       const val = context[fieldName];
       if (val === undefined || val === null) return '0';
       if (typeof val === 'number') return String(val);
       if (typeof val === 'boolean') return val ? 'true' : 'false';
       return JSON.stringify(String(val));
-    });
+    };
+    expr = expr.replace(/@(?:Record\.)?([a-zA-Z0-9_-]+)/g, resolveToken);
+    expr = expr.replace(/\{\{\s*([a-zA-Z0-9_-]+)\s*\}\}/g, resolveToken);
+    expr = expr.replace(/\{\s*([a-zA-Z0-9_-]+)\s*\}/g, resolveToken);
 
     // Handle common functions safely
     // DATEDIFF("days", date1, date2)

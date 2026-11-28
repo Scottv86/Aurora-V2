@@ -16,14 +16,48 @@ import {
   Music, 
   Sliders,
   Play,
-  VolumeX
+  VolumeX,
+  Palette,
+  Timer
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../components/UI/Primitives';
 import { usePlatform } from '../../hooks/usePlatform';
 import { SettingsSubNavLayout, SettingsSubNavItem } from '../../components/Settings/SettingsSubNavLayout';
-import { ToastPosition, ToastNotificationConfig, SoundNotificationConfig, ChimeSoundId } from '../../types/platform';
+import { ToastPosition, ToastStylePreset, ToastNotificationConfig, SoundNotificationConfig, ChimeSoundId } from '../../types/platform';
 import { CHIME_LIBRARY, playChimeSound } from '../../lib/audioNotification';
+
+const TOAST_STYLE_PRESETS: {
+  id: ToastStylePreset;
+  name: string;
+  badge: string;
+  description: string;
+}[] = [
+  {
+    id: 'aurora-glass',
+    name: 'Aurora Glass',
+    badge: 'Default',
+    description: 'Frosted glass with an ambient radial glow, squircle icon badge, and hover-reveal dismiss.',
+  },
+  {
+    id: 'minimal-pill',
+    name: 'Minimal Pill',
+    badge: 'Compact',
+    description: 'Ultra-clean monochrome capsules that hug single-line alerts and expand smoothly for rich content.',
+  },
+  {
+    id: 'soft-tint',
+    name: 'Soft Tinted',
+    badge: 'Friendly',
+    description: 'Delicate semantic color washes with rounded surfaces and circular status icons.',
+  },
+  {
+    id: 'editorial-sharp',
+    name: 'Editorial Sharp',
+    badge: 'Classic',
+    description: 'Crisp 0px architectural geometry with Aurora’s signature left accent bar.',
+  },
+];
 
 const POSITION_OPTIONS: { id: ToastPosition; label: string; quadrant: string }[] = [
   { id: 'top-left', label: 'Top Left', quadrant: 'top-left' },
@@ -47,6 +81,8 @@ export const NotificationSettingsPage = () => {
     duration: 4000,
     closeButton: true,
     expand: false,
+    style: 'aurora-glass',
+    showProgressBar: true,
   });
 
   // Sound settings state
@@ -90,6 +126,8 @@ export const NotificationSettingsPage = () => {
           duration: existingNotifs?.toasts?.duration ?? 4000,
           closeButton: existingNotifs?.toasts?.closeButton ?? true,
           expand: existingNotifs?.toasts?.expand ?? false,
+          style: existingNotifs?.toasts?.style || 'aurora-glass',
+          showProgressBar: existingNotifs?.toasts?.showProgressBar ?? true,
         });
       }
 
@@ -105,6 +143,21 @@ export const NotificationSettingsPage = () => {
       setInitialized(true);
     }
   }, [tenant, initialized]);
+
+  // Live-preview selected toast style & progress bar before saving, and restore on unmount
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.toastStyle = toastConfig.style || 'aurora-glass';
+    root.dataset.toastProgress = String(toastConfig.showProgressBar ?? true);
+    root.style.setProperty('--aurora-toast-duration', `${toastConfig.duration || 4000}ms`);
+
+    return () => {
+      const saved = tenant?.workspaceSettings?.notifications?.toasts;
+      root.dataset.toastStyle = saved?.style || 'aurora-glass';
+      root.dataset.toastProgress = String(saved?.showProgressBar ?? true);
+      root.style.setProperty('--aurora-toast-duration', `${saved?.duration ?? 4000}ms`);
+    };
+  }, [toastConfig.style, toastConfig.showProgressBar, toastConfig.duration, tenant]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -141,8 +194,15 @@ export const NotificationSettingsPage = () => {
     }, 800);
   };
 
-  const triggerSampleToast = (type: 'success' | 'info' | 'warning' | 'error') => {
+  const triggerSampleToast = (type: 'success' | 'info' | 'warning' | 'error' | 'compact', overrideStyle?: ToastStylePreset) => {
+    const activeStyle = overrideStyle || toastConfig.style || 'aurora-glass';
+    const presetMeta = TOAST_STYLE_PRESETS.find(p => p.id === activeStyle);
     const positionLabel = POSITION_OPTIONS.find(p => p.id === toastConfig.position)?.label || 'Bottom Left';
+
+    // Ensure DOM reflects style immediately when previewing directly from a preset card
+    document.documentElement.dataset.toastStyle = activeStyle;
+    document.documentElement.dataset.toastProgress = String(toastConfig.showProgressBar ?? true);
+    document.documentElement.style.setProperty('--aurora-toast-duration', `${toastConfig.duration || 4000}ms`);
     
     // Play selected toast chime if sound enabled
     if (soundConfig.enabled) {
@@ -150,19 +210,25 @@ export const NotificationSettingsPage = () => {
     }
 
     const toastOptions = {
-      description: `Rendered at ${positionLabel} (${toastConfig.duration || 4000}ms)`,
+      description: `${presetMeta?.name || 'Aurora Glass'} • ${positionLabel} (${toastConfig.duration || 4000}ms)`,
       position: toastConfig.position,
       duration: toastConfig.duration || 4000,
     };
 
     switch (type) {
+      case 'compact':
+        toast.success('Copied to clipboard', {
+          position: toastConfig.position,
+          duration: toastConfig.duration || 4000,
+        });
+        break;
       case 'success':
         toast.success(`Success Toast Triggered`, toastOptions);
         break;
       case 'info':
         toast.info(`System Information Alert`, {
           ...toastOptions,
-          description: `Previewing notification layout at ${positionLabel}`,
+          description: `Previewing ${presetMeta?.name || 'Aurora Glass'} at ${positionLabel}`,
         });
         break;
       case 'warning':
@@ -211,6 +277,119 @@ export const NotificationSettingsPage = () => {
               transition={{ duration: 0.2 }}
               className="space-y-8"
             >
+              {/* Toast Style Presets */}
+              <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-zinc-200/80 dark:border-white/5 rounded-3xl p-6 lg:p-8 shadow-xl shadow-black/5 dark:shadow-none space-y-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Palette size={18} className="text-indigo-500" />
+                      <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider font-mono">
+                        Toast Style Preset
+                      </h3>
+                    </div>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                      Choose the visual aesthetic for system notifications. Click any preset to preview it live.
+                    </p>
+                  </div>
+                  <div className="text-xs font-mono text-indigo-500 dark:text-indigo-400 font-semibold bg-indigo-50 dark:bg-indigo-500/10 px-3 py-1 rounded-full shrink-0">
+                    {TOAST_STYLE_PRESETS.find(p => p.id === (toastConfig.style || 'aurora-glass'))?.name}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {TOAST_STYLE_PRESETS.map((preset) => {
+                    const isSelected = (toastConfig.style || 'aurora-glass') === preset.id;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => {
+                          setToastConfig((prev: ToastNotificationConfig) => ({ ...prev, style: preset.id }));
+                          triggerSampleToast('success', preset.id);
+                        }}
+                        className={`text-left p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-4 ${
+                          isSelected
+                            ? 'bg-indigo-50/70 dark:bg-indigo-950/25 border-indigo-500 shadow-md shadow-indigo-500/10'
+                            : 'bg-white/50 dark:bg-zinc-900/50 border-zinc-200/80 dark:border-zinc-800/80 hover:border-zinc-300 dark:hover:border-zinc-700'
+                        }`}
+                      >
+                        {/* Mini Visual Preview Mockup */}
+                        <div className="w-full p-3.5 rounded-xl bg-zinc-100/80 dark:bg-black/40 border border-zinc-200/70 dark:border-white/5 flex items-center justify-center min-h-[76px]">
+                          {preset.id === 'aurora-glass' && (
+                            <div
+                              style={{ backgroundImage: 'radial-gradient(circle at 18px 18px, rgba(16,185,129,0.22) 0%, transparent 60%)' }}
+                              className="relative w-full max-w-[230px] rounded-2xl bg-white/90 dark:bg-[#0f1118]/90 border border-zinc-200/90 dark:border-white/12 px-3 py-2.5 shadow-md flex items-center gap-2.5 overflow-hidden"
+                            >
+                              <div className="w-6 h-6 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                                <CheckCircle2 size={13} />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="text-[11px] font-semibold text-zinc-900 dark:text-zinc-100 truncate">Changes saved</div>
+                                <div className="text-[9.5px] text-zinc-500 dark:text-zinc-400 truncate">Synced to workspace</div>
+                              </div>
+                              <div className="absolute left-0 right-0 bottom-0 h-[2px] bg-gradient-to-r from-emerald-500/80 to-transparent w-2/3" />
+                            </div>
+                          )}
+
+                          {preset.id === 'minimal-pill' && (
+                            <div className="rounded-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-white/15 px-3.5 py-2 shadow-md flex items-center gap-2">
+                              <CheckCircle2 size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                              <span className="text-[11px] font-semibold text-zinc-900 dark:text-zinc-100 whitespace-nowrap">
+                                Copied to clipboard
+                              </span>
+                            </div>
+                          )}
+
+                          {preset.id === 'soft-tint' && (
+                            <div className="relative w-full max-w-[230px] rounded-xl bg-emerald-50/95 dark:bg-[#06261d]/95 border border-emerald-300/70 dark:border-emerald-500/35 px-3 py-2.5 shadow-sm flex items-center gap-2.5 overflow-hidden">
+                              <div className="w-6 h-6 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                                <CheckCircle2 size={13} />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="text-[11px] font-semibold text-zinc-900 dark:text-zinc-100 truncate">Workspace ready</div>
+                                <div className="text-[9.5px] text-zinc-600 dark:text-zinc-300 truncate">All modules online</div>
+                              </div>
+                            </div>
+                          )}
+
+                          {preset.id === 'editorial-sharp' && (
+                            <div className="relative w-full max-w-[230px] rounded-none bg-white dark:bg-[#0b0d13] border border-zinc-200 dark:border-white/12 pl-3.5 pr-3 py-2.5 shadow-md flex items-center gap-2.5 overflow-hidden">
+                              <div className="absolute top-0 bottom-0 left-0 w-[3px] bg-emerald-500" />
+                              <CheckCircle2 size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <div className="text-[11px] font-semibold text-zinc-900 dark:text-zinc-100 truncate">Deployment complete</div>
+                                <div className="text-[9.5px] text-zinc-500 dark:text-zinc-400 truncate">Build #482 live</div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-bold text-zinc-900 dark:text-white">{preset.name}</span>
+                              <span className="px-2 py-0.5 text-[10px] font-semibold bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-full">
+                                {preset.badge}
+                              </span>
+                            </div>
+                            <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                              isSelected
+                                ? 'border-indigo-600 bg-indigo-600 text-white'
+                                : 'border-zinc-300 dark:border-zinc-600'
+                            }`}>
+                              {isSelected && <Check size={10} className="stroke-[3]" />}
+                            </div>
+                          </div>
+                          <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                            {preset.description}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Toast Position Selector */}
               <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl border border-zinc-200/80 dark:border-white/5 rounded-3xl p-6 lg:p-8 shadow-xl shadow-black/5 dark:shadow-none space-y-6">
                 <div>
@@ -312,6 +491,15 @@ export const NotificationSettingsPage = () => {
                       <XCircle size={14} />
                       Test Error
                     </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => triggerSampleToast('compact')}
+                      className="gap-1.5 text-xs text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30"
+                    >
+                      <Sparkles size={14} />
+                      Test Compact
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -375,19 +563,38 @@ export const NotificationSettingsPage = () => {
                 </div>
 
                 {/* Stacking / Expansion Toggle */}
-                <div className="p-4 rounded-2xl bg-white/40 dark:bg-white/[0.02] border border-zinc-200/80 dark:border-white/5 flex items-center justify-between">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Layers size={16} className="text-indigo-500" />
-                      <p className="text-sm font-semibold text-zinc-900 dark:text-white">Expand Multi-Toasts</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-2xl bg-white/40 dark:bg-white/[0.02] border border-zinc-200/80 dark:border-white/5 flex items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Layers size={16} className="text-indigo-500" />
+                        <p className="text-sm font-semibold text-zinc-900 dark:text-white">Expand Multi-Toasts</p>
+                      </div>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400">Expand multiple simultaneous toasts into a full visible list rather than stacking.</p>
                     </div>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">Expand multiple simultaneous toasts into a full visible list rather than stacking.</p>
+                    <div 
+                      onClick={() => setToastConfig((prev: ToastNotificationConfig) => ({ ...prev, expand: !prev.expand }))}
+                      className={`h-6 w-11 rounded-full relative cursor-pointer transition-colors shrink-0 ${toastConfig.expand ? 'bg-indigo-600' : 'bg-zinc-200 dark:bg-white/10'}`}
+                    >
+                      <div className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-all ${toastConfig.expand ? 'right-1' : 'left-1'}`} />
+                    </div>
                   </div>
-                  <div 
-                    onClick={() => setToastConfig((prev: ToastNotificationConfig) => ({ ...prev, expand: !prev.expand }))}
-                    className={`h-6 w-11 rounded-full relative cursor-pointer transition-colors ${toastConfig.expand ? 'bg-indigo-600' : 'bg-zinc-200 dark:bg-white/10'}`}
-                  >
-                    <div className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-all ${toastConfig.expand ? 'right-1' : 'left-1'}`} />
+
+                  {/* Countdown Progress Bar Toggle */}
+                  <div className="p-4 rounded-2xl bg-white/40 dark:bg-white/[0.02] border border-zinc-200/80 dark:border-white/5 flex items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Timer size={16} className="text-indigo-500" />
+                        <p className="text-sm font-semibold text-zinc-900 dark:text-white">Countdown Progress Bar</p>
+                      </div>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400">Shows a subtle hairline timer along the bottom edge that pauses on hover.</p>
+                    </div>
+                    <div 
+                      onClick={() => setToastConfig((prev: ToastNotificationConfig) => ({ ...prev, showProgressBar: !(prev.showProgressBar ?? true) }))}
+                      className={`h-6 w-11 rounded-full relative cursor-pointer transition-colors shrink-0 ${(toastConfig.showProgressBar ?? true) ? 'bg-indigo-600' : 'bg-zinc-200 dark:bg-white/10'}`}
+                    >
+                      <div className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-all ${(toastConfig.showProgressBar ?? true) ? 'right-1' : 'left-1'}`} />
+                    </div>
                   </div>
                 </div>
               </div>

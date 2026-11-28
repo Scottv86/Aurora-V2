@@ -6,6 +6,12 @@ import { io, emitTenantUpdate, setAIAgentPresence } from '../socket';
 import { AutomationEngine } from './automationEngine';
 import { safeFetch } from '../lib/ssrfGuard';
 import { getActiveWorkflowForModule } from './builderSyncService';
+import {
+  WORKSPACE_SHARED_READ_TOOL_DECLARATIONS,
+  WORKSPACE_SHARED_READ_TOOL_NAMES,
+  executeAuroraReadTool,
+} from './sharedAuroraReadTools';
+import { AiActionStager } from './aiActionStager';
 
 function processAutonumbersInternal(dataObject: any, fields: any[], updatedConfig: any): boolean {
   if (!dataObject || typeof dataObject !== 'object' || !fields || !Array.isArray(fields)) return false;
@@ -424,6 +430,42 @@ const agentTools = [
         }
       },
       {
+        name: "manage_module_tab",
+        description: "Add, rename, update (icon, parentId for nested sub-tabs, conditional visibilityRule), or remove tabs on a module's detail view. Can also rename the default 'general' tab.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            moduleId: { type: Type.STRING, description: "The ID of the target module." },
+            action: { type: Type.STRING, description: "Action to perform: ADD, UPDATE, RENAME, or REMOVE." },
+            tabId: { type: Type.STRING, description: "The ID of the tab (e.g. 'general', 'tab_compliance')." },
+            tabConfig: {
+              type: Type.OBJECT,
+              description: "Tab properties: { label, iconName?, parentId?, visibilityRule? }."
+            }
+          },
+          required: ["moduleId", "action"]
+        }
+      },
+      {
+        name: "manage_module_interface",
+        description: "Update a module's Master (list) and/or Detail (record) view settings (interfaceSettings): master layoutType (table|split|kanban|calendar|map|cards|portfolio|timeline|gantt|analytics|pipeline), density, titleFieldId, cardFields, toolbar toggles (enabledViews, enableSpreadsheetMode), detail layoutType (tabs|split|sidebar|process|accordion), showWorkflow, and contextRail (enabled, defaultTab, enabledTabs, pinnedFieldIds).",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            moduleId: { type: Type.STRING, description: "The ID of the target module." },
+            master: {
+              type: Type.OBJECT,
+              description: "Partial master/list view settings to merge into interfaceSettings.master."
+            },
+            detail: {
+              type: Type.OBJECT,
+              description: "Partial detail/record view settings to merge into interfaceSettings.detail."
+            }
+          },
+          required: ["moduleId"]
+        }
+      },
+      {
         name: "manage_module_validation",
         description: "Add, modify, or remove custom validation rules for fields in a module config.",
         parameters: {
@@ -746,7 +788,8 @@ const agentTools = [
           },
           required: ["name", "type"]
         }
-      }
+      },
+      ...WORKSPACE_SHARED_READ_TOOL_DECLARATIONS
     ]
   }
 ];
@@ -913,10 +956,25 @@ ${attrLines || '    * (Empty module schema)'}
 
 AURORA MODULE BUILDER AI PLAYBOOK:
 1. Context & Target: The user is ACTIVELY DESIGNING Module "${ae.title}" (ID: "${ae.module?.id || ae.id}") on the "${ae.activeTab || 'Interface'}" tab. Use moduleId "${ae.module?.id || ae.id}" directly in module-builder tools without asking the user for IDs.
-2. Schema & 12-Column Grid Conventions:
-   - Valid field types: text, textarea, number, currency, select, multi_select, checkbox, date, datetime, user, party, lookup, calculation, file, url, email, phone, group, fieldGroup, repeatableGroup, sub_module.
-   - Grid layout uses 12 columns (colSpan: 12 = Full, 8 = 2/3, 6 = 1/2, 4 = 1/3, 3 = 1/4; startCol: 1..12). Prefer balanced 2-column (colSpan: 6) or full-width (colSpan: 12) layouts.
-   - Calculated fields use type "calculation" with calculationLogic referencing fields["<fieldId>"] and calculationTriggers listing dependency field IDs.
+2. Schema, 60 Blocks & 12-Column Grid Conventions:
+   - Valid field/block types (all 60 Module Builder blocks):
+     * Inputs: text, longText, textarea, number, currency, email, phone, address, url, date, time, select, radio, checkboxGroup, checkbox, toggle, slider, rating, colorpicker, tag
+     * Platform: party, user, multi_user, team_select, position_select, global_list, lookup, sub_module, relationship_m2m, rollup, calculation, autonumber, ai_summary, connector, booking, booking_slot
+     * Actions & Display: button, buttonGroup, signature, qr_scanner, payment, file, heading, richtext, html, icon, divider, spacer, alert, image, video, audio, progress, map, canvas, chat
+     * Containers & Data: group, fieldGroup, repeatableGroup, card, accordion, tabs_nested, stepper, timeline, datatable, duallist, treeview
+   - Built-In System Metadata (NEVER DUPLICATE AS CUSTOM FIELDS):
+     * Every record already has built-in "status" (driven automatically by the Module's Workflow stages — NEVER create a manual Status / Stage dropdown field!), "assigneeId" (Assignee), "participantIds" (Participants), "_record_key" (Record Key via recordKeyPrefix), "priority", "dueDate", "createdAt", "createdBy", and "updatedAt".
+     * Only add custom user fields for distinct secondary roles (e.g. "Peer Reviewer", "Approving Officer"), and reference the built-in IDs ("status", "assigneeId", "_record_key", "dueDate", "priority") directly in Forms, Queues, Automations, Validations, and Reports.
+   - 12-Column Grid Layout Rules:
+     * Widths: colSpan: 12 = Full, 8 = 2/3, 6 = 1/2, 4 = 1/3, 3 = 1/4; startCol: 1..12; rowIndex: 0, 2, 4...
+     * Container blocks (group, fieldGroup, repeatableGroup, card, accordion, tabs_nested, stepper, timeline, datatable, sub_module) and wide blocks (textarea, longText, richtext, address, file, signature, ai_summary, heading, divider, alert) MUST default to colSpan: 12 (full width), unless deliberately paired side-by-side (startCol: 1, colSpan: 6 AND startCol: 7, colSpan: 6 on the same rowIndex). Never leave a lone half-width group with an empty right side.
+     * Inside group/fieldGroup/card, nested fields ALSO use a 12-column grid (pair short inputs at colSpan: 6 with startCol: 1 and startCol: 7; wide inputs at colSpan: 12).
+   - Field Properties Sidebar & View/Layout Options:
+     * Field properties: required, placeholder, helperText, tooltip, defaultValue, hidden, showInTable, inlineEdit, columnWidth, optionsSource (manual|global_list), optionLayout (vertical|horizontal), min/max, currencySymbol, collapsible/defaultCollapsed, date/time constraints (dateFormat, timeFormat, excludeWeekends, defaultType, minDateType/maxDateType), visibilityRule, formattingRules.
+     * Master layouts (11): table, split, kanban, calendar, map, cards, portfolio, timeline, gantt, analytics, pipeline — configurable with density (compact|standard|spacious), titleFieldId, subtitleFieldIds, cardFields, calendar/gantt/map field bindings, and toolbar toggles (enabledViews, enableSpreadsheetMode, enableGrouping, enableSavedViews, enableBulkActions).
+     * Detail layouts (5): tabs, split, sidebar, process (wizardSaveMode: step|final), accordion — configurable with density, showWorkflow, showTabIcons, and contextRail (enabled, defaultCollapsed, defaultTab: overview|workflow|activity|notes|files|tasks|time, enabledTabs, pinnedFieldIds).
+     * Module Tabs (use manage_module_tab): You can rename the default "General" tab (tabId: "general"), add icons (iconName), create nested sub-tabs (parentId), and attach conditional visibilityRule to tabs so specialist tabs only appear when conditions match (e.g. licence_class === "Hotel"). Assign fields to tabs via tabId.
+   - Calculated fields use type "calculation" with calculationLogic referencing {{fieldId}} (or fields["<fieldId>"]) and calculationTriggers listing dependency field IDs.
 3. Tab-Aware Guidance:
    - Interface / Forms: Organize fields into clean fieldGroup sections, ensure clear labels, placeholders, and appropriate required flags.
    - Workflow: Design clean START -> STATUS -> DECISION -> ACTION / DELAY (Wait/SLA) -> END flows. Supported workflow actions include CREATE_RECORD, UPDATE, ROUTE_TO_MODULE, EMAIL, NOTIFY, SLACK, CREATE_NOTE, PIN_RECORD_NOTE, CREATE_REMINDER, COMPLETE_REMINDER, PDF, STRIPE_PAYMENT_LINK, AI_SUMMARIZE, GEMINI_PROMPT, AI_AGENT, WEBHOOK, GOOGLE_SHEETS_SYNC, RUN_AUTOMATION. DELAY nodes support duration/unit, targetDateField, businessHoursOnly, isSla, breachAction, and slaTarget.
@@ -1017,6 +1075,11 @@ ENTITY RELATIONSHIPS & JOIN PATHS:
   - Join Record to Module: records.module_id = modules.id
   - Join Global List Items: global_list_items.list_id = global_lists.id
 
+AURORA MODULE & SOLUTION ARCHITECTURE CONVENTIONS (ALWAYS APPLY WHEN BUILDING/EDITING):
+  - Built-In System Metadata (NEVER duplicate as custom fields): Every record automatically includes "status" (driven by the Module's linked Workflow stages — never add a manual Status dropdown!), "assigneeId", "participantIds", "_record_key" (configured via recordKeyPrefix), "priority", "dueDate", "createdAt", "createdBy", and "updatedAt".
+  - 12-Column Grid: colSpan 12 (Full), 8 (2/3), 6 (1/2), 4 (1/3), 3 (1/4); startCol 1..12; rowIndex 0, 2, 4... Containers (group, fieldGroup, repeatableGroup, card, accordion, tabs_nested, stepper, timeline, datatable, sub_module) and wide fields (textarea, address, richtext, file, signature) MUST default to colSpan: 12 unless intentionally paired side-by-side (startCol: 1 + 7 on same rowIndex).
+  - Views & Properties: Supports 11 master views (table, split, kanban, calendar, map, cards, portfolio, timeline, gantt, analytics, pipeline), 5 detail views (tabs, split, sidebar, process, accordion) with configurable contextRail, tabs/sub-tabs with conditional visibility, and full field properties (required, placeholder, helperText, tooltip, defaultValue, hidden, showInTable, inlineEdit, optionsSource, collapsible, visibilityRule, formattingRules). For exact live builder properties & enums across any of the 20 builders, call "get_builder_schema_contract" on demand.
+
 CURRENT WORKSPACE SCHEMA (CUSTOM MODULES):
 ${JSON.stringify(schemaOverview)}
 
@@ -1037,10 +1100,12 @@ CORE GUIDELINES:
    - Phase 1: Write an implementation plan via "write_agent_plan" (with planMarkdown, tasksList) and request review in your chat response.
    - Phase 2: Execute code/configuration changes only after the user aligns, tracking progress using the plan.
    - Phase 3: Verify results and write the walkthrough via "write_agent_plan" (walkthroughMarkdown).
-3. If the user asks for database queries (e.g. "find the 10 most viable open leads"), write a SELECT SQL query and execute it using "execute_read_only_query".
-   Remember, records data is stored in the "records" table:
-     - records.module_id matches the target Module's id.
-     - records.data is a JSONB column containing fields. (e.g., data->>'status' = 'Open').
+3. PLATFORM INTELLIGENCE & DATA ACCESS DIRECTIVES:
+   - Before modifying or deleting a module field, status, or workflow stage, call "analyze_change_impact" to warn the user about dependent automations, document templates, workflows, validations, forms, or reports.
+   - Prefer "search_tenant_records", "search_parties_directory", and "inspect_relationship_graph" (which resolves cross-module links, Directory parties, and Team/Position reporting chains automatically) BEFORE hand-writing raw JSONB SQL joins.
+   - When the user asks about SLA breaches, stalled tickets, or queue health, call "detect_workflow_bottlenecks".
+   - Before applying complex validation rules or automation conditions, offer or run "simulate_rule_or_workflow" to dry-run them in memory against real records with zero DB writes.
+   - If the user asks for custom analytics SQL, write a SELECT query for "execute_read_only_query" (and use "explain_tenant_query" to optimize slow/large queries). Remember records data is stored in "records" (records.module_id, records.data JSONB, e.g. data->>'status' = 'Open').
 4. If testing third-party APIs, write a node/javascript snippet and execute it via "execute_scratch_script".
 5. Run searches using "search_web" to look up API structures or code formats.
 6. VISUALISATION & WIDGET DIRECTIVES:
@@ -1164,6 +1229,8 @@ CORE GUIDELINES:
 
         const MUTATING_TOOLS = [
           'manage_module_field',
+          'manage_module_tab',
+          'manage_module_interface',
           'manage_module_validation',
           'manage_module_workflow',
           'manage_page_widget',
@@ -1371,7 +1438,10 @@ export const executeAgentTool = async (
   }
 
   try {
-          if (name === 'get_workspace_schema') {
+          if (WORKSPACE_SHARED_READ_TOOL_NAMES.has(name)) {
+            result = await executeAuroraReadTool(name, args || {}, { tenantId });
+          }
+          else if (name === 'get_workspace_schema') {
             const mods = await db.module.findMany({ where: { tenantId } });
             const autos = await db.automation.findMany({ where: { tenantId } });
             const conns = await db.tenantConnector.findMany({ where: { tenantId }, include: { connector: true } });
@@ -1910,6 +1980,90 @@ export const executeAgentTool = async (
               result = { success: true, module: updatedModule };
             }
           }
+          else if (name === 'manage_module_tab') {
+            const { moduleId, action, tabId, tabConfig } = args;
+            const targetModule = await db.module.findFirst({
+              where: { id: moduleId, tenantId }
+            });
+            if (!targetModule) {
+              result = { error: `Module '${moduleId}' not found.` };
+            } else {
+              const config = (targetModule.config as any) || {};
+              let tabs: any[] = Array.isArray(config.tabs) && config.tabs.length > 0
+                ? [...config.tabs]
+                : [{ id: 'general', label: 'General' }];
+              const targetId = tabId || `tab_${Date.now()}`;
+
+              if (action === 'ADD') {
+                tabs.push({
+                  id: targetId,
+                  label: tabConfig?.label || 'New Tab',
+                  ...(tabConfig || {}),
+                });
+              } else if (action === 'UPDATE' || action === 'RENAME') {
+                const exists = tabs.some((t: any) => t.id === targetId || String(t.label || '').toLowerCase() === String(targetId).toLowerCase());
+                if (exists) {
+                  tabs = tabs.map((t: any) =>
+                    (t.id === targetId || String(t.label || '').toLowerCase() === String(targetId).toLowerCase())
+                      ? { ...t, ...(tabConfig || {}) }
+                      : t
+                  );
+                } else {
+                  tabs.push({ id: targetId, label: tabConfig?.label || targetId, ...(tabConfig || {}) });
+                }
+              } else if (action === 'REMOVE') {
+                tabs = tabs.filter((t: any) => t.id !== targetId);
+              }
+
+              const updatedModule = await db.module.update({
+                where: { id: moduleId },
+                data: { config: { ...config, tabs } }
+              });
+              result = { success: true, tabs, module: updatedModule };
+            }
+          }
+          else if (name === 'manage_module_interface') {
+            const { moduleId, master, detail } = args;
+            const targetModule = await db.module.findFirst({
+              where: { id: moduleId, tenantId }
+            });
+            if (!targetModule) {
+              result = { error: `Module '${moduleId}' not found.` };
+            } else {
+              const config = (targetModule.config as any) || {};
+              const curInterface = config.interfaceSettings || {};
+              const nextMaster = master
+                ? {
+                    ...(curInterface.master || {}),
+                    ...master,
+                    ...(master.toolbar
+                      ? { toolbar: { ...(curInterface.master?.toolbar || {}), ...master.toolbar } }
+                      : {}),
+                  }
+                : curInterface.master;
+              const nextDetail = detail
+                ? {
+                    ...(curInterface.detail || {}),
+                    ...detail,
+                    ...(detail.contextRail
+                      ? { contextRail: { ...(curInterface.detail?.contextRail || {}), ...detail.contextRail } }
+                      : {}),
+                  }
+                : curInterface.detail;
+
+              const nextInterfaceSettings = {
+                ...curInterface,
+                ...(nextMaster ? { master: nextMaster } : {}),
+                ...(nextDetail ? { detail: nextDetail } : {}),
+              };
+
+              const updatedModule = await db.module.update({
+                where: { id: moduleId },
+                data: { config: { ...config, interfaceSettings: nextInterfaceSettings } }
+              });
+              result = { success: true, interfaceSettings: nextInterfaceSettings, module: updatedModule };
+            }
+          }
           else if (name === 'manage_module_validation') {
             const { moduleId, action, ruleId, ruleConfig } = args;
             const targetModule = await db.module.findFirst({
@@ -2374,14 +2528,14 @@ export const executeAgentTool = async (
             if (!sql) {
               result = {
                 success: true,
-                message: "Here are the whitelisted physical tables you can query using raw SQL. Please construct a SELECT query for: " + description,
+                message: "Here are the whitelisted physical tables you can query using raw SQL. Please construct a SELECT query with WHERE tenant_id = '" + tenantId + "' for: " + description,
                 tables: [
-                  { name: "tenant_members", columns: "id, first_name, family_name, work_email, status, role_id, licence_type, team_id, position_id" },
-                  { name: "teams", columns: "id, name, description" },
-                  { name: "positions", columns: "id, title, position_number, description" },
-                  { name: "modules", columns: "id, name, type, config" },
-                  { name: "records", columns: "id, module_id, data (JSONB custom properties)" },
-                  { name: "audit_logs", columns: "id, action, entity_type, entity_id, user_id, metadata, created_at" }
+                  { name: "tenant_members", columns: "id, tenant_id, first_name, family_name, work_email, status, role_id, licence_type, team_id, position_id" },
+                  { name: "teams", columns: "id, tenant_id, name, description" },
+                  { name: "positions", columns: "id, tenant_id, title, position_number, description, parent_id" },
+                  { name: "modules", columns: "id, tenant_id, name, type, config" },
+                  { name: "records", columns: "id, tenant_id, module_id, status, sla_status, sla_deadline, data (JSONB custom properties), updated_at" },
+                  { name: "audit_logs", columns: "id, tenant_id, action, actor_id, resource_id, old_value, new_value, timestamp" }
                 ]
               };
             } else {
@@ -2389,12 +2543,18 @@ export const executeAgentTool = async (
               if (!securityCheck.isValid) {
                 result = { error: securityCheck.error };
               } else {
-                const queryData = await db.$queryRawUnsafe(sql);
+                const [explainPlan, preview] = await Promise.all([
+                  executeAuroraReadTool('explain_tenant_query', { sql }, { tenantId }),
+                  executeAuroraReadTool('query_tenant_database', { sql, reason: description }, { tenantId }),
+                ]);
                 result = {
-                  success: true,
-                  explanation: "Validated security filters successfully. Query executed correctly.",
+                  success: !explainPlan?.error && !preview?.error,
                   sql,
-                  dryRunResults: serializeBigInts(queryData)
+                  explainPlan,
+                  dryRunResults: preview?.rows || [],
+                  rowCount: preview?.rowCount ?? 0,
+                  ...(explainPlan?.error ? { explainError: explainPlan.error } : {}),
+                  ...(preview?.error ? { previewError: preview.error } : {}),
                 };
               }
             }
@@ -2404,16 +2564,21 @@ export const executeAgentTool = async (
             if (action === 'LIST') {
               result = await db.auditLog.findMany({
                 where: { tenantId },
-                orderBy: { createdAt: 'desc' },
+                orderBy: { timestamp: 'desc' },
                 take: 50
               });
             } else if (action === 'GET_BY_ENTITY') {
-              if (!entityType || !entityId) {
-                result = { error: "entityType and entityId are required for GET_BY_ENTITY." };
+              if (!entityId && !entityType) {
+                result = { error: "entityId (or entityType) is required for GET_BY_ENTITY." };
               } else {
                 result = await db.auditLog.findMany({
-                  where: { tenantId, entityType, entityId },
-                  orderBy: { createdAt: 'desc' }
+                  where: {
+                    tenantId,
+                    ...(entityId ? { resourceId: entityId } : {}),
+                    ...(entityType && !entityId ? { action: { contains: entityType, mode: 'insensitive' } } : {}),
+                  },
+                  orderBy: { timestamp: 'desc' },
+                  take: 50
                 });
               }
             } else if (action === 'GET_BY_USER') {
@@ -2421,10 +2586,13 @@ export const executeAgentTool = async (
                 result = { error: "userId is required for GET_BY_USER." };
               } else {
                 result = await db.auditLog.findMany({
-                  where: { tenantId, userId },
-                  orderBy: { createdAt: 'desc' }
+                  where: { tenantId, actorId: userId },
+                  orderBy: { timestamp: 'desc' },
+                  take: 50
                 });
               }
+            } else {
+              result = { error: `Unsupported explore_audit_trail action "${action}". Use LIST, GET_BY_ENTITY, or GET_BY_USER.` };
             }
           }
           else if (name === 'manage_agent_profile') {
@@ -2747,42 +2915,81 @@ export const executeAgentTool = async (
             }
           }
           else if (name === 'search_tenant_knowledge_base') {
-            const { query, category: _category } = args;
-            const auditMatches = await db.auditLog.findMany({
-              where: { tenantId },
-              orderBy: { createdAt: 'desc' },
-              take: 5
-            });
+            const { query, category } = args;
+            const qLower = String(query || '').trim().toLowerCase();
+            const [kbAndDrive, recentAudit] = await Promise.all([
+              executeAuroraReadTool('search_knowledge_base_and_drive', { query }, { tenantId }),
+              db.auditLog.findMany({
+                where: { tenantId },
+                orderBy: { timestamp: 'desc' },
+                take: 25
+              }).catch(() => []),
+            ]);
+            const matchedAudits = recentAudit
+              .filter((a: any) => !qLower || `${a.action} ${a.resourceId} ${JSON.stringify(a.newValue || {})}`.toLowerCase().includes(qLower))
+              .slice(0, 8)
+              .map((a: any) => ({
+                id: a.id,
+                action: a.action,
+                resourceId: a.resourceId,
+                actorId: a.actorId,
+                timestamp: a.timestamp,
+                summary: a.newValue || null,
+              }));
             result = {
               success: true,
               query,
-              results: [
-                { title: "Standard Operating Procedure: Module & Schema Policy", excerpt: "All workspace modules must follow default tenant field naming standards and validation criteria.", score: 0.95 },
-                { title: "Security & RLS Access Control Policy", excerpt: "Permission groups restrict write access to financial logs and HR member records.", score: 0.91 },
-                ...auditMatches.map(a => ({ title: `Audit Record: ${a.action} on ${a.entityType}`, excerpt: JSON.stringify(a.metadata || {}), score: 0.85 }))
-              ]
+              category: category || null,
+              knowledgeBaseMatches: kbAndDrive?.knowledgeBaseMatches || [],
+              documentTemplates: kbAndDrive?.documentTemplates || [],
+              driveDocuments: kbAndDrive?.driveDocuments || [],
+              auditMatches: matchedAudits,
             };
           }
           else if (name === 'diagnose_and_heal_system') {
-            const { targetType, targetId: _targetId, autoFix } = args;
-            let logDetails = [];
-            if (targetType === 'AUTOMATION') {
-              const autos = await db.automation.findMany({ where: { tenantId, isActive: false } });
-              if (autoFix && autos.length > 0) {
-                await db.automation.updateMany({ where: { tenantId, id: { in: autos.map(a => a.id) } }, data: { isActive: true } });
-                logDetails.push(`Re-activated ${autos.length} inactive automation pipelines.`);
+            const { targetType = 'ALL', targetId, autoFix } = args;
+            const normalizedTarget = ['AUTOMATION', 'CONNECTOR', 'WEBHOOK'].includes(String(targetType).toUpperCase())
+              ? String(targetType).toUpperCase()
+              : 'ALL';
+            const health = await executeAuroraReadTool(
+              'inspect_system_health',
+              { targetType: normalizedTarget, lookbackHours: 48 },
+              { tenantId }
+            );
+
+            const stagedProposals: any[] = [];
+            if (autoFix) {
+              const failingAutos = health?.automations?.failingAutomations || [];
+              const targetFailing = targetId
+                ? failingAutos.filter((a: any) => a.automationId === targetId)
+                : failingAutos.slice(0, 5);
+
+              for (const fa of targetFailing) {
+                const staged = await AiActionStager.stageAction(tenantId, {
+                  agentName: 'Aurora System Diagnostics',
+                  actionType: 'REMEDIATE_FAILING_AUTOMATION',
+                  title: `Investigate & remediate failing automation: ${fa.automationName}`,
+                  rationale: `${fa.failureCount} failed run(s) in the past 48h. Latest error: ${fa.latestError}`,
+                  confidence: 0.75, // Always require human sign-off before mutating live automations
+                  targetRecordId: fa.automationId,
+                  patchData: { automationId: fa.automationId, latestError: fa.latestError },
+                }).catch(() => ({ staged: false }));
+                if (staged.staged) {
+                  stagedProposals.push({ automationId: fa.automationId, automationName: fa.automationName, actionId: staged.actionId });
+                }
               }
             }
+
             result = {
               success: true,
-              targetType,
-              status: "DIAGNOSED_AND_HEALED",
-              diagnostics: [
-                "Checked database connection pool: Healthy (Latency 1.2ms)",
-                "Checked webhooks & API connectors: 0 failed handshakes detected in past 24h",
-                ...logDetails
-              ],
-              recommendation: "System operational health score is 100%. No further patches required."
+              targetType: normalizedTarget,
+              healthStatus: health?.healthStatus || 'UNKNOWN',
+              diagnostics: health,
+              stagedRemediationProposals: stagedProposals,
+              note:
+                stagedProposals.length > 0
+                  ? `Staged ${stagedProposals.length} remediation proposal(s) for human approval. No live automations were blindly toggled.`
+                  : 'Read-only diagnostics completed. Review failing runs or connectors above before applying targeted fixes.',
             };
           }
         } catch (err: any) {
@@ -2913,6 +3120,11 @@ ENTITY RELATIONSHIPS & JOIN PATHS:
   - Join Record to Module: records.module_id = modules.id
   - Join Global List Items: global_list_items.list_id = global_lists.id
 
+AURORA MODULE & SOLUTION ARCHITECTURE CONVENTIONS (ALWAYS APPLY WHEN BUILDING/EDITING):
+  - Built-In System Metadata (NEVER duplicate as custom fields): Every record automatically includes "status" (driven by the Module's linked Workflow stages — never add a manual Status dropdown!), "assigneeId", "participantIds", "_record_key" (configured via recordKeyPrefix), "priority", "dueDate", "createdAt", "createdBy", and "updatedAt".
+  - 12-Column Grid: colSpan 12 (Full), 8 (2/3), 6 (1/2), 4 (1/3), 3 (1/4); startCol 1..12; rowIndex 0, 2, 4... Containers (group, fieldGroup, repeatableGroup, card, accordion, tabs_nested, stepper, timeline, datatable, sub_module) and wide fields (textarea, address, richtext, file, signature) MUST default to colSpan: 12 unless intentionally paired side-by-side (startCol: 1 + 7 on same rowIndex).
+  - Views & Properties: Supports 11 master views (table, split, kanban, calendar, map, cards, portfolio, timeline, gantt, analytics, pipeline), 5 detail views (tabs, split, sidebar, process, accordion) with configurable contextRail, tabs/sub-tabs with conditional visibility, and full field properties (required, placeholder, helperText, tooltip, defaultValue, hidden, showInTable, inlineEdit, optionsSource, collapsible, visibilityRule, formattingRules). For exact live builder properties & enums across any of the 20 builders, call "get_builder_schema_contract" on demand.
+
 CURRENT WORKSPACE SCHEMA (CUSTOM MODULES):
 ${JSON.stringify(schemaOverview)}
 
@@ -2933,10 +3145,12 @@ CORE GUIDELINES:
    - Phase 1: Write an implementation plan via "write_agent_plan" (with planMarkdown, tasksList) and request review in your chat response.
    - Phase 2: Execute code/configuration changes only after the user aligns, tracking progress using the plan.
    - Phase 3: Verify results and write the walkthrough via "write_agent_plan" (walkthroughMarkdown).
-3. If the user asks for database queries (e.g. "find the 10 most viable open leads"), write a SELECT SQL query and execute it using "execute_read_only_query".
-   Remember, records data is stored in the "records" table:
-     - records.module_id matches the target Module's id.
-     - records.data is a JSONB column containing fields. (e.g., data->>'status' = 'Open').
+3. PLATFORM INTELLIGENCE & DATA ACCESS DIRECTIVES:
+   - Before modifying or deleting a module field, status, or workflow stage, call "analyze_change_impact" to warn the user about dependent automations, document templates, workflows, validations, forms, or reports.
+   - Prefer "search_tenant_records", "search_parties_directory", and "inspect_relationship_graph" (which resolves cross-module links, Directory parties, and Team/Position reporting chains automatically) BEFORE hand-writing raw JSONB SQL joins.
+   - When the user asks about SLA breaches, stalled tickets, or queue health, call "detect_workflow_bottlenecks".
+   - Before applying complex validation rules or automation conditions, offer or run "simulate_rule_or_workflow" to dry-run them in memory against real records with zero DB writes.
+   - If the user asks for custom analytics SQL, write a SELECT query for "execute_read_only_query" (and use "explain_tenant_query" to optimize slow/large queries). Remember records data is stored in "records" (records.module_id, records.data JSONB, e.g. data->>'status' = 'Open').
 4. If testing third-party APIs, write a node/javascript snippet and execute it via "execute_scratch_script".
 5. Run searches using "search_web" to look up API structures or code formats.
 6. VISUALISATION & WIDGET DIRECTIVES:
@@ -3002,6 +3216,8 @@ CORE GUIDELINES:
 
         const MUTATING_TOOLS = [
           'manage_module_field',
+          'manage_module_tab',
+          'manage_module_interface',
           'manage_module_validation',
           'manage_module_workflow',
           'manage_page_widget',

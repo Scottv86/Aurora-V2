@@ -52,6 +52,7 @@ interface QueryBuilderProps {
   initialQuery?: SavedQueryEntity | null;
   onClose: () => void;
   onSaveSuccess?: (saved: SavedQueryEntity) => void;
+  draftMode?: boolean;
 }
 
 interface ColumnSchema {
@@ -90,7 +91,8 @@ interface DisplayColumn {
 export const QueryBuilder: React.FC<QueryBuilderProps> = ({
   initialQuery,
   onClose,
-  onSaveSuccess
+  onSaveSuccess,
+  draftMode = false
 }) => {
   const { tenant, modules = [] } = usePlatform();
   const { session } = useAuth();
@@ -779,6 +781,13 @@ LIMIT 50;`
     } as any;
 
     try {
+      if (draftMode) {
+        const draftSaved = { ...payload, id: queryId || `query_${Date.now()}` } as SavedQueryEntity;
+        toast.success(`Query "${draftSaved.name}" updated in Solution draft.`);
+        if (onSaveSuccess) onSaveSuccess(draftSaved);
+        onClose();
+        return;
+      }
       const { data: sessData } = await supabase.auth.getSession();
       const activeToken = sessData?.session?.access_token || token;
       const res = await fetch(`${API_BASE_URL}/api/saved-queries`, {

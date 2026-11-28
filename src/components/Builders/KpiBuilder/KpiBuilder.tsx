@@ -17,6 +17,7 @@ export interface KpiBuilderProps {
   initialKpi?: KpiDefinition | null;
   onClose: () => void;
   onSaveSuccess?: (saved: KpiDefinition) => void;
+  draftMode?: boolean;
 }
 
 const AVAILABLE_ICONS = [
@@ -44,7 +45,8 @@ const SERVICE_DESK_KPI_FIELDS = [
 export const KpiBuilder: React.FC<KpiBuilderProps> = ({
   initialKpi,
   onClose,
-  onSaveSuccess
+  onSaveSuccess,
+  draftMode = false
 }) => {
   const { tenant, modules = [] } = usePlatform();
   const tenantId = tenant?.id || 't1';
@@ -231,6 +233,14 @@ export const KpiBuilder: React.FC<KpiBuilderProps> = ({
     }
     setIsSaving(true);
     try {
+      if (draftMode) {
+        const draftSaved = { ...currentDraft, id: initialKpi?.id || `kpi_${Date.now()}` } as KpiDefinition;
+        toast.success(`Metric "${draftSaved.name}" updated in Solution draft.`);
+        setIsDirty(false);
+        if (onSaveSuccess) onSaveSuccess(draftSaved);
+        onClose();
+        return;
+      }
       const saved = await KpiService.saveKpi(tenantId, currentDraft);
       toast.success(initialKpi ? 'KPI Metric updated successfully!' : 'KPI Metric created successfully!');
       setIsDirty(false);

@@ -146,13 +146,31 @@ export function formatAction(
     };
   }
 
-  // 8. Module fields
+  // 8. Module fields & tabs
   if (name === 'manage_module_field') {
     const fieldLabel = args?.fieldConfig?.label || args?.fieldConfig?.name;
     return {
       title: 'Configured module field',
       activeTitle: 'Configuring field...',
       detail: fieldLabel ? `Field: ${fieldLabel}` : undefined,
+    };
+  }
+
+  if (name === 'manage_module_tab') {
+    const tabLabel = args?.tabConfig?.label || args?.tabId;
+    return {
+      title: args?.action === 'RENAME' ? 'Renamed module tab' : 'Configured module tab',
+      activeTitle: 'Configuring module tab...',
+      detail: tabLabel ? `Tab: ${tabLabel}` : undefined,
+    };
+  }
+
+  if (name === 'manage_module_interface') {
+    const viewName = args?.master?.layoutType || args?.detail?.layoutType;
+    return {
+      title: 'Updated module view & layout',
+      activeTitle: 'Updating module layout...',
+      detail: viewName ? `Layout: ${viewName}` : 'Updated list/detail settings',
     };
   }
 
@@ -219,9 +237,89 @@ export function formatAction(
   }
 
   if (name === 'fetch_web_page') {
+    const host = args?.url ? String(args.url).replace(/^https?:\/\//, '').slice(0, 50) : undefined;
     return {
-      title: 'Reviewed web page',
+      title: result?.title ? `Read "${result.title}"` : 'Reviewed web page',
       activeTitle: 'Reading web page...',
+      detail: host,
+    };
+  }
+
+  // Solution Studio & Shared Read-Only Tools
+  if (name === 'inspect_workspace_schema') {
+    return {
+      title: 'Inspected workspace modules',
+      activeTitle: 'Inspecting workspace modules...',
+      detail: args?.moduleName ? `Module: ${args.moduleName}` : 'Loaded live module schemas',
+    };
+  }
+  if (name === 'inspect_tenant_configuration') {
+    return {
+      title: 'Reviewed workspace configuration',
+      activeTitle: 'Checking workspace configuration...',
+      detail: 'Roles, teams, connectors & settings',
+    };
+  }
+  if (name === 'inspect_workspace_assets') {
+    return {
+      title: 'Scanned deployed workspace assets',
+      activeTitle: 'Scanning deployed workspace assets...',
+    };
+  }
+  if (name === 'search_knowledge_base_and_drive') {
+    return {
+      title: 'Searched Knowledge Base & Drive',
+      activeTitle: 'Searching Knowledge Base & Drive...',
+      detail: args?.query ? `"${args.query}"` : undefined,
+    };
+  }
+  if (name === 'read_attached_source') {
+    return {
+      title: 'Read attached source document',
+      activeTitle: 'Reading attached source...',
+      detail: args?.sourceName || undefined,
+    };
+  }
+  if (name === 'get_builder_schema_contract') {
+    const types = Array.isArray(args?.builderTypes) ? args.builderTypes.join(', ') : '';
+    return {
+      title: 'Loaded builder schema contract',
+      activeTitle: 'Loading builder schema...',
+      detail: types || undefined,
+    };
+  }
+  if (name === 'inspect_draft_artifact') {
+    return {
+      title: 'Inspected current draft component',
+      activeTitle: 'Inspecting draft component...',
+      detail: args?.artifactId || undefined,
+    };
+  }
+  if (name === 'evaluate_compliance') {
+    return {
+      title: 'Evaluated Compliance-as-Code',
+      activeTitle: 'Evaluating Compliance-as-Code...',
+      detail: typeof result?.score === 'number' ? `Score: ${result.score}/100` : undefined,
+    };
+  }
+  if (name === 'analyze_change_impact') {
+    return {
+      title: 'Analyzed downstream impact',
+      activeTitle: 'Analyzing downstream impact...',
+      detail: args?.moduleNameOrId || undefined,
+    };
+  }
+  if (name === 'simulate_rule_or_workflow') {
+    return {
+      title: 'Dry-ran rule against live records',
+      activeTitle: 'Simulating rule on live records...',
+      detail: args?.moduleNameOrId || undefined,
+    };
+  }
+  if (name === 'inspect_system_health') {
+    return {
+      title: 'Checked workspace system health',
+      activeTitle: 'Checking system health...',
     };
   }
 

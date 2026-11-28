@@ -15,6 +15,8 @@ export interface WorkflowBuilderProps {
   onSave?: (workflow: WorkflowEntity) => void;
   onDirtyChange?: (isDirty: boolean) => void;
   fields?: any[];
+  /** When true (e.g. inside Solution Studio), saves purely to draft state without hitting live REST API */
+  draftMode?: boolean;
 }
 
 export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
@@ -22,7 +24,8 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
   builderContext,
   onSave,
   onDirtyChange,
-  fields = []
+  fields = [],
+  draftMode = false
 }) => {
   const { tenant, modules } = usePlatform();
   const { session } = useAuth();
@@ -113,8 +116,15 @@ export const WorkflowBuilder: React.FC<WorkflowBuilderProps> = ({
         nodes: currentWorkflow.nodes,
         edges: currentWorkflow.edges,
         version: (initialWorkflow?.version || 0) + 1,
-        status: 'PUBLISHED'
+        status: draftMode ? 'DRAFT' : 'PUBLISHED'
       };
+
+      if (draftMode) {
+        onDirtyChange?.(false);
+        if (onSave) onSave(workflowEntity);
+        if (builderContext.onSaveSuccess) builderContext.onSaveSuccess(workflowEntity.id, workflowEntity);
+        return;
+      }
 
       const res = await fetch(`${API_BASE_URL}/api/workflows${isExistingPersistedId ? `/${initialWorkflow!.id}` : ''}`, {
         method: isExistingPersistedId ? 'PUT' : 'POST',

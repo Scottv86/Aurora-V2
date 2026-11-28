@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useLocation, useParams } from 'react-router-dom';
 import { Toaster } from 'sonner';
 
@@ -250,24 +250,27 @@ const PlatformToaster = () => {
   const duration = toastConfig.duration ?? 4000;
   const closeButton = toastConfig.closeButton ?? true;
   const expand = toastConfig.expand ?? false;
+  const stylePreset = toastConfig.style || 'aurora-glass';
+  const showProgressBar = toastConfig.showProgressBar ?? true;
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.toastStyle = stylePreset;
+    root.dataset.toastProgress = String(showProgressBar);
+    root.style.setProperty('--aurora-toast-duration', `${duration}ms`);
+  }, [stylePreset, showProgressBar, duration]);
 
   return (
-    <Toaster 
-      key={`toaster-${position}-${expand}-${closeButton}`}
+    <Toaster
+      key={`toaster-${position}-${expand}-${closeButton}-${stylePreset}`}
       theme={theme}
-      toastOptions={{
-        style: {
-          maxWidth: 'min(460px, calc(100vw - 32px))'
-        }
-      }}
-      position={position} 
-      expand={expand} 
-      closeButton={closeButton} 
-      duration={duration} 
+      position={position}
+      expand={expand}
+      closeButton={closeButton}
+      duration={duration}
     />
   );
 };
-
 const App = () => {
   return (
     <ThemeProvider>

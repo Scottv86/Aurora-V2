@@ -227,10 +227,20 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
 
   // Sync initial values when canonical form or context changes
   useEffect(() => {
-    setFormValues((prev) => ({
-      ...computedInitialValues,
-      ...prev,
-    }));
+    setFormValues((prev) => {
+      let hasNewKeys = false;
+      for (const key of Object.keys(computedInitialValues)) {
+        if (!(key in prev) || prev[key] === undefined) {
+          hasNewKeys = true;
+          break;
+        }
+      }
+      if (!hasNewKeys) return prev;
+      return {
+        ...computedInitialValues,
+        ...prev,
+      };
+    });
   }, [computedInitialValues]);
 
   // Keep activeStepId valid when steps change
