@@ -78,6 +78,8 @@ const PATH_MAP: Record<string, string> = {
   'forms-library': 'Forms',
   'workflows-library': 'Workflows',
   'validations-library': 'Rules',
+  'roles-library': 'Roles',
+  roles: 'Roles',
   queues: 'Queues',
   'queues-management': 'Queues',
   'queries-library': 'Queries',

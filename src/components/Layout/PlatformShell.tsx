@@ -616,6 +616,7 @@ export const PlatformShell = ({ children, fullBleed }: { children: ReactNode, fu
         { label: 'Searches', icon: LucideIcons.Search, to: '/workspace/settings/platform-modules/searches-library' },
         { label: 'Metrics', icon: LucideIcons.Target, to: '/workspace/settings/platform-modules/kpi-management' },
         { label: 'Rules', icon: LucideIcons.ShieldCheck, to: '/workspace/settings/platform-modules/validations-library' },
+        { label: 'Roles', icon: LucideIcons.Shield, to: '/workspace/settings/platform-modules/roles-library' },
         { label: 'Integrations', icon: LucideIcons.Plug, to: '/workspace/settings/platform-modules/integration-management' },
         { label: 'Workflows', icon: LucideIcons.GitBranch, to: '/workspace/settings/platform-modules/workflows-library' },
         { label: 'Automations', icon: LucideIcons.Zap, to: '/workspace/settings/platform-modules/automation-management' },

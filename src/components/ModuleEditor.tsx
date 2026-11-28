@@ -10542,12 +10542,6 @@ export const ModuleEditor = () => {
                 })()}
 
                 {detailsTab === 'security' && (() => {
-                  const standardRoles = [
-                    { id: 'admin', label: 'Administrator', icon: ShieldCheck },
-                    { id: 'manager', label: 'Department Manager', icon: Settings },
-                    { id: 'staff', label: 'Standard Staff', icon: Type },
-                    { id: 'guest', label: 'External Guest', icon: Globe }
-                  ];
                   const allSecurityFields = flattenFields(layout);
                   const displayedFields = fieldSecuritySearchQuery.trim()
                     ? allSecurityFields.filter((f: any) =>
@@ -10557,32 +10551,8 @@ export const ModuleEditor = () => {
                       )
                     : allSecurityFields;
 
-                  const toggleAllColumn = (key: 'read' | 'write' | 'masked' | 'hidden') => {
-                    if (displayedFields.length === 0) return;
-                    const allEnabled = displayedFields.every((f: any) => {
-                      const cfg = fieldSecurity[selectedSecurityRoleId]?.[f.id] || {
-                        read: true,
-                        write: selectedSecurityRoleId !== 'guest',
-                        masked: false,
-                        hidden: false
-                      };
-                      return cfg[key];
-                    });
-
-                    setFieldSecurity(prev => {
-                      const roleObj = { ...(prev[selectedSecurityRoleId] || {}) };
-                      displayedFields.forEach((f: any) => {
-                        const current = roleObj[f.id] || {
-                          read: true,
-                          write: selectedSecurityRoleId !== 'guest',
-                          masked: false,
-                          hidden: false
-                        };
-                        roleObj[f.id] = { ...current, [key]: !allEnabled };
-                      });
-                      return { ...prev, [selectedSecurityRoleId]: roleObj };
-                    });
-                  };
+                  const rolesList: any[] = Array.isArray(permissionGroups) ? permissionGroups : [];
+                  const governingRoles = rolesList.filter((grp: any) => Boolean(id && grp.modulePolicies?.[id]));
 
                   return (
                     <div className="flex-1 overflow-y-auto p-6 lg:p-8 custom-scrollbar">
@@ -10590,250 +10560,127 @@ export const ModuleEditor = () => {
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                           <div>
                             <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">Security & Permissions</h2>
-                            <p className="text-xs text-zinc-500 mt-0.5">Control module visibility, role access, and field-level privacy masking.</p>
+                            <p className="text-xs text-zinc-500 mt-0.5">
+                              Access, CRUD, row-level scoping, and field-level privacy for this module are governed centrally in the Roles Builder.
+                            </p>
                           </div>
-                          <span className={cn(
-                            "px-2.5 py-1 rounded-md text-xs font-medium border self-start sm:self-auto",
-                            moduleAccessControl.mode === 'all'
-                              ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20"
-                              : "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-500/20"
-                          )}>
-                            {moduleAccessControl.mode === 'all' ? 'Open to all' : `Restricted (${moduleAccessControl.allowedGroupIds?.length || 0} groups)`}
-                          </span>
+                          <button
+                            type="button"
+                            onClick={() => navigate('/workspace/settings/platform-modules/roles-library')}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition-colors self-start sm:self-auto cursor-pointer"
+                          >
+                            <ShieldCheck size={14} />
+                            <span>Open Roles Builder</span>
+                            <ArrowRight size={13} />
+                          </button>
                         </div>
 
-                        {/* Card 1: Module Access Policy */}
+                        {/* Card 1: Governing Roles (Read-Only Live Matrix) */}
                         <section className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 space-y-4">
-                          <div className="pb-3 border-b border-zinc-100 dark:border-zinc-800">
-                            <h3 className="text-sm font-semibold text-zinc-900 dark:text-white flex items-center gap-2">
-                              <ShieldCheck size={15} className="text-indigo-600 dark:text-indigo-400" />
-                              Module access policy
-                            </h3>
-                            <p className="text-xs text-zinc-500 mt-0.5">Control who can discover, view, and open this module in their workspace launcher.</p>
+                          <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
+                            <div>
+                              <h3 className="text-sm font-semibold text-zinc-900 dark:text-white flex items-center gap-2">
+                                <ShieldCheck size={15} className="text-indigo-600 dark:text-indigo-400" />
+                                Roles governing this module
+                              </h3>
+                              <p className="text-xs text-zinc-500 mt-0.5">
+                                {governingRoles.length > 0
+                                  ? `${governingRoles.length} ${governingRoles.length === 1 ? 'role defines' : 'roles define'} explicit policies on this module.`
+                                  : 'No roles explicitly restrict this module yet. All workspace members inherit default access.'}
+                              </p>
+                            </div>
+                            <span className="px-2.5 py-1 rounded-md text-xs font-medium border bg-zinc-50 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700">
+                              {governingRoles.length} {governingRoles.length === 1 ? 'Role' : 'Roles'}
+                            </span>
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <button
-                              type="button"
-                              onClick={() => setModuleAccessControl(prev => ({ ...prev, mode: 'all' }))}
-                              className={cn(
-                                "p-4 rounded-xl border text-left transition-all flex items-start justify-between gap-3 cursor-pointer",
-                                moduleAccessControl.mode === 'all'
-                                  ? "border-indigo-600 bg-indigo-50/40 dark:bg-indigo-950/20 ring-1 ring-indigo-500"
-                                  : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900"
-                              )}
-                            >
-                              <div>
-                                <div className="text-xs font-semibold text-zinc-900 dark:text-white">All workspace members</div>
-                                <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
-                                  Visible to all members with standard records access. Field privacy and masking rules still apply.
-                                </p>
-                              </div>
-                              <div className={cn(
-                                "w-4 h-4 rounded-full border flex items-center justify-center shrink-0 mt-0.5",
-                                moduleAccessControl.mode === 'all'
-                                  ? "border-indigo-600 bg-indigo-600 text-white"
-                                  : "border-zinc-300 dark:border-zinc-600"
-                              )}>
-                                {moduleAccessControl.mode === 'all' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                              </div>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => setModuleAccessControl(prev => ({ ...prev, mode: 'restricted' }))}
-                              className={cn(
-                                "p-4 rounded-xl border text-left transition-all flex items-start justify-between gap-3 cursor-pointer",
-                                moduleAccessControl.mode === 'restricted'
-                                  ? "border-indigo-600 bg-indigo-50/40 dark:bg-indigo-950/20 ring-1 ring-indigo-500"
-                                  : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900"
-                              )}
-                            >
-                              <div>
-                                <div className="text-xs font-semibold text-zinc-900 dark:text-white">Restricted to selected security groups</div>
-                                <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
-                                  Only users belonging to explicitly authorized security groups can launch or interact with this module.
-                                </p>
-                              </div>
-                              <div className={cn(
-                                "w-4 h-4 rounded-full border flex items-center justify-center shrink-0 mt-0.5",
-                                moduleAccessControl.mode === 'restricted'
-                                  ? "border-indigo-600 bg-indigo-600 text-white"
-                                  : "border-zinc-300 dark:border-zinc-600"
-                              )}>
-                                {moduleAccessControl.mode === 'restricted' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                              </div>
-                            </button>
-                          </div>
-
-                          {moduleAccessControl.mode === 'restricted' && (
-                            <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-2.5">
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Authorized security groups</span>
-                                <span className="text-xs text-zinc-400">Click to grant or revoke access</span>
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                {(permissionGroups || []).length === 0 ? (
-                                  <p className="text-xs text-zinc-400 italic">No custom security groups created yet. Configure them under Workforce &gt; Security Groups.</p>
-                                ) : (
-                                  (permissionGroups || []).map((grp: any) => {
-                                    const isSelected = (moduleAccessControl.allowedGroupIds || []).includes(grp.id);
-                                    return (
-                                      <button
-                                        key={grp.id}
-                                        type="button"
-                                        onClick={() => {
-                                          setModuleAccessControl(prev => {
-                                            const current = prev.allowedGroupIds || [];
-                                            const next = current.includes(grp.id)
-                                              ? current.filter(gid => gid !== grp.id)
-                                              : [...current, grp.id];
-                                            return { ...prev, allowedGroupIds: next };
-                                          });
-                                        }}
-                                        className={cn(
-                                          "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 border cursor-pointer",
-                                          isSelected
-                                            ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
-                                            : "bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600"
+                          {governingRoles.length === 0 ? (
+                            <div className="rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 p-6 text-center space-y-2.5">
+                              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                                Configure object CRUD, row scope (All / Team / Own), and field masking from the Roles Builder.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => navigate('/workspace/settings/platform-modules/roles-library')}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-colors cursor-pointer"
+                              >
+                                <span>Configure in Roles Builder</span>
+                                <ArrowRight size={12} />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="divide-y divide-zinc-100 dark:divide-zinc-800 border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden">
+                              {governingRoles.map((grp: any) => {
+                                const pol = grp.modulePolicies[id!];
+                                const fieldRuleCount = Object.keys(pol.fields || {}).length;
+                                return (
+                                  <div
+                                    key={grp.id}
+                                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 bg-white dark:bg-zinc-900 hover:bg-zinc-50/70 dark:hover:bg-zinc-800/30 transition-colors"
+                                  >
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs font-semibold text-zinc-900 dark:text-white truncate">{grp.name}</span>
+                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">
+                                          SCOPE: {pol.rowScope || 'ALL'}
+                                        </span>
+                                        {fieldRuleCount > 0 && (
+                                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400">
+                                            {fieldRuleCount} field {fieldRuleCount === 1 ? 'rule' : 'rules'}
+                                          </span>
                                         )}
-                                      >
-                                        <ShieldCheck size={13} className={isSelected ? "text-white" : "text-zinc-400"} />
-                                        <span>{grp.name}</span>
-                                        {isSelected && <Check size={12} strokeWidth={2.5} />}
-                                      </button>
-                                    );
-                                  })
-                                )}
-                              </div>
+                                      </div>
+                                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                                        {!pol.access ? (
+                                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400">
+                                            NO ACCESS
+                                          </span>
+                                        ) : (
+                                          (['read', 'create', 'update', 'delete', 'export'] as const).map((verb) => (
+                                            <span
+                                              key={verb}
+                                              className={cn(
+                                                "px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase",
+                                                pol[verb]
+                                                  ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                                                  : "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 line-through"
+                                              )}
+                                            >
+                                              {verb}
+                                            </span>
+                                          ))
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => navigate(`/workspace/settings/builder/role/${grp.id}`)}
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors shrink-0 cursor-pointer"
+                                    >
+                                      <span>Edit in Role Builder</span>
+                                      <ArrowRight size={12} />
+                                    </button>
+                                  </div>
+                                );
+                              })}
                             </div>
                           )}
                         </section>
 
-                        {/* Card 2: Field-Level Security Matrix */}
+                        {/* Card 2: Read-Only Field-Level Security Summary */}
                         <section className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 space-y-4">
-                          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-zinc-100 dark:border-zinc-800">
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-zinc-100 dark:border-zinc-800">
                             <div>
                               <div className="flex items-center gap-2">
-                                <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Field security & privacy</h3>
+                                <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Field-level security overview</h3>
                                 <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
                                   {displayedFields.length} {displayedFields.length === 1 ? 'field' : 'fields'}
                                 </span>
                               </div>
-                              <p className="text-xs text-zinc-500 mt-0.5">Select a role or group below to configure read, write, masking, and visibility per field.</p>
-                            </div>
-
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setFieldSecurity(prev => {
-                                    const updated = { ...(prev[selectedSecurityRoleId] || {}) };
-                                    allSecurityFields.forEach((f: any) => {
-                                      updated[f.id] = { read: true, write: true, masked: false, hidden: false };
-                                    });
-                                    return { ...prev, [selectedSecurityRoleId]: updated };
-                                  });
-                                  toast.success('Applied Full Access preset');
-                                }}
-                                className="px-2.5 py-1 rounded-md text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 transition-colors cursor-pointer"
-                              >
-                                Allow all
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setFieldSecurity(prev => {
-                                    const updated = { ...(prev[selectedSecurityRoleId] || {}) };
-                                    allSecurityFields.forEach((f: any) => {
-                                      updated[f.id] = { read: true, write: false, masked: false, hidden: false };
-                                    });
-                                    return { ...prev, [selectedSecurityRoleId]: updated };
-                                  });
-                                  toast.success('Applied Read Only preset');
-                                }}
-                                className="px-2.5 py-1 rounded-md text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 transition-colors cursor-pointer"
-                              >
-                                Read only
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setFieldSecurity(prev => {
-                                    const updated = { ...(prev[selectedSecurityRoleId] || {}) };
-                                    allSecurityFields.forEach((f: any) => {
-                                      const label = (f.label || '').toLowerCase();
-                                      const isSensitive = ['email', 'phone', 'tel', 'currency', 'money', 'number'].includes(f.type) || label.includes('ssn') || label.includes('tax') || label.includes('salary');
-                                      updated[f.id] = { read: true, write: !isSensitive, masked: isSensitive, hidden: false };
-                                    });
-                                    return { ...prev, [selectedSecurityRoleId]: updated };
-                                  });
-                                  toast.success('Applied Mask Sensitive preset');
-                                }}
-                                className="px-2.5 py-1 rounded-md text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 border border-amber-200 dark:border-amber-500/30 transition-colors cursor-pointer"
-                              >
-                                Mask sensitive
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setFieldSecurity(prev => {
-                                    const updated = { ...(prev[selectedSecurityRoleId] || {}) };
-                                    allSecurityFields.forEach((f: any) => {
-                                      updated[f.id] = { read: false, write: false, masked: false, hidden: true };
-                                    });
-                                    return { ...prev, [selectedSecurityRoleId]: updated };
-                                  });
-                                  toast.success('Applied Hide All preset');
-                                }}
-                                className="px-2.5 py-1 rounded-md text-xs font-medium text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 border border-rose-200 dark:border-rose-500/30 transition-colors cursor-pointer"
-                              >
-                                Hide all
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Role / Group Selector Pills + Field Search */}
-                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              {standardRoles.map((role) => {
-                                const isSelected = selectedSecurityRoleId === role.id;
-                                return (
-                                  <button
-                                    key={role.id}
-                                    type="button"
-                                    onClick={() => setSelectedSecurityRoleId(role.id)}
-                                    className={cn(
-                                      "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer",
-                                      isSelected
-                                        ? "bg-indigo-50 dark:bg-indigo-500/15 border-indigo-300 dark:border-indigo-500/40 text-indigo-700 dark:text-indigo-300"
-                                        : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
-                                    )}
-                                  >
-                                    <role.icon size={12} />
-                                    <span>{role.label}</span>
-                                  </button>
-                                );
-                              })}
-                              {(permissionGroups || []).map((grp: any) => {
-                                const isSelected = selectedSecurityRoleId === grp.id;
-                                return (
-                                  <button
-                                    key={grp.id}
-                                    type="button"
-                                    onClick={() => setSelectedSecurityRoleId(grp.id)}
-                                    className={cn(
-                                      "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer",
-                                      isSelected
-                                        ? "bg-indigo-50 dark:bg-indigo-500/15 border-indigo-300 dark:border-indigo-500/40 text-indigo-700 dark:text-indigo-300"
-                                        : "bg-zinc-50 dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
-                                    )}
-                                  >
-                                    <ShieldCheck size={12} />
-                                    <span>{grp.name}</span>
-                                  </button>
-                                );
-                              })}
+                              <p className="text-xs text-zinc-500 mt-0.5">
+                                Read-only view of active field privacy rules across all Roles. Click any role pill to edit its policy.
+                              </p>
                             </div>
 
                             <div className="relative w-full md:w-56 shrink-0">
@@ -10848,39 +10695,19 @@ export const ModuleEditor = () => {
                             </div>
                           </div>
 
-                          {/* Dense Table */}
                           <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden">
-                            <table className="w-full text-left border-collapse table-fixed">
+                            <table className="w-full text-left border-collapse">
                               <thead>
-                                <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-800/50 text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 select-none">
-                                  <th className="px-3 py-2 w-auto">Field</th>
-                                  <th className="px-2 py-2 w-28">Type</th>
-                                  <th className="px-2 py-2 w-20 text-center">
-                                    <button type="button" onClick={() => toggleAllColumn('read')} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer" title="Toggle Can Read for all displayed fields">
-                                      Can read
-                                    </button>
-                                  </th>
-                                  <th className="px-2 py-2 w-20 text-center">
-                                    <button type="button" onClick={() => toggleAllColumn('write')} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer" title="Toggle Can Write for all displayed fields">
-                                      Can write
-                                    </button>
-                                  </th>
-                                  <th className="px-2 py-2 w-20 text-center">
-                                    <button type="button" onClick={() => toggleAllColumn('masked')} className="hover:text-amber-600 dark:hover:text-amber-400 transition-colors cursor-pointer" title="Toggle Mask for all displayed fields">
-                                      Masked
-                                    </button>
-                                  </th>
-                                  <th className="px-2 py-2 w-20 text-center">
-                                    <button type="button" onClick={() => toggleAllColumn('hidden')} className="hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer" title="Toggle Hidden for all displayed fields">
-                                      Hidden
-                                    </button>
-                                  </th>
+                                <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-800/50 text-[11px] font-semibold text-zinc-600 dark:text-zinc-400">
+                                  <th className="px-3 py-2">Field</th>
+                                  <th className="px-3 py-2 w-28">Type</th>
+                                  <th className="px-3 py-2">Role Restrictions</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800 text-xs">
                                 {displayedFields.length === 0 ? (
                                   <tr>
-                                    <td colSpan={6} className="px-3 py-6 text-center text-xs text-zinc-400">
+                                    <td colSpan={3} className="px-3 py-6 text-center text-xs text-zinc-400">
                                       {fieldSecuritySearchQuery.trim()
                                         ? `No fields match "${fieldSecuritySearchQuery}"`
                                         : 'No schema fields defined in layout.'}
@@ -10888,32 +10715,18 @@ export const ModuleEditor = () => {
                                   </tr>
                                 ) : (
                                   displayedFields.map((field: any) => {
-                                    const roleConfig = fieldSecurity[selectedSecurityRoleId]?.[field.id] || {
-                                      read: true,
-                                      write: selectedSecurityRoleId !== 'guest',
-                                      masked: false,
-                                      hidden: false
-                                    };
-
-                                    const updatePerm = (key: 'read' | 'write' | 'masked' | 'hidden', val: boolean) => {
-                                      setFieldSecurity(prev => ({
-                                        ...prev,
-                                        [selectedSecurityRoleId]: {
-                                          ...(prev[selectedSecurityRoleId] || {}),
-                                          [field.id]: {
-                                            ...roleConfig,
-                                            [key]: val
-                                          }
-                                        }
-                                      }));
-                                    };
-
                                     const fieldDef = FIELD_CATEGORIES.flatMap(c => c.fields).find(f => f.id === field.type);
                                     const Icon = fieldDef?.icon || GridIcon;
+                                    const restrictions = governingRoles
+                                      .map((grp: any) => {
+                                        const vis = grp.modulePolicies?.[id!]?.fields?.[field.id]?.visibility;
+                                        return vis && vis !== 'editable' ? { roleId: grp.id, roleName: grp.name, vis } : null;
+                                      })
+                                      .filter(Boolean) as Array<{ roleId: string; roleName: string; vis: string }>;
 
                                     return (
                                       <tr key={field.id} className="hover:bg-zinc-50/70 dark:hover:bg-zinc-800/35 transition-colors">
-                                        <td className="px-3 py-2 min-w-0">
+                                        <td className="px-3 py-2.5">
                                           <div className="flex items-center gap-2 min-w-0">
                                             <div className="w-5 h-5 rounded bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 dark:text-zinc-400 shrink-0">
                                               <Icon size={11} />
@@ -10921,71 +10734,38 @@ export const ModuleEditor = () => {
                                             <span className="font-medium text-xs text-zinc-900 dark:text-white truncate">
                                               {field.label || field.name || field.id}
                                             </span>
-                                            <span className="text-[10px] text-zinc-400 font-mono truncate hidden sm:inline">
-                                              ({field.id})
-                                            </span>
                                           </div>
                                         </td>
-                                        <td className="px-2 py-2">
-                                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 truncate max-w-full">
+                                        <td className="px-3 py-2.5">
+                                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400">
                                             {field.type}
                                           </span>
                                         </td>
-                                        <td className="px-2 py-2 text-center">
-                                          <button
-                                            type="button"
-                                            onClick={() => updatePerm('read', !roleConfig.read)}
-                                            className={cn(
-                                              "w-4 h-4 rounded mx-auto flex items-center justify-center transition-colors cursor-pointer",
-                                              roleConfig.read
-                                                ? "bg-indigo-600 text-white"
-                                                : "border border-zinc-300 dark:border-zinc-600 hover:border-zinc-400"
-                                            )}
-                                          >
-                                            {roleConfig.read && <Check size={10} strokeWidth={3} />}
-                                          </button>
-                                        </td>
-                                        <td className="px-2 py-2 text-center">
-                                          <button
-                                            type="button"
-                                            onClick={() => updatePerm('write', !roleConfig.write)}
-                                            className={cn(
-                                              "w-4 h-4 rounded mx-auto flex items-center justify-center transition-colors cursor-pointer",
-                                              roleConfig.write
-                                                ? "bg-indigo-600 text-white"
-                                                : "border border-zinc-300 dark:border-zinc-600 hover:border-zinc-400"
-                                            )}
-                                          >
-                                            {roleConfig.write && <Check size={10} strokeWidth={3} />}
-                                          </button>
-                                        </td>
-                                        <td className="px-2 py-2 text-center">
-                                          <button
-                                            type="button"
-                                            onClick={() => updatePerm('masked', !roleConfig.masked)}
-                                            className={cn(
-                                              "w-4 h-4 rounded mx-auto flex items-center justify-center transition-colors cursor-pointer",
-                                              roleConfig.masked
-                                                ? "bg-amber-600 text-white"
-                                                : "border border-zinc-300 dark:border-zinc-600 hover:border-zinc-400"
-                                            )}
-                                          >
-                                            {roleConfig.masked && <Check size={10} strokeWidth={3} />}
-                                          </button>
-                                        </td>
-                                        <td className="px-2 py-2 text-center">
-                                          <button
-                                            type="button"
-                                            onClick={() => updatePerm('hidden', !roleConfig.hidden)}
-                                            className={cn(
-                                              "w-4 h-4 rounded mx-auto flex items-center justify-center transition-colors cursor-pointer",
-                                              roleConfig.hidden
-                                                ? "bg-rose-600 text-white"
-                                                : "border border-zinc-300 dark:border-zinc-600 hover:border-zinc-400"
-                                            )}
-                                          >
-                                            {roleConfig.hidden && <Check size={10} strokeWidth={3} />}
-                                          </button>
+                                        <td className="px-3 py-2.5">
+                                          {restrictions.length === 0 ? (
+                                            <span className="text-[11px] text-zinc-400">Editable (default)</span>
+                                          ) : (
+                                            <div className="flex flex-wrap gap-1.5">
+                                              {restrictions.map((r) => (
+                                                <button
+                                                  key={r.roleId}
+                                                  type="button"
+                                                  onClick={() => navigate(`/workspace/settings/builder/role/${r.roleId}`)}
+                                                  className={cn(
+                                                    "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold border transition-opacity hover:opacity-80 cursor-pointer",
+                                                    r.vis === 'hidden'
+                                                      ? "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/30"
+                                                      : r.vis === 'masked'
+                                                      ? "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/30"
+                                                      : "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/30"
+                                                  )}
+                                                >
+                                                  <span>{r.roleName}:</span>
+                                                  <span className="uppercase">{r.vis}</span>
+                                                </button>
+                                              ))}
+                                            </div>
+                                          )}
                                         </td>
                                       </tr>
                                     );
@@ -10998,7 +10778,7 @@ export const ModuleEditor = () => {
                           <div className="flex items-start gap-2 p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800 text-[11px] text-zinc-500 dark:text-zinc-400">
                             <Info size={14} className="text-zinc-400 shrink-0 mt-0.5" />
                             <div>
-                              <span className="font-medium text-zinc-700 dark:text-zinc-300">Privacy & Sanitization Note:</span> Masked fields are automatically sanitized on the server before reaching clients and LLM agent contexts. Hidden fields are completely stripped from API responses for this role.
+                              <span className="font-medium text-zinc-700 dark:text-zinc-300">Single Source of Truth:</span> Masked fields are automatically sanitized on the server before reaching clients and LLM agent contexts, and hidden fields are completely stripped from API responses. Manage all rules from the Roles Builder.
                             </div>
                           </div>
                         </section>

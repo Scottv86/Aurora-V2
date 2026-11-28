@@ -236,6 +236,16 @@ class SolutionArtifactRegistryManager {
       targetBuilderRoute: '/workspace/settings/platform-modules/queries-library',
       renderPreview: (_artifact) => null
     });
+
+    // 19. PERMISSION (Roles & Permissions Builder)
+    this.registerPlugin({
+      type: 'PERMISSION',
+      label: 'Role & Permission Policy',
+      description: 'Reusable RBAC/ABAC access blueprint covering capabilities, module CRUD, row scope, field masking, and AI guardrails',
+      iconName: 'Shield',
+      targetBuilderRoute: '/workspace/settings/platform-modules/roles-library',
+      renderPreview: (_artifact) => null
+    });
   }
 }
 

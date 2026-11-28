@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { AuthRequest, authenticate } from '../middleware/authMiddleware';
 import { globalPrisma } from '../lib/prisma';
-import { resolveCapabilities } from '../lib/permissions';
+import { resolveCapabilities, resolveEffectivePolicies } from '../lib/permissions';
 
 const router = Router();
 
@@ -52,9 +52,12 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
       }) || await globalPrisma.tenant.findFirst();
     }
 
-    // Calculate flattened capabilities for the primary membership
+    // Calculate flattened capabilities & effective role policies for the primary membership
     const groupIds = primaryMembership?.permissionGroups?.map((pg: any) => pg.permissionGroupId) || [];
-    const capabilities = tenant ? await resolveCapabilities(groupIds, tenant.id) : [];
+    const effectivePolicies = tenant && groupIds.length > 0
+      ? await resolveEffectivePolicies(groupIds, tenant.id)
+      : null;
+    const capabilities = effectivePolicies?.capabilities || (tenant ? await resolveCapabilities(groupIds, tenant.id) : []);
     
     // Menu Configuration Resolution: User Customization > Specific User Override > Team Override > Position Override > Role Override > Tenant Default
     const memberId = primaryMembership?.id;
@@ -110,6 +113,7 @@ router.get('/context', async (req: AuthRequest, res: Response) => {
         team: primaryMembership?.team?.name,
         permissionGroupIds: groupIds,
         permissionGroups: groupIds,
+        effectivePolicies: effectivePolicies || undefined,
         capabilities: user.isSuperAdmin ? ['platform:manage', 'manage:staff', 'view:billing', 'admin:access'] : capabilities
       },
       tenant: tenant ? {

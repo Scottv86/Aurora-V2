@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Shield, Trash2, Edit2, CheckCircle2, Search, Plus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Shield, Trash2, Edit2, CheckCircle2, Search, Plus, Sliders, ExternalLink } from 'lucide-react';
 import { usePermissionGroups, PermissionGroup } from '../../../hooks/usePermissionGroups';
 import { Table, Column } from '../../UI/Table';
 import { Badge, Button } from '../../UI/Primitives';
@@ -23,6 +24,7 @@ export const SecurityGroups = ({
   onSearchChange,
   onAddGroup
 }: SecurityGroupsProps) => {
+  const navigate = useNavigate();
   const { groups, loading, deleteGroup } = usePermissionGroups();
   const [editingGroup, setEditingGroup] = useState<PermissionGroup | null>(null);
   const [isModalOpenState, setIsModalOpenState] = useState(false); // internal for edit mode
@@ -99,11 +101,25 @@ export const SecurityGroups = ({
       className: 'text-right',
       accessor: (g: PermissionGroup) => (
         <div className="flex items-center justify-end gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/workspace/settings/builder/role/${g.id}`);
+            }}
+            className="h-8 px-2.5 rounded-xl text-[11px] font-bold gap-1.5"
+            title="Configure full policy in Role Builder Studio"
+          >
+            <Sliders size={12} />
+            Role Builder
+          </Button>
           <Button 
             variant="ghost" 
             size="sm"
             onClick={(e) => { e.stopPropagation(); handleEdit(g); }}
             className="h-8 w-8 p-0 rounded-xl"
+            title="Quick Edit Capabilities"
           >
             <Edit2 size={14} />
           </Button>
@@ -130,15 +146,26 @@ export const SecurityGroups = ({
   return (
     <div className="space-y-6">
       <div className="bg-white/40 dark:bg-white/[0.03] backdrop-blur-xl rounded-[2.5rem] border border-white/20 dark:border-white/5 p-6 lg:p-8 shadow-2xl overflow-hidden">
-        <div className="relative max-w-md mb-8 group">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-blue-600 transition-colors" size={16} />
-          <input 
-            type="text" 
-            placeholder="Search security groups..." 
-            value={searchQuery}
-            onChange={(e) => onSearchChange?.(e.target.value)}
-            className="h-11 w-full rounded-2xl border border-zinc-200 bg-zinc-50/50 pl-10 pr-4 text-xs font-bold outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md shadow-sm"
-          />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-8">
+          <div className="relative flex-1 max-w-md group">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 group-focus-within:text-blue-600 transition-colors" size={16} />
+            <input 
+              type="text" 
+              placeholder="Search security groups..." 
+              value={searchQuery}
+              onChange={(e) => onSearchChange?.(e.target.value)}
+              className="h-11 w-full rounded-2xl border border-zinc-200 bg-zinc-50/50 pl-10 pr-4 text-xs font-bold outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-white/5 dark:backdrop-blur-md shadow-sm"
+            />
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => navigate('/workspace/settings/platform-modules/roles-library')}
+            className="gap-1.5 rounded-xl font-bold shrink-0"
+          >
+            <ExternalLink size={13} />
+            Open Roles Builder
+          </Button>
         </div>
 
         {filteredGroups.length === 0 && !loading ? (

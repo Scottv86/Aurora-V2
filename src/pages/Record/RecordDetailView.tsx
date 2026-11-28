@@ -83,6 +83,7 @@ import { sanitizeRecordKeyAttributes, resolveRecordTitle } from '../../utils/act
 import { useRecordPresence, getDeterministicColor } from '../../hooks/useRecordPresence';
 import { RecordPresenceStack } from '../../components/Record/RecordPresenceStack';
 import { ModulePreviewConfig } from '../../types/preview';
+import { useCapabilities } from '../../hooks/useCapabilities';
 
 
 interface WorkflowState {
@@ -126,6 +127,7 @@ export const RecordDetailView = ({
   const queryClient = useQueryClient();
   const { session, user: supabaseUser } = auth;
   const { tenant, user: platformUser, isLoading: platformLoading, setBreadcrumbOverride, members, modules } = usePlatform();
+  const { canModule } = useCapabilities();
   const effectiveDetailSecurityUser = useMemo(() => {
     if (isPreview && previewConfig?.simulatedUser) return previewConfig.simulatedUser;
     if (isPreview && previewConfig?.simulatedRole) {
@@ -5291,12 +5293,12 @@ export const RecordDetailView = ({
           onOpenVisualizer={() => setShowVisualizer(true)}
           isStarred={isStarred}
           onToggleStar={handleToggleStar}
-          onDuplicate={handleDuplicateRecord}
+          onDuplicate={canModule(routeModuleId || moduleId || '', 'create') ? handleDuplicateRecord : undefined}
           isCloning={isCloning}
           onOpenMove={() => setShowMoveModal(true)}
           onCopyLink={handleCopyRecordLink}
-          onExportPdf={() => setShowExportPdfModal(true)}
-          onDeleteRecord={() => setShowDeleteModal(true)}
+          onExportPdf={canModule(routeModuleId || moduleId || '', 'export') ? () => setShowExportPdfModal(true) : undefined}
+          onDeleteRecord={canModule(routeModuleId || moduleId || '', 'delete') ? () => setShowDeleteModal(true) : undefined}
           fullViewUrl={isEmbedded ? `/workspace/modules/${routeModuleId || moduleId}/records/${recordId}` : undefined}
           onToggleParticipant={handleToggleParticipant}
           onClearParticipants={handleClearParticipants}

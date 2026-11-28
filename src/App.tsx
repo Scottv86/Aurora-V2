@@ -80,6 +80,8 @@ const FormsLibraryPage = lazy(() => import('./pages/Settings/FormsLibraryPage').
 const WorkflowsLibraryPage = lazy(() => import('./pages/Settings/WorkflowsLibraryPage').then(m => ({ default: m.WorkflowsLibraryPage })));
 const ValidationsLibraryPage = lazy(() => import('./pages/Settings/ValidationsLibraryPage').then(m => ({ default: m.ValidationsLibraryPage })));
 const QueuesLibraryPage = lazy(() => import('./pages/Settings/QueuesLibraryPage').then(m => ({ default: m.QueuesLibraryPage })));
+const RolesLibraryPage = lazy(() => import('./pages/Settings/RolesLibraryPage').then(m => ({ default: m.RolesLibraryPage })));
+const RoleBuilderStudio = lazy(() => import('./components/Builders/RoleBuilder/RoleBuilderStudio').then(m => ({ default: m.RoleBuilderStudio })));
 const QueriesLibraryPage = lazy(() => import('./pages/Settings/QueriesLibraryPage').then(m => ({ default: m.QueriesLibraryPage })));
 const SearchesLibraryPage = lazy(() => import('./pages/Settings/SearchesLibraryPage').then(m => ({ default: m.SearchesLibraryPage })));
 const KpiLibraryPage = lazy(() => import('./pages/Settings/KpiLibraryPage').then(m => ({ default: m.KpiLibraryPage })));
@@ -454,6 +456,8 @@ const App = () => {
                  <Route path="builder/brand/:brandId" element={<BrandStudioPage />} />
                  <Route path="builder/agent" element={<AgentBuilderStudio />} />
                  <Route path="builder/agent/:id" element={<AgentBuilderStudio />} />
+                 <Route path="builder/role/new" element={<RoleBuilderStudio />} />
+                 <Route path="builder/role/:id" element={<RoleBuilderStudio />} />
                  <Route path="agent-builder" element={<AgentBuilderStudio />} />
 
 
@@ -490,6 +494,7 @@ const App = () => {
                    <Route path="forms-library" element={<FormsLibraryPage />} />
                    <Route path="workflows-library" element={<WorkflowsLibraryPage />} />
                    <Route path="validations-library" element={<ValidationsLibraryPage />} />
+                   <Route path="roles-library" element={<RolesLibraryPage />} />
                    <Route path="document-generation" element={<DocumentAutomation />} />
 
                    <Route path="report-management" element={<ReportManagementSettings />} />
@@ -503,6 +508,7 @@ const App = () => {
                    <Route path="queries-library" element={<QueriesLibraryPage />} />
                    <Route path="searches-library" element={<SearchesLibraryPage />} />
                    <Route path="searches" element={<Navigate to="/workspace/settings/platform-modules/searches-library" replace />} />
+                 <Route path="roles" element={<Navigate to="/workspace/settings/platform-modules/roles-library" replace />} />
                    <Route path="kpi-management" element={<KpiLibraryPage />} />
                    <Route path="kpi-library" element={<KpiLibraryPage />} />
                    <Route path="records-management" element={<RecordsManagementSettings />} />
@@ -518,6 +524,7 @@ const App = () => {
                  <Route path="solution" element={<Navigate to="/workspace/settings/platform-modules/solutions" replace />} />
                  <Route path="queries" element={<Navigate to="/workspace/settings/platform-modules/queries-library" replace />} />
                  <Route path="searches" element={<Navigate to="/workspace/settings/platform-modules/searches-library" replace />} />
+                 <Route path="roles" element={<Navigate to="/workspace/settings/platform-modules/roles-library" replace />} />
                  <Route path="kpis" element={<Navigate to="/workspace/settings/platform-modules/kpi-management" replace />} />
                  <Route path="metrics" element={<Navigate to="/workspace/settings/platform-modules/kpi-management" replace />} />
                  <Route path="content" element={<Navigate to="/workspace/settings/platform-modules/document-generation" replace />} />

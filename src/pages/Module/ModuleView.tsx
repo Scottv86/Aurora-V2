@@ -62,6 +62,7 @@ import { RecordActivityDrawer } from '../../components/Platform/RecordActivityDr
 import { TransitionRequirementsModal } from '../../components/Platform/TransitionRequirementsModal';
 import { resolveRecordNextStep, checkMissingRequiredFields, resolveRecordSlaStatus, buildPipelineSteps } from '../../lib/workflowProcessUtils';
 import { isFieldHiddenBySecurity, isFieldMaskedBySecurity, formatMaskedFieldValue } from '../../utils/fieldSecurity';
+import { useCapabilities } from '../../hooks/useCapabilities';
 import { useRecordListPresence } from '../../hooks/useRecordListPresence';
 import { RecordListPresence } from '../../components/Record/RecordListPresence';
 import { getSharedSocket } from '../../lib/socketClient';
@@ -906,6 +907,7 @@ export const ModuleView = ({ previewConfig }: { previewConfig?: ModulePreviewCon
   const [splitSortBy, setSplitSortBy] = useState<'created' | 'updated' | 'title' | 'key'>('created');
   const { session, user } = useAuth();
   const { tenant, isLoading: platformLoading, modules, members, user: platformUser, menuConfig, isDeveloper } = usePlatform();
+  const { canModule } = useCapabilities();
   const [externalRulesets, setExternalRulesets] = useState<any[]>([]);
 
   useEffect(() => {
@@ -6499,7 +6501,7 @@ export const ModuleView = ({ previewConfig }: { previewConfig?: ModulePreviewCon
           onBulkMove={(_selectedIds, selectedItems) => {
             setRecordsToMove(selectedItems);
           }}
-          onBulkDelete={handleBulkDelete}
+          onBulkDelete={canModule(moduleData?.id || moduleId || '', 'delete') ? handleBulkDelete : undefined}
         />
       </div>
     );
@@ -6792,7 +6794,7 @@ export const ModuleView = ({ previewConfig }: { previewConfig?: ModulePreviewCon
             })}
           
           {/* Linear / Notion Style Split Button for Create & Bulk Import */}
-          <div className="relative flex items-center shadow-xs" ref={createDropdownRef}>
+          <div className={cn("relative flex items-center shadow-xs", !canModule(moduleData?.id || moduleId || '', 'create') && "hidden")} ref={createDropdownRef}>
             {/* Primary Action Button */}
             <button 
               type="button"

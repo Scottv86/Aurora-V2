@@ -410,6 +410,26 @@ router.post('/:id/decide', async (req: TenantRequest, res) => {
       return res.status(400).json({ error: 'Decision must be APPROVE or REJECT' });
     }
 
+    // Enforce centralized Role Builder workflow approval policies for non-admins
+    const reqUser: any = req.user;
+    const rawRole = String(reqUser?.role || reqUser?.roleId || '').toLowerCase();
+    const isAdminUser = Boolean(reqUser?.isSuperAdmin || rawRole.includes('admin') || rawRole.includes('owner'));
+    const wfPolicy = reqUser?.effectivePolicies?.workflowPolicies;
+    if (!isAdminUser && wfPolicy && reqUser?.permissionGroupIds?.length > 0) {
+      if (wfPolicy.canApprove === false && (wfPolicy.maxApprovalAmount !== undefined || wfPolicy.allowedWorkflowIds?.length > 0 || wfPolicy.allowedQueueIds?.length > 0)) {
+        return res.status(403).json({ error: 'Forbidden: Your role does not have workflow approval authority.' });
+      }
+      if (decision === 'APPROVE' && typeof wfPolicy.maxApprovalAmount === 'number') {
+        const reqAmount = typeof req.body.amount === 'number' ? req.body.amount : Number(req.body.amount);
+        if (!Number.isNaN(reqAmount) && reqAmount > wfPolicy.maxApprovalAmount) {
+          return res.status(403).json({
+            error: `Forbidden: Approval amount ($${reqAmount.toLocaleString()}) exceeds your role limit ($${wfPolicy.maxApprovalAmount.toLocaleString()}).`,
+            maxApprovalAmount: wfPolicy.maxApprovalAmount,
+          });
+        }
+      }
+    }
+
     const actorId = req.user?.uid || 'USER';
     const actorEmail = req.user?.email || 'actor@aurora.io';
     const digitalSignature = crypto.createHash('sha256')

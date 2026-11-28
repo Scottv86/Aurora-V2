@@ -383,20 +383,30 @@ model Position {
 }
 
 model PermissionGroup {
-  id            String                  @id @default(cuid())
-  tenantId      String                  @map("tenant_id")
-  name          String
-  description   String?
-  capabilities  Json?
-  createdAt     DateTime                @default(now()) @map("created_at")
-  updatedAt     DateTime                @updatedAt @map("updated_at")
-  parentGroupId String?                 @map("parent_group_id")
-  members       MemberPermissionGroup[]
-  parentGroup   PermissionGroup?        @relation("GroupInheritance", fields: [parentGroupId], references: [id])
-  childGroups   PermissionGroup[]       @relation("GroupInheritance")
-  tenant        Tenant                  @relation(fields: [tenantId], references: [id])
+  id               String                  @id @default(cuid())
+  tenantId         String                  @map("tenant_id")
+  name             String
+  slug             String?
+  description      String?
+  type             String                  @default("CUSTOM")
+  status           String                  @default("ACTIVE")
+  icon             String?
+  color            String?
+  capabilities     Json?
+  modulePolicies   Json?                   @map("module_policies")
+  workflowPolicies Json?                   @map("workflow_policies")
+  aiPolicies       Json?                   @map("ai_policies")
+  solutionId       String?                 @map("solution_id")
+  createdAt        DateTime                @default(now()) @map("created_at")
+  updatedAt        DateTime                @updatedAt @map("updated_at")
+  parentGroupId    String?                 @map("parent_group_id")
+  members          MemberPermissionGroup[]
+  parentGroup      PermissionGroup?        @relation("GroupInheritance", fields: [parentGroupId], references: [id])
+  childGroups      PermissionGroup[]       @relation("GroupInheritance")
+  tenant           Tenant                  @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
+  @@index([tenantId, slug])
   @@map("permission_groups")
 }
 

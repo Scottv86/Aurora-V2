@@ -53,6 +53,75 @@ function resolveSecurityRoleKey(userOrReq: any, fieldSecurity: Record<string, an
   return fieldSecurity.staff ? 'staff' : null;
 }
 
+export function isUserAuthorizedForModuleAction(
+  userOrReq: any,
+  moduleConfigOrModule: any,
+  action: 'access' | 'read' | 'create' | 'update' | 'delete' | 'export' = 'read'
+): boolean {
+  const user = userOrReq?.user ? userOrReq.user : userOrReq;
+  if (!user || user.isSuperAdmin) return true;
+  const rawRole = String(user?.role || user?.roleId || '').toLowerCase();
+  if (rawRole.includes('admin') || rawRole.includes('owner') || rawRole === 'tenant_admin') {
+    return true;
+  }
+
+  const moduleId = moduleConfigOrModule?.id;
+  const centralizedPolicy = moduleId ? user?.effectivePolicies?.modulePolicies?.[moduleId] : undefined;
+  if (centralizedPolicy) {
+    if (centralizedPolicy.access === false) return false;
+    return Boolean(centralizedPolicy[action]);
+  }
+
+  // Fallback to legacy module.config.accessControl
+  return isUserAuthorizedForModule(user, moduleConfigOrModule);
+}
+
+export function buildRowScopeWhere(userOrReq: any, moduleId?: string): Record<string, any> {
+  const user = userOrReq?.user ? userOrReq.user : userOrReq;
+  if (!user || user.isSuperAdmin || !moduleId) return {};
+  const rawRole = String(user?.role || user?.roleId || '').toLowerCase();
+  if (rawRole.includes('admin') || rawRole.includes('owner') || rawRole === 'tenant_admin') {
+    return {};
+  }
+
+  const modPolicy = user?.effectivePolicies?.modulePolicies?.[moduleId];
+  if (!modPolicy || !modPolicy.rowScope || modPolicy.rowScope === 'ALL') return {};
+
+  if (modPolicy.rowScope === 'OWNED') {
+    return { createdByMemberId: user.memberId || '__none__' };
+  }
+  if (modPolicy.rowScope === 'TEAM') {
+    if (user.teamId) {
+      return { createdByMember: { teamId: user.teamId } };
+    }
+    return { createdByMemberId: user.memberId || '__none__' };
+  }
+  return {};
+}
+
+export function isRecordWithinRowScope(userOrReq: any, record: any, moduleId?: string): boolean {
+  const user = userOrReq?.user ? userOrReq.user : userOrReq;
+  if (!user || user.isSuperAdmin || !record) return true;
+  const rawRole = String(user?.role || user?.roleId || '').toLowerCase();
+  if (rawRole.includes('admin') || rawRole.includes('owner') || rawRole === 'tenant_admin') {
+    return true;
+  }
+
+  const targetModId = moduleId || record.moduleId;
+  const modPolicy = targetModId ? user?.effectivePolicies?.modulePolicies?.[targetModId] : undefined;
+  if (!modPolicy || !modPolicy.rowScope || modPolicy.rowScope === 'ALL') return true;
+
+  if (modPolicy.rowScope === 'OWNED') {
+    return Boolean(user.memberId && record.createdByMemberId === user.memberId);
+  }
+  if (modPolicy.rowScope === 'TEAM') {
+    if (user.memberId && record.createdByMemberId === user.memberId) return true;
+    const recordTeamId = record.createdByMember?.teamId;
+    return Boolean(user.teamId && recordTeamId && recordTeamId === user.teamId);
+  }
+  return true;
+}
+
 export function isUserAuthorizedForModule(userOrReq: any, moduleConfigOrModule: any): boolean {
   const user = userOrReq?.user ? userOrReq.user : userOrReq;
   if (!user || user.isSuperAdmin) return true;
@@ -61,6 +130,17 @@ export function isUserAuthorizedForModule(userOrReq: any, moduleConfigOrModule: 
     return true;
   }
 
+  // 1. Check centralized Role Builder modulePolicies first (if configured for this module)
+  const moduleId = moduleConfigOrModule?.id;
+  const centralizedPolicy = moduleId ? user?.effectivePolicies?.modulePolicies?.[moduleId] : undefined;
+  if (centralizedPolicy) {
+    if (centralizedPolicy.access === false || centralizedPolicy.read === false) {
+      return false;
+    }
+    return true;
+  }
+
+  // 2. Fallback to legacy module.config.accessControl
   const config = moduleConfigOrModule?.config && typeof moduleConfigOrModule.config === 'object' 
     ? moduleConfigOrModule.config 
     : (moduleConfigOrModule || {});
@@ -97,14 +177,38 @@ export function isUserAuthorizedForModule(userOrReq: any, moduleConfigOrModule: 
   return hasGroup || hasRole;
 }
 
-function applyFieldSecurityRead(data: Record<string, any>, moduleConfig: any, user: any): Record<string, any> {
+function getCentralizedFieldPolicies(user: any, moduleConfig: any, moduleId?: string): Record<string, any> | null {
+  const effectiveModPolicies = user?.effectivePolicies?.modulePolicies;
+  if (!effectiveModPolicies || typeof effectiveModPolicies !== 'object') return null;
+  const targetModId = moduleId || moduleConfig?.moduleId || moduleConfig?.id;
+  if (!targetModId || !effectiveModPolicies[targetModId]?.fields) return null;
+  return effectiveModPolicies[targetModId].fields;
+}
+
+function applyFieldSecurityRead(data: Record<string, any>, moduleConfig: any, user: any, moduleId?: string): Record<string, any> {
   if (!data || typeof data !== 'object') return data;
+  const result = { ...data };
+
+  // 1. Apply centralized Role Builder field policies first
+  const centralFields = getCentralizedFieldPolicies(user, moduleConfig, moduleId);
+  if (centralFields) {
+    for (const [fieldId, cfg] of Object.entries<any>(centralFields)) {
+      if (!cfg || result[fieldId] === undefined) continue;
+      if (cfg.visibility === 'hidden') {
+        delete result[fieldId];
+      } else if (cfg.visibility === 'masked' && result[fieldId] !== null && result[fieldId] !== '') {
+        const strVal = String(result[fieldId]);
+        result[fieldId] = strVal.length > 4 ? `${'•'.repeat(Math.min(8, strVal.length - 4))}${strVal.slice(-4)}` : '••••••••';
+      }
+    }
+  }
+
+  // 2. Fallback / merge with legacy module.config.fieldSecurity
   const fieldSecurity = moduleConfig?.fieldSecurity;
   const roleKey = resolveSecurityRoleKey(user, fieldSecurity);
-  if (!roleKey || !fieldSecurity?.[roleKey]) return data;
+  if (!roleKey || !fieldSecurity?.[roleKey]) return result;
 
   const rolePerms = fieldSecurity[roleKey];
-  const result = { ...data };
   for (const [fieldId, perm] of Object.entries<any>(rolePerms)) {
     if (!perm || result[fieldId] === undefined) continue;
     if (perm.hidden === true || perm.read === false) {
@@ -121,14 +225,42 @@ function checkFieldSecurityWrite(
   incomingData: Record<string, any>,
   existingData: Record<string, any> | null,
   moduleConfig: any,
-  user: any
+  user: any,
+  moduleId?: string
 ): string[] {
+  const blockedFields = new Set<string>();
+
+  // 1. Check centralized Role Builder field policies first
+  const centralFields = getCentralizedFieldPolicies(user, moduleConfig, moduleId);
+  if (centralFields) {
+    for (const [fieldId, cfg] of Object.entries<any>(centralFields)) {
+      if (!cfg) continue;
+      if (cfg.visibility === 'masked' && existingData && existingData[fieldId] !== undefined && incomingData[fieldId] !== undefined) {
+        const strVal = String(existingData[fieldId]);
+        const maskedVal = strVal.length > 4 ? `${'•'.repeat(Math.min(8, strVal.length - 4))}${strVal.slice(-4)}` : '••••••••';
+        if (incomingData[fieldId] === maskedVal) {
+          incomingData[fieldId] = existingData[fieldId];
+        }
+      }
+      if (cfg.visibility === 'readonly' || cfg.visibility === 'hidden' || cfg.visibility === 'masked') {
+        if (incomingData[fieldId] !== undefined) {
+          const prevVal = existingData ? existingData[fieldId] : undefined;
+          const isBothEmpty = (incomingData[fieldId] === '' || incomingData[fieldId] === null) &&
+                              (prevVal === undefined || prevVal === null || prevVal === '');
+          if (!isBothEmpty && JSON.stringify(incomingData[fieldId]) !== JSON.stringify(prevVal)) {
+            blockedFields.add(fieldId);
+          }
+        }
+      }
+    }
+  }
+
+  // 2. Fallback to legacy module.config.fieldSecurity
   const fieldSecurity = moduleConfig?.fieldSecurity;
   const roleKey = resolveSecurityRoleKey(user, fieldSecurity);
-  if (!roleKey || !fieldSecurity?.[roleKey]) return [];
+  if (!roleKey || !fieldSecurity?.[roleKey]) return Array.from(blockedFields);
 
   const rolePerms = fieldSecurity[roleKey];
-  const blockedFields: string[] = [];
   for (const [fieldId, perm] of Object.entries<any>(rolePerms)) {
     if (!perm) continue;
 
@@ -147,11 +279,11 @@ function checkFieldSecurityWrite(
       const isBothEmpty = (incomingData[fieldId] === '' || incomingData[fieldId] === null) &&
                           (prevVal === undefined || prevVal === null || prevVal === '');
       if (!isBothEmpty && JSON.stringify(incomingData[fieldId]) !== JSON.stringify(prevVal)) {
-        blockedFields.push(fieldId);
+        blockedFields.add(fieldId);
       }
     }
   }
-  return blockedFields;
+  return Array.from(blockedFields);
 }
 
 function getStatusFromState(evaluatedState: any, workflow: any, fallback: string): string {
@@ -516,10 +648,12 @@ router.get('/records', async (req: TenantRequest, res) => {
     const whereClause: any = {};
     if (moduleId) {
       const targetModule = await findModuleByIdOrSlug(db, req.tenantId!, moduleId as string);
-      if (targetModule && !isUserAuthorizedForModule((req as any).user, targetModule)) {
+      if (targetModule && !isUserAuthorizedForModuleAction((req as any).user, targetModule, 'read')) {
         return res.status(403).json({ error: 'Access denied: You do not have permission to view records in this module' });
       }
-      whereClause.moduleId = targetModule ? targetModule.id : (moduleId as string);
+      const resolvedModId = targetModule ? targetModule.id : (moduleId as string);
+      whereClause.moduleId = resolvedModId;
+      Object.assign(whereClause, buildRowScopeWhere((req as any).user, resolvedModId));
     }
     
     // Total count for pagination
@@ -589,7 +723,7 @@ router.get('/records', async (req: TenantRequest, res) => {
     
     // Format records for frontend consumption
     const formatted = (records as any[]).map((r: any) => {
-      const safeData = applyFieldSecurityRead((r.data as any) || {}, r.module?.config, (req as any).user);
+      const safeData = applyFieldSecurityRead((r.data as any) || {}, r.module?.config, (req as any).user, r.moduleId);
       return {
         id: r.id,
         moduleId: r.moduleId,
@@ -630,10 +764,13 @@ router.get('/records/:id', async (req: TenantRequest, res) => {
     if (!record) {
       return res.status(404).json({ error: 'Record not found' });
     }
-    if ((record as any).module && !isUserAuthorizedForModule((req as any).user, (record as any).module)) {
+    if ((record as any).module && !isUserAuthorizedForModuleAction((req as any).user, (record as any).module, 'read')) {
       return res.status(403).json({ error: 'Access denied: You do not have permission to view this record' });
     }
-    const safeData = applyFieldSecurityRead((record.data as any) || {}, (record as any).module?.config, (req as any).user);
+    if (!isRecordWithinRowScope((req as any).user, record, record.moduleId)) {
+      return res.status(403).json({ error: 'Access denied: Record is outside your role row-level scope' });
+    }
+    const safeData = applyFieldSecurityRead((record.data as any) || {}, (record as any).module?.config, (req as any).user, record.moduleId);
     res.json({
       id: record.id,
       moduleId: record.moduleId,
@@ -663,15 +800,15 @@ router.post('/records', async (req: TenantRequest, res) => {
     const module = await db.module.findUnique({ where: { id: moduleId } });
     if (!module) return res.status(404).json({ error: 'Module not found' });
 
-    if (!isUserAuthorizedForModule((req as any).user, module)) {
-      return res.status(403).json({ error: 'Access denied: You do not have permission to create records in this module' });
+    if (!isUserAuthorizedForModuleAction((req as any).user, module, 'create')) {
+      return res.status(403).json({ error: 'Access denied: Your role does not permit creating records in this module' });
     }
 
     // Validation for required fields
     const config = module.config as any;
 
     // Enforce Field-Level Security write permissions
-    const blockedWriteFields = checkFieldSecurityWrite(data, null, config, (req as any).user);
+    const blockedWriteFields = checkFieldSecurityWrite(data, null, config, (req as any).user, module.id);
     if (blockedWriteFields.length > 0) {
       return res.status(403).json({
         error: `Field-level security restriction: Your role does not have write permission for field(s): ${blockedWriteFields.join(', ')}`
@@ -1459,13 +1596,16 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
     });
     
     if (module) {
-      if (!isUserAuthorizedForModule((req as any).user, module)) {
-        return res.status(403).json({ error: 'Access denied: You do not have permission to modify records in this module' });
+      if (!isUserAuthorizedForModuleAction((req as any).user, module, 'update')) {
+        return res.status(403).json({ error: 'Access denied: Your role does not permit modifying records in this module' });
+      }
+      if (!isRecordWithinRowScope((req as any).user, existing, module.id)) {
+        return res.status(403).json({ error: 'Access denied: Record is outside your role row-level scope' });
       }
       const config = module.config as any;
 
       // Enforce Field-Level Security for write
-      const blockedWriteFields = checkFieldSecurityWrite(data, (existing.data as any) || null, config, (req as any).user);
+      const blockedWriteFields = checkFieldSecurityWrite(data, (existing.data as any) || null, config, (req as any).user, module.id);
       if (blockedWriteFields.length > 0) {
         return res.status(403).json({
           error: `Field-level security restriction: Your role does not have write permission for field(s): ${blockedWriteFields.join(', ')}`
@@ -1787,8 +1927,8 @@ router.put('/records/:id', async (req: TenantRequest, res) => {
         name: updaterName,
         avatarUrl: updaterUser?.avatarUrl
       },
-      ...applyFieldSecurityRead((record.data as any) || {}, module?.config, (req as any).user),
-      data: applyFieldSecurityRead((record.data as any) || {}, module?.config, (req as any).user),
+      ...applyFieldSecurityRead((record.data as any) || {}, module?.config, (req as any).user, module?.id),
+      data: applyFieldSecurityRead((record.data as any) || {}, module?.config, (req as any).user, module?.id),
       status: record.status,
       workflowState: record.workflowState,
       updatedFields: Object.keys(data || {}),
@@ -2063,13 +2203,16 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
     });
 
     if (module) {
-      if (!isUserAuthorizedForModule((req as any).user, module)) {
-        return res.status(403).json({ error: 'Access denied: You do not have permission to modify records in this module' });
+      if (!isUserAuthorizedForModuleAction((req as any).user, module, 'update')) {
+        return res.status(403).json({ error: 'Access denied: Your role does not permit modifying records in this module' });
+      }
+      if (!isRecordWithinRowScope((req as any).user, existing, module.id)) {
+        return res.status(403).json({ error: 'Access denied: Record is outside your role row-level scope' });
       }
       const config = module.config as any;
 
       // Enforce Field-Level Security for write
-      const blockedWriteFields = checkFieldSecurityWrite(data, (existing.data as any) || null, config, (req as any).user);
+      const blockedWriteFields = checkFieldSecurityWrite(data, (existing.data as any) || null, config, (req as any).user, module.id);
       if (blockedWriteFields.length > 0) {
         return res.status(403).json({
           error: `Field-level security restriction: Your role does not have write permission for field(s): ${blockedWriteFields.join(', ')}`
@@ -2384,8 +2527,8 @@ router.patch('/records/:id', async (req: TenantRequest, res) => {
         name: updaterName,
         avatarUrl: updaterUser?.avatarUrl
       },
-      ...applyFieldSecurityRead((record.data as any) || {}, module?.config, (req as any).user),
-      data: applyFieldSecurityRead((record.data as any) || {}, module?.config, (req as any).user),
+      ...applyFieldSecurityRead((record.data as any) || {}, module?.config, (req as any).user, module?.id),
+      data: applyFieldSecurityRead((record.data as any) || {}, module?.config, (req as any).user, module?.id),
       status: record.status,
       workflowState: record.workflowState,
       updatedFields: Object.keys(data || {}),
@@ -2497,10 +2640,13 @@ router.delete('/records/:id', async (req: TenantRequest, res) => {
     // Fetch record first to back up into Recycling Bin before deletion
     const existing = await db.record.findFirst({
       where: { id },
-      include: { module: true }
+      include: { module: true, createdByMember: true }
     });
-    if (existing && existing.module && !isUserAuthorizedForModule((req as any).user, existing.module)) {
-      return res.status(403).json({ error: 'Access denied: You do not have permission to delete records in this module' });
+    if (existing && existing.module && !isUserAuthorizedForModuleAction((req as any).user, existing.module, 'delete')) {
+      return res.status(403).json({ error: 'Access denied: Your role does not permit deleting records in this module' });
+    }
+    if (existing && !isRecordWithinRowScope((req as any).user, existing, existing.moduleId)) {
+      return res.status(403).json({ error: 'Access denied: Record is outside your role row-level scope' });
     }
     if (existing) {
       const recData = (existing.data || {}) as any;

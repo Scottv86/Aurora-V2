@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { globalPrisma } from '../lib/prisma';
+import { resolveEffectivePolicies, EffectivePolicies } from '../lib/permissions';
 
 export interface AuthRequest extends Request {
   user?: {
@@ -13,7 +14,9 @@ export interface AuthRequest extends Request {
     memberId?: string;
     role?: string;
     roleId?: string;
+    teamId?: string | null;
     permissionGroupIds?: string[];
+    effectivePolicies?: EffectivePolicies;
     avatarUrl?: string;
   };
 }
@@ -200,6 +203,15 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
       .map((pg: any) => pg.permissionGroupId || pg.id)
       .filter(Boolean);
 
+    let effectivePolicies: EffectivePolicies | undefined;
+    if (groupIds.length > 0 && membership?.tenantId) {
+      try {
+        effectivePolicies = await resolveEffectivePolicies(groupIds, membership.tenantId);
+      } catch (polErr) {
+        // Non-fatal fallback if policy columns are unavailable
+      }
+    }
+
     req.user = {
       id: dbUser.id,
       uid: dbUser.id,
@@ -210,7 +222,9 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
       memberId: membership?.id || dbUser.id,
       role: userRole,
       roleId: userRole,
+      teamId: membership?.teamId || null,
       permissionGroupIds: groupIds,
+      effectivePolicies,
       avatarUrl: avatarUrl || undefined
     };
 

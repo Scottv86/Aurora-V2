@@ -51,12 +51,29 @@ const saveTenantQueues = async (tenantId: string, queues: any[]): Promise<void> 
   }
 };
 
+const getAllowedQueueIdsForUser = (user: any): string[] | null => {
+  if (!user || user.isSuperAdmin) return null;
+  const rawRole = String(user.role || user.roleId || '').toLowerCase();
+  if (rawRole.includes('admin') || rawRole.includes('owner') || rawRole === 'tenant_admin') {
+    return null;
+  }
+  const allowed = user.effectivePolicies?.workflowPolicies?.allowedQueueIds;
+  if (Array.isArray(allowed) && allowed.length > 0) {
+    return allowed;
+  }
+  return null;
+};
+
 // GET /api/queues - List all queues for tenant
 router.get('/', async (req: TenantRequest, res: Response) => {
   try {
     const tenantId = req.tenantId || 't1';
     const queues = await loadTenantQueues(tenantId);
-    res.json(queues);
+    const allowedIds = getAllowedQueueIdsForUser((req as any).user);
+    const filtered = allowedIds
+      ? queues.filter((q) => allowedIds.includes(q.id) || (q.slug && allowedIds.includes(q.slug)))
+      : queues;
+    res.json(filtered);
   } catch (err: any) {
     console.error('[QueuesAPI] GET / Error:', err);
     res.status(500).json({ error: err.message || 'Failed to fetch queues' });
@@ -73,6 +90,11 @@ router.get('/:id', async (req: TenantRequest, res: Response) => {
 
     if (!found) {
       return res.status(404).json({ error: 'Queue not found' });
+    }
+
+    const allowedIds = getAllowedQueueIdsForUser((req as any).user);
+    if (allowedIds && !allowedIds.includes(found.id) && !(found.slug && allowedIds.includes(found.slug))) {
+      return res.status(403).json({ error: 'Forbidden: Your role does not have access to this queue' });
     }
 
     res.json(found);

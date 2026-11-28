@@ -53,6 +53,13 @@ export function isUserAuthorizedForModule(user: any, moduleOrConfig: any): boole
     return true;
   }
 
+  // 1. Check centralized Role Builder modulePolicies first
+  const moduleId = moduleOrConfig?.id;
+  const centralModPolicy = moduleId ? user?.effectivePolicies?.modulePolicies?.[moduleId] : undefined;
+  if (centralModPolicy) {
+    return centralModPolicy.access !== false && centralModPolicy.read !== false;
+  }
+
   const config = moduleOrConfig?.config && typeof moduleOrConfig.config === 'object'
     ? moduleOrConfig.config
     : (moduleOrConfig || {});
@@ -103,6 +110,28 @@ export function getFieldSecurityPermission(
   user: any
 ): FieldSecurityPermission {
   if (!fieldId) return DEFAULT_PERM;
+
+  // 1. Check centralized Role Builder field policies first
+  const isAdmin =
+    user?.isSuperAdmin ||
+    String(user?.role || user?.roleId || '').toLowerCase().includes('admin') ||
+    String(user?.role || user?.roleId || '').toLowerCase().includes('owner');
+
+  if (!isAdmin) {
+    const moduleId = moduleOrConfig?.id || moduleOrConfig?.moduleId;
+    const centralField = moduleId
+      ? user?.effectivePolicies?.modulePolicies?.[moduleId]?.fields?.[fieldId]
+      : undefined;
+    if (centralField?.visibility) {
+      const vis = centralField.visibility;
+      if (vis === 'hidden') return { read: false, write: false, masked: false, hidden: true };
+      if (vis === 'masked') return { read: true, write: false, masked: true, hidden: false };
+      if (vis === 'readonly') return { read: true, write: false, masked: false, hidden: false };
+      return DEFAULT_PERM;
+    }
+  }
+
+  // 2. Fallback to legacy module.config.fieldSecurity
   const fieldSecurity = extractFieldSecurityMap(moduleOrConfig);
   if (!fieldSecurity) return DEFAULT_PERM;
 

@@ -1,5 +1,5 @@
 import { globalPrisma } from './prisma';
-import { resolveCapabilities } from './permissions';
+import { resolveCapabilities, resolveEffectivePolicies } from './permissions';
 
 export type AIFeatureKey =
   | 'ai:antigravity_agent'
@@ -170,12 +170,33 @@ export async function resolveAIFeatureAccess(options: {
     }
   }
 
-  // 3. Permission Group Capabilities Check
+  // 3. Permission Group / Role Policies & Capabilities Check
   if (member) {
     const groupIds = (member.permissionGroups || []).map((mpg: any) => mpg.permissionGroupId);
     if (groupIds.length > 0) {
       try {
-        const capabilities = await resolveCapabilities(groupIds, tenantId);
+        const effective = await resolveEffectivePolicies(groupIds, tenantId);
+        const explicitDecision = effective.aiPolicies?.[featureKey];
+        if (explicitDecision === 'DENY') {
+          return {
+            allowed: false,
+            reason: 'Role Builder AI Policy: DENY',
+            level: 'PERMISSION_GROUP',
+            featureKey
+          };
+        }
+        if (explicitDecision === 'ALLOW') {
+          return {
+            allowed: true,
+            reason: 'Role Builder AI Policy: ALLOW',
+            level: 'PERMISSION_GROUP',
+            featureKey
+          };
+        }
+
+        const capabilities = effective.capabilities.length > 0
+          ? effective.capabilities
+          : await resolveCapabilities(groupIds, tenantId);
         const capsSet = new Set(capabilities);
 
         // Check explicit negation first (e.g. !ai:antigravity_agent)
